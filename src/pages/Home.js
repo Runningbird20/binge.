@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
 
@@ -28,8 +29,14 @@ export default function Home() {
       <Navbar />
       <main className="page-content">
         <div className="home-header">
-          <h1>Welcome back, {user.username}.</h1>
-          <p className="home-subtitle">What are you watching or reading today?</p>
+          <div className="home-profile">
+            <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
+            <div>
+              <h1>Welcome back, {user.username}.</h1>
+              <p className="home-subtitle">What are you watching or reading today?</p>
+              {user.bio && <p className="home-bio">{user.bio}</p>}
+            </div>
+          </div>
         </div>
 
         <div className="stats-row">

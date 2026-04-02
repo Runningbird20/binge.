@@ -146,9 +146,72 @@ body {
   gap: 0.75rem;
 }
 
+.navbar-user-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  max-width: 220px;
+}
+
 .navbar-username {
   font-size: 0.9rem;
-  color: #888;
+  color: #d4d4d4;
+}
+
+.navbar-user-bio {
+  font-size: 0.75rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-avatar {
+  border-radius: 999px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #2b1e09 0%, #7d5f20 100%);
+  color: #fff7e3;
+  border: 1px solid rgba(232, 201, 122, 0.25);
+}
+
+.user-avatar-sm {
+  width: 36px;
+  height: 36px;
+  font-size: 0.8rem;
+}
+
+.user-avatar-md {
+  width: 48px;
+  height: 48px;
+  font-size: 1rem;
+}
+
+.user-avatar-lg {
+  width: 72px;
+  height: 72px;
+  font-size: 1.35rem;
+}
+
+.user-avatar-xl {
+  width: 96px;
+  height: 96px;
+  font-size: 1.7rem;
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-avatar-fallback {
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* ─── App layout (authenticated pages) ─────────────────────────────────── */
@@ -182,6 +245,12 @@ body {
   margin-bottom: 2rem;
 }
 
+.home-profile {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
 .home-header h1 {
   font-size: 2rem;
   font-weight: 700;
@@ -192,6 +261,12 @@ body {
 .home-subtitle {
   color: #888;
   margin: 0;
+}
+
+.home-bio {
+  max-width: 620px;
+  color: #b8b8b8;
+  margin: 0.85rem 0 0 0;
 }
 
 .stats-row {
@@ -308,6 +383,10 @@ body {
   max-width: 420px;
 }
 
+.auth-card-wide {
+  max-width: 560px;
+}
+
 .auth-logo {
   display: inline-block;
   font-size: 1.2rem;
@@ -355,7 +434,8 @@ body {
   font-weight: 500;
 }
 
-.auth-form input {
+.auth-form input,
+.auth-form textarea {
   padding: 0.75rem 1rem;
   border-radius: 8px;
   border: 1px solid #2a2a2a;
@@ -365,8 +445,73 @@ body {
   outline: none;
   transition: border-color 0.2s;
 }
-.auth-form input:focus { border-color: #e8c97a; }
-.auth-form input::placeholder { color: #444; }
+.auth-form textarea {
+  resize: vertical;
+  min-height: 104px;
+}
+.auth-form input:focus,
+.auth-form textarea:focus { border-color: #e8c97a; }
+.auth-form input::placeholder,
+.auth-form textarea::placeholder { color: #444; }
+
+.auth-label-title {
+  display: block;
+  font-size: 0.85rem;
+  color: #a0a0a0;
+  font-weight: 500;
+}
+
+.auth-field-hint {
+  color: #666;
+  font-size: 0.8rem;
+  margin: 0.3rem 0 0 0;
+}
+
+.auth-field-count {
+  align-self: flex-end;
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.avatar-field {
+  background: linear-gradient(135deg, rgba(232, 201, 122, 0.08), rgba(20, 20, 20, 0.9));
+  border: 1px solid #2b2b2b;
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.avatar-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.avatar-upload-label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #d4d4d4;
+}
+
+.avatar-upload-label input[type="file"] {
+  padding: 0.65rem 0.75rem;
+  border: 1px dashed #3b3b3b;
+  border-radius: 10px;
+  background-color: #111;
+}
+
+.avatar-upload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  color: #888;
+  font-size: 0.8rem;
+}
 
 .auth-switch {
   margin-top: 1.5rem;
@@ -882,8 +1027,16 @@ body {
   .hero-media-grid { grid-template-columns: repeat(2, 1fr); }
   .media-card-placeholder { width: 120px; height: 180px; }
   .navbar { padding: 0 1rem; gap: 0.75rem; }
+  .navbar-user-copy { display: none; }
+  .home-profile { flex-direction: column; }
   .page-content { padding: 1.5rem 1rem; }
   .filter-bar { flex-direction: column; }
   .filter-input { width: 100%; }
   .tabs { gap: 0.35rem; }
+  .auth-card { padding: 1.5rem; }
+  .avatar-field-header,
+  .avatar-upload-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

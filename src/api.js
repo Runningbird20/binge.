@@ -8,14 +8,61 @@ function authHeaders() {
   };
 }
 
+async function parseResponseBody(res) {
+  const text = await res.text();
+  if (!text) return null;
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function buildErrorMessage(res, data) {
+  if (data && typeof data === 'object') {
+    return data.error || data.message || `Request failed with status ${res.status}`;
+  }
+
+  if (typeof data === 'string') {
+    const message = data.trim();
+    if (!message) {
+      return `Request failed with status ${res.status}`;
+    }
+    if (message.startsWith('Proxy error')) {
+      return `${message} Make sure the API server is running and reachable.`;
+    }
+    if (message.startsWith('<!DOCTYPE') || message.startsWith('<html')) {
+      return `The API returned an HTML error page (status ${res.status}).`;
+    }
+    return message;
+  }
+
+  return `Request failed with status ${res.status}`;
+}
+
 async function request(method, path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: authHeaders(),
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  let res;
+
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: authHeaders(),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new Error('Unable to reach the API. Make sure the backend server is running.');
+  }
+
+  const data = await parseResponseBody(res);
+  if (!res.ok) {
+    throw new Error(buildErrorMessage(res, data));
+  }
   return data;
 }
 

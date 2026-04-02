@@ -1,5 +1,6 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import UserAvatar from './UserAvatar';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -22,7 +23,11 @@ export default function Navbar() {
             <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
           </div>
           <div className="navbar-user">
-            <span className="navbar-username">{user.username}</span>
+            <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
+            <div className="navbar-user-copy">
+              <span className="navbar-username">{user.username}</span>
+              {user.bio && <span className="navbar-user-bio">{user.bio}</span>}
+            </div>
             <button className="btn-ghost" onClick={handleLogout}>Log out</button>
           </div>
         </>
