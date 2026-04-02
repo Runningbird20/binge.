@@ -10,12 +10,21 @@ const db = new Database(path.join(dataDir, 'app.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+function hasColumn(tableName, columnName) {
+  return db
+    .prepare(`PRAGMA table_info(${tableName})`)
+    .all()
+    .some((column) => column.name === columnName);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    bio TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -76,5 +85,13 @@ db.exec(`
     UNIQUE (user_id, media_type, media_id)
   );
 `);
+
+if (!hasColumn('users', 'bio')) {
+  db.exec("ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''");
+}
+
+if (!hasColumn('users', 'avatar_url')) {
+  db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT');
+}
 
 module.exports = db;
