@@ -1,25 +1,32 @@
-import logo from './logo.svg';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import Landing from './pages/Landing';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Home from './pages/Home';
+import Movies from './pages/Movies';
+import TVShows from './pages/TVShows';
+import Books from './pages/Books';
+import Watchlist from './pages/Watchlist';
 import './App.css';
 
-function App() {
+export default function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/"          element={<Landing />} />
+          <Route path="/login"     element={<Login />} />
+          <Route path="/signup"    element={<Signup />} />
+          <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
+          <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
+          <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
+          <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+          <Route path="*"          element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
-
-export default App;
