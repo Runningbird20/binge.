@@ -20,7 +20,4 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Server
-.env
-server/data/
+node_modules/
