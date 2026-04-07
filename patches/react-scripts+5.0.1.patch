@@ -1,7 +1,28 @@
 diff --git a/node_modules/react-scripts/config/webpackDevServer.config.js b/node_modules/react-scripts/config/webpackDevServer.config.js
-index 522a81b..b1a59eb 100644
+index 522a81b..5f53547 100644
 --- a/node_modules/react-scripts/config/webpackDevServer.config.js
 +++ b/node_modules/react-scripts/config/webpackDevServer.config.js
+@@ -23,6 +23,11 @@ const sockPort = process.env.WDS_SOCKET_PORT;
+ 
+ module.exports = function (proxy, allowedHost) {
+   const disableFirewall =
+     !proxy || process.env.DANGEROUSLY_DISABLE_HOST_CHECK === 'true';
++  const resolvedAllowedHosts = disableFirewall
++    ? 'all'
++    : allowedHost && allowedHost.trim()
++      ? [allowedHost]
++      : 'auto';
+   return {
+@@ -43,7 +48,7 @@ module.exports = function (proxy, allowedHost) {
+     // specified the `proxy` setting. Finally, we let you override it if you
+     // really know what you're doing with a special environment variable.
+     // Note: ["localhost", ".localhost"] will support subdomains - but we might
+     // want to allow setting the allowedHosts manually for more complex setups
+-    allowedHosts: disableFirewall ? 'all' : [allowedHost],
++    allowedHosts: resolvedAllowedHosts,
+     headers: {
+       'Access-Control-Allow-Origin': '*',
+       'Access-Control-Allow-Methods': '*',
 @@ -107,29 +107,33 @@ module.exports = function (proxy, allowedHost) {
        disableDotRule: true,
        index: paths.publicUrlOrPath,
