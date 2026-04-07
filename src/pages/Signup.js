@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
@@ -10,6 +10,7 @@ const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 export default function Signup() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const avatarInputRef = useRef(null);
   const [form, setForm] = useState({
     username: '',
     email: '',
@@ -35,12 +36,16 @@ export default function Signup() {
 
     if (!file.type.startsWith('image/')) {
       setError('Please upload an image file for your avatar');
+      setAvatarFileName('');
+      updateForm('avatarUrl', '');
       e.target.value = '';
       return;
     }
 
     if (file.size > MAX_AVATAR_SIZE_BYTES) {
       setError('Avatar image must be smaller than 2 MB');
+      setAvatarFileName('');
+      updateForm('avatarUrl', '');
       e.target.value = '';
       return;
     }
@@ -53,6 +58,8 @@ export default function Signup() {
     };
     reader.onerror = () => {
       setError('We could not read that image. Please try another file.');
+      setAvatarFileName('');
+      updateForm('avatarUrl', '');
       e.target.value = '';
     };
     reader.readAsDataURL(file);
@@ -61,6 +68,9 @@ export default function Signup() {
   function clearAvatar() {
     setAvatarFileName('');
     updateForm('avatarUrl', '');
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = '';
+    }
   }
 
   async function handleSubmit(e) {
@@ -108,34 +118,45 @@ export default function Signup() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="avatar-field">
-            <div className="avatar-field-header">
-              <div>
-                <span className="auth-label-title">Avatar</span>
-                <p className="auth-field-hint">Upload a profile photo to personalize your account.</p>
+            <span className="auth-label-title">Avatar</span>
+            <div className="avatar-field-frame">
+              <div className="avatar-field-header">
+                <div className="avatar-field-copy">
+                  <p className="auth-field-hint">Upload a profile photo to personalize your account.</p>
+                  <span className="avatar-upload-note">PNG, JPG, GIF, or WebP up to 2 MB</span>
+                </div>
+                <UserAvatar
+                  avatarUrl={form.avatarUrl}
+                  name={form.username || 'New user'}
+                  size="xl"
+                  alt="Avatar preview"
+                />
               </div>
-              <UserAvatar
-                avatarUrl={form.avatarUrl}
-                name={form.username || 'New user'}
-                size="xl"
-                alt="Avatar preview"
-              />
+              <div className="avatar-field-actions">
+                <label htmlFor="avatar-upload" className="avatar-upload-trigger">
+                  {avatarFileName ? 'Change avatar photo' : 'Choose avatar photo'}
+                </label>
+                <input
+                  id="avatar-upload"
+                  ref={avatarInputRef}
+                  className="avatar-upload-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                />
+                <span className="avatar-upload-status">
+                  {avatarFileName ? 'Preview updated and ready to save.' : 'Optional'}
+                </span>
+              </div>
+              {avatarFileName && (
+                <div className="avatar-upload-meta">
+                  <span className="avatar-upload-chip" title={avatarFileName}>{avatarFileName}</span>
+                  <button type="button" className="btn-ghost btn-sm" onClick={clearAvatar}>
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
-            <label className="avatar-upload-label">
-              Upload avatar photo
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-              />
-            </label>
-            {avatarFileName && (
-              <div className="avatar-upload-meta">
-                <span>{avatarFileName} selected for your avatar.</span>
-                <button type="button" className="btn-ghost" onClick={clearAvatar}>
-                  Remove
-                </button>
-              </div>
-            )}
           </div>
 
           <label>
