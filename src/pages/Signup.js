@@ -108,7 +108,7 @@ export default function Signup() {
   return (
     <div className="auth-page">
       <div className="auth-card auth-card-wide">
-        <Link to="/" className="auth-logo">[TBD]</Link>
+        <Link to="/" className="auth-logo">binge.</Link>
         <h1>Create your account</h1>
         <p className="auth-subtitle">
           Add a username, bio, and avatar so your profile is ready for logging and community activity.
@@ -134,7 +134,7 @@ export default function Signup() {
               </div>
               <div className="avatar-field-actions">
                 <label htmlFor="avatar-upload" className="avatar-upload-trigger">
-                  {avatarFileName ? 'Change avatar photo' : 'Choose avatar photo'}
+                  {avatarFileName ? 'Change avatar photo' : 'Upload avatar photo'}
                 </label>
                 <input
                   id="avatar-upload"
@@ -142,10 +142,11 @@ export default function Signup() {
                   className="avatar-upload-input"
                   type="file"
                   accept="image/*"
+                  aria-label="Upload avatar photo"
                   onChange={handleAvatarChange}
                 />
                 <span className="avatar-upload-status">
-                  {avatarFileName ? 'Preview updated and ready to save.' : 'Optional'}
+                  {avatarFileName ? `${avatarFileName} selected for your avatar` : 'Optional'}
                 </span>
               </div>
               {avatarFileName && (

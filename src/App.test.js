@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Signup from './pages/Signup';
 import Home from './pages/Home';
+import AccountSettings from './pages/AccountSettings';
 import { AuthProvider } from './contexts/AuthContext';
 
 const mockNavigate = jest.fn();
@@ -185,4 +186,82 @@ test('shows avatar and bio on the signed-in home page', async () => {
       screen.getAllByRole('img', { name: /mediafan avatar/i }).length
     ).toBeGreaterThan(0);
   });
+});
+
+test('shows an account settings gear link for signed-in users', () => {
+  renderWithAuth(
+    <Home />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  expect(screen.getByRole('link', { name: /account settings/i })).toBeInTheDocument();
+});
+
+test('updates username and email from account settings', async () => {
+  global.fetch.mockResolvedValue(
+    mockResponse({
+      body: JSON.stringify({
+        token: 'updated-token',
+        user: {
+          id: 7,
+          username: 'newmediafan',
+          email: 'newmediafan@example.com',
+          bio: 'Always logging the next favorite.',
+          avatarUrl: 'data:image/png;base64,avatar-preview',
+        },
+      }),
+    })
+  );
+
+  renderWithAuth(
+    <AccountSettings />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  const usernameInput = screen.getByLabelText(/^username$/i);
+  const emailInput = screen.getByLabelText(/^email$/i);
+
+  await userEvent.clear(usernameInput);
+  await userEvent.type(usernameInput, 'newmediafan');
+  await userEvent.clear(emailInput);
+  await userEvent.type(emailInput, 'newmediafan@example.com');
+  await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+  await waitFor(() => {
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/auth/account',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
+        }),
+        body: JSON.stringify({
+          username: 'newmediafan',
+          email: 'newmediafan@example.com',
+        }),
+      })
+    );
+  });
+
+  expect(await screen.findByText(/account details updated\./i)).toBeInTheDocument();
+  expect(JSON.parse(localStorage.getItem('user'))).toEqual(
+    expect.objectContaining({
+      username: 'newmediafan',
+      email: 'newmediafan@example.com',
+    })
+  );
+  expect(localStorage.getItem('token')).toBe('updated-token');
 });

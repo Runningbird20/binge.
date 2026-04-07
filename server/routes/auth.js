@@ -19,6 +19,14 @@ function serializeUser(user) {
   };
 }
 
+function createToken(user) {
+  return jwt.sign(
+    { id: user.id, username: user.username, email: user.email },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
 router.post('/signup', async (req, res) => {
   const username = req.body.username?.trim();
   const email = req.body.email?.trim().toLowerCase();
@@ -46,11 +54,7 @@ router.post('/signup', async (req, res) => {
     const user = db
       .prepare('SELECT id, username, email, bio, avatar_url, created_at FROM users WHERE id = ?')
       .get(result.lastInsertRowid);
-    const token = jwt.sign(
-      { id: result.lastInsertRowid, username, email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = createToken(user);
     res.status(201).json({
       token,
       user: serializeUser(user),
@@ -75,11 +79,7 @@ router.post('/login', async (req, res) => {
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
-  const token = jwt.sign(
-    { id: user.id, username: user.username, email: user.email },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+  const token = createToken(user);
   res.json({ token, user: serializeUser(user) });
 });
 
@@ -89,6 +89,95 @@ router.get('/me', requireAuth, (req, res) => {
   ).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(serializeUser(user));
+});
+
+router.patch('/account', requireAuth, async (req, res) => {
+  const username = req.body.username?.trim();
+  const email = req.body.email?.trim().toLowerCase();
+  const currentPassword = req.body.currentPassword;
+  const newPassword = req.body.newPassword;
+
+  if (username !== undefined && !username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+
+  if (email !== undefined && !email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  if (newPassword !== undefined && newPassword.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  if (newPassword !== undefined && !currentPassword) {
+    return res.status(400).json({ error: 'Current password is required to change your password' });
+  }
+
+  const currentUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!currentUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (username && username !== currentUser.username) {
+    const duplicateUsername = db
+      .prepare('SELECT id FROM users WHERE username = ? AND id != ?')
+      .get(username, currentUser.id);
+    if (duplicateUsername) {
+      return res.status(409).json({ error: 'Username is already in use' });
+    }
+  }
+
+  if (email && email !== currentUser.email) {
+    const duplicateEmail = db
+      .prepare('SELECT id FROM users WHERE email = ? AND id != ?')
+      .get(email, currentUser.id);
+    if (duplicateEmail) {
+      return res.status(409).json({ error: 'Email is already in use' });
+    }
+  }
+
+  let nextPasswordHash = currentUser.password_hash;
+  if (newPassword !== undefined) {
+    const validCurrentPassword = await bcrypt.compare(currentPassword, currentUser.password_hash);
+    if (!validCurrentPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    nextPasswordHash = await bcrypt.hash(newPassword, 10);
+  }
+
+  const nextUsername = username ?? currentUser.username;
+  const nextEmail = email ?? currentUser.email;
+
+  const hasChanges =
+    nextUsername !== currentUser.username ||
+    nextEmail !== currentUser.email ||
+    nextPasswordHash !== currentUser.password_hash;
+
+  if (!hasChanges) {
+    return res.status(400).json({ error: 'No account changes to save' });
+  }
+
+  try {
+    db.prepare(
+      'UPDATE users SET username = ?, email = ?, password_hash = ? WHERE id = ?'
+    ).run(nextUsername, nextEmail, nextPasswordHash, currentUser.id);
+
+    const updatedUser = db.prepare(
+      'SELECT id, username, email, bio, avatar_url, created_at FROM users WHERE id = ?'
+    ).get(currentUser.id);
+
+    res.json({
+      token: createToken(updatedUser),
+      user: serializeUser(updatedUser),
+    });
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'Username or email already in use' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 module.exports = router;

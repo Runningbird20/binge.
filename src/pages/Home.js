@@ -53,7 +53,7 @@ export default function Home() {
         <div className="home-sections">
           <section className="home-section">
             <div className="section-header">
-              <h2>Browse</h2>
+              <h2>The Library</h2>
             </div>
             <div className="browse-grid">
               <Link to="/movies" className="browse-card browse-movies">
