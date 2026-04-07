@@ -9,6 +9,7 @@ import Movies from './pages/Movies';
 import TVShows from './pages/TVShows';
 import Books from './pages/Books';
 import Watchlist from './pages/Watchlist';
+import AccountSettings from './pages/AccountSettings';
 import './App.css';
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
           <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
           <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+          <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

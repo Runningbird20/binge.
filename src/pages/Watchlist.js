@@ -77,7 +77,7 @@ export default function Watchlist() {
       <Navbar />
       <main className="page-content">
         <div className="page-header">
-          <h1>My List</h1>
+          <h1>My Library</h1>
         </div>
 
         <div className="tabs">

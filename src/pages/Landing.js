@@ -9,7 +9,7 @@ export default function Landing() {
   return (
     <div className="App">
       <nav className="nav">
-        <div className="nav-logo">[TBD]</div>
+        <div className="nav-logo">binge.</div>
         <div className="nav-links">
           <Link to="/login">Log in</Link>
           <Link to="/signup" className="btn-primary">Sign Up</Link>
@@ -102,7 +102,7 @@ export default function Landing() {
       </section>
 
       <footer className="footer">
-        <div className="footer-logo">[TBD]</div>
+        <div className="footer-logo">binge.</div>
         <p>© 2026 · All rights reserved</p>
       </footer>
     </div>

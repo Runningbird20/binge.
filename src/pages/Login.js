@@ -28,7 +28,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <Link to="/" className="auth-logo">[TBD]</Link>
+        <Link to="/" className="auth-logo">binge.</Link>
         <h1>Welcome back</h1>
         <p className="auth-subtitle">Log in to your account</p>
 
