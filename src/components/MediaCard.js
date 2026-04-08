@@ -4,6 +4,7 @@ export default function MediaCard({ item, mediaType, userRating, onRate, onWatch
   const imageUrl = item.poster_url || item.cover_url;
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
+  const description = item.synopsis || item.overview || '';
 
   return (
     <div className="media-card-full">
@@ -29,8 +30,8 @@ export default function MediaCard({ item, mediaType, userRating, onRate, onWatch
             <span className="rating-count"> ({item.rating_count})</span>
           </div>
         )}
-        {item.synopsis && (
-          <p className="media-card-synopsis">{item.synopsis}</p>
+        {description && (
+          <p className="media-card-synopsis">{description}</p>
         )}
         <div className="media-card-actions">
           <StarRating value={userRating} onChange={(r) => onRate && onRate(item, r)} />

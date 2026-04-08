@@ -10,12 +10,6 @@ Install the project dependencies with:
 npm install
 ```
 
-The AllMovie scraper also needs a local Playwright browser binary:
-
-```bash
-npx playwright install chromium
-```
-
 Recommended runtime:
 
 - Node.js `18+`
@@ -47,10 +41,6 @@ Development dependencies:
 
 - `patch-package` `^8.0.1`
 
-Additional runtime note:
-
-- `playwright` requires the Chromium browser installed through `npx playwright install chromium`
-
 ## Available Scripts
 
 ### `npm start`
@@ -72,6 +62,62 @@ This is useful when you only need to work on frontend UI and do not need the API
 
 Starts only the Express API on `http://localhost:5001`.
 
+### `npm run import:books`
+
+Fetches book metadata from Internet Archive and writes it to `data/internet_archive_books.json`.
+
+### `npm run import:books:bulk`
+
+Streams a larger Internet Archive pull into `data/internet_archive_books.bulk.jsonl` and writes a resume checkpoint file alongside it.
+
+### `npm run import:books:resume`
+
+Continues the bulk Internet Archive pull from the saved checkpoint.
+
+### `npm run import:movies`
+
+Fetches movie metadata from Plex and writes it to `data/plex_movies.json`.
+
+### `npm run import:movies:bulk`
+
+Streams Plex movie metadata into `data/plex_movies.bulk.jsonl` and writes a resume checkpoint file alongside it.
+
+### `npm run import:movies:resume`
+
+Continues the Plex movie bulk import from the saved checkpoint.
+
+### `npm run import:movies:runner`
+
+Runs the Plex movie importer in a resumable loop, with progress written to `data/plex_movies.runner.log`.
+
+### `npm run import:tv`
+
+Fetches TV metadata from Plex and writes it to `data/plex_tv.json`.
+
+### `npm run import:tv:bulk`
+
+Streams Plex TV metadata into `data/plex_tv.bulk.jsonl` and writes a resume checkpoint file alongside it.
+
+### `npm run import:tv:resume`
+
+Continues the Plex TV bulk import from the saved checkpoint.
+
+### `npm run import:tv:runner`
+
+Runs the Plex TV importer in a resumable loop, with progress written to `data/plex_tv.runner.log`.
+
+### `npm run import:plex`
+
+Fetches both movies and TV metadata from Plex.
+
+### `npm run import:plex:bulk`
+
+Runs the Plex bulk importer for both movies and TV.
+
+### `npm run import:plex:resume`
+
+Resumes the Plex bulk importer for both movies and TV.
+
 ### `npm run build`
 
 Builds the frontend for production into the `build` folder.
@@ -82,6 +128,59 @@ Runs the test suite.
 
 ## Notes
 
-- The frontend proxies `/api/*` requests to `http://localhost:5001`.
+- The frontend can call the API through `REACT_APP_API_URL` in development, and falls back to the CRA proxy when no explicit API URL is set.
 - `better-sqlite3` is rebuilt during `postinstall` so the local native binding matches the current machine and Node version.
-- The Open Library scraper uses Node's built-in `fetch`, so no separate `node-fetch` install is needed on modern Node versions.
+- The import scripts use Node's built-in `fetch`, so no separate `node-fetch` install is needed on modern Node versions.
+- The server automatically seeds from `data/plex_movies.json`, `data/plex_tv.json`, `data/plex_movies.bulk.jsonl`, `data/plex_tv.bulk.jsonl`, `data/internet_archive_books.json`, and `data/internet_archive_books.bulk.jsonl` when those files exist.
+- Internet Archive imports exclude explicit/pornographic records with a keyword filter.
+
+## Internet Archive Books
+
+The Internet Archive scraper exports the book fields this app uses:
+
+- `coverUrl`
+- `title`
+- `author`
+- `genre`
+- `year`
+- `description`
+
+Examples:
+
+```bash
+node internet_archive_scraper.js --limit 25
+node internet_archive_scraper.js --query "mediatype:texts AND subject:(science fiction)" --limit 10
+```
+
+Notes:
+
+- `--query` uses Internet Archive advanced search syntax.
+- Per-item metadata requests fill in better descriptions and dates by default.
+- Explicit/pornographic records are filtered out before export.
+- Bulk mode is available through `--all` or `npm run import:books:bulk`.
+- Bulk exports write newline-delimited JSON and a checkpoint file so the crawl can be resumed.
+- Resume a previous batch with `npm run import:books:resume`.
+
+## Plex Movies And TV
+
+Plex imports scrape the public Plex movie and TV database pages and normalize them into the app's movie and TV schema.
+
+Examples:
+
+```bash
+node plex_importer.js --type movie --limit 20
+node plex_importer.js --type tv --limit 10
+node plex_importer.js --type both --limit 15
+node plex_importer.js --type movie --all --max-items 100
+node plex_importer.js --type tv --all --resume --max-items 100
+```
+
+Notes:
+
+- Bulk mode writes newline-delimited JSON and a checkpoint file, just like the Internet Archive importer.
+- Movies are grouped by year on Plex, and TV shows are grouped by decade.
+- Bulk checkpoints track both the current catalog page and the current title index within that page.
+- Use `node plex_resume_runner.js --type movie` or `node plex_resume_runner.js --type tv` for a background runner.
+- The runner writes progress logs to `data/plex_movies.runner.log` and `data/plex_tv.runner.log`.
+- Imported Plex records now include `title`, `overview`, `writers`, `cast`, and `age rating` in addition to the existing normalized fields.
+- The importer writes normalized JSON and JSONL that the server seeds into the `movies` and `tv_shows` tables.
