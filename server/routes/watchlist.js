@@ -7,7 +7,7 @@ router.use(requireAuth);
 
 router.get('/', (req, res) => {
   const { media_type, status } = req.query;
-  let query = 
+  let query = `
     SELECT w.*,
       CASE w.media_type
         WHEN 'movie'   THEN (SELECT title FROM movies   WHERE id = w.media_id)
