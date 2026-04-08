@@ -1,0 +1,12 @@
+{
+  "source": "internet-archive",
+  "query": "mediatype:texts AND subject:(fiction OR literature OR biography OR history OR science)",
+  "sort": "downloads desc",
+  "pageSize": 25,
+  "enrichMetadata": true,
+  "totalAvailable": 2652268,
+  "collected": 9912,
+  "processedPages": 400,
+  "nextPage": 401,
+  "updatedAt": "2026-04-08T03:40:04.357Z"
+}

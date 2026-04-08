@@ -1,4 +1,22 @@
-const BASE = '/api';
+function resolveBaseUrl() {
+  if (process.env.NODE_ENV === 'test') {
+    return '/api';
+  }
+
+  const configuredApiUrl = process.env.REACT_APP_API_URL?.trim();
+  if (!configuredApiUrl) {
+    return '/api';
+  }
+
+  const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
+  if (normalizedApiUrl.endsWith('/api')) {
+    return normalizedApiUrl;
+  }
+
+  return `${normalizedApiUrl}/api`;
+}
+
+const BASE = resolveBaseUrl();
 
 function authHeaders() {
   const token = localStorage.getItem('token');
