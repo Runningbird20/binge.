@@ -237,4 +237,31 @@ router.get('/books/:id', (req, res) => {
   res.json({ ...book, ...stats });
 });
 
+// ─── TMDB ID lookup for embed player ─────────────────────────────────────────
+router.get('/tmdb-id', async (req, res) => {
+  const { title, year, type } = req.query;
+  if (!title) return res.status(400).json({ error: 'title required' });
+
+  const TMDB_KEY = process.env.TMDB_API_KEY;
+  if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
+
+  try {
+    const mediaType = type === 'tv_show' ? 'tv' : 'movie';
+    const params = new URLSearchParams({
+      api_key: TMDB_KEY,
+      query: title,
+      ...(year ? { first_air_date_year: year, year } : {}),
+    });
+    const url = `https://api.themoviedb.org/3/search/${mediaType}?${params}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
+    const data = await r.json();
+    const result = data.results?.[0];
+    if (!result) return res.json({ id: null });
+    res.json({ id: result.id, title: result.title || result.name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
