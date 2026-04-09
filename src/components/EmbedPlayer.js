@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
 
 const PROVIDERS = [
@@ -8,7 +8,6 @@ const PROVIDERS = [
   { id: '2embed',     label: '2Embed'     },
 ];
 
-// Pure function — no hooks
 function buildUrl(provider, tmdbId, mediaType, season, episode) {
   const isTV = mediaType === 'tv_show';
   if (!tmdbId) return null;
@@ -32,24 +31,66 @@ function buildUrl(provider, tmdbId, mediaType, season, episode) {
 }
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
-  const [provider, setProvider]       = useState('vidsrc');
-  const [season, setSeason]           = useState(1);
-  const [episode, setEpisode]         = useState(1);
-  const [tmdbId, setTmdbId]           = useState(null);
-  const [lookupState, setLookupState] = useState('loading');
+  const [provider, setProvider]         = useState('vidsrc');
+  const [season, setSeason]             = useState(1);
+  const [episode, setEpisode]           = useState(1);
+  const [tmdbId, setTmdbId]             = useState(null);
+  const [lookupState, setLookupState]   = useState('loading');
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Episode data
+  const [seasonEpisodeCounts, setSeasonEpisodeCounts] = useState({}); // { 1: 8, 2: 10, ... }
+  const [loadingEpisodes, setLoadingEpisodes]         = useState(false);
+
+  // Progress tracking
+  const [watched, setWatched]           = useState(new Set()); // Set of "season:episode" strings
+  const [markingWatched, setMarkingWatched] = useState(false);
+
   const modalRef = useRef(null);
   const iframeRef = useRef(null);
   const isTV = mediaType === 'tv_show';
+  const watchTimerRef = useRef(null);
+  const watchSecondsRef = useRef(0);
+  const AUTO_WATCH_SECONDS = 5 * 60; // 5 minutes = auto-mark watched
+  const [realSeasonCount, setRealSeasonCount] = useState(null); // fetched from TMDB
+  const totalSeasons = realSeasonCount ?? item.seasons ?? 1;
 
-  // Fullscreen change listener
+  // Fullscreen listener
   useEffect(() => {
-    function onFsChange() {
-      setIsFullscreen(!!document.fullscreenElement);
-    }
+    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  // Auto-track watch time — mark watched after 5 minutes on same episode
+  useEffect(() => {
+    if (!isTV || !item.id) return;
+
+    // Reset timer when episode changes
+    watchSecondsRef.current = 0;
+    if (watchTimerRef.current) clearInterval(watchTimerRef.current);
+
+    // Only start tracking if not already watched
+    const key = `${season}:${episode}`;
+    if (watched.has(key)) return;
+
+    watchTimerRef.current = setInterval(() => {
+      watchSecondsRef.current += 1;
+      if (watchSecondsRef.current >= AUTO_WATCH_SECONDS) {
+        clearInterval(watchTimerRef.current);
+        // Auto-mark as watched
+        api.post('/media/episode-progress', { media_id: item.id, season, episode })
+          .then(() => {
+            setWatched(prev => new Set([...prev, key]));
+          })
+          .catch(() => {});
+      }
+    }, 1000);
+
+    return () => {
+      if (watchTimerRef.current) clearInterval(watchTimerRef.current);
+    };
+  }, [season, episode, isTV, item.id, watched]);
 
   // TMDB ID lookup
   useEffect(() => {
@@ -65,30 +106,84 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         if (data.id) {
           setTmdbId(data.id);
           setLookupState('done');
+          // Also fetch real season count from TMDB
+          if (mediaType === 'tv_show') {
+            try {
+              const showData = await api.get(`/media/tmdb-show?tmdbId=${data.id}`);
+              if (showData.numberOfSeasons) setRealSeasonCount(showData.numberOfSeasons);
+            } catch { /* use DB value as fallback */ }
+          }
         } else {
           setLookupState('error');
         }
       } catch (err) {
-        if (err.message?.includes('TMDB_API_KEY') || err.message?.includes('503')) {
-          setLookupState('no-key');
-        } else {
-          setLookupState('error');
-        }
+        setLookupState(err.message?.includes('503') ? 'no-key' : 'error');
       }
     }
     fetchTmdbId();
   }, [item.title, item.year, mediaType]);
 
+  // Fetch episode count for a season when TMDB ID is ready
+  const fetchSeasonEpisodes = useCallback(async (s) => {
+    if (!tmdbId || !isTV || seasonEpisodeCounts[s] !== undefined) return;
+    setLoadingEpisodes(true);
+    try {
+      const data = await api.get(`/media/tmdb-season?tmdbId=${tmdbId}&season=${s}`);
+      setSeasonEpisodeCounts(prev => ({ ...prev, [s]: data.episodeCount || 1 }));
+    } catch {
+      // Fallback to 12 if TMDB fails
+      setSeasonEpisodeCounts(prev => ({ ...prev, [s]: 12 }));
+    } finally {
+      setLoadingEpisodes(false);
+    }
+  }, [tmdbId, isTV, seasonEpisodeCounts]);
+
+  // Fetch episode count whenever season or tmdbId changes
+  useEffect(() => {
+    if (tmdbId && isTV) fetchSeasonEpisodes(season);
+  }, [tmdbId, season, isTV, fetchSeasonEpisodes]);
+
+  // Pre-fetch all seasons' episode counts once tmdbId is known
+  useEffect(() => {
+    if (!tmdbId || !isTV) return;
+    for (let s = 1; s <= totalSeasons; s++) {
+      fetchSeasonEpisodes(s);
+    }
+  }, [tmdbId, isTV, totalSeasons, fetchSeasonEpisodes]);
+
+  // Load watched episodes for this show
+  useEffect(() => {
+    if (!item.id || !isTV) return;
+    api.get(`/media/episode-progress/${item.id}`)
+      .then(rows => {
+        setWatched(new Set(rows.map(r => `${r.season}:${r.episode}`)));
+      })
+      .catch(() => {});
+  }, [item.id, isTV]);
+
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
-      // Try iframe first, fall back to modal
-      const el = iframeRef.current || modalRef.current;
-      el?.requestFullscreen().catch(() => {
+      (iframeRef.current || modalRef.current)?.requestFullscreen().catch(() => {
         modalRef.current?.requestFullscreen();
       });
     } else {
       document.exitFullscreen();
     }
+  }
+
+  async function markWatched(s, e) {
+    const key = `${s}:${e}`;
+    setMarkingWatched(true);
+    try {
+      if (watched.has(key)) {
+        await api.delete('/media/episode-progress', { media_id: item.id, season: s, episode: e });
+        setWatched(prev => { const n = new Set(prev); n.delete(key); return n; });
+      } else {
+        await api.post('/media/episode-progress', { media_id: item.id, season: s, episode: e });
+        setWatched(prev => new Set([...prev, key]));
+      }
+    } catch { /* non-fatal */ }
+    finally { setMarkingWatched(false); }
   }
 
   function getFallbackUrl() {
@@ -97,11 +192,13 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     return `https://vidsrc.me/embed/movie?tmdb=${title}`;
   }
 
+  const episodeCount = seasonEpisodeCounts[season];
   const embedUrl = tmdbId
     ? buildUrl(provider, tmdbId, mediaType, season, episode)
     : getFallbackUrl();
 
-  const totalSeasons = item.seasons || 3;
+  // Count watched in current season
+  const watchedInSeason = Array.from(watched).filter(k => k.startsWith(`${season}:`)).length;
 
   return (
     <div className="player-overlay" onClick={onClose}>
@@ -118,18 +215,15 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button
-              className="player-close"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            >
+            <button className="player-close" onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
               {isFullscreen ? '↙' : '↗'}
             </button>
             <button className="player-close" onClick={onClose} title="Close">✕</button>
           </div>
         </div>
 
-        {/* TMDB lookup status */}
+        {/* Status bar */}
         {lookupState === 'loading' && (
           <div className="player-lookup-bar">
             <span className="player-lookup-dot" /> Looking up media ID...
@@ -137,45 +231,87 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         )}
         {lookupState === 'error' && (
           <div className="player-lookup-bar player-lookup-bar--warn">
-            ⚠️ Could not find TMDB ID for "{item.title}" — stream may not load. Try switching sources.
+            ⚠️ Could not find TMDB ID for "{item.title}" — stream may not load.
           </div>
         )}
         {lookupState === 'no-key' && (
           <div className="player-lookup-bar player-lookup-bar--warn">
-            ⚠️ Add <code>TMDB_API_KEY</code> to your .env for better stream matching.
+            ⚠️ Add <code>TMDB_API_KEY</code> to your .env for accurate episode counts.
           </div>
         )}
 
         {/* TV Controls */}
         {isTV && (
           <div className="player-tv-controls">
+
+            {/* Season row */}
             <div className="player-control-group">
               <label>Season</label>
               <div className="player-episode-btns">
-                {Array.from({ length: totalSeasons }, (_, i) => i + 1).map(s => (
-                  <button
-                    key={s}
-                    className={`player-ep-btn ${season === s ? 'active' : ''}`}
-                    onClick={() => { setSeason(s); setEpisode(1); }}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {Array.from({ length: totalSeasons }, (_, i) => i + 1).map(s => {
+                  const watchedCount = Array.from(watched).filter(k => k.startsWith(`${s}:`)).length;
+                  const total = seasonEpisodeCounts[s];
+                  const allWatched = total && watchedCount === total;
+                  return (
+                    <button
+                      key={s}
+                      className={`player-ep-btn ${season === s ? 'active' : ''} ${allWatched ? 'ep-all-watched' : watchedCount > 0 ? 'ep-partial-watched' : ''}`}
+                      onClick={() => { setSeason(s); setEpisode(1); }}
+                      title={watchedCount > 0 ? `${watchedCount}${total ? '/'+total : ''} watched` : ''}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+
+            {/* Episode row */}
             <div className="player-control-group">
-              <label>Episode</label>
+              <label>
+                Episode
+                {episodeCount !== undefined && (
+                  <span className="player-ep-meta">
+                    {loadingEpisodes ? ' ...' : ` (${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''})`}
+                  </span>
+                )}
+              </label>
               <div className="player-episode-btns">
-                {Array.from({ length: 20 }, (_, i) => i + 1).map(e => (
-                  <button
-                    key={e}
-                    className={`player-ep-btn ${episode === e ? 'active' : ''}`}
-                    onClick={() => setEpisode(e)}
-                  >
-                    {e}
-                  </button>
-                ))}
+                {episodeCount === undefined ? (
+                  <span className="player-ep-loading">Loading episodes...</span>
+                ) : (
+                  Array.from({ length: episodeCount }, (_, i) => i + 1).map(e => {
+                    const isWatched = watched.has(`${season}:${e}`);
+                    const isCurrent = episode === e;
+                    return (
+                      <button
+                        key={e}
+                        className={`player-ep-btn ${isCurrent ? 'active' : ''} ${isWatched && !isCurrent ? 'ep-watched' : ''}`}
+                        onClick={() => setEpisode(e)}
+                        title={isWatched ? 'Watched — click to unmark' : 'Click to watch'}
+                      >
+                        {e}
+                      </button>
+                    );
+                  })
+                )}
               </div>
+            </div>
+
+            {/* Mark watched button */}
+            <div className="player-mark-row">
+              <button
+                className={`player-mark-btn ${watched.has(`${season}:${episode}`) ? 'player-mark-btn--watched' : ''}`}
+                onClick={() => markWatched(season, episode)}
+                disabled={markingWatched}
+                title={watched.has(`${season}:${episode}`) ? 'Click to unmark as watched' : 'Click to manually mark as watched (auto-marks after 5 min)'}
+              >
+                {watched.has(`${season}:${episode}`) ? '✓ Watched' : '+ Mark as watched'}
+              </button>
+              <span className="player-mark-hint">
+                S{season} E{episode}
+                {!watched.has(`${season}:${episode}`) && ' · auto-tracks after 5 min'}
+              </span>
             </div>
           </div>
         )}
@@ -194,7 +330,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           ))}
         </div>
 
-        {/* iFrame */}
+        {/* iframe */}
         <div className="player-frame-wrap">
           {embedUrl ? (
             <iframe
@@ -204,14 +340,11 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               className="player-frame"
               allowFullScreen
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-              allowFullScreen={true}
               referrerPolicy="no-referrer"
               title={`Watch ${item.title}`}
             />
           ) : (
-            <div className="player-no-url">
-              <p>⏳ Preparing stream...</p>
-            </div>
+            <div className="player-no-url"><p>⏳ Preparing stream...</p></div>
           )}
         </div>
 
