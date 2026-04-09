@@ -353,53 +353,72 @@ export default function Books() {
       <main className="page-content">
         <div className="page-header books-page-header">
           <div>
+            <p className="page-kicker">Browse</p>
             <h1>Books</h1>
-            <p className="books-page-subtitle">
-              Explore the books loaded from your data folder and add favorites to your Library.
+            <p className="page-subtitle books-page-subtitle">
+              Search the shelf, open richer book details, and save future reads to your library or shared lists.
             </p>
           </div>
         </div>
 
-        <div className="filter-bar">
-          <input
-            className="search-input"
-            type="text"
-            aria-label="Search books"
-            placeholder="Search books..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <select
-            className="filter-input"
-            aria-label="Genre"
-            value={genre}
-            onChange={(event) => setGenre(event.target.value)}
-          >
-            <option value="">All Genres</option>
-            {genreOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <select
-            className="filter-input"
-            aria-label="Sort by"
-            value={sortOrder}
-            onChange={(event) => setSortOrder(event.target.value)}
-          >
-            <option value="title-asc">Title A-Z</option>
-            <option value="year-desc">Newest First</option>
-            <option value="year-asc">Oldest First</option>
-          </select>
-          {hasActiveFilters && (
-            <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-              Clear
-            </button>
-          )}
-        </div>
+        <section className="surface-panel">
+          <div className="surface-panel-header">
+            <div>
+              <h2>Filter the Shelf</h2>
+              <p className="surface-panel-copy">
+                Search by title or author, narrow by genre, and sort the shelf without leaving the page.
+              </p>
+            </div>
+            <p className="surface-panel-meta">
+              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
+            </p>
+          </div>
 
-        <section className="books-results-panel">
+          <div className="filter-bar">
+            <input
+              className="search-input"
+              type="text"
+              aria-label="Search books"
+              placeholder="Search books..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="filter-input"
+              aria-label="Genre"
+              value={genre}
+              onChange={(event) => setGenre(event.target.value)}
+            >
+              <option value="">All Genres</option>
+              {genreOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select
+              className="filter-input"
+              aria-label="Sort by"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            >
+              <option value="title-asc">Title A-Z</option>
+              <option value="year-desc">Newest First</option>
+              <option value="year-asc">Oldest First</option>
+            </select>
+            {hasActiveFilters && (
+              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
+                Clear
+              </button>
+            )}
+          </div>
+
+          {hasActiveFilters && !loading && (
+            <p className="surface-panel-copy">Showing results for your active filters.</p>
+          )}
+        </section>
+
+        <section className="surface-panel surface-panel-spacious books-results-panel">
           <div className="books-results-header">
             <p className="books-results-count">
               {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}

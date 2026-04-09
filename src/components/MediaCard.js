@@ -1,6 +1,13 @@
 import StarRating from './StarRating';
 
-export default function MediaCard({ item, mediaType, userRating, onRate, onWatchlist, onOpenDetails }) {
+export default function MediaCard({
+  item,
+  mediaType,
+  userRating,
+  onRate,
+  onWatchlist,
+  onOpenDetails,
+}) {
   const imageUrl = item.poster_url || item.cover_url || item.image_url;
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
@@ -29,24 +36,29 @@ export default function MediaCard({ item, mediaType, userRating, onRate, onWatch
           </div>
         )}
       </div>
+
       <div className="media-card-body">
         <h3 className="media-card-title">{item.title}</h3>
+
         <div className="media-card-meta">
           {item.year && <span>{item.year}</span>}
           {subtitle && <span>{subtitle}</span>}
           {item.genre && <span className="media-card-genre">{item.genre}</span>}
         </div>
+
         {avgRating && (
           <div className="media-card-avg">
-            <span className="star-gold">★</span> {avgRating}
+            Score {avgRating}/10
             <span className="rating-count"> ({item.rating_count})</span>
           </div>
         )}
+
         {description && (
           <p className="media-card-synopsis">{description}</p>
         )}
+
         <div className="media-card-actions">
-          <StarRating value={userRating} onChange={(r) => onRate && onRate(item, r)} />
+          <StarRating value={userRating} onChange={(rating) => onRate && onRate(item, rating)} />
           {onWatchlist && (
             <button
               className="btn-ghost btn-sm"
@@ -56,7 +68,7 @@ export default function MediaCard({ item, mediaType, userRating, onRate, onWatch
                 onWatchlist(item);
               }}
             >
-              + Watchlist
+              Save
             </button>
           )}
         </div>
