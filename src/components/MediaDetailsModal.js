@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import StarRating from './StarRating';
+import ListSaveControls from './ListSaveControls';
 
 function getImageUrl(item) {
   return item.poster_url || item.cover_url || item.image_url || '';
@@ -137,6 +138,7 @@ export default function MediaDetailsModal({
                 {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
               </button>
             )}
+            <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
             {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
+import ListSaveControls from '../components/ListSaveControls';
 import { api } from '../api';
 
 const BOOKS_PAGE_SIZE = 24;
@@ -135,6 +136,7 @@ function BookDetailsModal({
             >
               {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
             </button>
+            <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
             {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
           </div>
         </div>
