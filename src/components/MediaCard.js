@@ -1,7 +1,21 @@
 import StarRating from './StarRating';
 
 export default function MediaCard({ item, mediaType, userRating, onRate, onWatchlist, onOpenDetails }) {
-  const imageUrl = item.poster_url || item.cover_url || item.image_url;
+  const rawUrl = item.poster_url || item.cover_url || item.image_url;
+  // Extract real image URL from Plex proxy URLs
+  function resolvePosterUrl(url) {
+    if (!url) return null;
+    try {
+      if (url.includes('plex.tv')) {
+        const inner = new URL(url).searchParams.get('url');
+        if (inner) {
+          try { return decodeURIComponent(inner); } catch { return inner; }
+        }
+      }
+    } catch { /* fall through */ }
+    return url;
+  }
+  const imageUrl = resolvePosterUrl(rawUrl);
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
   const description = item.synopsis || item.overview || '';
@@ -22,7 +36,7 @@ export default function MediaCard({ item, mediaType, userRating, onRate, onWatch
     >
       <div className="media-card-poster">
         {imageUrl ? (
-          <img src={imageUrl} alt={item.title} />
+          <img src={imageUrl} alt={item.title} referrerPolicy="no-referrer" />
         ) : (
           <div className="media-card-placeholder-img">
             <span>{item.title?.charAt(0)}</span>
