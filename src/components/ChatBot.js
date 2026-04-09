@@ -4,50 +4,156 @@ import { api } from '../api';
 
 const INTENT_LABELS = {
   recommendation: '🎯 Recommendation',
-  thematic: '🎭 Thematic Analysis',
-  factual: '📋 Factual Lookup',
+  thematic: '🎭 Analysis',
+  factual: '📋 Factual',
   general: '💬 General',
 };
 
 const SUGGESTED_PROMPTS = [
   'Recommend something based on my ratings',
-  'What themes does Inception share with other films?',
+  'What are the best drama TV shows?',
   'Who directed The Dark Knight?',
-  'Suggest books similar to ones I\'ve enjoyed',
-  'What are some highly rated sci-fi movies?',
-  'Compare two books I might like',
+  'What themes does Dune explore?',
+  'Best sci-fi movies of all time?',
+  'What should I read if I like mystery?',
 ];
 
-function SourceBadge({ source }) {
-  const icon = source.media_type === 'movie' ? '🎬' : source.media_type === 'tv_show' ? '📺' : '📚';
-  const label = `${source.title}${source.year ? ` (${source.year})` : ''}`;
-  if (source.siteUrl) {
-    return (
-      <a href={source.siteUrl} className="chat-source-badge chat-source-badge--link"
-         title={`View ${label} on binge.`}>
-        {icon} {source.title}
-      </a>
-    );
+// ─── Request Modal ─────────────────────────────────────────────────────────────
+
+function RequestModal({ prefill, onClose }) {
+  const [title, setTitle]         = useState(prefill?.title || '');
+  const [mediaType, setMediaType] = useState(prefill?.media_type || 'movie');
+  const [year, setYear]           = useState('');
+  const [reason, setReason]       = useState('');
+  const [status, setStatus]       = useState(null);
+  const [error, setError]         = useState('');
+
+  async function submit() {
+    if (!title.trim()) { setError('Please enter a title.'); return; }
+    setStatus('loading');
+    setError('');
+    try {
+      await api.post('/requests', { title: title.trim(), media_type: mediaType, year: year || undefined, reason });
+      setStatus('success');
+    } catch (err) {
+      setError(err.message || 'Something went wrong.');
+      setStatus(null);
+    }
   }
+
   return (
-    <span className="chat-source-badge" title={label}>
-      {icon} {source.title}
-    </span>
+    <div className="req-overlay" onClick={onClose}>
+      <div className="req-modal" onClick={e => e.stopPropagation()}>
+        {status === 'success' ? (
+          <div className="req-success">
+            <div className="req-success-icon">✨</div>
+            <h3>Request submitted!</h3>
+            <p>An admin will review your request for <em>"{title}"</em>.</p>
+            <button className="btn-primary" onClick={onClose}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div className="req-header">
+              <div>
+                <p className="req-eyebrow">Can't find it?</p>
+                <h3 className="req-title">Request Media</h3>
+              </div>
+              <button className="req-close" onClick={onClose}>✕</button>
+            </div>
+            <p className="req-subtitle">Ask an admin to add something to binge.</p>
+
+            {error && <div className="req-error">{error}</div>}
+
+            <div className="req-form">
+              <div className="req-field">
+                <label>Title</label>
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder="e.g. Interstellar"
+                  onKeyDown={e => e.key === 'Enter' && submit()}
+                  autoFocus
+                />
+              </div>
+
+              <div className="req-field-row">
+                <div className="req-field">
+                  <label>Type</label>
+                  <select value={mediaType} onChange={e => setMediaType(e.target.value)}>
+                    <option value="movie">🎬 Movie</option>
+                    <option value="tv_show">📺 TV Show</option>
+                    <option value="book">📚 Book</option>
+                  </select>
+                </div>
+                <div className="req-field">
+                  <label>Year <span className="req-optional">(optional)</span></label>
+                  <input
+                    type="number"
+                    value={year}
+                    onChange={e => setYear(e.target.value)}
+                    placeholder="e.g. 2014"
+                    min="1888" max="2030"
+                  />
+                </div>
+              </div>
+
+              <div className="req-field">
+                <label>Why do you want it? <span className="req-optional">(optional)</span></label>
+                <textarea
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  placeholder="e.g. It's a classic everyone should see"
+                  rows={2}
+                />
+              </div>
+
+              <button
+                className="req-submit"
+                onClick={submit}
+                disabled={status === 'loading'}
+              >
+                {status === 'loading' ? 'Submitting...' : 'Submit Request →'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
+
+// ─── Source badges ─────────────────────────────────────────────────────────────
+
+function SiteBadge({ source }) {
+  const icon = source.media_type === 'movie' ? '🎬' : source.media_type === 'tv_show' ? '📺' : '📚';
+  return (
+    <a href={source.siteUrl} className="chat-source-badge chat-source-badge--site"
+       title={`View on binge.: ${source.title}${source.year ? ` (${source.year})` : ''}`}>
+      {icon} {source.title}
+    </a>
+  );
+}
+
+function WebBadge({ source }) {
+  return (
+    <a href={source.url} target="_blank" rel="noreferrer"
+       className="chat-source-badge chat-source-badge--web"
+       title={source.snippet || source.title}>
+      🌐 {source.source || 'Web'}
+    </a>
+  );
+}
+
+// ─── Message ───────────────────────────────────────────────────────────────────
 
 function Message({ msg }) {
   return (
     <div className={`chat-message chat-message--${msg.role}`}>
       {msg.role === 'assistant' && (
         <div className="chat-message-header">
-          <span className="chat-avatar">🤖</span>
-          {msg.intent && (
-            <span className="chat-intent-badge">{INTENT_LABELS[msg.intent] || msg.intent}</span>
-          )}
-          {msg.latency && (
-            <span className="chat-latency">{(msg.latency / 1000).toFixed(1)}s</span>
-          )}
+          <span className="chat-avatar">🦉</span>
+          {msg.intent && <span className="chat-intent-badge">{INTENT_LABELS[msg.intent] || msg.intent}</span>}
+          {msg.latency && <span className="chat-latency">{(msg.latency / 1000).toFixed(1)}s</span>}
         </div>
       )}
       {msg.role === 'user' && (
@@ -57,14 +163,25 @@ function Message({ msg }) {
       )}
       <div className="chat-message-body">
         <p className="chat-message-text">{msg.content}</p>
-        {msg.sources && msg.sources.length > 0 && (
-          <div className="chat-sources">
-            <span className="chat-sources-label">Sources used:</span>
-            <div className="chat-sources-list">
-              {msg.sources.map((s) => (
-                <SourceBadge key={`${s.media_type}:${s.id}`} source={s} />
-              ))}
-            </div>
+
+        {(msg.siteSources?.length > 0 || msg.webSources?.length > 0) && (
+          <div className="chat-sources-row">
+            {msg.siteSources?.length > 0 && (
+              <div className="chat-sources">
+                <span className="chat-sources-label">On binge.</span>
+                <div className="chat-sources-list">
+                  {msg.siteSources.map(s => <SiteBadge key={`${s.media_type}:${s.id}`} source={s} />)}
+                </div>
+              </div>
+            )}
+            {msg.webSources?.length > 0 && (
+              <div className="chat-sources">
+                <span className="chat-sources-label">Sources</span>
+                <div className="chat-sources-list">
+                  {msg.webSources.map((s, i) => <WebBadge key={i} source={s} />)}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -72,94 +189,78 @@ function Message({ msg }) {
   );
 }
 
+// ─── Main ChatBot ──────────────────────────────────────────────────────────────
+
 export default function ChatBot() {
   const { user } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [ollamaStatus, setOllamaStatus] = useState(null); // null=checking, true=ok, false=down
-  const [error, setError] = useState(null);
+  const [isOpen, setIsOpen]             = useState(false);
+  const [isMinimized, setIsMinimized]   = useState(false);
+  const [messages, setMessages]         = useState([]);
+  const [input, setInput]               = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [apiStatus, setApiStatus]       = useState(null);
+  const [requestModal, setRequestModal] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Check Ollama status when panel opens
   useEffect(() => {
-    if (!isOpen || ollamaStatus !== null) return;
+    if (!isOpen || apiStatus !== null) return;
     checkStatus();
-  }, [isOpen, ollamaStatus]);
+  }, [isOpen, apiStatus]);
 
   async function checkStatus() {
     try {
       const data = await api.get('/chat/status');
-      setOllamaStatus(data.ok);
+      setApiStatus(data.ok);
       if (data.ok && messages.length === 0) {
         setMessages([{
           id: 'welcome',
           role: 'assistant',
-          content: `Hi ${user?.username || 'there'}! 👋 I'm your media assistant. I can help you discover movies, TV shows, and books — ask me anything! Try asking for recommendations based on your ratings, or explore themes across different works.`,
+          content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it. I'll search the web and show you what's available on binge.!`,
         }]);
       }
     } catch {
-      setOllamaStatus(false);
+      setApiStatus(false);
     }
   }
 
   useEffect(() => {
-    if (isOpen && !isMinimized) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (isOpen && !isMinimized) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isOpen, isMinimized]);
 
   useEffect(() => {
-    if (isOpen && !isMinimized && ollamaStatus) {
-      inputRef.current?.focus();
-    }
-  }, [isOpen, isMinimized, ollamaStatus]);
+    if (isOpen && !isMinimized && apiStatus) inputRef.current?.focus();
+  }, [isOpen, isMinimized, apiStatus]);
 
   const sendMessage = useCallback(async (text) => {
     const trimmed = (text || input).trim();
     if (!trimmed || loading) return;
-
     setInput('');
-    setError(null);
 
-    const userMsg = {
-      id: Date.now(),
-      role: 'user',
-      content: trimmed,
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    const userMsg = { id: Date.now(), role: 'user', content: trimmed };
+    setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
-    // Build conversation history (exclude welcome message)
     const conversationHistory = messages
-      .filter((m) => m.id !== 'welcome')
-      .map((m) => ({ role: m.role, content: m.content }));
+      .filter(m => m.id !== 'welcome')
+      .map(m => ({ role: m.role, content: m.content }));
 
     try {
-      const data = await api.post('/chat', {
-        message: trimmed,
-        conversationHistory,
-      });
-
-      const assistantMsg = {
+      const data = await api.post('/chat', { message: trimmed, conversationHistory });
+      setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
         content: data.response,
         intent: data.intent,
-        sources: data.sources || [],
+        siteSources: data.siteSources || data.sources || [],
+        webSources: data.webSources || [],
         latency: data.latency,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+      }]);
     } catch (err) {
-      const errMsg = err?.message || 'Something went wrong. Please try again.';
-      setError(errMsg);
-      setMessages((prev) => [...prev, {
+      setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
-        content: `⚠️ ${errMsg}`,
+        content: `⚠️ ${err?.message || 'Something went wrong. Please try again.'}`,
       }]);
     } finally {
       setLoading(false);
@@ -167,130 +268,110 @@ export default function ChatBot() {
   }, [input, loading, messages]);
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
-  function clearChat() {
-    setMessages([]);
-    setOllamaStatus(null); // re-check and re-add welcome
-  }
+  function clearChat() { setMessages([]); setApiStatus(null); }
 
   if (!user) return null;
 
   return (
     <>
-      {/* Floating toggle button */}
+      {/* FAB */}
       <button
         className={`chatbot-fab ${isOpen ? 'chatbot-fab--open' : ''}`}
-        onClick={() => { setIsOpen((o) => !o); setIsMinimized(false); }}
+        onClick={() => { setIsOpen(o => !o); setIsMinimized(false); }}
         aria-label="Open AI media assistant"
-        title="Ask your media assistant"
       >
-        {isOpen ? '✕' : '🤖'}
+        {isOpen ? '✕' : '🦉'}
         {!isOpen && <span className="chatbot-fab-label">Ask AI</span>}
       </button>
 
-      {/* Chat panel */}
+      {/* Panel */}
       {isOpen && (
         <div className={`chatbot-panel ${isMinimized ? 'chatbot-panel--minimized' : ''}`}>
+
           {/* Header */}
           <div className="chatbot-header">
             <div className="chatbot-header-title">
-              <span>🤖</span>
+              <span className="chatbot-header-owl">🦉</span>
               <div>
                 <strong>Media Assistant</strong>
-                <span className={`chatbot-status-dot ${ollamaStatus ? 'chatbot-status-dot--online' : ollamaStatus === false ? 'chatbot-status-dot--offline' : 'chatbot-status-dot--checking'}`} />
+                <span className={`chatbot-status-dot chatbot-status-dot--${apiStatus ? 'online' : apiStatus === false ? 'offline' : 'checking'}`} />
               </div>
             </div>
             <div className="chatbot-header-actions">
-              <button onClick={clearChat} title="Clear chat" className="chatbot-icon-btn">🗑</button>
-              <button onClick={() => setIsMinimized((m) => !m)} title="Minimize" className="chatbot-icon-btn">
-                {isMinimized ? '▲' : '▼'}
+              <button
+                onClick={() => setRequestModal({})}
+                className="chatbot-request-trigger"
+                title="Request media"
+              >
+                + Request
               </button>
-              <button onClick={() => setIsOpen(false)} title="Close" className="chatbot-icon-btn">✕</button>
+              <button onClick={clearChat} title="Clear chat" className="chatbot-icon-btn">🗑</button>
+              <button onClick={() => setIsMinimized(m => !m)} className="chatbot-icon-btn">{isMinimized ? '▲' : '▼'}</button>
+              <button onClick={() => setIsOpen(false)} className="chatbot-icon-btn">✕</button>
             </div>
           </div>
 
           {!isMinimized && (
             <>
-              {/* Ollama offline warning */}
-              {ollamaStatus === false && (
+              {apiStatus === false && (
                 <div className="chatbot-offline-banner">
-                  <strong>⚠️ Ollama not detected.</strong>
-                  <p>
-                    To use the AI assistant, install <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a> and run:
-                  </p>
-                  <code>ollama pull llama3.2</code>
-                  <br />
-                  <code>ollama serve</code>
-                  <button className="chatbot-retry-btn" onClick={() => { setOllamaStatus(null); checkStatus(); }}>
-                    Retry connection
-                  </button>
+                  <strong>⚠️ AI not available.</strong>
+                  <p>Make sure <code>GROQ_API_KEY</code> is set in your <code>.env</code> file.</p>
+                  <button className="chatbot-retry-btn" onClick={() => { setApiStatus(null); checkStatus(); }}>Retry</button>
                 </div>
               )}
 
-              {/* Messages */}
               <div className="chatbot-messages">
-                {messages.map((msg) => (
-                  <Message key={msg.id} msg={msg} />
-                ))}
+                {messages.map(msg => <Message key={msg.id} msg={msg} />)}
                 {loading && (
                   <div className="chat-message chat-message--assistant">
-                    <div className="chat-message-header">
-                      <span className="chat-avatar">🤖</span>
-                    </div>
+                    <div className="chat-message-header"><span className="chat-avatar">🦉</span></div>
                     <div className="chat-message-body">
-                      <div className="chat-typing-indicator">
-                        <span /><span /><span />
-                      </div>
+                      <div className="chat-typing-indicator"><span /><span /><span /></div>
                     </div>
                   </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Suggested prompts — only shown when chat is empty */}
-              {messages.length <= 1 && !loading && ollamaStatus && (
+              {messages.length <= 1 && !loading && apiStatus && (
                 <div className="chatbot-suggestions">
-                  {SUGGESTED_PROMPTS.map((prompt) => (
-                    <button
-                      key={prompt}
-                      className="chatbot-suggestion-chip"
-                      onClick={() => sendMessage(prompt)}
-                    >
-                      {prompt}
-                    </button>
+                  {SUGGESTED_PROMPTS.map(p => (
+                    <button key={p} className="chatbot-suggestion-chip" onClick={() => sendMessage(p)}>{p}</button>
                   ))}
                 </div>
               )}
 
-              {/* Input */}
               <div className="chatbot-input-row">
                 <textarea
                   ref={inputRef}
                   className="chatbot-input"
-                  placeholder={ollamaStatus ? 'Ask about movies, books, TV shows...' : 'AI offline — start Ollama to chat'}
+                  placeholder="Ask anything about movies, books, TV..."
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={loading || !ollamaStatus}
+                  disabled={loading || !apiStatus}
                   rows={1}
                 />
                 <button
                   className="chatbot-send-btn"
                   onClick={() => sendMessage()}
-                  disabled={loading || !input.trim() || !ollamaStatus}
+                  disabled={loading || !input.trim() || !apiStatus}
                 >
                   {loading ? '⏳' : '➤'}
                 </button>
               </div>
-              <p className="chatbot-footer-note">Powered by Ollama · Runs locally · Free &amp; private</p>
+              <p className="chatbot-footer-note">Web search enabled · binge. catalog cross-referenced</p>
             </>
           )}
         </div>
+      )}
+
+      {requestModal && (
+        <RequestModal prefill={requestModal} onClose={() => setRequestModal(null)} />
       )}
     </>
   );

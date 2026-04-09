@@ -1,14 +1,14 @@
 {
   "source": "plex",
   "mediaType": "tv",
-  "catalogPath": "/tv-show-database/2010s",
-  "catalogLabel": "2010s",
+  "catalogPath": "/tv-show-database/2020s",
+  "catalogLabel": "2020s",
   "totalPages": 8,
-  "processedPages": 1,
-  "collected": 134,
-  "currentItemIndex": 387,
-  "currentPageItemCount": 42109,
-  "currentItemSlug": "patrick-melrose",
-  "nextPage": 2,
-  "updatedAt": "2026-04-09T00:21:24.747Z"
+  "processedPages": 0,
+  "collected": 85,
+  "currentItemIndex": 100,
+  "currentPageItemCount": 41451,
+  "currentItemSlug": "presumed-innocent",
+  "nextPage": 1,
+  "updatedAt": "2026-04-09T17:21:48.318Z"
 }
