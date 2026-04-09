@@ -14,9 +14,12 @@ const DEFAULT_BULK_OUTPUT = path.join(__dirname, 'data', 'internet_archive_books
 const DEFAULT_CHECKPOINT = path.join(__dirname, 'data', 'internet_archive_books.bulk.checkpoint.json');
 const DEFAULT_LIMIT = 20;
 const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_BULK_PAGE_SIZE = 200;
 const DEFAULT_SORT = 'downloads desc';
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_RETRIES = 3;
+const DEFAULT_MIN_YEAR = 2000;
+const ARCHIVE_MAX_PAGE = 400;
 const DEFAULT_QUERY =
   'mediatype:texts AND subject:(fiction OR literature OR biography OR history OR science)';
 const DEFAULT_FIELDS = [
@@ -43,6 +46,62 @@ const EXPLICIT_PATTERNS = [
   /\bsoftcore\b/i,
   /\bfetish\b/i,
   /\badult video\b/i,
+];
+const RESEARCH_PATTERNS = [
+  /\bthesis\b/i,
+  /\bdissertation\b/i,
+  /\bproceedings\b/i,
+  /\bconference(?: presentations?)?\b/i,
+  /\bresearch papers?\b/i,
+  /\bscientific articles?\b/i,
+  /\bworking papers?\b/i,
+  /\btechnical report\b/i,
+  /\bpeer[- ]review/i,
+  /\beric\s+ed\d+\b/i,
+  /\binternational journal\b/i,
+  /\bpapers contain references\b/i,
+  /\bvolume\s+\d+\s*\(\d{4}\)\s+no\s+\d+\b/i,
+];
+const PERIODICAL_PATTERNS = [
+  /\bjournals?\b/i,
+  /\bnewspapers?\b/i,
+  /\bgazettes?\b/i,
+  /\bmagazines?\b/i,
+  /\bperiodicals?\b/i,
+  /\bquarterly\b/i,
+  /\bmonthly\b/i,
+  /\bweekly\b/i,
+  /\bnewsletter\b/i,
+  /\bstudent newspapers?\b/i,
+  /\bnews enterprise\b/i,
+  /\btimes of india\b/i,
+  /\bgleaner\b/i,
+  /\bissue\s+\d+\b/i,
+  /\bfull volume\b/i,
+];
+const TITLE_ARTIFACT_PATTERNS = [
+  /\.compressed\b/i,
+  /anna[’']s archive/i,
+  /\bz[\s-]?lib(?:rary)?(?:\.org)?\b/i,
+  /\bbookzz(?:\.org)?\b/i,
+  /\bpdf archives?\b/i,
+  /\bscreenshot archive\b/i,
+  /\bmega image\b/i,
+  /\bpages?\s*0{2,}\d+/i,
+];
+const FICTION_LIKE_PATTERNS = [
+  /\bfiction\b/i,
+  /\bnovel\b/i,
+  /\bjuvenile\b/i,
+  /\bfantasy\b/i,
+  /\bromance\b/i,
+  /\bmystery\b/i,
+  /\bthriller\b/i,
+  /\bscience fiction\b/i,
+  /\bgraphic novel\b/i,
+  /\bmanga\b/i,
+  /\bcomic\b/i,
+  /\bstory\b/i,
 ];
 
 function ensureArray(value) {
@@ -83,6 +142,33 @@ function normalizeYear(value) {
   if (!text) return null;
   const match = text.match(/\b(\d{4})\b/);
   return match ? Number(match[1]) : null;
+}
+
+function normalizeArchiveTitle(value) {
+  let title = compactWhitespace(value);
+  if (!title) return null;
+
+  title = title
+    .replace(/^BK\s*\d+\s*-\s*/i, '')
+    .replace(/^\d{4}\s+Or Before\s*-\s*/i, '')
+    .replace(/^\d{4}\s*-\s*/i, '')
+    .replace(/^\d+\s*[\.\-]\s*/i, '')
+    .replace(
+      /\[(?:[^\]]*?(?:z[\s-]?lib(?:rary)?|bookzz(?:\.org)?|kobo|yen press|kitzoku)[^\]]*)\]/ig,
+      ' '
+    )
+    .replace(
+      /\((?:[^\)]*?(?:z[\s-]?lib(?:rary)?|bookzz(?:\.org)?|anna[’']s archive)[^\)]*)\)/ig,
+      ' '
+    )
+    .replace(/anna[’']s archive.*$/i, '')
+    .replace(/\.compressed\b/ig, '')
+    .replace(/[_]+/g, ' ');
+
+  title = compactWhitespace(title);
+  if (!title) return null;
+
+  return title.replace(/[\s\-:;,.|/]+$/g, '').trim() || null;
 }
 
 function normalizeCreator(value) {
@@ -140,6 +226,90 @@ function isExplicitRecord(record) {
     .join(' ');
 
   return EXPLICIT_PATTERNS.some((pattern) => pattern.test(joined));
+}
+
+function isFictionLikeBook(book) {
+  const joined = [
+    book?.title,
+    book?.genre,
+    ...(ensureArray(book?.subjects)),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return FICTION_LIKE_PATTERNS.some((pattern) => pattern.test(joined));
+}
+
+function isResearchOrPeriodicalRecord(book) {
+  const title = normalizeArchiveTitle(book?.title) || '';
+  const researchText = [
+    title,
+    book?.author,
+    book?.description,
+    ...(ensureArray(book?.subjects)),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const periodicalText = [
+    title,
+    book?.title,
+    book?.author,
+    ...(ensureArray(book?.subjects)),
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const looksLikeNamedBook =
+    /\bbook\b|\bcookbook\b|\bencyclopedia\b|\bdictionary\b|\bcompanion\b|\batlas\b|\bguide\b/i.test(
+      title
+    );
+  const canTreatJournalAsStoryArtifact =
+    /\bjournal\b/i.test(title) && isFictionLikeBook(book);
+
+  if (RESEARCH_PATTERNS.some((pattern) => pattern.test(researchText))) {
+    return true;
+  }
+
+  if (
+    !looksLikeNamedBook &&
+    !(canTreatJournalAsStoryArtifact && /\bjournal\b/i.test(periodicalText)) &&
+    PERIODICAL_PATTERNS.some((pattern) => pattern.test(periodicalText))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasCoherentArchiveTitle(book) {
+  const title = normalizeArchiveTitle(book?.title);
+  if (!title) return false;
+  if (!/[\p{L}]/u.test(title)) return false;
+  if (/^[#\d]/.test(title)) return false;
+  if (TITLE_ARTIFACT_PATTERNS.some((pattern) => pattern.test(title))) return false;
+
+  const wordCount = title.split(/\s+/).filter(Boolean).length;
+  const digitCount = (title.match(/\d/g) || []).length;
+  const hashTokenCount = (title.match(/\b[a-f0-9]{6,}\b/gi) || []).length;
+  const punctuationCount = (title.match(/[()[\]{}|_]/g) || []).length;
+
+  if (title.length > 180) return false;
+  if (wordCount > 28) return false;
+  if (hashTokenCount >= 2) return false;
+  if (digitCount >= 12) return false;
+  if (digitCount >= 7 && punctuationCount >= 3) return false;
+
+  const monthDatePattern =
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},\s+\d{4}\b/i;
+  if (monthDatePattern.test(title) && !isFictionLikeBook(book)) {
+    return false;
+  }
+
+  return true;
+}
+
+function hasArchiveCoverArt(book) {
+  const coverUrl = compactWhitespace(book?.coverUrl || book?.cover_url);
+  return Boolean(coverUrl);
 }
 
 async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, retries = DEFAULT_RETRIES } = {}) {
@@ -227,7 +397,7 @@ async function fetchArchiveMetadata(identifier) {
 function normalizeArchiveBook(record, metadataPayload = null) {
   const metadata = metadataPayload?.metadata || {};
   const identifier = compactWhitespace(record?.identifier);
-  const title = compactWhitespace(record?.title || metadata?.title) || 'Untitled';
+  const title = normalizeArchiveTitle(record?.title || metadata?.title) || 'Untitled';
   const author = normalizeCreator(record?.creator || metadata?.creator) || 'Unknown';
   const subjects = normalizeSubjects(record?.subject || metadata?.subject);
   const synopsis =
@@ -251,46 +421,32 @@ function normalizeArchiveBook(record, metadataPayload = null) {
   };
 }
 
-async function collectInternetArchiveBooks(
-  {
-    query = DEFAULT_QUERY,
-    limit = DEFAULT_LIMIT,
-    pageSize = DEFAULT_PAGE_SIZE,
-    sort = DEFAULT_SORT,
-    enrichMetadata = true,
-  } = {}
-) {
-  const collectedDocs = [];
-  let page = 1;
-  let totalAvailable = 0;
-
-  while (collectedDocs.length < limit) {
-    const pagePayload = await searchArchiveBooks(query, {
-      page,
-      rows: pageSize,
-      sort,
-    });
-
-    totalAvailable = pagePayload.totalAvailable || totalAvailable;
-    const filteredDocs = pagePayload.docs
-      .filter((doc) => compactWhitespace(doc?.identifier) && compactWhitespace(doc?.title))
-      .filter((doc) => !isExplicitRecord(doc));
-
-    collectedDocs.push(...filteredDocs);
-
-    if (pagePayload.docs.length === 0 || page * pageSize >= totalAvailable) {
-      break;
-    }
-
-    page += 1;
+function shouldKeepArchiveBook(book, minYear = DEFAULT_MIN_YEAR) {
+  if (!book || isExplicitRecord(book)) {
+    return false;
   }
 
-  const selectedDocs = collectedDocs.slice(0, limit);
+  if (!hasArchiveCoverArt(book)) {
+    return false;
+  }
+
+  if (isResearchOrPeriodicalRecord(book) || !hasCoherentArchiveTitle(book)) {
+    return false;
+  }
+
+  const year = normalizeYear(book.year);
+  return year != null && year >= minYear;
+}
+
+async function normalizeArchiveDocs(docs, { enrichMetadata = true, minYear = DEFAULT_MIN_YEAR } = {}) {
   const metadataByIdentifier = new Map();
+  const normalizedDocs = docs
+    .filter((doc) => compactWhitespace(doc?.identifier) && compactWhitespace(doc?.title))
+    .filter((doc) => !isExplicitRecord(doc));
 
   if (enrichMetadata) {
     const metadataPayloads = await Promise.all(
-      selectedDocs.map(async (doc) => {
+      normalizedDocs.map(async (doc) => {
         try {
           return [doc.identifier, await fetchArchiveMetadata(doc.identifier)];
         } catch {
@@ -304,9 +460,45 @@ async function collectInternetArchiveBooks(
     });
   }
 
-  const books = selectedDocs
+  return normalizedDocs
     .map((doc) => normalizeArchiveBook(doc, metadataByIdentifier.get(doc.identifier)))
-    .filter((book) => !isExplicitRecord(book));
+    .filter((book) => shouldKeepArchiveBook(book, minYear));
+}
+
+async function collectInternetArchiveBooks(
+  {
+    query = DEFAULT_QUERY,
+    limit = DEFAULT_LIMIT,
+    pageSize = DEFAULT_PAGE_SIZE,
+    sort = DEFAULT_SORT,
+    enrichMetadata = true,
+    minYear = DEFAULT_MIN_YEAR,
+  } = {}
+) {
+  const books = [];
+  let page = 1;
+  let totalAvailable = 0;
+
+  while (books.length < limit) {
+    const pagePayload = await searchArchiveBooks(query, {
+      page,
+      rows: pageSize,
+      sort,
+    });
+
+    totalAvailable = pagePayload.totalAvailable || totalAvailable;
+    const filteredBooks = await normalizeArchiveDocs(pagePayload.docs, {
+      enrichMetadata,
+      minYear,
+    });
+    books.push(...filteredBooks);
+
+    if (pagePayload.docs.length === 0 || page * pageSize >= totalAvailable) {
+      break;
+    }
+
+    page += 1;
+  }
 
   return {
     source: 'internet-archive',
@@ -314,8 +506,8 @@ async function collectInternetArchiveBooks(
     collectedAt: new Date().toISOString(),
     query,
     totalAvailable,
-    collected: books.length,
-    books,
+    collected: Math.min(books.length, limit),
+    books: books.slice(0, limit),
   };
 }
 
@@ -341,6 +533,48 @@ function appendBooksToJsonl(books, outputPath = DEFAULT_BULK_OUTPUT) {
   return targetPath;
 }
 
+function readJsonlRecords(filePath) {
+  const targetPath = path.resolve(filePath);
+  if (!fs.existsSync(targetPath)) return [];
+
+  return fs.readFileSync(targetPath, 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function readExistingArchiveSourceKeys(outputPath) {
+  return new Set(
+    readJsonlRecords(outputPath)
+      .map((record) => compactWhitespace(record?.sourceKey))
+      .filter(Boolean)
+  );
+}
+
+function getArchiveSegmentYears(minYear = DEFAULT_MIN_YEAR, maxYear = new Date().getUTCFullYear()) {
+  const normalizedMinYear = Number(minYear);
+  const normalizedMaxYear = Number(maxYear);
+  const years = [];
+
+  for (let year = normalizedMaxYear; year >= normalizedMinYear; year -= 1) {
+    years.push(year);
+  }
+
+  return years;
+}
+
+function buildArchiveYearQuery(query, year) {
+  return `${query} AND year:[${year} TO ${year}]`;
+}
+
 function writeCheckpoint(checkpointPath, payload) {
   const targetPath = path.resolve(checkpointPath);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
@@ -362,118 +596,144 @@ function readCheckpoint(checkpointPath) {
 async function collectInternetArchiveBooksBulk(
   {
     query = DEFAULT_QUERY,
-    pageSize = DEFAULT_PAGE_SIZE,
+    pageSize = DEFAULT_BULK_PAGE_SIZE,
     sort = DEFAULT_SORT,
     enrichMetadata = true,
     output = DEFAULT_BULK_OUTPUT,
     checkpoint = DEFAULT_CHECKPOINT,
-    startPage = 1,
     maxPages = Number.POSITIVE_INFINITY,
     limit = null,
     resume = false,
+    minYear = DEFAULT_MIN_YEAR,
   } = {}
 ) {
-  let currentPage = startPage;
-  let collected = 0;
+  const outputPath = path.resolve(output);
+  const checkpointPath = path.resolve(checkpoint);
+  const years = getArchiveSegmentYears(minYear);
+  const effectivePageSize = Math.max(Number(pageSize) || DEFAULT_BULK_PAGE_SIZE, DEFAULT_BULK_PAGE_SIZE);
+  const seenSourceKeys = resume ? readExistingArchiveSourceKeys(outputPath) : new Set();
+
+  let currentYearIndex = 0;
+  let currentPage = 1;
+  let collected = resume ? seenSourceKeys.size : 0;
   let processedPages = 0;
-  let totalAvailable = 0;
+  let currentSegmentTotalAvailable = 0;
+  let lastProcessedYear = null;
+  let lastProcessedPage = null;
+  let pagesProcessedThisRun = 0;
 
   if (resume) {
-    const existingCheckpoint = readCheckpoint(checkpoint);
+    const existingCheckpoint = readCheckpoint(checkpointPath);
     if (existingCheckpoint) {
-      currentPage = Number(existingCheckpoint.nextPage) || currentPage;
-      collected = Number(existingCheckpoint.collected) || 0;
-      processedPages = Number(existingCheckpoint.processedPages) || 0;
-      totalAvailable = Number(existingCheckpoint.totalAvailable) || 0;
+      if (existingCheckpoint.mode === 'year_segments') {
+        currentYearIndex = Number(existingCheckpoint.currentYearIndex) || 0;
+        currentPage = Number(existingCheckpoint.nextPage) || currentPage;
+        collected = Number(existingCheckpoint.collected) || collected;
+        processedPages = Number(existingCheckpoint.processedPages) || processedPages;
+        currentSegmentTotalAvailable =
+          Number(existingCheckpoint.currentSegmentTotalAvailable) || currentSegmentTotalAvailable;
+      }
     }
   } else {
-    const outputPath = path.resolve(output);
-    const checkpointPath = path.resolve(checkpoint);
     if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     if (fs.existsSync(checkpointPath)) fs.unlinkSync(checkpointPath);
   }
 
-  appendBooksToJsonl([], output);
+  appendBooksToJsonl([], outputPath);
 
-  while (processedPages < maxPages) {
+  while (pagesProcessedThisRun < maxPages) {
     if (limit != null && collected >= limit) {
       break;
     }
 
-    const pagePayload = await searchArchiveBooks(query, {
-      page: currentPage,
-      rows: pageSize,
-      sort,
-    });
-
-    totalAvailable = pagePayload.totalAvailable || totalAvailable;
-    if (pagePayload.docs.length === 0) {
+    if (currentYearIndex >= years.length) {
       break;
     }
 
-    const filteredDocs = pagePayload.docs
-      .filter((doc) => compactWhitespace(doc?.identifier) && compactWhitespace(doc?.title))
-      .filter((doc) => !isExplicitRecord(doc));
+    const currentYear = years[currentYearIndex];
+    const segmentQuery = buildArchiveYearQuery(query, currentYear);
+    const pagePayload = await searchArchiveBooks(segmentQuery, {
+      page: currentPage,
+      rows: effectivePageSize,
+      sort,
+    });
 
-    const remainingLimit =
-      limit == null ? filteredDocs.length : Math.max(limit - collected, 0);
-    const selectedDocs = filteredDocs.slice(0, remainingLimit);
-
-    const metadataByIdentifier = new Map();
-    if (enrichMetadata) {
-      const metadataPayloads = await Promise.all(
-        selectedDocs.map(async (doc) => {
-          try {
-            return [doc.identifier, await fetchArchiveMetadata(doc.identifier)];
-          } catch {
-            return [doc.identifier, null];
-          }
-        })
-      );
-
-      metadataPayloads.forEach(([identifier, metadata]) => {
-        metadataByIdentifier.set(identifier, metadata);
-      });
+    currentSegmentTotalAvailable = pagePayload.totalAvailable || currentSegmentTotalAvailable;
+    if (pagePayload.docs.length === 0) {
+      currentYearIndex += 1;
+      currentPage = 1;
+      currentSegmentTotalAvailable = 0;
+      continue;
     }
 
-    const books = selectedDocs
-      .map((doc) => normalizeArchiveBook(doc, metadataByIdentifier.get(doc.identifier)))
-      .filter((book) => !isExplicitRecord(book));
+    const books = await normalizeArchiveDocs(pagePayload.docs, {
+      enrichMetadata,
+      minYear,
+    });
+    const newBooks = books.filter((book) => !seenSourceKeys.has(book.sourceKey));
+    const remainingLimit = limit == null ? newBooks.length : Math.max(limit - collected, 0);
+    const selectedBooks = newBooks.slice(0, remainingLimit);
+    selectedBooks.forEach((book) => {
+      seenSourceKeys.add(book.sourceKey);
+    });
 
-    appendBooksToJsonl(books, output);
+    appendBooksToJsonl(selectedBooks, outputPath);
 
-    collected += books.length;
+    collected += selectedBooks.length;
     processedPages += 1;
-    currentPage += 1;
+    pagesProcessedThisRun += 1;
+    lastProcessedYear = currentYear;
+    lastProcessedPage = currentPage;
 
-    writeCheckpoint(checkpoint, {
+    const segmentTotalPages = Math.ceil(currentSegmentTotalAvailable / effectivePageSize);
+    if (
+      pagePayload.docs.length < effectivePageSize ||
+      currentPage >= segmentTotalPages ||
+      currentPage >= ARCHIVE_MAX_PAGE
+    ) {
+      currentYearIndex += 1;
+      currentPage = 1;
+      currentSegmentTotalAvailable = 0;
+    } else {
+      currentPage += 1;
+    }
+
+    writeCheckpoint(checkpointPath, {
       source: 'internet-archive',
+      mode: 'year_segments',
       query,
       sort,
-      pageSize,
+      pageSize: effectivePageSize,
       enrichMetadata,
-      totalAvailable,
+      minYear,
+      years,
       collected,
       processedPages,
+      currentYear: years[currentYearIndex] ?? null,
+      currentYearIndex,
+      currentSegmentTotalAvailable,
       nextPage: currentPage,
+      complete: currentYearIndex >= years.length,
       updatedAt: new Date().toISOString(),
     });
 
-    if (pagePayload.docs.length < pageSize || currentPage > Math.ceil(totalAvailable / pageSize)) {
-      break;
-    }
+    if (currentYearIndex >= years.length) break;
   }
 
   return {
     source: 'internet-archive',
     mediaType: 'book',
     query,
-    totalAvailable,
+    currentYear: years[currentYearIndex] ?? null,
     collected,
     processedPages,
     nextPage: currentPage,
-    output: path.resolve(output),
-    checkpoint: path.resolve(checkpoint),
+    lastProcessedYear,
+    lastProcessedPage,
+    pagesProcessedThisRun,
+    complete: currentYearIndex >= years.length,
+    output: outputPath,
+    checkpoint: checkpointPath,
   };
 }
 
@@ -486,9 +746,9 @@ function parseCliArgs(argv) {
     output: DEFAULT_OUTPUT,
     checkpoint: DEFAULT_CHECKPOINT,
     enrichMetadata: true,
+    minYear: DEFAULT_MIN_YEAR,
     bulk: false,
     resume: false,
-    startPage: 1,
     maxPages: Number.POSITIVE_INFINITY,
     help: false,
   };
@@ -523,6 +783,10 @@ function parseCliArgs(argv) {
       case '--no-enrich':
         options.enrichMetadata = false;
         break;
+      case '--min-year':
+        options.minYear = Number(argv[index + 1]) || options.minYear;
+        index += 1;
+        break;
       case '--all':
       case '--bulk':
         options.bulk = true;
@@ -531,10 +795,6 @@ function parseCliArgs(argv) {
         break;
       case '--resume':
         options.resume = true;
-        break;
-      case '--start-page':
-        options.startPage = Number(argv[index + 1]) || options.startPage;
-        index += 1;
         break;
       case '--max-pages':
         options.maxPages = Number(argv[index + 1]) || options.maxPages;
@@ -566,15 +826,17 @@ Options:
   --page-size <number>       Search page size (default: 50)
   --sort <value>             Internet Archive sort value (default: downloads desc)
   --output <path>            JSON output path (default: data/internet_archive_books.json)
+  --min-year <number>        Keep only books published in or after this year (default: 2000)
   --all | --bulk             Stream a large pull to JSONL instead of one JSON array file
   --checkpoint <path>        Checkpoint path for bulk mode
   --resume                   Resume bulk mode from the checkpoint file
-  --start-page <number>      Starting page for bulk mode (default: 1)
   --max-pages <number>       Cap how many pages to process in this run
   --no-enrich                Skip per-item metadata requests
 
 Notes:
   The scraper excludes explicit/pornographic records using keyword-based filtering.
+  Books without a usable year are skipped by the minimum-year filter.
+  Bulk mode crawls one publication year at a time so it can continue past Archive's page-400 search cap.
   Bulk mode writes newline-delimited JSON to data/internet_archive_books.bulk.jsonl.
 `);
 }
@@ -611,7 +873,12 @@ if (require.main === module) {
 module.exports = {
   collectInternetArchiveBooks,
   collectInternetArchiveBooksBulk,
+  hasArchiveCoverArt,
+  hasCoherentArchiveTitle,
+  isResearchOrPeriodicalRecord,
+  normalizeArchiveTitle,
   normalizeArchiveBook,
+  shouldKeepArchiveBook,
   appendBooksToJsonl,
   writeBooksToFile,
 };
