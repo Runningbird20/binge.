@@ -24,15 +24,6 @@ function parseJsonLines(text) {
     .filter(Boolean);
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Unable to load ${url}`);
-  }
-
-  return response.json();
-}
-
 async function fetchJsonLines(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -85,10 +76,8 @@ let booksPromise;
 
 export async function loadFallbackMovies() {
   if (!moviesPromise) {
-    moviesPromise = fetchJson('/catalog/plex_movies.json').then((data) => {
-      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-      return items.map((item, index) => normalizeMovie(item, index));
-    });
+    moviesPromise = fetchJsonLines('/catalog/plex_movies.bulk.jsonl')
+      .then((items) => items.map((item, index) => normalizeMovie(item, index)));
   }
 
   return moviesPromise;
