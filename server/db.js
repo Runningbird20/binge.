@@ -846,6 +846,18 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE (list_item_id, user_id)
   );
+
+  CREATE TABLE IF NOT EXISTS chat_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    query TEXT NOT NULL,
+    intent TEXT,
+    response_length INTEGER,
+    sources_count INTEGER,
+    latency_ms INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 if (!hasColumn('users', 'bio')) {

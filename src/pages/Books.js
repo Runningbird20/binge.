@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ListSaveControls from '../components/ListSaveControls';
 import { api } from '../api';
@@ -146,8 +147,11 @@ function BookDetailsModal({
 }
 
 export default function Books() {
+  const [searchParams] = useSearchParams();
+  const openId = Number(searchParams.get('open'));
+
   const [books, setBooks] = useState([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [genre, setGenre] = useState('');
   const [sortOrder, setSortOrder] = useState('title-asc');
@@ -217,6 +221,14 @@ export default function Books() {
           setFacets({
             genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
           });
+          // Auto-open modal if ?open=ID is in the URL
+          if (openId && page === 1) {
+            const match = (Array.isArray(data?.items) ? data.items : []).find((b) => b.id === openId);
+            if (match) {
+              setSelectedBook(match);
+              setDetailMessage('');
+            }
+          }
         }
       } catch {
         if (!cancelled) {
