@@ -62,17 +62,11 @@ export default function TVShows() {
   useEffect(() => {
     api.get('/ratings/my?media_type=tv_show')
       .then((ratings) => {
-<<<<<<< HEAD
         const nextRatings = {};
         ratings.forEach((rating) => {
           nextRatings[rating.media_id] = rating.rating;
         });
         setUserRatings(nextRatings);
-=======
-        const map = {};
-        ratings.forEach((r) => { map[r.media_id] = r.rating; });
-        setUserRatings(map);
->>>>>>> 465db07ff1fca1574291f604c7421ff73e627156
       })
       .catch(() => {});
   }, []);
@@ -80,15 +74,10 @@ export default function TVShows() {
   async function handleRate(item, rating) {
     try {
       await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, rating });
-<<<<<<< HEAD
       setUserRatings((current) => ({ ...current, [item.id]: rating }));
     } catch (error) {
       alert(error.message);
     }
-=======
-      setUserRatings((prev) => ({ ...prev, [item.id]: rating }));
-    } catch (err) { alert(err.message); }
->>>>>>> 465db07ff1fca1574291f604c7421ff73e627156
   }
 
   async function handleWatchlist(item) {
@@ -117,47 +106,11 @@ export default function TVShows() {
       <Navbar />
       <main className="page-content">
         <div className="page-header">
-<<<<<<< HEAD
           <p className="page-kicker">Browse</p>
           <h1>TV Shows</h1>
           <p className="page-subtitle">
             Explore series, compare genres, and jump from discovery into ratings, watchlists, and shared planning.
           </p>
-=======
-          <div>
-            <h1>TV Shows</h1>
-            <p>Browse TV shows and open a tile to see full details and quick actions.</p>
-          </div>
-        </div>
-
-        <div className="filter-bar">
-          <input
-            className="search-input"
-            type="text"
-            aria-label="Search TV shows"
-            placeholder="Search TV shows..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select className="filter-input" aria-label="Genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
-            <option value="">All Genres</option>
-            {genreOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-          <select className="filter-input" aria-label="Sort by" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
-            <option value="title-asc">Title A-Z</option>
-            <option value="title-desc">Title Z-A</option>
-            <option value="year-desc">Newest First</option>
-            <option value="year-asc">Oldest First</option>
-          </select>
-          {hasActiveFilters && <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>Clear</button>}
-        </div>
-
-        <div className="books-results-header">
-          <p className="books-results-count">
-            {loading ? 'Loading shows...' : `${shows.length} show${shows.length === 1 ? '' : 's'} found`}
-          </p>
-          {hasActiveFilters && !loading && <p className="books-results-summary">Showing results for your active filters.</p>}
->>>>>>> 465db07ff1fca1574291f604c7421ff73e627156
         </div>
 
         <section className="surface-panel">
