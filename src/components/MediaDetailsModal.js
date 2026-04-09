@@ -5,7 +5,15 @@ import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 
 function getImageUrl(item) {
-  return item.poster_url || item.cover_url || item.image_url || '';
+  const raw = item.poster_url || item.cover_url || item.image_url || '';
+  if (!raw) return '';
+  try {
+    if (raw.includes('plex.tv')) {
+      const inner = new URL(raw).searchParams.get('url');
+      if (inner) return inner;
+    }
+  } catch { /* fall through */ }
+  return raw;
 }
 
 function getCreatorLabel(item) {
@@ -112,7 +120,7 @@ export default function MediaDetailsModal({
           <div className="book-detail-cover-panel">
             <div className="book-detail-cover-frame">
               {imageUrl ? (
-                <img src={imageUrl} alt={item.title} className="book-detail-cover-image" />
+                <img src={imageUrl} alt={item.title} className="book-detail-cover-image" referrerPolicy="no-referrer" />
               ) : (
                 <div className="book-detail-cover-placeholder">
                   <span>{item.title?.charAt(0)}</span>

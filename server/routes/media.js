@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { requireAuth } = require('../middleware/auth');
 const { buildBookGenreFacets, matchesBookGenreFacet } = require('../bookGenres');
 
 const router = express.Router();
@@ -485,6 +486,124 @@ router.get('/tmdb-id', async (req, res) => {
     return res.json({ id: result.id, title: result.title || result.name });
   } catch (err) {
     return res.json({ id: null });
+  }
+});
+
+// ─── TMDB show details (real season count) ───────────────────────────────────
+router.get('/tmdb-show', async (req, res) => {
+  const { tmdbId } = req.query;
+  if (!tmdbId) return res.status(400).json({ error: 'tmdbId required' });
+
+  const TMDB_KEY = process.env.TMDB_API_KEY;
+  if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
+
+  try {
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${TMDB_KEY}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
+    const data = await r.json();
+    res.json({
+      numberOfSeasons: data.number_of_seasons || null,
+      numberOfEpisodes: data.number_of_episodes || null,
+      status: data.status || null,
+      name: data.name || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── TMDB season episode count ────────────────────────────────────────────────
+router.get('/tmdb-season', async (req, res) => {
+  const { tmdbId, season } = req.query;
+  if (!tmdbId || !season) return res.status(400).json({ error: 'tmdbId and season required' });
+
+  const TMDB_KEY = process.env.TMDB_API_KEY;
+  if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
+
+  try {
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${TMDB_KEY}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
+    const data = await r.json();
+    res.json({
+      season: data.season_number,
+      episodeCount: data.episodes?.length || 0,
+      episodes: (data.episodes || []).map(e => ({
+        number: e.episode_number,
+        name: e.name,
+        airDate: e.air_date,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Episode progress tracking ────────────────────────────────────────────────
+// Mark episode as watched
+router.post('/episode-progress', requireAuth, (req, res) => {
+  const { media_id, season, episode } = req.body;
+  if (!media_id || !season || !episode) {
+    return res.status(400).json({ error: 'media_id, season, episode required' });
+  }
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS episode_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        media_id INTEGER NOT NULL,
+        season INTEGER NOT NULL,
+        episode INTEGER NOT NULL,
+        watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, media_id, season, episode)
+      )
+    `);
+    db.prepare(`
+      INSERT OR REPLACE INTO episode_progress (user_id, media_id, season, episode, watched_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(req.user.id, Number(media_id), Number(season), Number(episode));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all watched episodes for a show
+router.get('/episode-progress/:mediaId', requireAuth, (req, res) => {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS episode_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        media_id INTEGER NOT NULL,
+        season INTEGER NOT NULL,
+        episode INTEGER NOT NULL,
+        watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, media_id, season, episode)
+      )
+    `);
+    const rows = db.prepare(`
+      SELECT season, episode, watched_at FROM episode_progress
+      WHERE user_id = ? AND media_id = ?
+      ORDER BY watched_at DESC
+    `).all(req.user.id, Number(req.params.mediaId));
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Unmark episode as watched
+router.delete('/episode-progress', requireAuth, (req, res) => {
+  const { media_id, season, episode } = req.body;
+  try {
+    db.prepare(`
+      DELETE FROM episode_progress WHERE user_id = ? AND media_id = ? AND season = ? AND episode = ?
+    `).run(req.user.id, Number(media_id), Number(season), Number(episode));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

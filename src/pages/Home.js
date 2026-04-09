@@ -1,10 +1,126 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
+import ForYou from '../components/ForYou';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
-import ForYou from '../components/ForYou';
+
+const MEDIA_ICONS = {
+  movie: '\ud83c\udfac',
+  tv_show: '\ud83d\udcfa',
+  book: '\ud83d\udcda',
+};
+
+function resolvePosterUrl(url) {
+  if (!url) return null;
+
+  try {
+    if (url.includes('plex.tv')) {
+      const parsed = new URL(url);
+      const inner = parsed.searchParams.get('url');
+      if (inner) {
+        try {
+          return decodeURIComponent(inner);
+        } catch {
+          return inner;
+        }
+      }
+    }
+  } catch {
+    return url;
+  }
+
+  return url;
+}
+
+function WatchlistGallery() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    api.get('/watchlist')
+      .then((data) => setItems(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function scroll(direction) {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: direction * 220, behavior: 'smooth' });
+    }
+  }
+
+  function getSiteUrl(item) {
+    if (item.media_type === 'movie') return `/movies?open=${item.media_id}`;
+    if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}`;
+    if (item.media_type === 'book') return `/books?open=${item.media_id}`;
+    return '/watchlist';
+  }
+
+  if (loading) {
+    return <div className="loading-state" style={{ padding: '2rem' }}>Loading...</div>;
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="empty-state">
+        <p>Your watchlist is empty.</p>
+        <p className="empty-hint">Browse movies, TV shows, and books to add items.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="wl-gallery-wrap">
+      {items.length > 4 && (
+        <button
+          className="wl-gallery-arrow wl-gallery-arrow--left"
+          onClick={() => scroll(-1)}
+          type="button"
+        >
+          {'\u2039'}
+        </button>
+      )}
+      <div className="wl-gallery-scroll" ref={scrollRef}>
+        {items.map((item) => (
+          <Link key={item.id} to={getSiteUrl(item)} className="wl-gallery-card">
+            <div className="wl-gallery-poster">
+              {item.image_url || item.poster_url ? (
+                <img
+                  src={resolvePosterUrl(item.image_url || item.poster_url)}
+                  alt={item.title}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="wl-gallery-placeholder">
+                  {MEDIA_ICONS[item.media_type] || MEDIA_ICONS.tv_show}
+                </div>
+              )}
+              <div className="wl-gallery-overlay">
+                <span className="wl-gallery-type">{MEDIA_ICONS[item.media_type]}</span>
+              </div>
+            </div>
+            <div className="wl-gallery-info">
+              <p className="wl-gallery-title">{item.title}</p>
+              {item.year && <p className="wl-gallery-year">{item.year}</p>}
+            </div>
+          </Link>
+        ))}
+      </div>
+      {items.length > 4 && (
+        <button
+          className="wl-gallery-arrow wl-gallery-arrow--right"
+          onClick={() => scroll(1)}
+          type="button"
+        >
+          {'\u203a'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const { user } = useAuth();
@@ -19,7 +135,7 @@ export default function Home() {
         ]);
         setStats({ ratings: ratings.length, watchlist: watchlist.length });
       } catch {
-        // stats stay at zero if request fails
+        // Keep the dashboard usable even if the stats call fails.
       }
     }
 
@@ -85,6 +201,14 @@ export default function Home() {
           </section>
 
           <ForYou />
+
+          <section className="home-section">
+            <div className="section-header">
+              <h2>Your Watchlist</h2>
+              <Link to="/watchlist" className="section-link">View all</Link>
+            </div>
+            <WatchlistGallery />
+          </section>
 
           <div className="home-secondary-grid">
             <section className="home-section surface-panel">
