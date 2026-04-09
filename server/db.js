@@ -970,6 +970,17 @@ if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rati
 // ── New table migrations (safe to run on existing databases) ──────────────────
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS episode_progress (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    media_id INTEGER NOT NULL,
+    season INTEGER NOT NULL,
+    episode INTEGER NOT NULL,
+    watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, media_id, season, episode),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS chat_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
