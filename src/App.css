@@ -3207,3 +3207,14 @@ body {
   display: flex; align-items: center; justify-content: center;
   color: #555; font-size: 0.9rem;
 }
+
+/* Fullscreen player */
+.player-modal:fullscreen {
+  width: 100vw;
+  max-height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+.player-modal:fullscreen .player-frame {
+  min-height: calc(100vh - 160px);
+}
