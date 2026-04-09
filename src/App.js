@@ -14,6 +14,7 @@ import Lists from './pages/Lists';
 import SharedList from './pages/SharedList';
 import AccountSettings from './pages/AccountSettings';
 import AdminRequests from './pages/AdminRequests';
+import LiveTV from './pages/LiveTV';
 import './App.css';
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/lists/:shareCode" element={<SharedList />} />
           <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
           <Route path="/admin/requests" element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
+          <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
         <ChatBot />
