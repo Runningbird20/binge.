@@ -28,6 +28,8 @@ export default function MediaDetailsModal({
   userRating,
   isAddingWatchlist,
   detailMessage,
+  allowActions = true,
+  browseOnlyMessage = '',
 }) {
   useEffect(() => {
     if (!item) return undefined;
@@ -127,8 +129,12 @@ export default function MediaDetailsModal({
           </div>
 
           <div className="book-detail-actions">
-            <StarRating value={userRating} onChange={(rating) => onRate && onRate(item, rating)} />
-            {onWatchlist && (
+            <StarRating
+              value={userRating}
+              onChange={(rating) => onRate && onRate(item, rating)}
+              readOnly={!allowActions || !onRate}
+            />
+            {allowActions && onWatchlist && (
               <button
                 type="button"
                 className="btn-primary book-detail-library-btn"
@@ -138,7 +144,12 @@ export default function MediaDetailsModal({
                 {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
               </button>
             )}
-            <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
+            {allowActions && (
+              <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
+            )}
+            {!allowActions && browseOnlyMessage && (
+              <p className="book-detail-status">{browseOnlyMessage}</p>
+            )}
             {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
           </div>
         </div>

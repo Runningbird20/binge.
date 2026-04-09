@@ -58,7 +58,11 @@ export default function MediaCard({
         )}
 
         <div className="media-card-actions">
-          <StarRating value={userRating} onChange={(rating) => onRate && onRate(item, rating)} />
+          <StarRating
+            value={userRating}
+            onChange={(rating) => onRate && onRate(item, rating)}
+            readOnly={!onRate}
+          />
           {onWatchlist && (
             <button
               className="btn-ghost btn-sm"
