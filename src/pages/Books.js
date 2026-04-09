@@ -50,6 +50,15 @@ function BookDetailsModal({
   isAddingToLibrary,
   detailMessage,
 }) {
+  const [showReader, setShowReader] = useState(false);
+  const [downloading, setDownloading] = useState(null); // null | 'pdf' | 'epub' | 'txt'
+  const [downloadError, setDownloadError] = useState('');
+
+  // Extract Internet Archive identifier from source_key
+  const archiveId = book.source_key?.startsWith('internet-archive:')
+    ? book.source_key.replace('internet-archive:', '')
+    : null;
+
   useEffect(() => {
     if (!book) {
       return undefined;
@@ -73,7 +82,45 @@ function BookDetailsModal({
 
   if (!book) return null;
 
+  async function handleDownload(format) {
+    if (!archiveId) return;
+    setDownloading(format);
+    setDownloadError('');
+    try {
+      const url = `/api/media/book-download?identifier=${encodeURIComponent(archiveId)}&format=${format}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Download failed');
+      }
+      // Get filename from Content-Disposition header or build one
+      const disposition = res.headers.get('content-disposition') || '';
+      const nameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = nameMatch ? nameMatch[1] : `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
+
+      // Stream to a blob and trigger browser download
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setDownloadError(err.message || 'Download failed. This book may not be available.');
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   return (
+    <>
     <div className="book-detail-overlay" onClick={onClose}>
       <div
         className="book-detail-modal"
@@ -139,8 +186,102 @@ function BookDetailsModal({
             </button>
             <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
             {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
+            {archiveId && (
+              <button
+                type="button"
+                className="btn-watch"
+                onClick={() => setShowReader(true)}
+              >
+                📖 Read Now
+              </button>
+            )}
+            {archiveId && (
+              <div className="book-download-row">
+                <span className="book-download-label">Download:</span>
+                {['pdf', 'epub', 'txt'].map(fmt => (
+                  <button
+                    key={fmt}
+                    className="book-download-btn"
+                    onClick={() => handleDownload(fmt)}
+                    disabled={downloading !== null}
+                  >
+                    {downloading === fmt ? '⏳' : '⬇'} {fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+            {downloadError && (
+              <p className="book-download-error">{downloadError}</p>
+            )}
           </div>
         </div>
+      </div>
+    </div>
+
+    {showReader && archiveId && (
+      <BookReader
+        book={book}
+        archiveId={archiveId}
+        onClose={() => setShowReader(false)}
+      />
+    )}
+    </>
+  );
+}
+
+function BookReader({ book, archiveId, onClose }) {
+  const iframeRef = useRef(null);
+  const modalRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      (iframeRef.current || modalRef.current)?.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  const embedUrl = `https://archive.org/embed/${archiveId}`;
+
+  return (
+    <div className="player-overlay" onClick={onClose}>
+      <div className="player-modal" ref={modalRef} onClick={e => e.stopPropagation()}>
+        <div className="player-header">
+          <div className="player-title">
+            <span>📚</span>
+            <div>
+              <strong>{book.title}</strong>
+              {book.author && <span className="player-year">by {book.author}</span>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <button className="player-close" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+              {isFullscreen ? '↙' : '↗'}
+            </button>
+            <button className="player-close" onClick={onClose} title="Close">✕</button>
+          </div>
+        </div>
+        <div className="player-frame-wrap">
+          <iframe
+            ref={iframeRef}
+            src={embedUrl}
+            className="player-frame"
+            allowFullScreen
+            allow="fullscreen"
+            title={`Read ${book.title}`}
+            style={{ minHeight: '600px' }}
+          />
+        </div>
+        <p className="player-note">
+          Powered by Internet Archive · Free &amp; legal · Some books may require borrowing
+        </p>
       </div>
     </div>
   );

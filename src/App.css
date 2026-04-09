@@ -3218,3 +3218,40 @@ body {
 .player-modal:fullscreen .player-frame {
   min-height: calc(100vh - 160px);
 }
+
+/* ── Book download buttons ── */
+.book-download-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.book-download-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.book-download-btn {
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+  background: #141414;
+  color: #c0c0c0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.book-download-btn:hover:not(:disabled) {
+  border-color: rgba(232,201,122,0.4);
+  color: #e8c97a;
+  background: rgba(232,201,122,0.08);
+}
+.book-download-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.book-download-error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #f08080;
+}
