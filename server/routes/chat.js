@@ -7,6 +7,7 @@ const router = express.Router();
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
 // ─── Intent detection ─────────────────────────────────────────────────────────
 
@@ -15,16 +16,18 @@ function detectQueryIntent(query) {
   if (q.includes('recommend') || q.includes('suggest') || q.includes('what should i') ||
       q.includes('similar to') || q.includes('based on my') || q.includes('for me') ||
       q.includes('my taste') || q.includes('my history') || q.includes('i enjoy') ||
-      q.includes('i like') || q.includes('discover')) return 'recommendation';
+      q.includes('i like') || q.includes('discover') || q.includes('what to watch') ||
+      q.includes('what to read')) return 'recommendation';
 
   if (q.includes('theme') || q.includes('explain') || q.includes('why') ||
       q.includes('how does') || q.includes('compare') || q.includes('differ') ||
-      q.includes('symbol') || q.includes('analyz') || q.includes('what does')) return 'thematic';
+      q.includes('symbol') || q.includes('analyz') || q.includes('what does') ||
+      q.includes('meaning') || q.includes('review')) return 'thematic';
 
   if (q.includes('who direct') || q.includes('who wrote') || q.includes('who star') ||
       q.includes('when was') || q.includes('what year') || q.includes('cast') ||
-      q.includes('author') || q.includes('creator') || q.includes('how many season') ||
-      q.includes('synopsis')) return 'factual';
+      q.includes('how many season') || q.includes('synopsis') || q.includes('plot') ||
+      q.includes('runtime') || q.includes('release')) return 'factual';
 
   return 'general';
 }
@@ -32,28 +35,51 @@ function detectQueryIntent(query) {
 // ─── System prompts ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(intent) {
-  const base = `You are the media assistant for "binge." — a platform where users track movies, TV shows, and books.
+  const base = `You are the media assistant for "binge." — a fun platform for tracking movies, TV shows, and books.
 
-CRITICAL RULES you must follow without exception:
-1. You may ONLY mention or recommend titles that appear in the SITE DATABASE CONTEXT provided.
-2. NEVER invent, hallucinate, or suggest titles from your own training data that are not in the context.
-3. If the context does not contain titles matching the request, say so honestly and list only what IS available.
-4. Do not pivot away from the context to make up alternatives. Stay strictly within what the database contains.
-5. When listing titles, be specific about which ones are movies, TV shows, or books.`;
+You have access to two sources of information that will be provided to you:
+1. WEB SEARCH RESULTS — real information retrieved from the internet
+2. BINGE. SITE DATABASE — the actual titles currently available on the binge. platform
 
-  if (intent === 'recommendation') return `${base}\n\nYour task: recommend titles from the database based on the user's taste. Explain briefly why each fits. Only use titles from the context.`;
-  if (intent === 'thematic') return `${base}\n\nYour task: provide thematic or analytical insight about titles in the database. Only reference titles in the context.`;
-  if (intent === 'factual') return `${base}\n\nYour task: answer factual questions using only information from the context. If the answer isn't there, say so.`;
-  return `${base}\n\nAnswer using only the titles and information in the database context.`;
+YOUR RESPONSE STRUCTURE (always follow this for general/list questions):
+1. Answer the question using the web search results (e.g. "According to Collider, the best drama TV shows are...")
+2. Then say "Here's what we have on binge.:" and list which of those (or related) titles are in the site database — just the title names, no links
+
+CRITICAL FORMATTING RULES — you must follow these exactly:
+- NEVER include URLs, hyperlinks, or markdown links like [text](url) anywhere in your response text
+- NEVER write out any web addresses or links — not even as plain text like https://...
+- NEVER add a "Sources:" section at the bottom of your response
+- Just mention source names naturally in text, e.g. "According to IMDb..." or "Collider ranks..."
+- For binge. titles, just list the title names — the UI will automatically add clickable links
+- Keep responses concise and conversational — no need to list every single title, pick the best ones`;
+
+  if (intent === 'recommendation') return `${base}
+
+RECOMMENDATION MODE: The user wants suggestions tailored to their taste.
+Use web search to understand what makes great titles in this genre/style.
+Recommend ONLY titles from the SITE DATABASE. If a great match isn't on the site, mention it as "not on binge. yet — you could request it!"
+List title names only — no links or URLs.`;
+
+  if (intent === 'thematic') return `${base}
+
+ANALYSIS MODE: Use web search results for rich context, themes, critical analysis.
+Be specific and enthusiastic. Mention source names naturally but never include URLs.`;
+
+  if (intent === 'factual') return `${base}
+
+FACTUAL MODE: Answer directly using web search results. Be concise and accurate.
+Mention the source name naturally (e.g. "According to IMDb...") but never include URLs.`;
+
+  return base;
 }
 
-// ─── RAG retrieval ────────────────────────────────────────────────────────────
+// ─── Site database retrieval ──────────────────────────────────────────────────
 
 function detectMediaTypes(query) {
   const q = query.toLowerCase();
-  const wantsMovies  = q.includes('movie') || q.includes('film') || q.includes('cinema');
-  const wantsTV      = q.includes('tv') || q.includes('show') || q.includes('series') || q.includes('episode') || q.includes('season');
-  const wantsBooks   = q.includes('book') || q.includes('novel') || q.includes('read') || q.includes('author');
+  const wantsMovies = q.includes('movie') || q.includes('film') || q.includes('cinema');
+  const wantsTV     = q.includes('tv') || q.includes('show') || q.includes('series') || q.includes('episode') || q.includes('season');
+  const wantsBooks  = q.includes('book') || q.includes('novel') || q.includes('read') || q.includes('author');
   if (!wantsMovies && !wantsTV && !wantsBooks) return ['movie', 'tv_show', 'book'];
   const types = [];
   if (wantsMovies) types.push('movie');
@@ -66,28 +92,28 @@ function extractTerms(query) {
   const stop = new Set(['the','and','for','with','that','this','are','was','have','from',
     'some','any','what','which','show','give','list','find','tell','me','about','on','in',
     'a','an','is','of','to','do','you','can','i','my','your','their','its','shows','movies',
-    'books','films','series','tv']);
+    'books','films','series','tv','watch','read','best','good','great','top']);
   return query.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
     .filter(t => t.length > 2 && !stop.has(t));
 }
 
-function searchMedia(query, limit = 20) {
+function searchSiteMedia(query, limit = 20) {
   const mediaTypes = detectMediaTypes(query);
   const terms = extractTerms(query);
   const sources = [];
 
   if (mediaTypes.includes('movie')) {
-    // Term-based search
-    for (const term of terms.slice(0, 5)) {
-      sources.push(...db.prepare(`
-        SELECT id, title, year, genre, director, cast_members, synopsis, overview,
-               source_key, poster_url, 'movie' as media_type
-        FROM movies WHERE source_key IS NOT NULL
-          AND (title LIKE ? OR genre LIKE ? OR director LIKE ? OR cast_members LIKE ? OR synopsis LIKE ? OR overview LIKE ?)
-        LIMIT 10
-      `).all(...Array(6).fill(`%${term}%`)));
+    if (terms.length > 0) {
+      for (const term of terms.slice(0, 5)) {
+        sources.push(...db.prepare(`
+          SELECT id, title, year, genre, director, cast_members, synopsis, overview,
+                 source_key, poster_url, 'movie' as media_type
+          FROM movies WHERE source_key IS NOT NULL
+            AND (title LIKE ? OR genre LIKE ? OR director LIKE ? OR cast_members LIKE ? OR synopsis LIKE ? OR overview LIKE ?)
+          LIMIT 10
+        `).all(...Array(6).fill(`%${term}%`)));
+      }
     }
-    // Always include full movie catalog (small dataset)
     sources.push(...db.prepare(`
       SELECT id, title, year, genre, director, cast_members, synopsis, overview,
              source_key, poster_url, 'movie' as media_type
@@ -96,16 +122,17 @@ function searchMedia(query, limit = 20) {
   }
 
   if (mediaTypes.includes('tv_show')) {
-    for (const term of terms.slice(0, 5)) {
-      sources.push(...db.prepare(`
-        SELECT id, title, year, genre, creator, cast_members, synopsis, overview,
-               seasons, source_key, poster_url, 'tv_show' as media_type
-        FROM tv_shows WHERE source_key IS NOT NULL
-          AND (title LIKE ? OR genre LIKE ? OR creator LIKE ? OR cast_members LIKE ? OR synopsis LIKE ? OR overview LIKE ?)
-        LIMIT 10
-      `).all(...Array(6).fill(`%${term}%`)));
+    if (terms.length > 0) {
+      for (const term of terms.slice(0, 5)) {
+        sources.push(...db.prepare(`
+          SELECT id, title, year, genre, creator, cast_members, synopsis, overview,
+                 seasons, source_key, poster_url, 'tv_show' as media_type
+          FROM tv_shows WHERE source_key IS NOT NULL
+            AND (title LIKE ? OR genre LIKE ? OR creator LIKE ? OR cast_members LIKE ? OR synopsis LIKE ? OR overview LIKE ?)
+          LIMIT 10
+        `).all(...Array(6).fill(`%${term}%`)));
+      }
     }
-    // Include all TV shows
     sources.push(...db.prepare(`
       SELECT id, title, year, genre, creator, cast_members, synopsis, overview,
              seasons, source_key, poster_url, 'tv_show' as media_type
@@ -114,14 +141,16 @@ function searchMedia(query, limit = 20) {
   }
 
   if (mediaTypes.includes('book')) {
-    for (const term of terms.slice(0, 5)) {
-      sources.push(...db.prepare(`
-        SELECT id, title, year, genre, author, synopsis,
-               source_key, cover_url, 'book' as media_type
-        FROM books WHERE source_key IS NOT NULL
-          AND (title LIKE ? OR genre LIKE ? OR author LIKE ? OR synopsis LIKE ?)
-        LIMIT 10
-      `).all(...Array(4).fill(`%${term}%`)));
+    if (terms.length > 0) {
+      for (const term of terms.slice(0, 5)) {
+        sources.push(...db.prepare(`
+          SELECT id, title, year, genre, author, synopsis,
+                 source_key, cover_url, 'book' as media_type
+          FROM books WHERE source_key IS NOT NULL
+            AND (title LIKE ? OR genre LIKE ? OR author LIKE ? OR synopsis LIKE ?)
+          LIMIT 10
+        `).all(...Array(4).fill(`%${term}%`)));
+      }
     }
     sources.push(...db.prepare(`
       SELECT id, title, year, genre, author, synopsis,
@@ -130,7 +159,6 @@ function searchMedia(query, limit = 20) {
     `).all());
   }
 
-  // Deduplicate
   const seen = new Set();
   return sources.filter(s => {
     const key = `${s.media_type}:${s.id}`;
@@ -150,7 +178,7 @@ function buildSiteUrl(doc) {
 function getUserRatingHistory(userId) {
   if (!userId) return [];
   return db.prepare(`
-    SELECT r.rating, r.review, r.media_type, r.media_id,
+    SELECT r.rating, r.media_type,
       CASE r.media_type WHEN 'movie' THEN m.title WHEN 'tv_show' THEN t.title WHEN 'book' THEN b.title END as title,
       CASE r.media_type WHEN 'movie' THEN m.genre WHEN 'tv_show' THEN t.genre WHEN 'book' THEN b.genre END as genre,
       CASE r.media_type WHEN 'movie' THEN m.director WHEN 'tv_show' THEN t.creator WHEN 'book' THEN b.author END as creator
@@ -162,29 +190,120 @@ function getUserRatingHistory(userId) {
   `).all(userId);
 }
 
-function formatDocumentContext(docs) {
+function formatSiteContext(docs) {
+  if (!docs.length) return 'No titles currently in the binge. database.';
   return docs.map((doc, i) => {
     const typeLabel = doc.media_type === 'movie' ? 'Movie' : doc.media_type === 'tv_show' ? 'TV Show' : 'Book';
     const meta = [
-      doc.year         ? `Year: ${doc.year}`           : null,
-      doc.genre        ? `Genre: ${doc.genre}`          : null,
-      doc.director     ? `Director: ${doc.director}`    : null,
-      doc.creator      ? `Creator: ${doc.creator}`      : null,
-      doc.author       ? `Author: ${doc.author}`        : null,
-      doc.cast_members ? `Cast: ${doc.cast_members}`    : null,
-      doc.seasons      ? `Seasons: ${doc.seasons}`      : null,
+      doc.year         ? `Year: ${doc.year}`        : null,
+      doc.genre        ? `Genre: ${doc.genre}`       : null,
+      doc.director     ? `Director: ${doc.director}` : null,
+      doc.creator      ? `Creator: ${doc.creator}`   : null,
+      doc.author       ? `Author: ${doc.author}`     : null,
+      doc.cast_members ? `Cast: ${doc.cast_members}` : null,
+      doc.seasons      ? `Seasons: ${doc.seasons}`   : null,
     ].filter(Boolean).join(' | ');
-    const desc = (doc.synopsis || doc.overview || '').slice(0, 250);
-    return `[${typeLabel} #${i+1}] "${doc.title}"${meta ? '\n'+meta : ''}${desc ? '\nDescription: '+desc : ''}`;
-  }).join('\n\n');
+    const desc = (doc.synopsis || doc.overview || '').slice(0, 150);
+    return `[binge. ${typeLabel}] "${doc.title}"${meta ? ' — '+meta : ''}${desc ? ' — '+desc : ''}`;
+  }).join('\n');
 }
 
 function formatUserHistory(history) {
   if (!history.length) return 'No rating history yet.';
   return history.map(r => {
     const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
-    return `- "${r.title}" (${r.media_type.replace('_',' ')}) ${stars}${r.genre ? ` | ${r.genre}` : ''}${r.creator ? ` | By: ${r.creator}` : ''}`;
+    return `- "${r.title}" (${r.media_type.replace('_',' ')}) ${stars}${r.genre ? ` | ${r.genre}` : ''}`;
   }).join('\n');
+}
+
+// ─── Web search using Tavily API ─────────────────────────────────────────────
+// Get a free key at https://tavily.com (1000 searches/month free)
+
+async function performWebSearch(query) {
+  const fallbackUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+
+  if (!TAVILY_API_KEY) {
+    console.warn('No TAVILY_API_KEY set — web search disabled');
+    return {
+      results: [{
+        title: `Search: "${query}"`,
+        snippet: 'Add a TAVILY_API_KEY to your .env to enable real web search results.',
+        url: fallbackUrl,
+        source: 'Google',
+      }],
+      searchUrl: fallbackUrl,
+    };
+  }
+
+  try {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: TAVILY_API_KEY,
+        query,
+        search_depth: 'basic',
+        max_results: 5,
+        include_answer: false,
+        include_raw_content: false,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!res.ok) {
+      console.error('Tavily error:', res.status, await res.text());
+      return { results: [], searchUrl: fallbackUrl };
+    }
+
+    const data = await res.json();
+
+    const results = (data.results || []).map(r => ({
+      title: r.title,
+      snippet: r.content?.slice(0, 300) || '',
+      url: r.url,
+      source: new URL(r.url).hostname.replace('www.', ''),
+    }));
+
+    return { results, searchUrl: fallbackUrl };
+  } catch (err) {
+    console.error('Tavily search error:', err.message);
+    return {
+      results: [{
+        title: `Search: "${query}"`,
+        snippet: 'Web search temporarily unavailable.',
+        url: fallbackUrl,
+        source: 'Google',
+      }],
+      searchUrl: fallbackUrl,
+    };
+  }
+}
+
+// ─── Main Groq call ───────────────────────────────────────────────────────────
+
+async function callGroq(systemPrompt, messages, intent) {
+  const response = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      temperature: intent === 'factual' ? 0.2 : 0.5,
+      max_tokens: 1500,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Groq API error: ${err}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || 'No response.';
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -202,53 +321,63 @@ router.post('/', requireAuth, async (req, res) => {
   const startTime = Date.now();
 
   try {
-    const intent       = detectQueryIntent(message);
-    const retrievedDocs = searchMedia(message, 20);
-    const userHistory  = getUserRatingHistory(userId);
+    const intent      = detectQueryIntent(message);
+    const siteDocs    = searchSiteMedia(message, 20);
+    const userHistory = getUserRatingHistory(userId);
 
-    const contextBlock = `=== SITE DATABASE CONTEXT (ONLY reference titles from here) ===
-${formatDocumentContext(retrievedDocs)}
+    // Always search the web — build a good query from the user's message
+    const searchQuery = message.length > 80 ? message.slice(0, 80) : message;
+    const { results: webResults, searchUrl } = await performWebSearch(searchQuery);
 
-=== USER'S RATING HISTORY ON BINGE. ===
+    // Format web results for the model
+    const webContext = webResults.length
+      ? webResults.map((r, i) =>
+          `[Web Source ${i+1}] ${r.source} — "${r.title}"\n${r.snippet}\nURL: ${r.url}`
+        ).join('\n\n')
+      : 'No web results found.';
+
+    // Build full context for the model
+    const contextBlock = `=== WEB SEARCH RESULTS (for: "${searchQuery}") ===
+${webContext}
+
+=== BINGE. SITE DATABASE (titles on the platform) ===
+${formatSiteContext(siteDocs)}
+
+=== USER'S RATING HISTORY ===
 ${formatUserHistory(userHistory)}
-=== END OF CONTEXT ===`;
+=== END CONTEXT ===`;
 
     const messages = [
       ...conversationHistory.slice(-6).map(t => ({ role: t.role, content: t.content })),
       { role: 'user', content: `${contextBlock}\n\nUser question: ${message}` },
     ];
 
-    const groqRes = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'system', content: buildSystemPrompt(intent) }, ...messages],
-        temperature: intent === 'factual' ? 0.2 : 0.5,
-        max_tokens: 1024,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
+    const aiResponse = await callGroq(buildSystemPrompt(intent), messages, intent);
 
-    if (!groqRes.ok) {
-      console.error('Groq error:', await groqRes.text());
-      return res.status(502).json({ error: 'Groq API error. Check your API key.' });
-    }
-
-    const groqData  = await groqRes.json();
-    const aiResponse = groqData.choices?.[0]?.message?.content || 'No response from model.';
-
-    // Sources = docs whose title appears in the response, with internal site links
-    const citedSources = retrievedDocs
+    // Site sources — db titles mentioned in the response
+    const siteSources = siteDocs
       .filter(doc => aiResponse.toLowerCase().includes(doc.title.toLowerCase()))
       .map(doc => ({
-        id:        doc.id,
-        title:     doc.title,
+        type: 'site',
+        id: doc.id,
+        title: doc.title,
         media_type: doc.media_type,
-        year:      doc.year,
-        genre:     doc.genre,
-        siteUrl:   buildSiteUrl(doc),
+        year: doc.year,
+        genre: doc.genre,
+        siteUrl: buildSiteUrl(doc),
         posterUrl: doc.poster_url || doc.cover_url || null,
+      }));
+
+    // Web sources — real sites from Brave Search (IMDb, Collider, Ranker, etc.)
+    const webSources = webResults
+      .filter(r => r.url?.startsWith('http'))
+      .slice(0, 4)
+      .map(r => ({
+        type: 'web',
+        title: r.title,
+        snippet: r.snippet,
+        url: r.url,
+        source: r.source,
       }));
 
     const latency = Date.now() - startTime;
@@ -256,15 +385,163 @@ ${formatUserHistory(userHistory)}
     try {
       db.prepare(`INSERT INTO chat_logs (user_id, query, intent, response_length, sources_count, latency_ms, created_at)
         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
-        .run(userId, message.slice(0, 500), intent, aiResponse.length, citedSources.length, latency);
+        .run(userId, message.slice(0, 500), intent, aiResponse.length, siteSources.length + webSources.length, latency);
     } catch { /* non-fatal */ }
 
-    res.json({ response: aiResponse, intent, sources: citedSources, latency });
+    res.json({
+      response: aiResponse,
+      intent,
+      siteSources,
+      webSources,
+      searchQuery,
+      latency,
+      sources: siteSources, // legacy
+    });
 
   } catch (err) {
     console.error('Chat error:', err);
     if (err.name === 'TimeoutError') return res.status(504).json({ error: 'Request timed out.' });
-    res.status(500).json({ error: 'Server error.' });
+    res.status(500).json({ error: err.message || 'Server error.' });
+  }
+});
+
+// ─── Dedicated recommendations endpoint ──────────────────────────────────────
+
+router.get('/recommendations', requireAuth, async (req, res) => {
+  if (!GROQ_API_KEY) return res.status(503).json({ error: 'GROQ_API_KEY not configured.' });
+
+  const userId = req.user.id;
+
+  try {
+    // Get full rating history with more detail
+    const history = db.prepare(`
+      SELECT r.rating, r.review, r.media_type, r.media_id,
+        CASE r.media_type WHEN 'movie' THEN m.title WHEN 'tv_show' THEN t.title WHEN 'book' THEN b.title END as title,
+        CASE r.media_type WHEN 'movie' THEN m.genre WHEN 'tv_show' THEN t.genre WHEN 'book' THEN b.genre END as genre,
+        CASE r.media_type WHEN 'movie' THEN m.director WHEN 'tv_show' THEN t.creator WHEN 'book' THEN b.author END as creator,
+        CASE r.media_type WHEN 'movie' THEN m.synopsis WHEN 'tv_show' THEN t.synopsis WHEN 'book' THEN b.synopsis END as synopsis
+      FROM ratings r
+      LEFT JOIN movies   m ON r.media_type = 'movie'   AND r.media_id = m.id
+      LEFT JOIN tv_shows t ON r.media_type = 'tv_show' AND r.media_id = t.id
+      LEFT JOIN books    b ON r.media_type = 'book'    AND r.media_id = b.id
+      WHERE r.user_id = ?
+      ORDER BY r.rating DESC, r.created_at DESC
+      LIMIT 30
+    `).all(userId);
+
+    if (history.length === 0) {
+      return res.json({
+        recommendations: [],
+        tasteProfile: null,
+        message: 'Rate some movies, TV shows, or books first to get personalized recommendations!',
+      });
+    }
+
+    // Get all site content to recommend from
+    const allMovies = db.prepare(`SELECT id, title, year, genre, director, cast_members, synopsis, overview, source_key, poster_url, 'movie' as media_type FROM movies WHERE source_key IS NOT NULL`).all();
+    const allTV    = db.prepare(`SELECT id, title, year, genre, creator, cast_members, synopsis, overview, seasons, source_key, poster_url, 'tv_show' as media_type FROM tv_shows WHERE source_key IS NOT NULL`).all();
+    const allBooks = db.prepare(`SELECT id, title, year, genre, author, synopsis, source_key, cover_url, 'book' as media_type FROM books WHERE source_key IS NOT NULL LIMIT 100`).all();
+
+    // Exclude already-rated items
+    const ratedIds = new Set(history.map(r => `${r.media_type}:${r.media_id}`));
+    const unratedMedia = [...allMovies, ...allTV, ...allBooks]
+      .filter(m => !ratedIds.has(`${m.media_type}:${m.id}`));
+
+    const historyText = history.map(r => {
+      const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+      return `- "${r.title}" (${r.media_type.replace('_',' ')}) ${stars} | Genre: ${r.genre || 'unknown'} | By: ${r.creator || 'unknown'}${r.review ? ` | Review: "${r.review.slice(0,80)}"` : ''}`;
+    }).join('');
+
+    const catalogText = unratedMedia.slice(0, 60).map(m => {
+      const typeLabel = m.media_type === 'movie' ? 'Movie' : m.media_type === 'tv_show' ? 'TV Show' : 'Book';
+      return `[${typeLabel} ID:${m.id}] "${m.title}" | Genre: ${m.genre || ''} | ${m.director ? 'Director: '+m.director : m.creator ? 'Creator: '+m.creator : m.author ? 'Author: '+m.author : ''} | ${(m.synopsis || m.overview || '').slice(0,120)}`;
+    }).join('');
+
+    const systemPrompt = `You are a personalized media recommendation engine for "binge." 
+Analyze the user's rating history carefully to identify their taste patterns — which genres, directors, themes, tones, and styles they love.
+Then pick the 5 best matches from the available catalog.
+
+RULES:
+- Only recommend titles from the AVAILABLE CATALOG provided
+- For each recommendation give: the exact title, the media type, and a specific 1-2 sentence explanation referencing something they've actually rated
+- Be specific — e.g. "Since you gave Breaking Bad 5 stars, you'll love Severance's intense workplace tension"
+- Do NOT include any URLs or links
+- Respond in this exact JSON format, nothing else:
+{
+  "tasteProfile": "2-3 sentence summary of what this user loves based on their ratings",
+  "recommendations": [
+    { "id": <number>, "title": "<exact title>", "media_type": "<movie|tv_show|book>", "reason": "<specific 1-2 sentence explanation>" },
+    ...5 items total
+  ]
+}`;
+
+    const userMessage = `USER'S RATING HISTORY (what they've already seen/read):
+${historyText}
+
+AVAILABLE CATALOG (titles NOT yet rated — only pick from these):
+${catalogText}
+
+Analyze the user's taste and return 5 personalized recommendations from the catalog in the JSON format specified.`;
+
+    const response = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.4,
+        max_tokens: 1000,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) throw new Error(`Groq error: ${await response.text()}`);
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || '{}';
+
+    // Parse JSON from model response
+    let parsed;
+    try {
+      const cleaned = raw.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return res.status(500).json({ error: 'Failed to parse recommendation response' });
+    }
+
+    // Enrich recommendations with full media data and site URLs
+    const enriched = (parsed.recommendations || []).map(rec => {
+      const mediaItem = unratedMedia.find(m => m.id === rec.id && m.media_type === rec.media_type)
+        || unratedMedia.find(m => m.title.toLowerCase() === rec.title.toLowerCase());
+      if (!mediaItem) return null;
+      return {
+        id: mediaItem.id,
+        title: mediaItem.title,
+        media_type: mediaItem.media_type,
+        year: mediaItem.year,
+        genre: mediaItem.genre,
+        posterUrl: mediaItem.poster_url || mediaItem.cover_url || null,
+        siteUrl: mediaItem.media_type === 'movie' ? `/movies?open=${mediaItem.id}` :
+                 mediaItem.media_type === 'tv_show' ? `/tv-shows?open=${mediaItem.id}` :
+                 `/books?open=${mediaItem.id}`,
+        reason: rec.reason,
+      };
+    }).filter(Boolean);
+
+    res.json({
+      tasteProfile: parsed.tasteProfile || null,
+      recommendations: enriched,
+    });
+
+  } catch (err) {
+    console.error('Recommendations error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
