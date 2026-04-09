@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ChatBot from './components/ChatBot';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
+        <ChatBot />
       </BrowserRouter>
     </AuthProvider>
   );
