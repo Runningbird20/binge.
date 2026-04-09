@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
@@ -11,8 +12,11 @@ function normalizeMediaItems(data) {
 }
 
 export default function TVShows() {
+  const [searchParams] = useSearchParams();
+  const openId = Number(searchParams.get('open'));
+
   const [shows, setShows] = useState([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
   const [genre, setGenre] = useState('');
   const [sortOrder, setSortOrder] = useState('title-asc');
   const [facets, setFacets] = useState({ genres: [] });
@@ -30,29 +34,34 @@ export default function TVShows() {
       if (genre) params.set('genre', genre);
       if (sortOrder) params.set('sort', sortOrder);
       const data = await api.get(`/media/tv-shows?${params}`);
-      setShows(normalizeMediaItems(data));
+      const items = normalizeMediaItems(data);
+      setShows(items);
       setFacets({
         genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
       });
+      // Auto-open modal if ?open=ID is in the URL
+      if (openId) {
+        const match = items.find((s) => s.id === openId);
+        if (match) {
+          setSelectedItem(match);
+          setDetailMessage('');
+        }
+      }
     } catch {
       setShows([]);
       setFacets({ genres: [] });
     } finally {
       setLoading(false);
     }
-  }, [search, genre, sortOrder]);
+  }, [search, genre, sortOrder, openId]);
 
-  useEffect(() => {
-    fetchShows();
-  }, [fetchShows]);
+  useEffect(() => { fetchShows(); }, [fetchShows]);
 
   useEffect(() => {
     api.get('/ratings/my?media_type=tv_show')
       .then((ratings) => {
         const map = {};
-        ratings.forEach((rating) => {
-          map[rating.media_id] = rating.rating;
-        });
+        ratings.forEach((r) => { map[r.media_id] = r.rating; });
         setUserRatings(map);
       })
       .catch(() => {});
@@ -62,9 +71,7 @@ export default function TVShows() {
     try {
       await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, rating });
       setUserRatings((prev) => ({ ...prev, [item.id]: rating }));
-    } catch (err) {
-      alert(err.message);
-    }
+    } catch (err) { alert(err.message); }
   }
 
   async function handleWatchlist(item) {
@@ -80,22 +87,9 @@ export default function TVShows() {
     }
   }
 
-  function openItemDetails(item) {
-    setSelectedItem(item);
-    setDetailMessage('');
-  }
-
-  function closeItemDetails() {
-    setSelectedItem(null);
-    setDetailMessage('');
-    setIsAddingWatchlist(false);
-  }
-
-  function clearFilters() {
-    setSearch('');
-    setGenre('');
-    setSortOrder('title-asc');
-  }
+  function openItemDetails(item) { setSelectedItem(item); setDetailMessage(''); }
+  function closeItemDetails() { setSelectedItem(null); setDetailMessage(''); setIsAddingWatchlist(false); }
+  function clearFilters() { setSearch(''); setGenre(''); setSortOrder('title-asc'); }
 
   const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
   const genreOptions = facets.genres;
@@ -120,44 +114,24 @@ export default function TVShows() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select
-            className="filter-input"
-            aria-label="Genre"
-            value={genre}
-            onChange={(e) => setGenre(e.target.value)}
-          >
+          <select className="filter-input" aria-label="Genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
             <option value="">All Genres</option>
-            {genreOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
+            {genreOptions.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-          <select
-            className="filter-input"
-            aria-label="Sort by"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
-          >
+          <select className="filter-input" aria-label="Sort by" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
             <option value="title-asc">Title A-Z</option>
             <option value="title-desc">Title Z-A</option>
             <option value="year-desc">Newest First</option>
             <option value="year-asc">Oldest First</option>
           </select>
-          {hasActiveFilters && (
-            <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-              Clear
-            </button>
-          )}
+          {hasActiveFilters && <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>Clear</button>}
         </div>
 
         <div className="books-results-header">
           <p className="books-results-count">
             {loading ? 'Loading shows...' : `${shows.length} show${shows.length === 1 ? '' : 's'} found`}
           </p>
-          {hasActiveFilters && !loading && (
-            <p className="books-results-summary">Showing results for your active filters.</p>
-          )}
+          {hasActiveFilters && !loading && <p className="books-results-summary">Showing results for your active filters.</p>}
         </div>
 
         {loading ? (
