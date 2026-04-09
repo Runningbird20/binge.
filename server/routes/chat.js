@@ -177,17 +177,27 @@ function buildSiteUrl(doc) {
 
 function getUserRatingHistory(userId) {
   if (!userId) return [];
-  return db.prepare(`
-    SELECT r.rating, r.media_type,
-      CASE r.media_type WHEN 'movie' THEN m.title WHEN 'tv_show' THEN t.title WHEN 'book' THEN b.title END as title,
-      CASE r.media_type WHEN 'movie' THEN m.genre WHEN 'tv_show' THEN t.genre WHEN 'book' THEN b.genre END as genre,
-      CASE r.media_type WHEN 'movie' THEN m.director WHEN 'tv_show' THEN t.creator WHEN 'book' THEN b.author END as creator
-    FROM ratings r
-    LEFT JOIN movies   m ON r.media_type = 'movie'   AND r.media_id = m.id
-    LEFT JOIN tv_shows t ON r.media_type = 'tv_show' AND r.media_id = t.id
-    LEFT JOIN books    b ON r.media_type = 'book'    AND r.media_id = b.id
-    WHERE r.user_id = ? ORDER BY r.created_at DESC LIMIT 20
+  const movies = db.prepare(`
+    SELECT ROUND(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*5, 1) AS rating,
+           'movie' AS media_type, m.title, m.genre, m.director AS creator
+    FROM movie_ratings r JOIN movies m ON r.media_id = m.id
+    WHERE r.user_id = ?
   `).all(userId);
+  const shows = db.prepare(`
+    SELECT ROUND(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS REAL)/38*5, 1) AS rating,
+           'tv_show' AS media_type, t.title, t.genre, t.creator AS creator
+    FROM tv_show_ratings r JOIN tv_shows t ON r.media_id = t.id
+    WHERE r.user_id = ?
+  `).all(userId);
+  const books = db.prepare(`
+    SELECT ROUND(CAST(prose+plot+characters+originality+pacing+resonance AS REAL)/32*5, 1) AS rating,
+           'book' AS media_type, b.title, b.genre, b.author AS creator
+    FROM book_ratings r JOIN books b ON r.media_id = b.id
+    WHERE r.user_id = ?
+  `).all(userId);
+  return [...movies, ...shows, ...books]
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 20);
 }
 
 function formatSiteContext(docs) {
@@ -414,20 +424,27 @@ router.get('/recommendations', requireAuth, async (req, res) => {
 
   try {
     // Get full rating history with more detail
-    const history = db.prepare(`
-      SELECT r.rating, r.review, r.media_type, r.media_id,
-        CASE r.media_type WHEN 'movie' THEN m.title WHEN 'tv_show' THEN t.title WHEN 'book' THEN b.title END as title,
-        CASE r.media_type WHEN 'movie' THEN m.genre WHEN 'tv_show' THEN t.genre WHEN 'book' THEN b.genre END as genre,
-        CASE r.media_type WHEN 'movie' THEN m.director WHEN 'tv_show' THEN t.creator WHEN 'book' THEN b.author END as creator,
-        CASE r.media_type WHEN 'movie' THEN m.synopsis WHEN 'tv_show' THEN t.synopsis WHEN 'book' THEN b.synopsis END as synopsis
-      FROM ratings r
-      LEFT JOIN movies   m ON r.media_type = 'movie'   AND r.media_id = m.id
-      LEFT JOIN tv_shows t ON r.media_type = 'tv_show' AND r.media_id = t.id
-      LEFT JOIN books    b ON r.media_type = 'book'    AND r.media_id = b.id
-      WHERE r.user_id = ?
-      ORDER BY r.rating DESC, r.created_at DESC
-      LIMIT 30
+    const movieHistory = db.prepare(`
+      SELECT ROUND(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*5, 1) AS rating,
+             r.review, 'movie' AS media_type, r.media_id,
+             m.title, m.genre, m.director AS creator, m.synopsis
+      FROM movie_ratings r JOIN movies m ON r.media_id = m.id WHERE r.user_id = ?
     `).all(userId);
+    const tvHistory = db.prepare(`
+      SELECT ROUND(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS REAL)/38*5, 1) AS rating,
+             r.review, 'tv_show' AS media_type, r.media_id,
+             t.title, t.genre, t.creator AS creator, t.synopsis
+      FROM tv_show_ratings r JOIN tv_shows t ON r.media_id = t.id WHERE r.user_id = ?
+    `).all(userId);
+    const bookHistory = db.prepare(`
+      SELECT ROUND(CAST(prose+plot+characters+originality+pacing+resonance AS REAL)/32*5, 1) AS rating,
+             r.review, 'book' AS media_type, r.media_id,
+             b.title, b.genre, b.author AS creator, b.synopsis
+      FROM book_ratings r JOIN books b ON r.media_id = b.id WHERE r.user_id = ?
+    `).all(userId);
+    const history = [...movieHistory, ...tvHistory, ...bookHistory]
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 30);
 
     if (history.length === 0) {
       return res.json({

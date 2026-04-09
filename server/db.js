@@ -778,16 +778,52 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS ratings (
+  CREATE TABLE IF NOT EXISTS movie_ratings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    media_type TEXT NOT NULL CHECK(media_type IN ('movie', 'tv_show', 'book')),
     media_id INTEGER NOT NULL,
-    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    acting INTEGER NOT NULL CHECK(acting >= 1 AND acting <= 5),
+    writing INTEGER NOT NULL CHECK(writing >= 1 AND writing <= 5),
+    originality INTEGER NOT NULL CHECK(originality >= 1 AND originality <= 5),
+    pacing INTEGER NOT NULL CHECK(pacing >= 1 AND pacing <= 5),
+    cinematography INTEGER NOT NULL CHECK(cinematography >= 1 AND cinematography <= 5),
     review TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE (user_id, media_type, media_id)
+    UNIQUE (user_id, media_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS tv_show_ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    media_id INTEGER NOT NULL,
+    premise INTEGER NOT NULL CHECK(premise >= 1 AND premise <= 5),
+    originality INTEGER NOT NULL CHECK(originality >= 1 AND originality <= 5),
+    acting INTEGER NOT NULL CHECK(acting >= 1 AND acting <= 6),
+    cinematography INTEGER NOT NULL CHECK(cinematography >= 1 AND cinematography <= 5),
+    writing INTEGER NOT NULL CHECK(writing >= 1 AND writing <= 6),
+    pacing INTEGER NOT NULL CHECK(pacing >= 1 AND pacing <= 5),
+    resonance INTEGER NOT NULL CHECK(resonance >= 1 AND resonance <= 6),
+    review TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE (user_id, media_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS book_ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    media_id INTEGER NOT NULL,
+    prose INTEGER NOT NULL CHECK(prose >= 1 AND prose <= 5),
+    plot INTEGER NOT NULL CHECK(plot >= 1 AND plot <= 5),
+    characters INTEGER NOT NULL CHECK(characters >= 1 AND characters <= 6),
+    originality INTEGER NOT NULL CHECK(originality >= 1 AND originality <= 5),
+    pacing INTEGER NOT NULL CHECK(pacing >= 1 AND pacing <= 5),
+    resonance INTEGER NOT NULL CHECK(resonance >= 1 AND resonance <= 6),
+    review TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE (user_id, media_id)
   );
 
   CREATE TABLE IF NOT EXISTS watchlist (
@@ -924,6 +960,11 @@ if (!hasColumn('tv_shows', 'age_rating')) {
 
 if (!hasColumn('tv_shows', 'overview')) {
   db.exec('ALTER TABLE tv_shows ADD COLUMN overview TEXT');
+}
+
+// ── Drop legacy single-table ratings if it still exists ───────────────────────
+if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ratings'").get()) {
+  db.exec('DROP TABLE ratings');
 }
 
 // ── New table migrations (safe to run on existing databases) ──────────────────
