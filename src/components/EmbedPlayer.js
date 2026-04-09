@@ -191,18 +191,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [
-    item?.id,
-    item?.title,
-    item?.year,
-    item?.tmdbId,
-    item?.tmdb_id,
-    item?.tmdb,
-    item?.imdbId,
-    item?.imdb_id,
-    item?.imdb,
-    mediaType,
-  ]);
+  }, [item, mediaType]);
 
   useEffect(() => {
     if (!isTV || !tmdbId) return undefined;
