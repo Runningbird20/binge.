@@ -1,17 +1,17 @@
-import StarRating from './StarRating';
+import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
 
 export default function MediaCard({
   item,
   mediaType,
   userRating,
-  onRate,
   onWatchlist,
   onOpenDetails,
 }) {
-  const imageUrl = item.poster_url || item.cover_url || item.image_url;
-  const subtitle = item.director || item.creator || item.author || '';
-  const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
+  const imageUrl   = item.poster_url || item.cover_url || item.image_url;
+  const subtitle   = item.director || item.creator || item.author || '';
+  const avgRating  = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
   const description = item.synopsis || item.overview || '';
+  const userScore  = computeNormalizedScore(mediaType, userRating);
 
   return (
     <div
@@ -35,34 +35,49 @@ export default function MediaCard({
             <span>{item.title?.charAt(0)}</span>
           </div>
         )}
+        {userRating && (
+          <div className="media-card-artifact-badge">
+            <RatingArtifact mediaType={mediaType} scores={userRating} size={90} />
+          </div>
+        )}
       </div>
 
       <div className="media-card-body">
         <h3 className="media-card-title">{item.title}</h3>
 
         <div className="media-card-meta">
-          {item.year && <span>{item.year}</span>}
-          {subtitle && <span>{subtitle}</span>}
-          {item.genre && <span className="media-card-genre">{item.genre}</span>}
+          {item.year    && <span>{item.year}</span>}
+          {subtitle     && <span>{subtitle}</span>}
+          {item.genre   && <span className="media-card-genre">{item.genre}</span>}
         </div>
 
-        {avgRating && (
-          <div className="media-card-avg">
-            Score {avgRating}/10
-            <span className="rating-count"> ({item.rating_count})</span>
-          </div>
-        )}
+        <div className="media-card-scores">
+          {userScore !== null && (
+            <span className="media-card-user-score">Your score: {userScore}/10</span>
+          )}
+          {avgRating && (
+            <span className="media-card-avg">
+              Community: {avgRating}/10
+              <span className="rating-count"> ({item.rating_count})</span>
+            </span>
+          )}
+        </div>
 
         {description && (
           <p className="media-card-synopsis">{description}</p>
         )}
 
         <div className="media-card-actions">
-          <StarRating
-            value={userRating}
-            onChange={(rating) => onRate && onRate(item, rating)}
-            readOnly={!onRate}
-          />
+          <button
+            className="btn-ghost btn-sm"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenDetails?.(item);
+            }}
+          >
+            {userRating ? 'Edit Rating' : 'Rate'}
+          </button>
           {onWatchlist && (
             <button
               className="btn-ghost btn-sm"

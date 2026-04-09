@@ -848,12 +848,19 @@ body {
   box-shadow: 0 26px 42px rgba(0, 0, 0, 0.48);
 }
 
-.book-shelf-cover-image,
+.book-shelf-cover-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 .book-detail-cover-image {
   width: 100%;
   height: 100%;
   display: block;
   object-fit: cover;
+  object-position: center top;
 }
 
 .book-shelf-cover-placeholder,
@@ -898,9 +905,10 @@ body {
   inset: 0;
   z-index: 400;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 2rem;
+  overflow-y: auto;
   background: rgba(7, 7, 7, 0.8);
   backdrop-filter: blur(10px);
 }
@@ -908,6 +916,7 @@ body {
 .book-detail-modal {
   position: relative;
   width: min(920px, 100%);
+  margin: auto;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 2rem;
@@ -937,6 +946,7 @@ body {
 
 .book-detail-cover-panel {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
 }
 
@@ -1493,22 +1503,359 @@ body {
   flex-wrap: wrap;
 }
 
-/* ─── Star rating input ──────────────────────────────────────────────────── */
+/* ─── Multi-dimensional rating input ────────────────────────────────────── */
 
-.star-rating-input {
+.rating-input {
   display: flex;
-  gap: 2px;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.25rem 0;
 }
 
-.star-rating-input .star {
-  font-size: 1.1rem;
-  color: #333;
-  cursor: pointer;
-  transition: color 0.1s;
-  user-select: none;
+.rating-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
-.star-rating-input .star.filled { color: #e8c97a; }
-.star-rating-input.readonly .star { cursor: default; }
+
+.rating-input-label-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.rating-input-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  line-height: 1.2;
+}
+
+.rating-input-desc {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.35);
+  line-height: 1.2;
+}
+
+.rating-input-buttons {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.rating-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.18);
+  background: transparent;
+  color: rgba(255,255,255,0.45);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.rating-btn:hover {
+  border-color: rgba(255,255,255,0.55);
+  color: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.07);
+}
+
+.rating-btn-active {
+  border-color: #e8c97a;
+  background: rgba(232,201,122,0.15);
+  color: #e8c97a;
+}
+
+/* TV show active color */
+.tv_show .rating-btn-active,
+[data-media-type="tv_show"] .rating-btn-active {
+  border-color: #a07de8;
+  background: rgba(160,125,232,0.15);
+  color: #a07de8;
+}
+
+/* Book active color */
+.book .rating-btn-active,
+[data-media-type="book"] .rating-btn-active {
+  border-color: #5db88a;
+  background: rgba(93,184,138,0.15);
+  color: #5db88a;
+}
+
+.rating-input-max {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.3);
+  margin-left: 2px;
+}
+
+/* ─── Rating artifact (radar chart) ─────────────────────────────────────── */
+
+.rating-artifact {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.artifact-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 1rem;
+  gap: 0.25rem;
+}
+
+.artifact-score {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  margin: 0;
+  line-height: 1;
+}
+
+.artifact-score span {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.4);
+  font-weight: 400;
+}
+
+/* ─── Rating section inside modals ──────────────────────────────────────── */
+
+.rating-section {
+  margin: 1.25rem 0 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.rating-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.4);
+  margin: 0 0 0.75rem;
+}
+
+.rating-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.btn-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rating-incomplete-hint {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ─── Media card scores ──────────────────────────────────────────────────── */
+
+.media-card-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0.25rem 0;
+}
+
+.media-card-user-score {
+  font-size: 0.78rem;
+  color: #e8c97a;
+  font-weight: 600;
+}
+
+.media-card-avg {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.45);
+}
+
+/* ─── Artifact badge on card poster ─────────────────────────────────────── */
+
+.media-card-poster {
+  position: relative;
+}
+
+.media-card-artifact-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 72px;
+  height: 72px;
+  background: rgba(10,10,10,0.75);
+  border-radius: 50%;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.media-card-artifact-badge .rating-artifact {
+  width: 68px;
+  height: 68px;
+}
+
+/* ─── Wide modal variant ─────────────────────────────────────────────────── */
+
+.book-detail-modal-wide {
+  max-width: 860px;
+}
+
+/* ─── Review textarea ────────────────────────────────────────────────────── */
+
+.review-textarea {
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: #e8e8e8;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.review-textarea::placeholder { color: rgba(255,255,255,0.25); }
+.review-textarea:focus {
+  outline: none;
+  border-color: rgba(232,201,122,0.4);
+}
+
+/* ─── Ratings page ───────────────────────────────────────────────────────── */
+
+.ratings-page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.ratings-page-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid #252525;
+  border-radius: 18px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.ratings-page-card:hover {
+  border-color: rgba(232,201,122,0.22);
+  transform: translateY(-3px);
+}
+
+.ratings-page-poster-wrap {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #1a1a1a;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ratings-page-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.ratings-page-poster-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #2d1f0d 0%, #121212 85%);
+  color: #f7e7be;
+  font-size: 3rem;
+  font-weight: 700;
+}
+
+.ratings-page-info {
+  padding: 0.9rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.ratings-page-type-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  align-self: flex-start;
+}
+.ratings-page-type-movie   { background: rgba(232,201,122,0.15); color: #e8c97a; }
+.ratings-page-type-tv_show { background: rgba(160,125,232,0.15); color: #a07de8; }
+.ratings-page-type-book    { background: rgba(93,184,138,0.15);  color: #5db88a; }
+
+.ratings-page-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f0ece3;
+  line-height: 1.35;
+}
+
+.ratings-page-year {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.ratings-page-score {
+  margin: 0.2rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #e8c97a;
+  line-height: 1;
+}
+.ratings-page-score span {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.35);
+  font-weight: 400;
+}
+
+.ratings-page-artifact {
+  margin: 0.5rem auto 0;
+  width: 160px;
+}
+
+.ratings-page-review {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.5);
+  line-height: 1.55;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  padding-top: 0.5rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── Watchlist page ─────────────────────────────────────────────────────── */
 
 /* ─── Watchlist page ─────────────────────────────────────────────────────── */
 

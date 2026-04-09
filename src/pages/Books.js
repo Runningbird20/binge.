@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ListSaveControls from '../components/ListSaveControls';
+import RatingInput from '../components/RatingInput';
+import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import { api } from '../api';
 import {
   buildMediaGenreFacets,
@@ -53,10 +55,23 @@ function BookDetailsModal({
   onAddToLibrary,
   isInLibrary,
   isAddingToLibrary,
+  onRate,
+  userRating,
   detailMessage,
   allowActions = true,
   browseOnlyMessage = '',
 }) {
+  const [draftScores, setDraftScores] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (userRating && typeof userRating === 'object') {
+      setDraftScores(userRating);
+    } else {
+      setDraftScores({});
+    }
+  }, [userRating, book]);
+
   useEffect(() => {
     if (!book) {
       return undefined;
@@ -80,10 +95,24 @@ function BookDetailsModal({
 
   if (!book) return null;
 
+  const cats = RATING_CATEGORIES.book;
+  const canSave = cats.every((cat) => draftScores[cat.key] >= 1);
+  const displayScore = computeNormalizedScore('book', draftScores);
+
+  async function handleSave() {
+    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onRate(book, draftScores);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div className="book-detail-overlay" onClick={onClose}>
       <div
-        className="book-detail-modal"
+        className="book-detail-modal book-detail-modal-wide"
         role="dialog"
         aria-modal="true"
         aria-labelledby="book-detail-title"
@@ -105,6 +134,12 @@ function BookDetailsModal({
               imageClassName="book-detail-cover-image"
               placeholderClassName="book-detail-cover-placeholder"
             />
+          </div>
+          <div className="artifact-panel">
+            <RatingArtifact mediaType="book" scores={draftScores} size={220} />
+            {displayScore !== null && (
+              <p className="artifact-score">{displayScore}<span>/10</span></p>
+            )}
           </div>
         </div>
 
@@ -132,6 +167,28 @@ function BookDetailsModal({
             <div className="book-detail-summary-row">
               <span className="book-detail-summary-label">Genre</span>
               <span>{book.genre || 'General Fiction'}</span>
+            </div>
+          </div>
+
+          <div className="rating-section">
+            <p className="rating-section-title">Your Rating</p>
+            <RatingInput
+              mediaType="book"
+              value={draftScores}
+              onChange={allowActions ? setDraftScores : () => {}}
+            />
+            <div className="rating-section-actions">
+              <button
+                type="button"
+                className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
+                onClick={handleSave}
+                disabled={!allowActions || !canSave || isSaving}
+              >
+                {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+              </button>
+              {allowActions && !canSave && (
+                <span className="rating-incomplete-hint">Rate all categories to save</span>
+              )}
             </div>
           </div>
 
@@ -175,6 +232,7 @@ export default function Books() {
   const [facets, setFacets] = useState({ genres: [] });
   const [loading, setLoading] = useState(true);
   const [libraryIds, setLibraryIds] = useState({});
+  const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
   const [addingBookId, setAddingBookId] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
@@ -315,16 +373,22 @@ export default function Books() {
       .then((items) => {
         if (cancelled) return;
         const nextLibraryIds = {};
-        items.forEach((item) => {
-          nextLibraryIds[item.media_id] = true;
-        });
+        items.forEach((item) => { nextLibraryIds[item.media_id] = true; });
         setLibraryIds(nextLibraryIds);
       })
       .catch(() => {});
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    api.get('/ratings/my?media_type=book')
+      .then((ratings) => {
+        const next = {};
+        ratings.forEach((r) => { next[r.media_id] = r; });
+        setUserRatings(next);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -373,6 +437,16 @@ export default function Books() {
     setSelectedBook(null);
     setDetailMessage('');
     setAddingBookId(null);
+  }
+
+  async function handleRate(book, categories, review) {
+    try {
+      await api.post('/ratings', { media_type: 'book', media_id: book.id, categories, review });
+      setUserRatings((cur) => ({ ...cur, [book.id]: { ...categories, media_id: book.id, review } }));
+      setDetailMessage('Rating saved!');
+    } catch (err) {
+      setDetailMessage(err.message);
+    }
   }
 
   async function handleAddToLibrary(book) {
@@ -557,6 +631,8 @@ export default function Books() {
           onAddToLibrary={handleAddToLibrary}
           isInLibrary={!!libraryIds[selectedBook?.id]}
           isAddingToLibrary={addingBookId === selectedBook?.id}
+          onRate={handleRate}
+          userRating={userRatings[selectedBook?.id]}
           detailMessage={detailMessage}
           allowActions={!usingFallbackCatalog}
           browseOnlyMessage="Fallback catalog mode is browse-only."

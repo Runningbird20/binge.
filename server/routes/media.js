@@ -95,8 +95,10 @@ router.get('/movies/:id', (req, res) => {
     .get(req.params.id);
   if (!movie) return res.status(404).json({ error: 'Not found' });
   const stats = db.prepare(
-    'SELECT AVG(rating) as avg_rating, COUNT(*) as rating_count FROM ratings WHERE media_type = ? AND media_id = ?'
-  ).get('movie', req.params.id);
+    `SELECT ROUND(AVG(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*10), 1) AS avg_rating,
+            COUNT(*) AS rating_count
+     FROM movie_ratings WHERE media_id = ?`
+  ).get(req.params.id);
   res.json({ ...movie, ...stats });
 });
 
@@ -140,8 +142,10 @@ router.get('/tv-shows/:id', (req, res) => {
     .get(req.params.id);
   if (!show) return res.status(404).json({ error: 'Not found' });
   const stats = db.prepare(
-    'SELECT AVG(rating) as avg_rating, COUNT(*) as rating_count FROM ratings WHERE media_type = ? AND media_id = ?'
-  ).get('tv_show', req.params.id);
+    `SELECT ROUND(AVG(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS REAL)/38*10), 1) AS avg_rating,
+            COUNT(*) AS rating_count
+     FROM tv_show_ratings WHERE media_id = ?`
+  ).get(req.params.id);
   res.json({ ...show, ...stats });
 });
 
@@ -232,8 +236,10 @@ router.get('/books/:id', (req, res) => {
     .get(req.params.id);
   if (!book) return res.status(404).json({ error: 'Not found' });
   const stats = db.prepare(
-    'SELECT AVG(rating) as avg_rating, COUNT(*) as rating_count FROM ratings WHERE media_type = ? AND media_id = ?'
-  ).get('book', req.params.id);
+    `SELECT ROUND(AVG(CAST(prose+plot+characters+originality+pacing+resonance AS REAL)/32*10), 1) AS avg_rating,
+            COUNT(*) AS rating_count
+     FROM book_ratings WHERE media_id = ?`
+  ).get(req.params.id);
   res.json({ ...book, ...stats });
 });
 
