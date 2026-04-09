@@ -858,6 +858,20 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS media_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    media_type TEXT NOT NULL CHECK(media_type IN ('movie', 'tv_show', 'book')),
+    year INTEGER,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+    admin_note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 if (!hasColumn('users', 'bio')) {
@@ -911,6 +925,36 @@ if (!hasColumn('tv_shows', 'age_rating')) {
 if (!hasColumn('tv_shows', 'overview')) {
   db.exec('ALTER TABLE tv_shows ADD COLUMN overview TEXT');
 }
+
+// ── New table migrations (safe to run on existing databases) ──────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS chat_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    query TEXT NOT NULL,
+    intent TEXT,
+    response_length INTEGER,
+    sources_count INTEGER,
+    latency_ms INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS media_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    media_type TEXT NOT NULL CHECK(media_type IN ('movie', 'tv_show', 'book')),
+    year INTEGER,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+    admin_note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+`);
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_media_lists_user_id ON media_lists(user_id);
