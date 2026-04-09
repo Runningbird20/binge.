@@ -20,6 +20,7 @@ export default function Navbar() {
             <NavLink to="/movies"    className={({ isActive }) => isActive ? 'active' : ''}>Movies</NavLink>
             <NavLink to="/tv-shows"  className={({ isActive }) => isActive ? 'active' : ''}>TV Shows</NavLink>
             <NavLink to="/books"     className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
+            <NavLink to="/lists"     className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
             <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
           </div>
           <div className="navbar-user">

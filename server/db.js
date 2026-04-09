@@ -800,6 +800,52 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id),
     UNIQUE (user_id, media_type, media_id)
   );
+
+  CREATE TABLE IF NOT EXISTS media_lists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    share_code TEXT NOT NULL UNIQUE,
+    is_public INTEGER NOT NULL DEFAULT 0 CHECK(is_public IN (0, 1)),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS media_list_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    list_id INTEGER NOT NULL,
+    media_type TEXT NOT NULL CHECK(media_type IN ('movie', 'tv_show', 'book')),
+    media_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (list_id) REFERENCES media_lists(id) ON DELETE CASCADE,
+    UNIQUE (list_id, media_type, media_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS media_list_collaborators (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    list_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    invited_by_user_id INTEGER NOT NULL,
+    added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (list_id) REFERENCES media_lists(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (invited_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (list_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS media_list_votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    list_item_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    value INTEGER NOT NULL CHECK(value IN (-1, 1)),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (list_item_id) REFERENCES media_list_items(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (list_item_id, user_id)
+  );
 `);
 
 if (!hasColumn('users', 'bio')) {
@@ -853,6 +899,17 @@ if (!hasColumn('tv_shows', 'age_rating')) {
 if (!hasColumn('tv_shows', 'overview')) {
   db.exec('ALTER TABLE tv_shows ADD COLUMN overview TEXT');
 }
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_media_lists_user_id ON media_lists(user_id);
+  CREATE INDEX IF NOT EXISTS idx_media_lists_share_code ON media_lists(share_code);
+  CREATE INDEX IF NOT EXISTS idx_media_list_items_list_id ON media_list_items(list_id);
+  CREATE INDEX IF NOT EXISTS idx_media_list_items_list_position ON media_list_items(list_id, position);
+  CREATE INDEX IF NOT EXISTS idx_media_list_collaborators_list_id ON media_list_collaborators(list_id);
+  CREATE INDEX IF NOT EXISTS idx_media_list_collaborators_user_id ON media_list_collaborators(user_id);
+  CREATE INDEX IF NOT EXISTS idx_media_list_votes_item_id ON media_list_votes(list_item_id);
+  CREATE INDEX IF NOT EXISTS idx_media_list_votes_user_id ON media_list_votes(user_id);
+`);
 
 syncPreferredMovies();
 syncPreferredTvShows();
