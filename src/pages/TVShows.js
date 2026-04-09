@@ -4,6 +4,11 @@ import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { api } from '../api';
+import {
+  buildMediaGenreFacets,
+  filterMediaItems,
+  loadFallbackTvShows,
+} from '../catalogFallback';
 
 function normalizeMediaItems(data) {
   if (Array.isArray(data)) return data;
@@ -25,6 +30,7 @@ export default function TVShows() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
+  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
 
   const fetchShows = useCallback(async () => {
     setLoading(true);
@@ -36,17 +42,40 @@ export default function TVShows() {
 
       const data = await api.get(`/media/tv-shows?${params}`);
       const items = normalizeMediaItems(data);
+      if (items.length === 0) {
+        throw new Error('TV catalog is empty');
+      }
+
       setShows(items);
       setFacets({
         genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
       });
+      setUsingFallbackCatalog(false);
+      // Auto-open modal if ?open=ID is in the URL
       if (openId) {
         const match = items.find((s) => s.id === openId);
         if (match) { setSelectedItem(match); setDetailMessage(''); }
       }
     } catch {
-      setShows([]);
-      setFacets({ genres: [] });
+      try {
+        const fallbackItems = await loadFallbackTvShows();
+        const filteredItems = filterMediaItems(fallbackItems, { search, genre, sortOrder });
+        setShows(filteredItems);
+        setFacets({ genres: buildMediaGenreFacets(fallbackItems) });
+        setUsingFallbackCatalog(true);
+
+        if (openId) {
+          const match = filteredItems.find((show) => show.id === openId);
+          if (match) {
+            setSelectedItem(match);
+            setDetailMessage('');
+          }
+        }
+      } catch {
+        setShows([]);
+        setFacets({ genres: [] });
+        setUsingFallbackCatalog(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -113,6 +142,9 @@ export default function TVShows() {
               <p className="surface-panel-copy">
                 Search by title, narrow by genre, and sort your shortlist in one place.
               </p>
+              {usingFallbackCatalog && (
+                <p className="surface-panel-copy">Showing the bundled TV catalog snapshot.</p>
+              )}
             </div>
             <p className="surface-panel-meta">
               {loading ? 'Loading shows...' : `${shows.length} show${shows.length === 1 ? '' : 's'} found`}
@@ -178,7 +210,7 @@ export default function TVShows() {
                   item={show}
                   mediaType="tv_show"
                   userRating={userRatings[show.id]}
-                  onWatchlist={handleWatchlist}
+                  onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
                   onOpenDetails={openItemDetails}
                 />
               ))}
@@ -192,11 +224,13 @@ export default function TVShows() {
           item={selectedItem}
           mediaType="tv_show"
           onClose={closeItemDetails}
-          onRate={handleRate}
-          onWatchlist={handleWatchlist}
+          onRate={usingFallbackCatalog ? undefined : handleRate}
+          onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
           userRating={userRatings[selectedItem.id]}
           isAddingWatchlist={isAddingWatchlist}
           detailMessage={detailMessage}
+          allowActions={!usingFallbackCatalog}
+          browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}
     </div>

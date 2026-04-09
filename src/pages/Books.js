@@ -5,6 +5,11 @@ import ListSaveControls from '../components/ListSaveControls';
 import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import { api } from '../api';
+import {
+  buildMediaGenreFacets,
+  filterBooksCatalog,
+  loadFallbackBooks,
+} from '../catalogFallback';
 
 const BOOKS_PAGE_SIZE = 24;
 
@@ -53,6 +58,8 @@ function BookDetailsModal({
   onRate,
   userRating,
   detailMessage,
+  allowActions = true,
+  browseOnlyMessage = '',
 }) {
   const [draftScores, setDraftScores] = useState({});
   const [isSaving, setIsSaving] = useState(false);
@@ -93,7 +100,7 @@ function BookDetailsModal({
   const displayScore = computeNormalizedScore('book', draftScores);
 
   async function handleSave() {
-    if (!canSave || isSaving) return;
+    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
     setIsSaving(true);
     try {
       await onRate(book, draftScores);
@@ -168,33 +175,40 @@ function BookDetailsModal({
             <RatingInput
               mediaType="book"
               value={draftScores}
-              onChange={setDraftScores}
+              onChange={allowActions ? setDraftScores : () => {}}
             />
             <div className="rating-section-actions">
               <button
                 type="button"
-                className={`btn-primary${canSave ? '' : ' btn-disabled'}`}
+                className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
                 onClick={handleSave}
-                disabled={!canSave || isSaving}
+                disabled={!allowActions || !canSave || isSaving}
               >
-                {isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+                {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
               </button>
-              {!canSave && (
+              {allowActions && !canSave && (
                 <span className="rating-incomplete-hint">Rate all categories to save</span>
               )}
             </div>
           </div>
 
           <div className="book-detail-actions">
-            <button
-              type="button"
-              className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
-              onClick={() => onAddToLibrary(book)}
-              disabled={isInLibrary || isAddingToLibrary}
-            >
-              {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
-            </button>
-            <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
+            {allowActions && (
+              <button
+                type="button"
+                className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
+                onClick={() => onAddToLibrary(book)}
+                disabled={isInLibrary || isAddingToLibrary}
+              >
+                {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
+              </button>
+            )}
+            {allowActions && (
+              <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
+            )}
+            {!allowActions && browseOnlyMessage && (
+              <p className="book-detail-status">{browseOnlyMessage}</p>
+            )}
             {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
           </div>
         </div>
@@ -223,6 +237,7 @@ export default function Books() {
   const [addingBookId, setAddingBookId] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
   const loadMoreRef = useRef(null);
 
   useEffect(() => {
@@ -265,6 +280,10 @@ export default function Books() {
         const data = await api.get(`/media/books?${params.toString()}`);
         if (!cancelled) {
           const nextItems = Array.isArray(data?.items) ? data.items : [];
+          if (nextItems.length === 0 && page === 1) {
+            throw new Error('Book catalog is empty');
+          }
+
           setBooks((current) => {
             if (page === 1) {
               return nextItems;
@@ -279,6 +298,7 @@ export default function Books() {
           setFacets({
             genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
           });
+          setUsingFallbackCatalog(false);
           // Auto-open modal if ?open=ID is in the URL
           if (openId && page === 1) {
             const match = (Array.isArray(data?.items) ? data.items : []).find((b) => b.id === openId);
@@ -290,11 +310,47 @@ export default function Books() {
         }
       } catch {
         if (!cancelled) {
-          if (page === 1) {
-            setBooks([]);
+          try {
+            const fallbackItems = await loadFallbackBooks();
+            const result = filterBooksCatalog(fallbackItems, {
+              search: debouncedSearch,
+              genre,
+              sortOrder,
+              page,
+              pageSize: BOOKS_PAGE_SIZE,
+            });
+
+            setBooks((current) => {
+              if (page === 1) {
+                return result.items;
+              }
+
+              const seenIds = new Set(current.map((book) => book.id));
+              const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
+              return [...current, ...appendedItems];
+            });
+            setTotalBooks(result.total);
+            setTotalPages(result.totalPages);
+            setFacets({
+              genres: buildMediaGenreFacets(fallbackItems),
+            });
+            setUsingFallbackCatalog(true);
+
+            if (openId && page === 1) {
+              const match = fallbackItems.find((book) => book.id === openId);
+              if (match) {
+                setSelectedBook(match);
+                setDetailMessage('');
+              }
+            }
+          } catch {
+            if (page === 1) {
+              setBooks([]);
+            }
+            setTotalBooks(0);
+            setTotalPages(1);
+            setUsingFallbackCatalog(false);
           }
-          setTotalBooks(0);
-          setTotalPages(1);
         }
       } finally {
         if (!cancelled) {
@@ -454,6 +510,9 @@ export default function Books() {
               <p className="surface-panel-copy">
                 Search by title or author, narrow by genre, and sort the shelf without leaving the page.
               </p>
+              {usingFallbackCatalog && (
+                <p className="surface-panel-copy">Showing the bundled book catalog snapshot.</p>
+              )}
             </div>
             <p className="surface-panel-meta">
               {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
@@ -575,6 +634,8 @@ export default function Books() {
           onRate={handleRate}
           userRating={userRatings[selectedBook?.id]}
           detailMessage={detailMessage}
+          allowActions={!usingFallbackCatalog}
+          browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}
 
