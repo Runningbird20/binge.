@@ -3887,3 +3887,58 @@ body {
   .livetv-player-area { min-height: 56vw; }
   .livetv-frame { min-height: 56vw; }
 }
+
+/* ── Episode progress tracking ── */
+.ep-watched {
+  background: rgba(74,222,128,0.15) !important;
+  border-color: rgba(74,222,128,0.5) !important;
+  color: #4ade80 !important;
+}
+.ep-all-watched {
+  background: rgba(74,222,128,0.2) !important;
+  border-color: rgba(74,222,128,0.6) !important;
+  color: #4ade80 !important;
+}
+.ep-partial-watched {
+  border-color: rgba(74,222,128,0.35) !important;
+  color: #86efac !important;
+}
+.player-ep-meta {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.3);
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
+.player-ep-loading {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.3);
+  padding: 0.2rem 0;
+}
+.player-mark-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+.player-mark-btn {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.player-mark-btn:hover { border-color: rgba(74,222,128,0.4); color: #4ade80; }
+.player-mark-btn--watched {
+  background: rgba(74,222,128,0.12);
+  border-color: rgba(74,222,128,0.4);
+  color: #4ade80;
+}
+.player-mark-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.player-mark-hint {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.25);
+}
