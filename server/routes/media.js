@@ -265,3 +265,107 @@ router.get('/tmdb-id', async (req, res) => {
 });
 
 module.exports = router;
+
+// ─── Book download proxy ──────────────────────────────────────────────────────
+// Streams the file from Internet Archive directly to the user — no redirect
+router.get('/book-download', async (req, res) => {
+  const { identifier, format } = req.query;
+
+  if (!identifier) return res.status(400).json({ error: 'identifier required' });
+
+  // Only allow safe formats
+  const allowedFormats = ['pdf', 'epub', 'txt'];
+  const fmt = allowedFormats.includes(format) ? format : 'pdf';
+
+  // Internet Archive direct download URL
+  // They store files as: /download/{identifier}/{identifier}.{ext}
+  const url = `https://archive.org/download/${identifier}/${identifier}.${fmt}`;
+
+  try {
+    const upstream = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; binge-app/1.0)' },
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!upstream.ok) {
+      // Try alternate filename pattern (some books use different names)
+      const altUrl = `https://archive.org/download/${identifier}`;
+      const listRes = await fetch(`https://archive.org/metadata/${identifier}/files`, {
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const files = listData.result || [];
+        // Find a downloadable file in preferred format order
+        const preferred = ['pdf', 'epub', 'txt'];
+        let match = null;
+        for (const ext of preferred) {
+          match = files.find(f => f.name?.toLowerCase().endsWith(`.${ext}`) && f.source !== 'derivative');
+          if (match) break;
+        }
+        if (!match) {
+          match = files.find(f =>
+            ['.pdf', '.epub', '.txt'].some(ext => f.name?.toLowerCase().endsWith(ext))
+          );
+        }
+
+        if (match) {
+          const fileUrl = `https://archive.org/download/${identifier}/${match.name}`;
+          const fileRes = await fetch(fileUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; binge-app/1.0)' },
+            signal: AbortSignal.timeout(30000),
+          });
+
+          if (fileRes.ok) {
+            const ext = match.name.split('.').pop().toLowerCase();
+            const contentTypes = {
+              pdf:  'application/pdf',
+              epub: 'application/epub+zip',
+              txt:  'text/plain',
+            };
+            res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+            res.setHeader('Content-Disposition', `attachment; filename="${match.name}"`);
+            if (fileRes.headers.get('content-length')) {
+              res.setHeader('Content-Length', fileRes.headers.get('content-length'));
+            }
+            fileRes.body.pipeTo(new WritableStream({
+              write(chunk) { res.write(chunk); },
+              close() { res.end(); },
+              abort(err) { res.destroy(err); },
+            }));
+            return;
+          }
+        }
+      }
+
+      return res.status(404).json({ error: 'No downloadable file found for this book.' });
+    }
+
+    // Stream the file directly to the client
+    const ext = fmt;
+    const contentTypes = {
+      pdf:  'application/pdf',
+      epub: 'application/epub+zip',
+      txt:  'text/plain',
+    };
+    const safeFilename = identifier.replace(/[^a-z0-9\-_]/gi, '_');
+    res.setHeader('Content-Type', contentTypes[ext]);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.${ext}"`);
+    if (upstream.headers.get('content-length')) {
+      res.setHeader('Content-Length', upstream.headers.get('content-length'));
+    }
+
+    upstream.body.pipeTo(new WritableStream({
+      write(chunk) { res.write(chunk); },
+      close() { res.end(); },
+      abort(err) { res.destroy(err); },
+    }));
+
+  } catch (err) {
+    console.error('Book download error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Download failed: ' + err.message });
+    }
+  }
+});
