@@ -1261,6 +1261,10 @@ body {
 }
 .media-card-full:hover { border-color: #333; transform: translateY(-2px); }
 
+.media-card-clickable {
+  cursor: pointer;
+}
+
 .media-card-poster {
   width: 100%;
   aspect-ratio: 2/3;

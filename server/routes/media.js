@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { buildBookGenreFacets, matchesBookGenreFacet } = require('../bookGenres');
 
 const router = express.Router();
 
@@ -14,16 +15,43 @@ function normalizePageSize(value, fallback = 24, max = 60) {
   return Math.min(Math.floor(parsed), max);
 }
 
-function getBookSortClause(sort) {
-  if (sort === 'year-desc') {
-    return 'year IS NULL ASC, year DESC, title ASC';
-  }
+function buildMediaGenreFacets(rows = []) {
+  return Array.from(
+    new Set(
+      rows
+        .flatMap((value) => String(value || '').split(','))
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right));
+}
 
-  if (sort === 'year-asc') {
-    return 'year IS NULL ASC, year ASC, title ASC';
-  }
+function sortMediaItems(items, sort) {
+  const sortedItems = [...items];
 
-  return 'title ASC';
+  sortedItems.sort((left, right) => {
+    if (sort === 'year-desc') {
+      if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
+      if (left.year == null) return 1;
+      if (right.year == null) return -1;
+      return right.year - left.year || left.title.localeCompare(right.title);
+    }
+
+    if (sort === 'year-asc') {
+      if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
+      if (left.year == null) return 1;
+      if (right.year == null) return -1;
+      return left.year - right.year || left.title.localeCompare(right.title);
+    }
+
+    if (sort === 'title-desc') {
+      return right.title.localeCompare(left.title);
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+
+  return sortedItems;
 }
 
 // --- Movies ---
@@ -32,14 +60,29 @@ router.get('/movies', (req, res) => {
     db.syncImportedMovies();
   }
 
-  const { search, genre, year } = req.query;
-  let query = 'SELECT * FROM movies WHERE 1=1';
+  const { search, genre, year, sort } = req.query;
+  let query = 'SELECT * FROM movies WHERE source_key IS NOT NULL';
   const params = [];
   if (search) { query += ' AND title LIKE ?'; params.push(`%${search}%`); }
   if (genre)  { query += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
   if (year)   { query += ' AND year = ?';       params.push(Number(year)); }
-  query += ' ORDER BY title ASC';
-  res.json(db.prepare(query).all(...params));
+  const items = sortMediaItems(db.prepare(query).all(...params), sort);
+  const genres = buildMediaGenreFacets(
+    db.prepare(`
+      SELECT DISTINCT genre
+      FROM movies
+      WHERE source_key IS NOT NULL
+        AND genre IS NOT NULL
+        AND TRIM(genre) <> ''
+    `).all().map((row) => row.genre)
+  );
+
+  res.json({
+    items,
+    facets: {
+      genres,
+    },
+  });
 });
 
 router.get('/movies/:id', (req, res) => {
@@ -47,7 +90,9 @@ router.get('/movies/:id', (req, res) => {
     db.syncImportedMovies();
   }
 
-  const movie = db.prepare('SELECT * FROM movies WHERE id = ?').get(req.params.id);
+  const movie = db
+    .prepare('SELECT * FROM movies WHERE id = ? AND source_key IS NOT NULL')
+    .get(req.params.id);
   if (!movie) return res.status(404).json({ error: 'Not found' });
   const stats = db.prepare(
     'SELECT AVG(rating) as avg_rating, COUNT(*) as rating_count FROM ratings WHERE media_type = ? AND media_id = ?'
@@ -61,13 +106,28 @@ router.get('/tv-shows', (req, res) => {
     db.syncImportedTvShows();
   }
 
-  const { search, genre } = req.query;
-  let query = 'SELECT * FROM tv_shows WHERE 1=1';
+  const { search, genre, sort } = req.query;
+  let query = 'SELECT * FROM tv_shows WHERE source_key IS NOT NULL';
   const params = [];
   if (search) { query += ' AND title LIKE ?'; params.push(`%${search}%`); }
   if (genre)  { query += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  query += ' ORDER BY title ASC';
-  res.json(db.prepare(query).all(...params));
+  const items = sortMediaItems(db.prepare(query).all(...params), sort);
+  const genres = buildMediaGenreFacets(
+    db.prepare(`
+      SELECT DISTINCT genre
+      FROM tv_shows
+      WHERE source_key IS NOT NULL
+        AND genre IS NOT NULL
+        AND TRIM(genre) <> ''
+    `).all().map((row) => row.genre)
+  );
+
+  res.json({
+    items,
+    facets: {
+      genres,
+    },
+  });
 });
 
 router.get('/tv-shows/:id', (req, res) => {
@@ -75,7 +135,9 @@ router.get('/tv-shows/:id', (req, res) => {
     db.syncImportedTvShows();
   }
 
-  const show = db.prepare('SELECT * FROM tv_shows WHERE id = ?').get(req.params.id);
+  const show = db
+    .prepare('SELECT * FROM tv_shows WHERE id = ? AND source_key IS NOT NULL')
+    .get(req.params.id);
   if (!show) return res.status(404).json({ error: 'Not found' });
   const stats = db.prepare(
     'SELECT AVG(rating) as avg_rating, COUNT(*) as rating_count FROM ratings WHERE media_type = ? AND media_id = ?'
@@ -94,29 +156,18 @@ router.get('/books', (req, res) => {
   const pageSize = normalizePageSize(req.query.page_size, 24);
   const offset = (page - 1) * pageSize;
 
-  let whereClause = 'WHERE 1=1';
+  let whereClause = 'WHERE source_key IS NOT NULL';
   const params = [];
   if (search) {
     whereClause += ' AND (title LIKE ? OR author LIKE ?)';
     params.push(`%${search}%`, `%${search}%`);
-  }
-  if (genre) {
-    whereClause += ' AND genre = ?';
-    params.push(genre);
   }
   if (minYear) {
     whereClause += ' AND (year IS NULL OR year >= ?)';
     params.push(Number(minYear));
   }
 
-  const itemsQuery = `
-    SELECT *
-    FROM books
-    ${whereClause}
-    ORDER BY ${getBookSortClause(sort)}
-    LIMIT ? OFFSET ?
-  `;
-  const totalQuery = `SELECT COUNT(*) AS total FROM books ${whereClause}`;
+  const itemsQuery = `SELECT * FROM books ${whereClause}`;
   const facetsQuery = `
     SELECT
       MIN(year) AS min_year,
@@ -131,10 +182,31 @@ router.get('/books', (req, res) => {
     ORDER BY genre ASC
   `;
 
-  const total = db.prepare(totalQuery).get(...params).total;
-  const items = db.prepare(itemsQuery).all(...params, pageSize, offset);
+  const allItems = db.prepare(itemsQuery).all(...params);
+  const filteredItems = genre
+    ? allItems.filter((book) => matchesBookGenreFacet(book.genre, genre))
+    : allItems;
+  const sortedItems = filteredItems.sort((left, right) => {
+    if (sort === 'year-desc') {
+      if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
+      if (left.year == null) return 1;
+      if (right.year == null) return -1;
+      return right.year - left.year || left.title.localeCompare(right.title);
+    }
+
+    if (sort === 'year-asc') {
+      if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
+      if (left.year == null) return 1;
+      if (right.year == null) return -1;
+      return left.year - right.year || left.title.localeCompare(right.title);
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+  const total = sortedItems.length;
+  const items = sortedItems.slice(offset, offset + pageSize);
   const facets = db.prepare(facetsQuery).get();
-  const genres = db.prepare(genresQuery).all().map((row) => row.genre);
+  const genres = buildBookGenreFacets(db.prepare(genresQuery).all().map((row) => row.genre));
 
   res.json({
     items,
@@ -155,7 +227,9 @@ router.get('/books/:id', (req, res) => {
     db.syncImportedBooks();
   }
 
-  const book = db.prepare('SELECT * FROM books WHERE id = ?').get(req.params.id);
+  const book = db
+    .prepare('SELECT * FROM books WHERE id = ? AND source_key IS NOT NULL')
+    .get(req.params.id);
   if (!book) return res.status(404).json({ error: 'Not found' });
   const stats = db.prepare(
     'SELECT AVG(rating) as avg_rating, COUNT(*) as rating_count FROM ratings WHERE media_type = ? AND media_id = ?'

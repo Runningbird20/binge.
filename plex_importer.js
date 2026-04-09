@@ -109,6 +109,52 @@ function normalizeYear(value) {
   return match ? Number(match[1]) : null;
 }
 
+function getReferenceDay(referenceDate = new Date()) {
+  return new Date(
+    Date.UTC(
+      referenceDate.getUTCFullYear(),
+      referenceDate.getUTCMonth(),
+      referenceDate.getUTCDate()
+    )
+  );
+}
+
+function parseReleaseDate(value) {
+  const normalized = compactWhitespace(value);
+  if (!normalized) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const parsed = new Date(`${normalized}T00:00:00Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isReleasedPlexMovie(record, referenceDate = new Date()) {
+  if (!record || normalizeMediaType(record.mediaType) !== 'movie') {
+    return true;
+  }
+
+  const releaseDate = parseReleaseDate(record.releaseDate);
+  if (releaseDate) {
+    return releaseDate.getTime() <= getReferenceDay(referenceDate).getTime();
+  }
+
+  const year = normalizeYear(record.year);
+  if (year != null) {
+    return year <= referenceDate.getUTCFullYear();
+  }
+
+  return true;
+}
+
+function shouldKeepPlexRecord(record, referenceDate = new Date()) {
+  if (!record) return false;
+  return isReleasedPlexMovie(record, referenceDate);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -639,42 +685,48 @@ async function collectPlexResults(
 ) {
   const normalizedType = normalizeMediaType(mediaType);
   const catalogPages = await fetchCatalogPages(normalizedType);
-  const selectedSlugs = [];
+  const items = [];
   const seen = new Set();
 
   for (const catalogPage of catalogPages) {
-    if (selectedSlugs.length >= limit) break;
+    if (limit != null && items.length >= limit) break;
 
     const pageSlugs = await fetchCatalogSlugs(normalizedType, catalogPage.path);
-    for (const slug of pageSlugs) {
-      if (seen.has(slug)) continue;
+    const uniquePageSlugs = pageSlugs.filter((slug) => {
+      if (seen.has(slug)) return false;
       seen.add(slug);
-      selectedSlugs.push(slug);
-      if (selectedSlugs.length >= limit) break;
+      return true;
+    });
+
+    for (let index = 0; index < uniquePageSlugs.length; index += detailConcurrency) {
+      if (limit != null && items.length >= limit) break;
+
+      const batch = uniquePageSlugs.slice(index, index + detailConcurrency);
+      const records = (
+        await mapWithConcurrency(batch, detailConcurrency, async (slug) => {
+          const record = await tryFetchNormalizedPlexRecord(normalizedType, slug);
+          if (delayMs > 0) {
+            await sleep(delayMs);
+          }
+          return record;
+        })
+      ).filter((record) => shouldKeepPlexRecord(record));
+
+      items.push(...records);
     }
 
-    if (delayMs > 0 && selectedSlugs.length < limit) {
+    if (delayMs > 0 && (limit == null || items.length < limit)) {
       await sleep(delayMs);
     }
   }
-
-  const items = (
-    await mapWithConcurrency(selectedSlugs, detailConcurrency, async (slug, index) => {
-      const record = await tryFetchNormalizedPlexRecord(normalizedType, slug);
-      if (delayMs > 0 && index < selectedSlugs.length - 1) {
-        await sleep(delayMs);
-      }
-      return record;
-    })
-  ).filter(Boolean);
 
   return {
     source: 'plex',
     mediaType: normalizedType,
     collectedAt: new Date().toISOString(),
     catalogPageCount: catalogPages.length,
-    collected: items.length,
-    items,
+    collected: limit == null ? items.length : Math.min(items.length, limit),
+    items: limit == null ? items : items.slice(0, limit),
   };
 }
 
@@ -738,7 +790,7 @@ async function collectPlexResultsBulk(
       const record = await tryFetchNormalizedPlexRecord(normalizedType, slug);
       currentItemIndex += 1;
 
-      if (record) {
+      if (shouldKeepPlexRecord(record)) {
         appendItemsToJsonl([record], outputPath);
         collected += 1;
       }
@@ -976,6 +1028,8 @@ module.exports = {
   fetchCatalogSlugs,
   fetchNormalizedPlexRecord,
   getPlexPathDefaults,
+  isReleasedPlexMovie,
+  shouldKeepPlexRecord,
   readCheckpoint,
   writeJsonFile,
 };
