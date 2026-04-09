@@ -1,9 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Signup from './pages/Signup';
 import Home from './pages/Home';
 import AccountSettings from './pages/AccountSettings';
 import Books from './pages/Books';
+import Movies from './pages/Movies';
+import TVShows from './pages/TVShows';
 import { AuthProvider } from './contexts/AuthContext';
 
 const mockNavigate = jest.fn();
@@ -364,7 +366,72 @@ test('shows seeded books as clickable covers and adds a book to the library', as
   expect(await screen.findByText(/added to your library\./i)).toBeInTheDocument();
 });
 
-test('uses the top search bar and sidebar filters on the books page', async () => {
+test('falls back to a placeholder when a book cover image fails to load', async () => {
+  global.fetch.mockImplementation((url, options = {}) => {
+    if (String(url).startsWith('/api/media/books?')) {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify({
+            items: [
+              {
+                id: 1,
+                title: 'Dune',
+                author: 'Frank Herbert',
+                year: 1965,
+                genre: 'Science Fiction',
+                synopsis: 'Set on the desert planet Arrakis...',
+                cover_url: 'https://covers.openlibrary.org/b/id/missing-cover.jpg',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 24,
+            totalPages: 1,
+            facets: {
+              genres: ['Fiction'],
+              minYear: 1965,
+              maxYear: 1965,
+            },
+          }),
+        })
+      );
+    }
+
+    if (url === '/api/watchlist?media_type=book' && (!options.method || options.method === 'GET')) {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
+  renderWithAuth(
+    <Books />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  const duneButton = await screen.findByRole('button', { name: /open details for dune/i });
+  const coverImage = within(duneButton).getByRole('img', { name: /dune/i });
+
+  fireEvent.error(coverImage);
+
+  await waitFor(() => {
+    expect(within(duneButton).queryByRole('img', { name: /dune/i })).not.toBeInTheDocument();
+  });
+
+  expect(within(duneButton).getByText('D')).toBeInTheDocument();
+});
+
+test('uses a movie-style filter bar on the books page', async () => {
   const allBooks = [
     {
       id: 1,
@@ -464,12 +531,12 @@ test('uses the top search bar and sidebar filters on the books page', async () =
     }
   );
 
-  expect(await screen.findByText(/filter options/i)).toBeInTheDocument();
+  expect(screen.queryByText(/filter options/i)).not.toBeInTheDocument();
   expect(await screen.findByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /open details for emma/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
 
-  await userEvent.type(screen.getByRole('textbox', { name: /search the shelf/i }), 'Andy');
+  await userEvent.type(screen.getByRole('textbox', { name: /search books/i }), 'Andy');
 
   await waitFor(() => {
     expect(screen.queryByRole('button', { name: /open details for dune/i })).not.toBeInTheDocument();
@@ -477,9 +544,12 @@ test('uses the top search bar and sidebar filters on the books page', async () =
     expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
   });
 
-  await userEvent.clear(screen.getByRole('textbox', { name: /search the shelf/i }));
+  await userEvent.clear(screen.getByRole('textbox', { name: /search books/i }));
 
-  await userEvent.click(screen.getByRole('button', { name: /^science fiction$/i }));
+  await userEvent.selectOptions(
+    screen.getByRole('combobox', { name: /^genre$/i }),
+    'Science Fiction'
+  );
 
   await waitFor(() => {
     expect(screen.getByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
@@ -487,14 +557,216 @@ test('uses the top search bar and sidebar filters on the books page', async () =
     expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument();
   });
 
-  fireEvent.change(screen.getByRole('slider', { name: /release date/i }), {
-    target: { value: '2000' },
-  });
+  await userEvent.selectOptions(
+    screen.getByRole('combobox', { name: /sort by/i }),
+    'year-desc'
+  );
 
   await waitFor(() => {
-    expect(screen.queryByRole('button', { name: /open details for dune/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
+    const visibleBooks = screen
+      .getAllByRole('button', { name: /open details for/i })
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(visibleBooks).toEqual([
+      'Open details for Project Hail Mary',
+      'Open details for Dune',
+    ]);
+  });
+});
+
+test('uses a genre dropdown on the movies page', async () => {
+  const allMovies = [
+    {
+      id: 1,
+      title: 'Arrival',
+      year: 2016,
+      genre: 'Science Fiction, Drama',
+      synopsis: 'A linguist works to communicate with visitors from space.',
+      poster_url: 'https://example.com/arrival.jpg',
+    },
+    {
+      id: 2,
+      title: 'Heat',
+      year: 1995,
+      genre: 'Crime, Drama',
+      synopsis: 'A meticulous detective closes in on a career thief.',
+      poster_url: 'https://example.com/heat.jpg',
+    },
+    {
+      id: 3,
+      title: 'Mad Max: Fury Road',
+      year: 2015,
+      genre: 'Action, Science Fiction',
+      synopsis: 'Survivors race across the wasteland.',
+      poster_url: 'https://example.com/fury-road.jpg',
+    },
+  ];
+
+  global.fetch.mockImplementation((url) => {
+    if (String(url).startsWith('/api/media/movies?')) {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      const search = (parsedUrl.searchParams.get('search') || '').toLowerCase();
+      const genre = parsedUrl.searchParams.get('genre') || '';
+      const sort = parsedUrl.searchParams.get('sort') || 'title-asc';
+
+      let items = allMovies.filter((movie) => {
+        const matchesSearch = !search || movie.title.toLowerCase().includes(search);
+        const matchesGenre =
+          !genre || movie.genre.split(',').map((value) => value.trim()).includes(genre);
+        return matchesSearch && matchesGenre;
+      });
+
+      items = items.sort((left, right) => {
+        if (sort === 'year-desc') return (right.year || 0) - (left.year || 0);
+        if (sort === 'year-asc') return (left.year || 0) - (right.year || 0);
+        if (sort === 'title-desc') return right.title.localeCompare(left.title);
+        return left.title.localeCompare(right.title);
+      });
+
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify({
+            items,
+            facets: {
+              genres: ['Action', 'Crime', 'Drama', 'Science Fiction'],
+            },
+          }),
+        })
+      );
+    }
+
+    if (url === '/api/ratings/my?media_type=movie') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
+  renderWithAuth(
+    <Movies />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  expect(await screen.findByText('Arrival')).toBeInTheDocument();
+  expect(screen.getByText('Heat')).toBeInTheDocument();
+  expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /all genres/i })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /^science fiction$/i })).toBeInTheDocument();
+
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^genre$/i }), 'Science Fiction');
+
+  await waitFor(() => {
+    expect(screen.getByText('Arrival')).toBeInTheDocument();
+    expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
+    expect(screen.queryByText('Heat')).not.toBeInTheDocument();
+  });
+});
+
+test('uses a genre dropdown on the TV shows page', async () => {
+  const allShows = [
+    {
+      id: 1,
+      title: 'The Bear',
+      year: 2022,
+      genre: 'Comedy, Drama',
+      synopsis: 'A chef returns home to run the family restaurant.',
+      poster_url: 'https://example.com/the-bear.jpg',
+    },
+    {
+      id: 2,
+      title: 'Dark',
+      year: 2017,
+      genre: 'Mystery, Science Fiction, Thriller',
+      synopsis: 'A missing child reveals a town-spanning time mystery.',
+      poster_url: 'https://example.com/dark.jpg',
+    },
+    {
+      id: 3,
+      title: 'Blue Eye Samurai',
+      year: 2023,
+      genre: 'Action, Adventure, Animation',
+      synopsis: 'A warrior seeks revenge in Edo-period Japan.',
+      poster_url: 'https://example.com/blue-eye-samurai.jpg',
+    },
+  ];
+
+  global.fetch.mockImplementation((url) => {
+    if (String(url).startsWith('/api/media/tv-shows?')) {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      const search = (parsedUrl.searchParams.get('search') || '').toLowerCase();
+      const genre = parsedUrl.searchParams.get('genre') || '';
+      const sort = parsedUrl.searchParams.get('sort') || 'title-asc';
+
+      let items = allShows.filter((show) => {
+        const matchesSearch = !search || show.title.toLowerCase().includes(search);
+        const matchesGenre =
+          !genre || show.genre.split(',').map((value) => value.trim()).includes(genre);
+        return matchesSearch && matchesGenre;
+      });
+
+      items = items.sort((left, right) => {
+        if (sort === 'year-desc') return (right.year || 0) - (left.year || 0);
+        if (sort === 'year-asc') return (left.year || 0) - (right.year || 0);
+        if (sort === 'title-desc') return right.title.localeCompare(left.title);
+        return left.title.localeCompare(right.title);
+      });
+
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify({
+            items,
+            facets: {
+              genres: ['Action', 'Adventure', 'Animation', 'Comedy', 'Drama', 'Mystery', 'Science Fiction', 'Thriller'],
+            },
+          }),
+        })
+      );
+    }
+
+    if (url === '/api/ratings/my?media_type=tv_show') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
+  renderWithAuth(
+    <TVShows />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  expect(await screen.findByText('Blue Eye Samurai')).toBeInTheDocument();
+  expect(screen.getByText('Dark')).toBeInTheDocument();
+  expect(screen.getByText('The Bear')).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /all genres/i })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /^mystery$/i })).toBeInTheDocument();
+
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^genre$/i }), 'Mystery');
+
+  await waitFor(() => {
+    expect(screen.getByText('Dark')).toBeInTheDocument();
+    expect(screen.queryByText('Blue Eye Samurai')).not.toBeInTheDocument();
+    expect(screen.queryByText('The Bear')).not.toBeInTheDocument();
   });
 });
 
