@@ -5,7 +5,39 @@ import { api } from '../api';
 const BOOKS_PAGE_SIZE = 24;
 
 function getCoverUrl(book) {
-  return book.cover_url || book.coverUrl || '';
+  const rawUrl = book.cover_url || book.coverUrl || '';
+  if (!rawUrl) return '';
+  if (rawUrl.startsWith('//')) return `https:${rawUrl}`;
+  if (rawUrl.startsWith('http://')) return rawUrl.replace(/^http:\/\//i, 'https://');
+  return rawUrl;
+}
+
+function BookCoverImage({ book, imageClassName, placeholderClassName }) {
+  const [coverUrl, setCoverUrl] = useState(() => getCoverUrl(book));
+
+  useEffect(() => {
+    setCoverUrl(getCoverUrl(book));
+  }, [book]);
+
+  if (!coverUrl) {
+    return (
+      <div className={placeholderClassName}>
+        <span>{book.title?.charAt(0)}</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={coverUrl}
+      alt={book.title}
+      className={imageClassName}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setCoverUrl('')}
+    />
+  );
 }
 
 function BookDetailsModal({
@@ -39,8 +71,6 @@ function BookDetailsModal({
 
   if (!book) return null;
 
-  const coverUrl = getCoverUrl(book);
-
   return (
     <div className="book-detail-overlay" onClick={onClose}>
       <div
@@ -61,13 +91,11 @@ function BookDetailsModal({
 
         <div className="book-detail-cover-panel">
           <div className="book-detail-cover-frame">
-            {coverUrl ? (
-              <img src={coverUrl} alt={book.title} className="book-detail-cover-image" />
-            ) : (
-              <div className="book-detail-cover-placeholder">
-                <span>{book.title?.charAt(0)}</span>
-              </div>
-            )}
+            <BookCoverImage
+              book={book}
+              imageClassName="book-detail-cover-image"
+              placeholderClassName="book-detail-cover-placeholder"
+            />
           </div>
         </div>
 
@@ -120,12 +148,11 @@ export default function Books() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [genre, setGenre] = useState('');
-  const [releaseYear, setReleaseYear] = useState('');
   const [sortOrder, setSortOrder] = useState('title-asc');
   const [page, setPage] = useState(1);
   const [totalBooks, setTotalBooks] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [facets, setFacets] = useState({ genres: [], minYear: null, maxYear: null });
+  const [facets, setFacets] = useState({ genres: [] });
   const [loading, setLoading] = useState(true);
   const [libraryIds, setLibraryIds] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
@@ -170,7 +197,6 @@ export default function Books() {
         });
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (genre) params.set('genre', genre);
-        if (releaseYear !== '') params.set('min_year', String(releaseYear));
 
         const data = await api.get(`/media/books?${params.toString()}`);
         if (!cancelled) {
@@ -188,12 +214,6 @@ export default function Books() {
           setTotalPages(Number(data?.totalPages) || 1);
           setFacets({
             genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
-            minYear: Number.isFinite(Number(data?.facets?.minYear))
-              ? Number(data.facets.minYear)
-              : null,
-            maxYear: Number.isFinite(Number(data?.facets?.maxYear))
-              ? Number(data.facets.maxYear)
-              : null,
           });
         }
       } catch {
@@ -216,7 +236,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, releaseYear, sortOrder, page]);
+  }, [debouncedSearch, genre, sortOrder, page]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,7 +259,7 @@ export default function Books() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, genre, releaseYear, sortOrder]);
+  }, [debouncedSearch, genre, sortOrder]);
 
   useEffect(() => {
     if (typeof window.IntersectionObserver !== 'function') {
@@ -310,16 +330,13 @@ export default function Books() {
     }
   }
 
-  const hasActiveFilters = Boolean(search || genre || releaseYear !== '' || sortOrder !== 'title-asc');
+  const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
   const genreOptions = facets.genres;
-  const minYear = facets.minYear;
-  const maxYear = facets.maxYear;
 
   function clearFilters() {
     setSearch('');
     setDebouncedSearch('');
     setGenre('');
-    setReleaseYear('');
     setSortOrder('title-asc');
     setPage(1);
   }
@@ -341,169 +358,104 @@ export default function Books() {
           </div>
         </div>
 
-        <div className="books-top-search">
-          <label className="books-top-search-label">
-            <span>Search the shelf</span>
-            <input
-              className="search-input books-top-search-input"
-              type="text"
-              placeholder="Search books or authors..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
+        <div className="filter-bar">
+          <input
+            className="search-input"
+            type="text"
+            aria-label="Search books"
+            placeholder="Search books..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <select
+            className="filter-input"
+            aria-label="Genre"
+            value={genre}
+            onChange={(event) => setGenre(event.target.value)}
+          >
+            <option value="">All Genres</option>
+            {genreOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <select
+            className="filter-input"
+            aria-label="Sort by"
+            value={sortOrder}
+            onChange={(event) => setSortOrder(event.target.value)}
+          >
+            <option value="title-asc">Title A-Z</option>
+            <option value="year-desc">Newest First</option>
+            <option value="year-asc">Oldest First</option>
+          </select>
+          {hasActiveFilters && (
+            <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
+              Clear
+            </button>
+          )}
         </div>
 
-        <div className="books-shell">
-          <aside className="books-filter-sidebar" aria-label="Book filters">
-            <div className="books-filter-card">
-              <div className="books-filter-card-header">
-                <div>
-                  <p className="books-filter-kicker">Filter Options</p>
-                  <h2>Refine the shelf</h2>
-                </div>
-                {hasActiveFilters && (
-                  <button type="button" className="btn-ghost" onClick={clearFilters}>
-                    Clear all
-                  </button>
-                )}
-              </div>
-
-              <label className="books-filter-group" htmlFor="books-release-slider">
-                <span>Release Date</span>
-                <div className="books-slider-header">
-                  <strong>
-                    {releaseYear === '' || minYear == null
-                      ? 'Any year'
-                      : `${releaseYear} and newer`}
-                  </strong>
-                  {minYear != null && maxYear != null && (
-                    <small>{minYear} to {maxYear}</small>
-                  )}
-                </div>
-                {minYear != null && maxYear != null ? (
-                  <input
-                    id="books-release-slider"
-                    className="books-year-slider"
-                    type="range"
-                    min={minYear}
-                    max={maxYear}
-                    step="1"
-                    value={releaseYear === '' ? minYear : releaseYear}
-                    onChange={(event) => setReleaseYear(Number(event.target.value))}
-                  />
-                ) : (
-                  <p className="books-filter-empty">Release dates are not available for these books yet.</p>
-                )}
-                <p className="books-slider-caption">
-                  Drag right to focus on newer releases in the shelf.
-                </p>
-              </label>
-
-              <div className="books-filter-group">
-                <span>Genre</span>
-                <div className="books-filter-chip-list">
-                  <button
-                    type="button"
-                    className={`books-filter-chip${genre ? '' : ' active'}`}
-                    onClick={() => setGenre('')}
-                    aria-pressed={!genre}
-                  >
-                    All Genres
-                  </button>
-                  {genreOptions.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={`books-filter-chip${genre === option ? ' active' : ''}`}
-                      onClick={() => setGenre(option)}
-                      aria-pressed={genre === option}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <label className="books-filter-group">
-                <span>Sort By</span>
-                <select
-                  className="books-filter-select"
-                  value={sortOrder}
-                  onChange={(event) => setSortOrder(event.target.value)}
-                >
-                  <option value="title-asc">Title A-Z</option>
-                  <option value="year-desc">Newest First</option>
-                  <option value="year-asc">Oldest First</option>
-                </select>
-              </label>
-            </div>
-          </aside>
-
-          <section className="books-results-panel">
-            <div className="books-results-header">
-              <p className="books-results-count">
-                {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
+        <section className="books-results-panel">
+          <div className="books-results-header">
+            <p className="books-results-count">
+              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
+            </p>
+            {hasActiveFilters && !loading && (
+              <p className="books-results-summary">
+                Showing results for your active filters.
               </p>
-              {hasActiveFilters && !loading && (
-                <p className="books-results-summary">
-                  Showing matches for your current filters.
-                </p>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="loading-state">Loading...</div>
-            ) : books.length === 0 ? (
-              <div className="empty-state">
-                <p>No books found.</p>
-                <p className="empty-hint">Try a different filter or clear the current ones to widen the shelf.</p>
-              </div>
-            ) : (
-              <>
-                <div className="book-library-grid">
-                  {books.map((book) => {
-                    const coverUrl = getCoverUrl(book);
-
-                    return (
-                      <button
-                        key={book.id}
-                        type="button"
-                        className="book-shelf-card"
-                        onClick={() => openBookDetails(book)}
-                        aria-label={`Open details for ${book.title}`}
-                      >
-                        <div className="book-shelf-cover-frame">
-                          {coverUrl ? (
-                            <img src={coverUrl} alt={book.title} className="book-shelf-cover-image" />
-                          ) : (
-                            <div className="book-shelf-cover-placeholder">
-                              <span>{book.title?.charAt(0)}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="book-shelf-copy">
-                          <h3>{book.title}</h3>
-                          <p>{book.author}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="books-infinite-footer">
-                  {loading && page > 1 && (
-                    <p className="books-pagination-copy">Loading more books...</p>
-                  )}
-                  {!loading && page >= totalPages && (
-                    <p className="books-pagination-copy">You have reached the end of the shelf.</p>
-                  )}
-                  {page < totalPages && <div ref={loadMoreRef} className="books-load-trigger" aria-hidden="true" />}
-                </div>
-              </>
             )}
-          </section>
-        </div>
+          </div>
+
+          {loading ? (
+            <div className="loading-state">Loading...</div>
+          ) : books.length === 0 ? (
+            <div className="empty-state">
+              <p>No books found.</p>
+              <p className="empty-hint">Try a different search or clear the filters.</p>
+            </div>
+          ) : (
+            <>
+              <div className="book-library-grid">
+                {books.map((book) => {
+                  return (
+                    <button
+                      key={book.id}
+                      type="button"
+                      className="book-shelf-card"
+                      onClick={() => openBookDetails(book)}
+                      aria-label={`Open details for ${book.title}`}
+                    >
+                      <div className="book-shelf-cover-frame">
+                        <BookCoverImage
+                          book={book}
+                          imageClassName="book-shelf-cover-image"
+                          placeholderClassName="book-shelf-cover-placeholder"
+                        />
+                      </div>
+                      <div className="book-shelf-copy">
+                        <h3>{book.title}</h3>
+                        <p>{book.author}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="books-infinite-footer">
+                {loading && page > 1 && (
+                  <p className="books-pagination-copy">Loading more books...</p>
+                )}
+                {!loading && page >= totalPages && (
+                  <p className="books-pagination-copy">You have reached the end of the shelf.</p>
+                )}
+                {page < totalPages && <div ref={loadMoreRef} className="books-load-trigger" aria-hidden="true" />}
+              </div>
+            </>
+          )}
+        </section>
       </main>
 
       {selectedBook && (

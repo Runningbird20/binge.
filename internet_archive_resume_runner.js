@@ -5,6 +5,7 @@ const { collectInternetArchiveBooksBulk } = require('./internet_archive_scraper'
 const DEFAULT_CHECKPOINT = path.join(__dirname, 'data', 'internet_archive_books.bulk.checkpoint.json');
 const DEFAULT_OUTPUT = path.join(__dirname, 'data', 'internet_archive_books.bulk.jsonl');
 const DEFAULT_PID_FILE = path.join(__dirname, 'data', 'internet_archive_books.runner.pid');
+const DEFAULT_LOG_FILE = path.join(__dirname, 'data', 'internet_archive_books.runner.log');
 const DEFAULT_DELAY_MS = 1500;
 const MAX_BACKOFF_MS = 60000;
 
@@ -21,11 +22,19 @@ function readJsonIfExists(filePath) {
   }
 }
 
+function appendLogLine(logFile, message) {
+  if (!logFile) return;
+
+  fs.mkdirSync(path.dirname(logFile), { recursive: true });
+  fs.appendFileSync(logFile, `${message}\n`, 'utf8');
+}
+
 function parseArgs(argv) {
   const options = {
     checkpoint: DEFAULT_CHECKPOINT,
     output: DEFAULT_OUTPUT,
     pidFile: DEFAULT_PID_FILE,
+    logFile: DEFAULT_LOG_FILE,
     delayMs: DEFAULT_DELAY_MS,
   };
 
@@ -44,6 +53,10 @@ function parseArgs(argv) {
         options.pidFile = argv[index + 1] || options.pidFile;
         index += 1;
         break;
+      case '--log-file':
+        options.logFile = argv[index + 1] || options.logFile;
+        index += 1;
+        break;
       case '--delay-ms':
         options.delayMs = Number(argv[index + 1]) || options.delayMs;
         index += 1;
@@ -54,16 +67,6 @@ function parseArgs(argv) {
   }
 
   return options;
-}
-
-function totalPagesFor(checkpoint) {
-  const totalAvailable = Number(checkpoint?.totalAvailable);
-  const pageSize = Number(checkpoint?.pageSize);
-  if (!Number.isFinite(totalAvailable) || !Number.isFinite(pageSize) || pageSize <= 0) {
-    return null;
-  }
-
-  return Math.ceil(totalAvailable / pageSize);
 }
 
 function isProcessRunning(pid) {
@@ -101,16 +104,24 @@ async function run() {
   const checkpointPath = path.resolve(options.checkpoint);
   const outputPath = path.resolve(options.output);
   const pidFilePath = path.resolve(options.pidFile);
+  const logFilePath = path.resolve(options.logFile);
   const existingPidRecord = readJsonIfExists(pidFilePath);
+  const log = (message) => {
+    console.log(message);
+    appendLogLine(logFilePath, message);
+  };
+  const logError = (message) => {
+    console.error(message);
+    appendLogLine(logFilePath, message);
+  };
 
   if (existingPidRecord?.pid && isProcessRunning(Number(existingPidRecord.pid))) {
-    console.log(
-      `Archive resume runner is already active with PID ${existingPidRecord.pid}.`
-    );
+    log(`Archive resume runner is already active with PID ${existingPidRecord.pid}.`);
     return;
   }
 
   writePidFile(pidFilePath);
+  appendLogLine(logFilePath, `[${new Date().toISOString()}] Starting archive resume runner.`);
 
   const shutdown = () => {
     clearPidFile(pidFilePath);
@@ -130,40 +141,60 @@ async function run() {
 
   while (true) {
     const checkpoint = readJsonIfExists(checkpointPath);
-    const totalPages = totalPagesFor(checkpoint);
-    if (checkpoint?.nextPage && totalPages && Number(checkpoint.nextPage) > totalPages) {
-      console.log(
-        `[${new Date().toISOString()}] Archive crawl complete at page ${totalPages}.`
-      );
+    const previousState = JSON.stringify({
+      mode: checkpoint?.mode || 'legacy',
+      currentYear: checkpoint?.currentYear ?? null,
+      currentYearIndex: checkpoint?.currentYearIndex ?? null,
+      nextPage: checkpoint?.nextPage ?? 1,
+      collected: checkpoint?.collected ?? 0,
+      processedPages: checkpoint?.processedPages ?? 0,
+      complete: checkpoint?.complete ?? false,
+    });
+
+    if (checkpoint?.complete) {
+      log(`[${new Date().toISOString()}] Archive crawl complete. Output at ${outputPath}.`);
       break;
     }
 
     try {
-      const processedPages = Number(checkpoint?.processedPages) || 0;
       const result = await collectInternetArchiveBooksBulk({
         output: outputPath,
         checkpoint: checkpointPath,
         resume: true,
-        maxPages: processedPages + 1,
-        pageSize: Number(checkpoint?.pageSize) || 25,
+        maxPages: 1,
+        pageSize: Number(checkpoint?.pageSize) || 200,
         query: checkpoint?.query,
         sort: checkpoint?.sort,
         enrichMetadata: checkpoint?.enrichMetadata ?? true,
+        minYear: Number(checkpoint?.minYear) || 2000,
       });
 
       consecutiveFailures = 0;
-      const totalPagesAfterRun =
-        Math.ceil(result.totalAvailable / (Number(checkpoint?.pageSize) || 25));
-      console.log(
-        `[${new Date().toISOString()}] Finished page ${result.nextPage - 1}. ` +
-          `Processed ${result.processedPages}/${totalPagesAfterRun} page(s), ` +
-          `collected ${result.collected} books so far.`
-      );
-
-      if (result.nextPage > totalPagesAfterRun) {
-        console.log(
-          `[${new Date().toISOString()}] Archive crawl complete. Output at ${outputPath}.`
+      if (result.lastProcessedYear != null && result.lastProcessedPage != null) {
+        log(
+          `[${new Date().toISOString()}] Processed year ${result.lastProcessedYear}, page ${result.lastProcessedPage}. ` +
+            `Processed ${result.processedPages} page(s), collected ${result.collected} books so far.`
         );
+      }
+
+      const nextState = JSON.stringify({
+        currentYear: result.currentYear ?? null,
+        nextPage: result.nextPage,
+        collected: result.collected,
+        processedPages: result.processedPages,
+        complete: result.complete,
+      });
+
+      if (nextState === previousState) {
+        logError(
+          `[${new Date().toISOString()}] Archive resume runner made no forward progress from the current checkpoint state. ` +
+            `Stopping to avoid an infinite retry loop.`
+        );
+        break;
+      }
+
+      if (result.complete) {
+        log(`[${new Date().toISOString()}] Archive crawl complete. Output at ${outputPath}.`);
         break;
       }
 
@@ -171,7 +202,7 @@ async function run() {
     } catch (error) {
       consecutiveFailures += 1;
       const backoffMs = Math.min(options.delayMs * Math.max(consecutiveFailures, 1), MAX_BACKOFF_MS);
-      console.error(
+      logError(
         `[${new Date().toISOString()}] Page run failed (${consecutiveFailures} consecutive): ${
           error?.stack || error?.message || error
         }`

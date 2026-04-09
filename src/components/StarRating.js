@@ -12,7 +12,12 @@ export default function StarRating({ value, onChange, readOnly = false }) {
           className={star <= display ? 'star filled' : 'star'}
           onMouseEnter={() => !readOnly && setHovered(star)}
           onMouseLeave={() => !readOnly && setHovered(0)}
-          onClick={() => !readOnly && onChange && onChange(star)}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!readOnly && onChange) {
+              onChange(star);
+            }
+          }}
         >
           ★
         </span>

@@ -22,40 +22,24 @@ const db = new Database(path.join(dataDir, 'app.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-const plexMovieBulkSyncState = {
-  offset: 0,
-  remainder: '',
-  size: 0,
-};
+function createSeedSyncState() {
+  return {
+    signature: null,
+    loaded: false,
+  };
+}
 
-const plexTvBulkSyncState = {
-  offset: 0,
-  remainder: '',
-  size: 0,
-};
-
-const tmdbMovieBulkSyncState = {
-  offset: 0,
-  remainder: '',
-  size: 0,
-};
-
-const tmdbTvBulkSyncState = {
-  offset: 0,
-  remainder: '',
-  size: 0,
-};
-
-const archiveBulkSyncState = {
-  offset: 0,
-  remainder: '',
-  size: 0,
-};
-
-const sourceCleanupState = {
-  movies: false,
-  tv: false,
-};
+const plexMovieSyncState = createSeedSyncState();
+const plexMovieBulkSyncState = createSeedSyncState();
+const plexTvSyncState = createSeedSyncState();
+const plexTvBulkSyncState = createSeedSyncState();
+const tmdbMovieSyncState = createSeedSyncState();
+const tmdbMovieBulkSyncState = createSeedSyncState();
+const tmdbTvSyncState = createSeedSyncState();
+const tmdbTvBulkSyncState = createSeedSyncState();
+const archiveBookSyncState = createSeedSyncState();
+const archiveBulkSyncState = createSeedSyncState();
+const openLibrarySyncState = createSeedSyncState();
 
 function hasColumn(tableName, columnName) {
   return db
@@ -75,6 +59,29 @@ function readJsonIfExists(filePath) {
   }
 }
 
+function readJsonlIfExists(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+
+  try {
+    return fs
+      .readFileSync(filePath, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error(`Unable to parse JSONL seed file: ${filePath}`, error);
+    return null;
+  }
+}
+
 function fileHasContent(filePath) {
   if (!fs.existsSync(filePath)) return false;
 
@@ -83,6 +90,22 @@ function fileHasContent(filePath) {
   } catch {
     return false;
   }
+}
+
+function getFileSignature(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+
+  try {
+    const stats = fs.statSync(filePath);
+    return `${stats.size}:${stats.mtimeMs}`;
+  } catch {
+    return null;
+  }
+}
+
+function resetSeedSyncState(syncState) {
+  syncState.signature = null;
+  syncState.loaded = false;
 }
 
 function normalizeString(value) {
@@ -121,6 +144,79 @@ function pickFirstString(value) {
 
 function deleteImportedRowsByPrefix(tableName, sourcePrefix) {
   db.prepare(`DELETE FROM ${tableName} WHERE source_key LIKE ?`).run(`${sourcePrefix}%`);
+}
+
+function deleteImportedRowsWithoutSourceKey(tableName) {
+  db
+    .prepare(`DELETE FROM ${tableName} WHERE source_key IS NULL OR TRIM(source_key) = ''`)
+    .run();
+}
+
+function pruneImportedRows(
+  tableName,
+  activeSourcePrefixes = [],
+  currentSourceKeys = [],
+  inactiveSourcePrefixes = []
+) {
+  const activePrefixes = activeSourcePrefixes.filter(Boolean);
+  const keepSourceKeys = Array.from(new Set(currentSourceKeys.filter(Boolean)));
+  const staleSourcePrefixes = inactiveSourcePrefixes.filter(Boolean);
+  const tempTableName = `temp_${tableName}_source_keys`;
+
+  deleteImportedRowsWithoutSourceKey(tableName);
+  db.exec(`DROP TABLE IF EXISTS ${tempTableName}`);
+  db.exec(`CREATE TEMP TABLE ${tempTableName} (source_key TEXT PRIMARY KEY)`);
+
+  const insertSourceKey = db.prepare(
+    `INSERT OR IGNORE INTO ${tempTableName} (source_key) VALUES (?)`
+  );
+  for (const sourceKey of keepSourceKeys) {
+    insertSourceKey.run(sourceKey);
+  }
+
+  if (activePrefixes.length) {
+    const prefixClause = activePrefixes.map(() => 'source_key LIKE ?').join(' OR ');
+    const prefixParams = activePrefixes.map((prefix) => `${prefix}%`);
+
+    db.prepare(`
+      DELETE FROM ${tableName}
+      WHERE (${prefixClause})
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ${tempTableName}
+          WHERE ${tempTableName}.source_key = ${tableName}.source_key
+        )
+    `).run(...prefixParams);
+  }
+
+  for (const sourcePrefix of staleSourcePrefixes) {
+    deleteImportedRowsByPrefix(tableName, sourcePrefix);
+  }
+
+  db.exec(`DROP TABLE IF EXISTS ${tempTableName}`);
+}
+
+function syncJsonSeedFile(filePath, syncState, selectItems, syncItems, syncOptions = {}) {
+  const signature = getFileSignature(filePath);
+  if (!signature) {
+    resetSeedSyncState(syncState);
+    return false;
+  }
+
+  if (syncState.loaded && syncState.signature === signature) {
+    return true;
+  }
+
+  const parsed = readJsonIfExists(filePath);
+  if (parsed == null) {
+    return false;
+  }
+
+  const items = selectItems(parsed);
+  syncItems(Array.isArray(items) ? items : [], syncOptions);
+  syncState.signature = signature;
+  syncState.loaded = true;
+  return true;
 }
 
 function normalizeGenreLabel(subject) {
@@ -201,11 +297,13 @@ function createBookUpsertStatement() {
   `);
 }
 
-function syncArchiveBookItems(items) {
-  if (!Array.isArray(items) || items.length === 0) return false;
+function syncArchiveBookItems(items, syncOptions = {}) {
+  if (!Array.isArray(items)) return false;
 
   const upsertBook = createBookUpsertStatement();
   const sync = db.transaction((records) => {
+    const sourceKeys = [];
+
     for (const item of records) {
       const title = normalizeString(item?.title);
       if (!title) continue;
@@ -220,66 +318,46 @@ function syncArchiveBookItems(items) {
         normalizeString(item?.sourceKey) ||
         `internet-archive:${normalizeString(item?.identifier) || `${title}:${author || ''}`}`;
 
+      sourceKeys.push(sourceKey);
       upsertBook.run(title, author, year, genre, synopsis, coverUrl, sourceKey);
     }
+
+    pruneImportedRows(
+      'books',
+      syncOptions.activeSourcePrefixes,
+      sourceKeys,
+      syncOptions.inactiveSourcePrefixes
+    );
   });
 
   sync(items);
   return true;
 }
 
-function syncJsonlSeedFile(filePath, syncState, syncItems) {
-  if (!fs.existsSync(filePath)) return false;
-
-  const stats = fs.statSync(filePath);
-  if (stats.size < syncState.offset) {
-    syncState.offset = 0;
-    syncState.remainder = '';
-    syncState.size = 0;
+function syncJsonlSeedFile(filePath, syncState, syncItems, syncOptions = {}) {
+  const signature = getFileSignature(filePath);
+  if (!signature) {
+    resetSeedSyncState(syncState);
+    return false;
   }
 
-  if (stats.size === syncState.size) {
-    return stats.size > 0;
+  if (syncState.loaded && syncState.signature === signature) {
+    return true;
   }
 
-  const fileDescriptor = fs.openSync(filePath, 'r');
-
-  try {
-    const bytesToRead = stats.size - syncState.offset;
-    const chunk = bytesToRead > 0 ? Buffer.alloc(bytesToRead) : Buffer.alloc(0);
-    if (bytesToRead > 0) {
-      fs.readSync(fileDescriptor, chunk, 0, bytesToRead, syncState.offset);
-    }
-
-    const combinedText = `${syncState.remainder}${chunk.toString('utf8')}`;
-    const normalizedText = combinedText.replace(/\r\n/g, '\n');
-    const hasTrailingNewline = normalizedText.endsWith('\n');
-    const lines = normalizedText.split('\n');
-
-    syncState.remainder = hasTrailingNewline ? '' : lines.pop() || '';
-    const records = lines
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-
-    syncState.offset = stats.size;
-    syncState.size = stats.size;
-
-    return syncItems(records);
-  } finally {
-    fs.closeSync(fileDescriptor);
+  const records = readJsonlIfExists(filePath);
+  if (!records) {
+    return false;
   }
+
+  syncItems(records, syncOptions);
+  syncState.signature = signature;
+  syncState.loaded = true;
+  return true;
 }
 
-function syncMovieItems(items) {
-  if (!Array.isArray(items) || items.length === 0) return false;
+function syncMovieItems(items, syncOptions = {}) {
+  if (!Array.isArray(items)) return false;
 
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_source_key ON movies(source_key)');
 
@@ -300,11 +378,16 @@ function syncMovieItems(items) {
   `);
 
   const sync = db.transaction((records) => {
+    const sourceKeys = [];
+
     for (const item of records) {
       const title = normalizeString(item?.title);
       if (!title) continue;
 
-      const sourceKey = normalizeString(item?.sourceKey) || `tmdb:movie:${title}`;
+      const sourceKey =
+        normalizeString(item?.sourceKey) ||
+        `${syncOptions.defaultSourceKeyPrefix || 'tmdb:movie:'}${title}`;
+      sourceKeys.push(sourceKey);
       upsertMovie.run(
         title,
         normalizeYear(item?.year || item?.releaseDate),
@@ -319,6 +402,13 @@ function syncMovieItems(items) {
         sourceKey
       );
     }
+
+    pruneImportedRows(
+      'movies',
+      syncOptions.activeSourcePrefixes,
+      sourceKeys,
+      syncOptions.inactiveSourcePrefixes
+    );
   });
 
   sync(items);
@@ -326,27 +416,51 @@ function syncMovieItems(items) {
 }
 
 function syncMoviesFromTmdb() {
-  const parsed = readJsonIfExists(tmdbMoviesDataPath);
-  const items = Array.isArray(parsed?.items) ? parsed.items : [];
-  return syncMovieItems(items);
+  return syncJsonSeedFile(
+    tmdbMoviesDataPath,
+    tmdbMovieSyncState,
+    (parsed) => (Array.isArray(parsed?.items) ? parsed.items : []),
+    syncMovieItems,
+    {
+      activeSourcePrefixes: ['tmdb:movie:'],
+      inactiveSourcePrefixes: ['plex:movie:'],
+      defaultSourceKeyPrefix: 'tmdb:movie:',
+    }
+  );
 }
 
 function syncMoviesFromPlex() {
-  const parsed = readJsonIfExists(plexMoviesDataPath);
-  const items = Array.isArray(parsed?.items) ? parsed.items : [];
-  return syncMovieItems(items);
+  return syncJsonSeedFile(
+    plexMoviesDataPath,
+    plexMovieSyncState,
+    (parsed) => (Array.isArray(parsed?.items) ? parsed.items : []),
+    syncMovieItems,
+    {
+      activeSourcePrefixes: ['plex:movie:'],
+      inactiveSourcePrefixes: ['tmdb:movie:'],
+      defaultSourceKeyPrefix: 'plex:movie:',
+    }
+  );
 }
 
 function syncMoviesFromTmdbBulk() {
-  return syncJsonlSeedFile(tmdbMoviesBulkDataPath, tmdbMovieBulkSyncState, syncMovieItems);
+  return syncJsonlSeedFile(tmdbMoviesBulkDataPath, tmdbMovieBulkSyncState, syncMovieItems, {
+    activeSourcePrefixes: ['tmdb:movie:'],
+    inactiveSourcePrefixes: ['plex:movie:'],
+    defaultSourceKeyPrefix: 'tmdb:movie:',
+  });
 }
 
 function syncMoviesFromPlexBulk() {
-  return syncJsonlSeedFile(plexMoviesBulkDataPath, plexMovieBulkSyncState, syncMovieItems);
+  return syncJsonlSeedFile(plexMoviesBulkDataPath, plexMovieBulkSyncState, syncMovieItems, {
+    activeSourcePrefixes: ['plex:movie:'],
+    inactiveSourcePrefixes: ['tmdb:movie:'],
+    defaultSourceKeyPrefix: 'plex:movie:',
+  });
 }
 
-function syncTvShowItems(items) {
-  if (!Array.isArray(items) || items.length === 0) return false;
+function syncTvShowItems(items, syncOptions = {}) {
+  if (!Array.isArray(items)) return false;
 
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_shows_source_key ON tv_shows(source_key)');
 
@@ -368,11 +482,16 @@ function syncTvShowItems(items) {
   `);
 
   const sync = db.transaction((records) => {
+    const sourceKeys = [];
+
     for (const item of records) {
       const title = normalizeString(item?.title);
       if (!title) continue;
 
-      const sourceKey = normalizeString(item?.sourceKey) || `tmdb:tv:${title}`;
+      const sourceKey =
+        normalizeString(item?.sourceKey) ||
+        `${syncOptions.defaultSourceKeyPrefix || 'tmdb:tv:'}${title}`;
+      sourceKeys.push(sourceKey);
       upsertShow.run(
         title,
         normalizeYear(item?.year || item?.releaseDate),
@@ -388,6 +507,13 @@ function syncTvShowItems(items) {
         sourceKey
       );
     }
+
+    pruneImportedRows(
+      'tv_shows',
+      syncOptions.activeSourcePrefixes,
+      sourceKeys,
+      syncOptions.inactiveSourcePrefixes
+    );
   });
 
   sync(items);
@@ -395,50 +521,94 @@ function syncTvShowItems(items) {
 }
 
 function syncTvShowsFromTmdb() {
-  const parsed = readJsonIfExists(tmdbTvDataPath);
-  const items = Array.isArray(parsed?.items) ? parsed.items : [];
-  return syncTvShowItems(items);
+  return syncJsonSeedFile(
+    tmdbTvDataPath,
+    tmdbTvSyncState,
+    (parsed) => (Array.isArray(parsed?.items) ? parsed.items : []),
+    syncTvShowItems,
+    {
+      activeSourcePrefixes: ['tmdb:tv:'],
+      inactiveSourcePrefixes: ['plex:tv:'],
+      defaultSourceKeyPrefix: 'tmdb:tv:',
+    }
+  );
 }
 
 function syncTvShowsFromPlex() {
-  const parsed = readJsonIfExists(plexTvDataPath);
-  const items = Array.isArray(parsed?.items) ? parsed.items : [];
-  return syncTvShowItems(items);
+  return syncJsonSeedFile(
+    plexTvDataPath,
+    plexTvSyncState,
+    (parsed) => (Array.isArray(parsed?.items) ? parsed.items : []),
+    syncTvShowItems,
+    {
+      activeSourcePrefixes: ['plex:tv:'],
+      inactiveSourcePrefixes: ['tmdb:tv:'],
+      defaultSourceKeyPrefix: 'plex:tv:',
+    }
+  );
 }
 
 function syncTvShowsFromTmdbBulk() {
-  return syncJsonlSeedFile(tmdbTvBulkDataPath, tmdbTvBulkSyncState, syncTvShowItems);
+  return syncJsonlSeedFile(tmdbTvBulkDataPath, tmdbTvBulkSyncState, syncTvShowItems, {
+    activeSourcePrefixes: ['tmdb:tv:'],
+    inactiveSourcePrefixes: ['plex:tv:'],
+    defaultSourceKeyPrefix: 'tmdb:tv:',
+  });
 }
 
 function syncTvShowsFromPlexBulk() {
-  return syncJsonlSeedFile(plexTvBulkDataPath, plexTvBulkSyncState, syncTvShowItems);
+  return syncJsonlSeedFile(plexTvBulkDataPath, plexTvBulkSyncState, syncTvShowItems, {
+    activeSourcePrefixes: ['plex:tv:'],
+    inactiveSourcePrefixes: ['tmdb:tv:'],
+    defaultSourceKeyPrefix: 'plex:tv:',
+  });
 }
 
 function syncBooksFromInternetArchive() {
-  const parsed = readJsonIfExists(internetArchiveBooksDataPath);
-  const items = Array.isArray(parsed?.books)
-    ? parsed.books
-    : Array.isArray(parsed?.items)
-      ? parsed.items
-      : [];
-  return syncArchiveBookItems(items);
+  return syncJsonSeedFile(
+    internetArchiveBooksDataPath,
+    archiveBookSyncState,
+    (parsed) => (
+      Array.isArray(parsed?.books)
+        ? parsed.books
+        : Array.isArray(parsed?.items)
+          ? parsed.items
+          : []
+    ),
+    syncArchiveBookItems,
+    {
+      activeSourcePrefixes: ['internet-archive:'],
+      inactiveSourcePrefixes: ['openlibrary:'],
+    }
+  );
 }
 
 function syncBooksFromInternetArchiveBulk() {
   return syncJsonlSeedFile(
     internetArchiveBooksBulkDataPath,
     archiveBulkSyncState,
-    syncArchiveBookItems
+    syncArchiveBookItems,
+    {
+      activeSourcePrefixes: ['internet-archive:'],
+      inactiveSourcePrefixes: ['openlibrary:'],
+    }
   );
 }
 
 function syncBooksFromOpenLibrary() {
-  if (!fs.existsSync(openLibraryDataPath)) return;
+  const signature = getFileSignature(openLibraryDataPath);
+  if (!signature) {
+    resetSeedSyncState(openLibrarySyncState);
+    return false;
+  }
+
+  if (openLibrarySyncState.loaded && openLibrarySyncState.signature === signature) {
+    return true;
+  }
 
   try {
     const parsed = JSON.parse(fs.readFileSync(openLibraryDataPath, 'utf8'));
     const docs = Array.isArray(parsed?.search?.docs) ? parsed.search.docs : [];
-    if (!docs.length) return;
 
     const workDescriptionById = new Map();
     if (parsed?.workDetail?.workId && parsed?.workDetail?.description) {
@@ -460,6 +630,8 @@ function syncBooksFromOpenLibrary() {
     `);
 
     const sync = db.transaction((records) => {
+      const sourceKeys = [];
+
       for (const doc of records) {
         const title = typeof doc?.title === 'string' ? doc.title.trim() : '';
         if (!title) continue;
@@ -475,54 +647,80 @@ function syncBooksFromOpenLibrary() {
         const coverUrl = typeof doc?.coverUrl === 'string' ? doc.coverUrl.trim() : null;
         const sourceKey = `openlibrary:${doc?.workId || doc?.key || `${title}:${author}`}`;
 
+        sourceKeys.push(sourceKey);
         upsertBook.run(title, author, year, genre, synopsis, coverUrl, sourceKey);
       }
+
+      pruneImportedRows('books', ['openlibrary:'], sourceKeys, ['internet-archive:']);
     });
 
     sync(docs);
+    openLibrarySyncState.signature = signature;
+    openLibrarySyncState.loaded = true;
+    return true;
   } catch (error) {
     console.error('Unable to sync books from Open Library data file:', error);
+    return false;
   }
-}
-
-function preferPlexMovieImports() {
-  return fileHasContent(plexMoviesBulkDataPath) || fileHasContent(plexMoviesDataPath);
-}
-
-function preferPlexTvImports() {
-  return fileHasContent(plexTvBulkDataPath) || fileHasContent(plexTvDataPath);
-}
-
-function cleanupLegacyMovieImportsIfNeeded() {
-  if (sourceCleanupState.movies || !preferPlexMovieImports()) return;
-
-  deleteImportedRowsByPrefix('movies', 'tmdb:');
-  sourceCleanupState.movies = true;
-}
-
-function cleanupLegacyTvImportsIfNeeded() {
-  if (sourceCleanupState.tv || !preferPlexTvImports()) return;
-
-  deleteImportedRowsByPrefix('tv_shows', 'tmdb:');
-  sourceCleanupState.tv = true;
 }
 
 function syncPreferredMovies() {
-  if (preferPlexMovieImports()) {
-    cleanupLegacyMovieImportsIfNeeded();
-    return syncMoviesFromPlexBulk() || syncMoviesFromPlex();
+  if (fileHasContent(plexMoviesBulkDataPath)) {
+    return syncMoviesFromPlexBulk();
   }
 
-  return syncMoviesFromTmdbBulk() || syncMoviesFromTmdb();
+  if (fileHasContent(plexMoviesDataPath)) {
+    return syncMoviesFromPlex();
+  }
+
+  if (fileHasContent(tmdbMoviesBulkDataPath)) {
+    return syncMoviesFromTmdbBulk();
+  }
+
+  if (fileHasContent(tmdbMoviesDataPath)) {
+    return syncMoviesFromTmdb();
+  }
+
+  pruneImportedRows('movies', ['plex:movie:', 'tmdb:movie:'], []);
+  return false;
 }
 
 function syncPreferredTvShows() {
-  if (preferPlexTvImports()) {
-    cleanupLegacyTvImportsIfNeeded();
-    return syncTvShowsFromPlexBulk() || syncTvShowsFromPlex();
+  if (fileHasContent(plexTvBulkDataPath)) {
+    return syncTvShowsFromPlexBulk();
   }
 
-  return syncTvShowsFromTmdbBulk() || syncTvShowsFromTmdb();
+  if (fileHasContent(plexTvDataPath)) {
+    return syncTvShowsFromPlex();
+  }
+
+  if (fileHasContent(tmdbTvBulkDataPath)) {
+    return syncTvShowsFromTmdbBulk();
+  }
+
+  if (fileHasContent(tmdbTvDataPath)) {
+    return syncTvShowsFromTmdb();
+  }
+
+  pruneImportedRows('tv_shows', ['plex:tv:', 'tmdb:tv:'], []);
+  return false;
+}
+
+function syncPreferredBooks() {
+  if (fileHasContent(internetArchiveBooksBulkDataPath)) {
+    return syncBooksFromInternetArchiveBulk();
+  }
+
+  if (fileHasContent(internetArchiveBooksDataPath)) {
+    return syncBooksFromInternetArchive();
+  }
+
+  if (fileHasContent(openLibraryDataPath)) {
+    return syncBooksFromOpenLibrary();
+  }
+
+  pruneImportedRows('books', ['internet-archive:', 'openlibrary:'], []);
+  return false;
 }
 
 db.exec(`
@@ -658,11 +856,7 @@ if (!hasColumn('tv_shows', 'overview')) {
 
 syncPreferredMovies();
 syncPreferredTvShows();
-
-const didSyncArchiveBooks = syncBooksFromInternetArchiveBulk() || syncBooksFromInternetArchive();
-if (!didSyncArchiveBooks) {
-  syncBooksFromOpenLibrary();
-}
+syncPreferredBooks();
 
 db.syncImportedMovies = () => {
   syncPreferredMovies();
@@ -673,7 +867,7 @@ db.syncImportedTvShows = () => {
 };
 
 db.syncImportedBooks = () => {
-  syncBooksFromInternetArchiveBulk();
+  syncPreferredBooks();
 };
 
 module.exports = db;
