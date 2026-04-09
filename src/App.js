@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ChatBot from './components/ChatBot';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -12,6 +13,7 @@ import Watchlist from './pages/Watchlist';
 import Lists from './pages/Lists';
 import SharedList from './pages/SharedList';
 import AccountSettings from './pages/AccountSettings';
+import AdminRequests from './pages/AdminRequests';
 import './App.css';
 
 export default function App() {
@@ -30,8 +32,10 @@ export default function App() {
           <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
           <Route path="/lists/:shareCode" element={<SharedList />} />
           <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+          <Route path="/admin/requests" element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
+        <ChatBot />
       </BrowserRouter>
     </AuthProvider>
   );

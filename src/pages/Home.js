@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
+import ForYou from '../components/ForYou';
 
 export default function Home() {
   const { user } = useAuth();
@@ -83,11 +84,25 @@ export default function Home() {
             </div>
           </section>
 
+<<<<<<< HEAD
           <div className="home-secondary-grid">
             <section className="home-section surface-panel">
               <div className="section-header">
                 <h2>My Library</h2>
                 <Link to="/watchlist" className="section-link">Open library</Link>
+=======
+          <ForYou />
+
+          <section className="home-section">
+            <div className="section-header">
+              <h2>Your Watchlist</h2>
+              <Link to="/watchlist" className="section-link">View all</Link>
+            </div>
+            {stats.watchlist === 0 ? (
+              <div className="empty-state">
+                <p>Your watchlist is empty.</p>
+                <p className="empty-hint">Browse movies, TV shows, and books to add items.</p>
+>>>>>>> 465db07ff1fca1574291f604c7421ff73e627156
               </div>
               {stats.watchlist === 0 ? (
                 <div className="empty-state home-empty-card">
