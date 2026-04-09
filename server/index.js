@@ -33,6 +33,8 @@ app.use('/api/lists',     require('./routes/lists'));
 app.use('/api/media',     require('./routes/media'));
 app.use('/api/watchlist', require('./routes/watchlist'));
 app.use('/api/ratings',   require('./routes/ratings'));
+app.use('/api/chat',      require('./routes/chat'));
+app.use('/api/requests',  require('./routes/requests'));
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
