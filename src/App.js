@@ -15,6 +15,7 @@ import SharedList from './pages/SharedList';
 import AccountSettings from './pages/AccountSettings';
 import AdminRequests from './pages/AdminRequests';
 import LiveTV from './pages/LiveTV';
+import Ratings from './pages/Ratings';
 import './App.css';
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
           <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
           <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
+          <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
           <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
           <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
           <Route path="/lists/:shareCode" element={<SharedList />} />

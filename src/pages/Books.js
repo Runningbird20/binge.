@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ListSaveControls from '../components/ListSaveControls';
+import RatingInput from '../components/RatingInput';
+import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import { api } from '../api';
+import {
+  buildMediaGenreFacets,
+  filterBooksCatalog,
+  loadFallbackBooks,
+} from '../catalogFallback';
 
 const BOOKS_PAGE_SIZE = 24;
 
@@ -48,16 +55,29 @@ function BookDetailsModal({
   onAddToLibrary,
   isInLibrary,
   isAddingToLibrary,
+  onRate,
+  userRating,
   detailMessage,
+  allowActions = true,
+  browseOnlyMessage = '',
 }) {
   const [showReader, setShowReader] = useState(false);
-  const [downloading, setDownloading] = useState(null); // null | 'pdf' | 'epub' | 'txt'
+  const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
+  const [draftScores, setDraftScores] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Extract Internet Archive identifier from source_key
-  const archiveId = book.source_key?.startsWith('internet-archive:')
+  const archiveId = book?.source_key?.startsWith('internet-archive:')
     ? book.source_key.replace('internet-archive:', '')
-    : null;
+    : book?.identifier || null;
+
+  useEffect(() => {
+    if (userRating && typeof userRating === 'object') {
+      setDraftScores(userRating);
+    } else {
+      setDraftScores({});
+    }
+  }, [userRating, book]);
 
   useEffect(() => {
     if (!book) {
@@ -97,20 +117,19 @@ function BookDetailsModal({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Download failed');
       }
-      // Get filename from Content-Disposition header or build one
+
       const disposition = res.headers.get('content-disposition') || '';
       const nameMatch = disposition.match(/filename="?([^"]+)"?/);
       const filename = nameMatch ? nameMatch[1] : `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
 
-      // Stream to a blob and trigger browser download
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
       setDownloadError(err.message || 'Download failed. This book may not be available.');
@@ -119,112 +138,162 @@ function BookDetailsModal({
     }
   }
 
+  const cats = RATING_CATEGORIES.book;
+  const canSave = cats.every((cat) => draftScores[cat.key] >= 1);
+  const displayScore = computeNormalizedScore('book', draftScores);
+
+  async function handleSave() {
+    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onRate(book, draftScores);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <>
-    <div className="book-detail-overlay" onClick={onClose}>
-      <div
-        className="book-detail-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="book-detail-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <button
-          type="button"
-          className="book-detail-close"
-          onClick={onClose}
-          aria-label="Close book details"
+      <div className="book-detail-overlay" onClick={onClose}>
+        <div
+          className="book-detail-modal book-detail-modal-wide"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="book-detail-title"
+          onClick={(event) => event.stopPropagation()}
         >
-          &times;
-        </button>
+          <button
+            type="button"
+            className="book-detail-close"
+            onClick={onClose}
+            aria-label="Close book details"
+          >
+            &times;
+          </button>
 
-        <div className="book-detail-cover-panel">
-          <div className="book-detail-cover-frame">
-            <BookCoverImage
-              book={book}
-              imageClassName="book-detail-cover-image"
-              placeholderClassName="book-detail-cover-placeholder"
-            />
-          </div>
-        </div>
-
-        <div className="book-detail-content">
-          <p className="book-detail-kicker">Book Details</p>
-          <h2 id="book-detail-title">{book.title}</h2>
-          <p className="book-detail-author">by {book.author}</p>
-
-          <div className="book-detail-meta">
-            {book.genre && (
-              <span className="book-detail-meta-chip">{book.genre}</span>
-            )}
-            {book.year && (
-              <span className="book-detail-meta-chip">{book.year}</span>
-            )}
-          </div>
-
-          <p className="book-detail-description">{book.synopsis}</p>
-
-          <div className="book-detail-summary">
-            <div className="book-detail-summary-row">
-              <span className="book-detail-summary-label">Author</span>
-              <span>{book.author}</span>
+          <div className="book-detail-cover-panel">
+            <div className="book-detail-cover-frame">
+              <BookCoverImage
+                book={book}
+                imageClassName="book-detail-cover-image"
+                placeholderClassName="book-detail-cover-placeholder"
+              />
             </div>
-            <div className="book-detail-summary-row">
-              <span className="book-detail-summary-label">Genre</span>
-              <span>{book.genre || 'General Fiction'}</span>
+            <div className="artifact-panel">
+              <RatingArtifact mediaType="book" scores={draftScores} size={220} />
+              {displayScore !== null && (
+                <p className="artifact-score">{displayScore}<span>/10</span></p>
+              )}
             </div>
           </div>
 
-          <div className="book-detail-actions">
-            <button
-              type="button"
-              className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
-              onClick={() => onAddToLibrary(book)}
-              disabled={isInLibrary || isAddingToLibrary}
-            >
-              {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
-            </button>
-            <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
-            {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
-            {archiveId && (
-              <button
-                type="button"
-                className="btn-watch"
-                onClick={() => setShowReader(true)}
-              >
-                📖 Read Now
-              </button>
-            )}
-            {archiveId && (
-              <div className="book-download-row">
-                <span className="book-download-label">Download:</span>
-                {['pdf', 'epub', 'txt'].map(fmt => (
-                  <button
-                    key={fmt}
-                    className="book-download-btn"
-                    onClick={() => handleDownload(fmt)}
-                    disabled={downloading !== null}
-                  >
-                    {downloading === fmt ? '⏳' : '⬇'} {fmt.toUpperCase()}
-                  </button>
-                ))}
+          <div className="book-detail-content">
+            <p className="book-detail-kicker">Book Details</p>
+            <h2 id="book-detail-title">{book.title}</h2>
+            <p className="book-detail-author">by {book.author}</p>
+
+            <div className="book-detail-meta">
+              {book.genre && (
+                <span className="book-detail-meta-chip">{book.genre}</span>
+              )}
+              {book.year && (
+                <span className="book-detail-meta-chip">{book.year}</span>
+              )}
+            </div>
+
+            <p className="book-detail-description">{book.synopsis}</p>
+
+            <div className="book-detail-summary">
+              <div className="book-detail-summary-row">
+                <span className="book-detail-summary-label">Author</span>
+                <span>{book.author}</span>
               </div>
-            )}
-            {downloadError && (
-              <p className="book-download-error">{downloadError}</p>
-            )}
+              <div className="book-detail-summary-row">
+                <span className="book-detail-summary-label">Genre</span>
+                <span>{book.genre || 'General Fiction'}</span>
+              </div>
+            </div>
+
+            <div className="rating-section">
+              <p className="rating-section-title">Your Rating</p>
+              <RatingInput
+                mediaType="book"
+                value={draftScores}
+                onChange={allowActions ? setDraftScores : () => {}}
+              />
+              <div className="rating-section-actions">
+                <button
+                  type="button"
+                  className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
+                  onClick={handleSave}
+                  disabled={!allowActions || !canSave || isSaving}
+                >
+                  {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+                </button>
+                {allowActions && !canSave && (
+                  <span className="rating-incomplete-hint">Rate all categories to save</span>
+                )}
+              </div>
+            </div>
+
+            <div className="book-detail-actions">
+              {allowActions && (
+                <button
+                  type="button"
+                  className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
+                  onClick={() => onAddToLibrary(book)}
+                  disabled={isInLibrary || isAddingToLibrary}
+                >
+                  {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
+                </button>
+              )}
+              {allowActions && (
+                <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
+              )}
+              {!allowActions && browseOnlyMessage && (
+                <p className="book-detail-status">{browseOnlyMessage}</p>
+              )}
+              {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
+              {archiveId && (
+                <button
+                  type="button"
+                  className="btn-watch"
+                  onClick={() => setShowReader(true)}
+                >
+                  Read Now
+                </button>
+              )}
+              {archiveId && (
+                <div className="book-download-row">
+                  <span className="book-download-label">Download:</span>
+                  {['pdf', 'epub', 'txt'].map((fmt) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      className="book-download-btn"
+                      onClick={() => handleDownload(fmt)}
+                      disabled={downloading !== null}
+                    >
+                      {downloading === fmt ? '...' : 'Download'} {fmt.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {downloadError && (
+                <p className="book-download-error">{downloadError}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    {showReader && archiveId && (
-      <BookReader
-        book={book}
-        archiveId={archiveId}
-        onClose={() => setShowReader(false)}
-      />
-    )}
+      {showReader && archiveId && (
+        <BookReader
+          book={book}
+          archiveId={archiveId}
+          onClose={() => setShowReader(false)}
+        />
+      )}
     </>
   );
 }
@@ -235,7 +304,9 @@ function BookReader({ book, archiveId, onClose }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
+    function onFsChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
@@ -252,20 +323,24 @@ function BookReader({ book, archiveId, onClose }) {
 
   return (
     <div className="player-overlay" onClick={onClose}>
-      <div className="player-modal" ref={modalRef} onClick={e => e.stopPropagation()}>
+      <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
         <div className="player-header">
           <div className="player-title">
-            <span>📚</span>
+            <span>Book</span>
             <div>
               <strong>{book.title}</strong>
               {book.author && <span className="player-year">by {book.author}</span>}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button className="player-close" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-              {isFullscreen ? '↙' : '↗'}
+            <button
+              className="player-close"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            >
+              {isFullscreen ? '<' : '>'}
             </button>
-            <button className="player-close" onClick={onClose} title="Close">✕</button>
+            <button className="player-close" onClick={onClose} title="Close">X</button>
           </div>
         </div>
         <div className="player-frame-wrap">
@@ -280,7 +355,7 @@ function BookReader({ book, archiveId, onClose }) {
           />
         </div>
         <p className="player-note">
-          Powered by Internet Archive · Free &amp; legal · Some books may require borrowing
+          Powered by Internet Archive. Some books may require borrowing.
         </p>
       </div>
     </div>
@@ -302,10 +377,12 @@ export default function Books() {
   const [facets, setFacets] = useState({ genres: [] });
   const [loading, setLoading] = useState(true);
   const [libraryIds, setLibraryIds] = useState({});
+  const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
   const [addingBookId, setAddingBookId] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
   const loadMoreRef = useRef(null);
 
   useEffect(() => {
@@ -348,6 +425,10 @@ export default function Books() {
         const data = await api.get(`/media/books?${params.toString()}`);
         if (!cancelled) {
           const nextItems = Array.isArray(data?.items) ? data.items : [];
+          if (nextItems.length === 0 && page === 1) {
+            throw new Error('Book catalog is empty');
+          }
+
           setBooks((current) => {
             if (page === 1) {
               return nextItems;
@@ -362,9 +443,9 @@ export default function Books() {
           setFacets({
             genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
           });
-          // Auto-open modal if ?open=ID is in the URL
+          setUsingFallbackCatalog(false);
           if (openId && page === 1) {
-            const match = (Array.isArray(data?.items) ? data.items : []).find((b) => b.id === openId);
+            const match = (Array.isArray(data?.items) ? data.items : []).find((book) => book.id === openId);
             if (match) {
               setSelectedBook(match);
               setDetailMessage('');
@@ -373,11 +454,47 @@ export default function Books() {
         }
       } catch {
         if (!cancelled) {
-          if (page === 1) {
-            setBooks([]);
+          try {
+            const fallbackItems = await loadFallbackBooks();
+            const result = filterBooksCatalog(fallbackItems, {
+              search: debouncedSearch,
+              genre,
+              sortOrder,
+              page,
+              pageSize: BOOKS_PAGE_SIZE,
+            });
+
+            setBooks((current) => {
+              if (page === 1) {
+                return result.items;
+              }
+
+              const seenIds = new Set(current.map((book) => book.id));
+              const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
+              return [...current, ...appendedItems];
+            });
+            setTotalBooks(result.total);
+            setTotalPages(result.totalPages);
+            setFacets({
+              genres: buildMediaGenreFacets(fallbackItems),
+            });
+            setUsingFallbackCatalog(true);
+
+            if (openId && page === 1) {
+              const match = fallbackItems.find((book) => book.id === openId);
+              if (match) {
+                setSelectedBook(match);
+                setDetailMessage('');
+              }
+            }
+          } catch {
+            if (page === 1) {
+              setBooks([]);
+            }
+            setTotalBooks(0);
+            setTotalPages(1);
+            setUsingFallbackCatalog(false);
           }
-          setTotalBooks(0);
-          setTotalPages(1);
         }
       } finally {
         if (!cancelled) {
@@ -410,6 +527,18 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    api.get('/ratings/my?media_type=book')
+      .then((ratings) => {
+        const next = {};
+        ratings.forEach((rating) => {
+          next[rating.media_id] = rating;
+        });
+        setUserRatings(next);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -460,6 +589,16 @@ export default function Books() {
     setAddingBookId(null);
   }
 
+  async function handleRate(book, categories, review) {
+    try {
+      await api.post('/ratings', { media_type: 'book', media_id: book.id, categories, review });
+      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
+      setDetailMessage('Rating saved!');
+    } catch (err) {
+      setDetailMessage(err.message);
+    }
+  }
+
   async function handleAddToLibrary(book) {
     setDetailMessage('');
     setAddingBookId(book.id);
@@ -506,53 +645,75 @@ export default function Books() {
       <main className="page-content">
         <div className="page-header books-page-header">
           <div>
+            <p className="page-kicker">Browse</p>
             <h1>Books</h1>
-            <p className="books-page-subtitle">
-              Explore the books loaded from your data folder and add favorites to your Library.
+            <p className="page-subtitle books-page-subtitle">
+              Search the shelf, open richer book details, and save future reads to your library or shared lists.
             </p>
           </div>
         </div>
 
-        <div className="filter-bar">
-          <input
-            className="search-input"
-            type="text"
-            aria-label="Search books"
-            placeholder="Search books..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <select
-            className="filter-input"
-            aria-label="Genre"
-            value={genre}
-            onChange={(event) => setGenre(event.target.value)}
-          >
-            <option value="">All Genres</option>
-            {genreOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <select
-            className="filter-input"
-            aria-label="Sort by"
-            value={sortOrder}
-            onChange={(event) => setSortOrder(event.target.value)}
-          >
-            <option value="title-asc">Title A-Z</option>
-            <option value="year-desc">Newest First</option>
-            <option value="year-asc">Oldest First</option>
-          </select>
-          {hasActiveFilters && (
-            <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-              Clear
-            </button>
-          )}
-        </div>
+        <section className="surface-panel">
+          <div className="surface-panel-header">
+            <div>
+              <h2>Filter the Shelf</h2>
+              <p className="surface-panel-copy">
+                Search by title or author, narrow by genre, and sort the shelf without leaving the page.
+              </p>
+              {usingFallbackCatalog && (
+                <p className="surface-panel-copy">Showing the bundled book catalog snapshot.</p>
+              )}
+            </div>
+            <p className="surface-panel-meta">
+              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
+            </p>
+          </div>
 
-        <section className="books-results-panel">
+          <div className="filter-bar">
+            <input
+              className="search-input"
+              type="text"
+              aria-label="Search books"
+              placeholder="Search books..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="filter-input"
+              aria-label="Genre"
+              value={genre}
+              onChange={(event) => setGenre(event.target.value)}
+            >
+              <option value="">All Genres</option>
+              {genreOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select
+              className="filter-input"
+              aria-label="Sort by"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            >
+              <option value="title-asc">Title A-Z</option>
+              <option value="year-desc">Newest First</option>
+              <option value="year-asc">Oldest First</option>
+            </select>
+            {hasActiveFilters && (
+              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
+                Clear
+              </button>
+            )}
+          </div>
+
+          {hasActiveFilters && !loading && (
+            <p className="surface-panel-copy">Showing results for your active filters.</p>
+          )}
+        </section>
+
+        <section className="surface-panel surface-panel-spacious books-results-panel">
           <div className="books-results-header">
             <p className="books-results-count">
               {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
@@ -574,29 +735,27 @@ export default function Books() {
           ) : (
             <>
               <div className="book-library-grid">
-                {books.map((book) => {
-                  return (
-                    <button
-                      key={book.id}
-                      type="button"
-                      className="book-shelf-card"
-                      onClick={() => openBookDetails(book)}
-                      aria-label={`Open details for ${book.title}`}
-                    >
-                      <div className="book-shelf-cover-frame">
-                        <BookCoverImage
-                          book={book}
-                          imageClassName="book-shelf-cover-image"
-                          placeholderClassName="book-shelf-cover-placeholder"
-                        />
-                      </div>
-                      <div className="book-shelf-copy">
-                        <h3>{book.title}</h3>
-                        <p>{book.author}</p>
-                      </div>
-                    </button>
-                  );
-                })}
+                {books.map((book) => (
+                  <button
+                    key={book.id}
+                    type="button"
+                    className="book-shelf-card"
+                    onClick={() => openBookDetails(book)}
+                    aria-label={`Open details for ${book.title}`}
+                  >
+                    <div className="book-shelf-cover-frame">
+                      <BookCoverImage
+                        book={book}
+                        imageClassName="book-shelf-cover-image"
+                        placeholderClassName="book-shelf-cover-placeholder"
+                      />
+                    </div>
+                    <div className="book-shelf-copy">
+                      <h3>{book.title}</h3>
+                      <p>{book.author}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
 
               <div className="books-infinite-footer">
@@ -620,7 +779,11 @@ export default function Books() {
           onAddToLibrary={handleAddToLibrary}
           isInLibrary={!!libraryIds[selectedBook?.id]}
           isAddingToLibrary={addingBookId === selectedBook?.id}
+          onRate={handleRate}
+          userRating={userRatings[selectedBook?.id]}
           detailMessage={detailMessage}
+          allowActions={!usingFallbackCatalog}
+          browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}
 
@@ -631,7 +794,7 @@ export default function Books() {
           onClick={scrollToTop}
           aria-label="Back to top"
         >
-          <span aria-hidden="true">↑</span>
+          <span aria-hidden="true">^</span>
         </button>
       )}
     </div>

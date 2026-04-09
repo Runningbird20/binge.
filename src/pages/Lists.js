@@ -411,11 +411,14 @@ export default function Lists() {
       <Navbar />
       <main className="page-content">
         <div className="page-header">
+          <p className="page-kicker">Plan Together</p>
           <h1>Shared Lists</h1>
-          <p className="books-page-subtitle">
+          <p className="page-subtitle books-page-subtitle">
             Build private watchlists, invite collaborators by username, and let vibe votes surface the consensus pick.
           </p>
         </div>
+
+        {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
         <div className="lists-shell">
           <aside className="lists-sidebar">
@@ -671,7 +674,6 @@ export default function Lists() {
           </section>
         </div>
 
-        {statusMessage && <p className="lists-page-status">{statusMessage}</p>}
       </main>
     </div>
   );
