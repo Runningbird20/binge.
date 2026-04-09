@@ -1,18 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 
 const PROVIDERS = [
-  { id: 'vidsrc',    label: 'Vidsrc'    },
-  { id: 'vidsrc2',   label: 'Vidsrc 2'  },
-  { id: 'superembed',label: 'SuperEmbed'},
-  { id: '2embed',    label: '2Embed'    },
+  { id: 'vidsrc',     label: 'Vidsrc'     },
+  { id: 'vidsrc2',    label: 'Vidsrc 2'   },
+  { id: 'superembed', label: 'SuperEmbed' },
+  { id: '2embed',     label: '2Embed'     },
 ];
 
+// Pure function — no hooks
 function buildUrl(provider, tmdbId, mediaType, season, episode) {
   const isTV = mediaType === 'tv_show';
-
   if (!tmdbId) return null;
-
   if (provider === 'vidsrc') {
     if (isTV) return `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`;
     return `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`;
@@ -33,13 +32,26 @@ function buildUrl(provider, tmdbId, mediaType, season, episode) {
 }
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
-  const [provider, setProvider]   = useState('vidsrc');
-  const [season, setSeason]       = useState(1);
-  const [episode, setEpisode]     = useState(1);
-  const [tmdbId, setTmdbId]       = useState(null);
-  const [lookupState, setLookupState] = useState('loading'); // loading | done | error | no-key
+  const [provider, setProvider]       = useState('vidsrc');
+  const [season, setSeason]           = useState(1);
+  const [episode, setEpisode]         = useState(1);
+  const [tmdbId, setTmdbId]           = useState(null);
+  const [lookupState, setLookupState] = useState('loading');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const modalRef = useRef(null);
+  const iframeRef = useRef(null);
   const isTV = mediaType === 'tv_show';
 
+  // Fullscreen change listener
+  useEffect(() => {
+    function onFsChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // TMDB ID lookup
   useEffect(() => {
     async function fetchTmdbId() {
       setLookupState('loading');
@@ -67,18 +79,22 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     fetchTmdbId();
   }, [item.title, item.year, mediaType]);
 
-  // Fallback URL using title when no TMDB ID available
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      // Try iframe first, fall back to modal
+      const el = iframeRef.current || modalRef.current;
+      el?.requestFullscreen().catch(() => {
+        modalRef.current?.requestFullscreen();
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
   function getFallbackUrl() {
     const title = encodeURIComponent(item.title);
-    if (provider === 'vidsrc') {
-      if (isTV) return `https://vidsrc.me/embed/tv?tmdb=${title}&season=${season}&episode=${episode}`;
-      return `https://vidsrc.me/embed/movie?tmdb=${title}`;
-    }
-    if (provider === 'superembed') {
-      if (isTV) return `https://multiembed.mov/?video_id=${title}&tmdb=1&s=${season}&e=${episode}`;
-      return `https://multiembed.mov/?video_id=${title}&tmdb=1`;
-    }
-    return `https://vidsrc.me/embed/${isTV ? 'tv' : 'movie'}?tmdb=${title}`;
+    if (isTV) return `https://vidsrc.me/embed/tv?tmdb=${title}&season=${season}&episode=${episode}`;
+    return `https://vidsrc.me/embed/movie?tmdb=${title}`;
   }
 
   const embedUrl = tmdbId
@@ -89,7 +105,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
   return (
     <div className="player-overlay" onClick={onClose}>
-      <div className="player-modal" onClick={e => e.stopPropagation()}>
+      <div className="player-modal" ref={modalRef} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
         <div className="player-header">
@@ -101,7 +117,16 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               {tmdbId && <span className="player-tmdb-badge">TMDB ✓</span>}
             </div>
           </div>
-          <button className="player-close" onClick={onClose}>✕</button>
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <button
+              className="player-close"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? '↙' : '↗'}
+            </button>
+            <button className="player-close" onClick={onClose} title="Close">✕</button>
+          </div>
         </div>
 
         {/* TMDB lookup status */}
@@ -112,13 +137,12 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         )}
         {lookupState === 'error' && (
           <div className="player-lookup-bar player-lookup-bar--warn">
-            ⚠️ Could not find TMDB ID for "{item.title}" — stream may not load.
+            ⚠️ Could not find TMDB ID for "{item.title}" — stream may not load. Try switching sources.
           </div>
         )}
         {lookupState === 'no-key' && (
           <div className="player-lookup-bar player-lookup-bar--warn">
             ⚠️ Add <code>TMDB_API_KEY</code> to your .env for better stream matching.
-            Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noreferrer">themoviedb.org</a>
           </div>
         )}
 
@@ -175,10 +199,12 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           {embedUrl ? (
             <iframe
               key={`${provider}-${tmdbId}-${season}-${episode}`}
+              ref={iframeRef}
               src={embedUrl}
               className="player-frame"
               allowFullScreen
-              allow="autoplay; fullscreen; picture-in-picture"
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allowFullScreen={true}
               referrerPolicy="no-referrer"
               title={`Watch ${item.title}`}
             />
@@ -190,7 +216,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         </div>
 
         <p className="player-note">
-          If the video doesn't load, try switching sources. A TMDB API key improves accuracy.
+          If the video doesn't load, try switching sources above.
         </p>
       </div>
     </div>
