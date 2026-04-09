@@ -1,120 +1,163 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 
 const PROVIDERS = [
-  { id: 'vidsrc',     label: 'Vidsrc'     },
-  { id: 'vidsrc2',    label: 'Vidsrc 2'   },
-  { id: 'superembed', label: 'SuperEmbed' },
-  { id: '2embed',     label: '2Embed'     },
+  { id: 'vidsrc-embed-ru', label: 'vidsrc-embed.ru', baseUrl: 'https://vidsrc-embed.ru' },
+  { id: 'vidsrc-embed-su', label: 'vidsrc-embed.su', baseUrl: 'https://vidsrc-embed.su' },
+  { id: 'vidsrcme-su', label: 'vidsrcme.su', baseUrl: 'https://vidsrcme.su' },
+  { id: 'vsrc-su', label: 'vsrc.su', baseUrl: 'https://vsrc.su' },
 ];
 
-// Pure function — no hooks
-function buildUrl(provider, tmdbId, mediaType, season, episode) {
-  const isTV = mediaType === 'tv_show';
-  if (!tmdbId) return null;
-  if (provider === 'vidsrc') {
-    if (isTV) return `https://vidsrc.me/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`;
-    return `https://vidsrc.me/embed/movie?tmdb=${tmdbId}`;
+function normalizeExternalId(kind, value) {
+  if (value == null) return null;
+
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+
+  if (kind === 'tmdb' && /^\d+$/.test(normalized)) {
+    return { kind: 'tmdb', value: normalized };
   }
-  if (provider === 'vidsrc2') {
-    if (isTV) return `https://vidsrc.to/embed/tv/${tmdbId}/${season}/${episode}`;
-    return `https://vidsrc.to/embed/movie/${tmdbId}`;
+
+  if (kind === 'imdb' && /^tt\d+$/i.test(normalized)) {
+    return { kind: 'imdb', value: normalized.toLowerCase() };
   }
-  if (provider === 'superembed') {
-    if (isTV) return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`;
-    return `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
-  }
-  if (provider === '2embed') {
-    if (isTV) return `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}`;
-    return `https://www.2embed.cc/embed/${tmdbId}`;
-  }
+
   return null;
 }
 
+function getEmbeddedId(item) {
+  const candidates = [
+    normalizeExternalId('tmdb', item?.tmdbId),
+    normalizeExternalId('tmdb', item?.tmdb_id),
+    normalizeExternalId('tmdb', item?.tmdb),
+    normalizeExternalId('imdb', item?.imdbId),
+    normalizeExternalId('imdb', item?.imdb_id),
+    normalizeExternalId('imdb', item?.imdb),
+  ];
+
+  return candidates.find(Boolean) || null;
+}
+
+function buildUrl(providerId, externalId, mediaType, season, episode) {
+  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
+  const isTV = mediaType === 'tv_show';
+
+  if (!provider || !externalId) return null;
+
+  const url = new URL(isTV ? '/embed/tv' : '/embed/movie', provider.baseUrl);
+  url.searchParams.set(externalId.kind, externalId.value);
+  url.searchParams.set('autoplay', '1');
+
+  if (isTV) {
+    url.searchParams.set('season', String(season));
+    url.searchParams.set('episode', String(episode));
+    url.searchParams.set('autonext', '1');
+  }
+
+  return url.toString();
+}
+
 export default function EmbedPlayer({ item, mediaType, onClose }) {
-  const [provider, setProvider]       = useState('vidsrc');
-  const [season, setSeason]           = useState(1);
-  const [episode, setEpisode]         = useState(1);
-  const [tmdbId, setTmdbId]           = useState(null);
-  const [lookupState, setLookupState] = useState('loading');
+  const [provider, setProvider] = useState(PROVIDERS[0].id);
+  const [season, setSeason] = useState(1);
+  const [episode, setEpisode] = useState(1);
+  const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
+  const [lookupState, setLookupState] = useState(() => (getEmbeddedId(item) ? 'done' : 'loading'));
+  const [lookupError, setLookupError] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const modalRef = useRef(null);
   const iframeRef = useRef(null);
   const isTV = mediaType === 'tv_show';
 
-  // Fullscreen change listener
   useEffect(() => {
     function onFsChange() {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(Boolean(document.fullscreenElement));
     }
+
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // TMDB ID lookup
   useEffect(() => {
-    async function fetchTmdbId() {
+    const embeddedId = getEmbeddedId(item);
+
+    if (embeddedId) {
+      setExternalId(embeddedId);
+      setLookupState('done');
+      setLookupError('');
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function fetchEmbedId() {
+      setExternalId(null);
       setLookupState('loading');
+      setLookupError('');
+
       try {
         const params = new URLSearchParams({
           title: item.title,
           type: mediaType,
           ...(item.year ? { year: item.year } : {}),
         });
-        const data = await api.get(`/media/tmdb-id?${params}`);
-        if (data.id) {
-          setTmdbId(data.id);
+        const data = await api.get(`/media/embed-id?${params}`);
+
+        if (cancelled) return;
+
+        if (data?.kind && data?.value) {
+          setExternalId({ kind: data.kind, value: String(data.value) });
           setLookupState('done');
+          setLookupError('');
         } else {
           setLookupState('error');
+          setLookupError(`Could not find a provider-compatible IMDb or TMDB ID for "${item.title}".`);
         }
       } catch (err) {
-        if (err.message?.includes('TMDB_API_KEY') || err.message?.includes('503')) {
-          setLookupState('no-key');
+        if (cancelled) return;
+        setLookupState('error');
+        if (err.message?.includes('Unable to reach the API')) {
+          setLookupError('Unable to reach the API. Make sure the backend server is running on port 5001.');
         } else {
-          setLookupState('error');
+          setLookupError(err.message || 'The stream lookup failed.');
         }
       }
     }
-    fetchTmdbId();
-  }, [item.title, item.year, mediaType]);
+
+    fetchEmbedId();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item, mediaType]);
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
-      // Try iframe first, fall back to modal
-      const el = iframeRef.current || modalRef.current;
-      el?.requestFullscreen().catch(() => {
+      const element = iframeRef.current || modalRef.current;
+      element?.requestFullscreen().catch(() => {
         modalRef.current?.requestFullscreen();
       });
-    } else {
-      document.exitFullscreen();
+      return;
     }
+
+    document.exitFullscreen();
   }
 
-  function getFallbackUrl() {
-    const title = encodeURIComponent(item.title);
-    if (isTV) return `https://vidsrc.me/embed/tv?tmdb=${title}&season=${season}&episode=${episode}`;
-    return `https://vidsrc.me/embed/movie?tmdb=${title}`;
-  }
-
-  const embedUrl = tmdbId
-    ? buildUrl(provider, tmdbId, mediaType, season, episode)
-    : getFallbackUrl();
-
+  const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
   const totalSeasons = item.seasons || 3;
 
   return (
     <div className="player-overlay" onClick={onClose}>
-      <div className="player-modal" ref={modalRef} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
+      <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
         <div className="player-header">
           <div className="player-title">
-            <span>{isTV ? '📺' : '🎬'}</span>
+            <span>{isTV ? 'TV' : 'Movie'}</span>
             <div>
               <strong>{item.title}</strong>
               {item.year && <span className="player-year">{item.year}</span>}
-              {tmdbId && <span className="player-tmdb-badge">TMDB ✓</span>}
+              {externalId && (
+                <span className="player-tmdb-badge">{externalId.kind.toUpperCase()} OK</span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -123,42 +166,38 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             >
-              {isFullscreen ? '↙' : '↗'}
+              {isFullscreen ? '<' : '>'}
             </button>
-            <button className="player-close" onClick={onClose} title="Close">✕</button>
+            <button className="player-close" onClick={onClose} title="Close">X</button>
           </div>
         </div>
 
-        {/* TMDB lookup status */}
         {lookupState === 'loading' && (
           <div className="player-lookup-bar">
-            <span className="player-lookup-dot" /> Looking up media ID...
+            <span className="player-lookup-dot" /> Looking up a stream ID...
           </div>
         )}
         {lookupState === 'error' && (
           <div className="player-lookup-bar player-lookup-bar--warn">
-            ⚠️ Could not find TMDB ID for "{item.title}" — stream may not load. Try switching sources.
-          </div>
-        )}
-        {lookupState === 'no-key' && (
-          <div className="player-lookup-bar player-lookup-bar--warn">
-            ⚠️ Add <code>TMDB_API_KEY</code> to your .env for better stream matching.
+            {lookupError || `Could not find a provider-compatible IMDb or TMDB ID for "${item.title}".`}
           </div>
         )}
 
-        {/* TV Controls */}
         {isTV && (
           <div className="player-tv-controls">
             <div className="player-control-group">
               <label>Season</label>
               <div className="player-episode-btns">
-                {Array.from({ length: totalSeasons }, (_, i) => i + 1).map(s => (
+                {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => (
                   <button
-                    key={s}
-                    className={`player-ep-btn ${season === s ? 'active' : ''}`}
-                    onClick={() => { setSeason(s); setEpisode(1); }}
+                    key={value}
+                    className={`player-ep-btn ${season === value ? 'active' : ''}`}
+                    onClick={() => {
+                      setSeason(value);
+                      setEpisode(1);
+                    }}
                   >
-                    {s}
+                    {value}
                   </button>
                 ))}
               </div>
@@ -166,13 +205,13 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
             <div className="player-control-group">
               <label>Episode</label>
               <div className="player-episode-btns">
-                {Array.from({ length: 20 }, (_, i) => i + 1).map(e => (
+                {Array.from({ length: 20 }, (_, index) => index + 1).map((value) => (
                   <button
-                    key={e}
-                    className={`player-ep-btn ${episode === e ? 'active' : ''}`}
-                    onClick={() => setEpisode(e)}
+                    key={value}
+                    className={`player-ep-btn ${episode === value ? 'active' : ''}`}
+                    onClick={() => setEpisode(value)}
                   >
-                    {e}
+                    {value}
                   </button>
                 ))}
               </div>
@@ -180,43 +219,40 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           </div>
         )}
 
-        {/* Provider switcher */}
         <div className="player-providers">
           <span className="player-providers-label">Source:</span>
-          {PROVIDERS.map(p => (
+          {PROVIDERS.map((entry) => (
             <button
-              key={p.id}
-              className={`player-provider-btn ${provider === p.id ? 'active' : ''}`}
-              onClick={() => setProvider(p.id)}
+              key={entry.id}
+              className={`player-provider-btn ${provider === entry.id ? 'active' : ''}`}
+              onClick={() => setProvider(entry.id)}
             >
-              {p.label}
+              {entry.label}
             </button>
           ))}
         </div>
 
-        {/* iFrame */}
         <div className="player-frame-wrap">
           {embedUrl ? (
             <iframe
-              key={`${provider}-${tmdbId}-${season}-${episode}`}
+              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
               ref={iframeRef}
               src={embedUrl}
               className="player-frame"
-              allowFullScreen
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-              allowFullScreen={true}
+              allowFullScreen
               referrerPolicy="no-referrer"
               title={`Watch ${item.title}`}
             />
           ) : (
             <div className="player-no-url">
-              <p>⏳ Preparing stream...</p>
+              <p>{lookupState === 'loading' ? 'Preparing stream...' : 'Stream unavailable right now.'}</p>
             </div>
           )}
         </div>
 
         <p className="player-note">
-          If the video doesn't load, try switching sources above.
+          VidSrc needs an IMDb or TMDB ID. This player now tries direct item IDs first, then an IMDb title lookup.
         </p>
       </div>
     </div>

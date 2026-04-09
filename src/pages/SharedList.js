@@ -188,16 +188,19 @@ export default function SharedList() {
         ) : (
           <>
             <div className="page-header">
+              <p className="page-kicker">Shared List</p>
               <div className="lists-detail-title-row">
                 <h1>{list.name}</h1>
                 <span className={`lists-visibility-badge${list.is_public ? ' is-public' : ''}`}>
                   {list.is_public ? 'Public' : 'Private'}
                 </span>
               </div>
-              <p className="books-page-subtitle">
+              <p className="page-subtitle books-page-subtitle">
                 Curated by {list.owner.username}. Anonymous vibe votes update live so the group can converge on a pick.
               </p>
             </div>
+
+            {statusMessage && <div className="status-banner">{statusMessage}</div>}
 
             {consensusPick && (
               <section className="lists-card lists-consensus-card">
@@ -340,8 +343,6 @@ export default function SharedList() {
             </section>
           </>
         )}
-
-        {statusMessage && <p className="lists-page-status">{statusMessage}</p>}
       </main>
     </div>
   );
