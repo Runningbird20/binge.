@@ -1,0 +1,74 @@
+# Project 3 requirements
+#
+# This repository is a Node.js/React/Express application, not a Python app.
+# There are no Python package dependencies to install with pip.
+# This file documents the runtime requirements, Node dependencies, and the
+# commands needed to install and run the project.
+#
+# System requirements
+# - Node.js 18+
+# - npm 9+
+#
+# Local environment
+# - The app expects REACT_APP_API_URL=http://localhost:5001 for local use.
+# - The repository already includes a .env file with local development values.
+#
+# Install dependencies
+#   npm install
+#
+# If the SQLite native module needs a rebuild on your machine
+#   npm rebuild better-sqlite3
+#
+# Run the full app locally
+#   npm start
+#
+# Run only the frontend
+#   npm run start:client
+#
+# Run only the backend API
+#   npm run server
+#
+# Build for production
+#   npm run build
+#
+# Run tests
+#   npm test
+#
+# Optional catalog/data import commands
+#   npm run import:books
+#   npm run import:books:bulk
+#   npm run import:books:resume
+#   npm run import:movies
+#   npm run import:movies:bulk
+#   npm run import:movies:resume
+#   npm run import:tv
+#   npm run import:tv:bulk
+#   npm run import:tv:resume
+#   npm run import:plex
+#   npm run import:plex:bulk
+#   npm run import:plex:resume
+#
+# Node application dependencies from package.json
+# - @testing-library/dom ^10.4.1
+# - @testing-library/jest-dom ^6.9.1
+# - @testing-library/react ^16.3.2
+# - @testing-library/user-event ^13.5.0
+# - bcryptjs ^3.0.3
+# - better-sqlite3 ^12.8.0
+# - concurrently ^9.2.1
+# - cors ^2.8.6
+# - dotenv ^17.4.0
+# - express ^5.2.1
+# - jsonwebtoken ^9.0.3
+# - playwright ^1.59.1
+# - react ^19.2.4
+# - react-dom ^19.2.4
+# - react-router-dom ^7.13.2
+# - react-scripts 5.0.1
+# - web-vitals ^2.1.4
+#
+# Development dependencies
+# - patch-package ^8.0.1
+
+npm install
+npm revbuild better-sqlite3
