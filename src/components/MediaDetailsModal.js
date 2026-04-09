@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
-import StarRating from './StarRating';
+import { useEffect, useState } from 'react';
 import ListSaveControls from './ListSaveControls';
+import RatingInput from './RatingInput';
+import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 
 function getImageUrl(item) {
   return item.poster_url || item.cover_url || item.image_url || '';
@@ -19,6 +20,11 @@ function getRuntimeLabel(item) {
   return 'Details';
 }
 
+function allCategoriesFilled(mediaType, scores) {
+  const cats = RATING_CATEGORIES[mediaType] || [];
+  return cats.every((cat) => scores[cat.key] >= 1);
+}
+
 export default function MediaDetailsModal({
   item,
   mediaType,
@@ -31,13 +37,26 @@ export default function MediaDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
 }) {
+  const [draftScores, setDraftScores] = useState({});
+  const [draftReview, setDraftReview] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Populate form when userRating changes (existing rating loaded)
+  useEffect(() => {
+    if (userRating && typeof userRating === 'object') {
+      setDraftScores(userRating);
+      setDraftReview(userRating.review || '');
+    } else {
+      setDraftScores({});
+      setDraftReview('');
+    }
+  }, [userRating, item]);
+
   useEffect(() => {
     if (!item) return undefined;
 
     function handleKeyDown(event) {
-      if (event.key === 'Escape') {
-        onClose();
-      }
+      if (event.key === 'Escape') onClose();
     }
 
     document.addEventListener('keydown', handleKeyDown);
@@ -52,15 +71,28 @@ export default function MediaDetailsModal({
 
   if (!item) return null;
 
-  const imageUrl = getImageUrl(item);
-  const subtitle = item.director || item.creator || item.author || item.studio || '';
+  const imageUrl  = getImageUrl(item);
+  const subtitle  = item.director || item.creator || item.author || item.studio || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
-  const typeLabel = mediaType === 'movie' ? 'Movie Details' : 'TV Show Details';
+  const typeLabel = mediaType === 'movie' ? 'Movie Details' : mediaType === 'tv_show' ? 'TV Show Details' : 'Book Details';
+
+  const canSave = allCategoriesFilled(mediaType, draftScores);
+  const displayScore = computeNormalizedScore(mediaType, draftScores);
+
+  async function handleSave() {
+    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onRate(item, draftScores, draftReview);
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <div className="book-detail-overlay" onClick={onClose}>
       <div
-        className="book-detail-modal"
+        className="book-detail-modal book-detail-modal-wide"
         role="dialog"
         aria-modal="true"
         aria-labelledby="media-detail-title"
@@ -85,6 +117,14 @@ export default function MediaDetailsModal({
               </div>
             )}
           </div>
+
+          {/* Artifact shown below the poster */}
+          <div className="artifact-panel">
+            <RatingArtifact mediaType={mediaType} scores={draftScores} size={220} />
+            {displayScore !== null && (
+              <p className="artifact-score">{displayScore}<span>/10</span></p>
+            )}
+          </div>
         </div>
 
         <div className="book-detail-content">
@@ -93,10 +133,12 @@ export default function MediaDetailsModal({
           {subtitle && <p className="book-detail-author">{subtitle}</p>}
 
           <div className="book-detail-meta">
-            {item.genre && <span className="book-detail-meta-chip">{item.genre}</span>}
-            {item.year && <span className="book-detail-meta-chip">{item.year}</span>}
+            {item.genre   && <span className="book-detail-meta-chip">{item.genre}</span>}
+            {item.year    && <span className="book-detail-meta-chip">{item.year}</span>}
             {item.runtime && <span className="book-detail-meta-chip">{item.runtime} min</span>}
-            {item.seasons != null && <span className="book-detail-meta-chip">{item.seasons} season{item.seasons === 1 ? '' : 's'}</span>}
+            {item.seasons != null && (
+              <span className="book-detail-meta-chip">{item.seasons} season{item.seasons === 1 ? '' : 's'}</span>
+            )}
           </div>
 
           {(item.overview || item.synopsis) && (
@@ -117,29 +159,60 @@ export default function MediaDetailsModal({
             {(item.seasons != null || item.runtime != null) && (
               <div className="book-detail-summary-row">
                 <span className="book-detail-summary-label">{getRuntimeLabel(item)}</span>
-                <span>{item.seasons != null ? `${item.seasons} season${item.seasons === 1 ? '' : 's'}` : `${item.runtime} min`}</span>
+                <span>
+                  {item.seasons != null
+                    ? `${item.seasons} season${item.seasons === 1 ? '' : 's'}`
+                    : `${item.runtime} min`}
+                </span>
               </div>
             )}
             {avgRating && (
               <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Rating</span>
-                <span>{avgRating} / 10</span>
+                <span className="book-detail-summary-label">Community Score</span>
+                <span>{avgRating} / 10 ({item.rating_count} rating{item.rating_count === 1 ? '' : 's'})</span>
               </div>
             )}
           </div>
 
-          <div className="book-detail-actions">
-            <StarRating
-              value={userRating}
-              onChange={(rating) => onRate && onRate(item, rating)}
-              readOnly={!allowActions || !onRate}
+          {/* Rating input */}
+          <div className="rating-section">
+            <p className="rating-section-title">Your Rating</p>
+            <RatingInput
+              mediaType={mediaType}
+              value={draftScores}
+              onChange={allowActions ? setDraftScores : () => {}}
             />
-            {allowActions && onWatchlist && (
+            <textarea
+              className="review-textarea"
+              placeholder="Write a review (optional)..."
+              value={draftReview}
+              onChange={(e) => setDraftReview(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              disabled={!allowActions}
+            />
+            <div className="rating-section-actions">
+              <button
+                type="button"
+                className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
+                onClick={handleSave}
+                disabled={!allowActions || !canSave || isSaving}
+              >
+                {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+              </button>
+              {allowActions && !canSave && (
+                <span className="rating-incomplete-hint">Rate all categories to save</span>
+              )}
+            </div>
+          </div>
+
+          <div className="book-detail-actions">
+            {onWatchlist && (
               <button
                 type="button"
                 className="btn-primary book-detail-library-btn"
                 onClick={() => onWatchlist(item)}
-                disabled={isAddingWatchlist}
+                disabled={!allowActions || isAddingWatchlist}
               >
                 {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
               </button>

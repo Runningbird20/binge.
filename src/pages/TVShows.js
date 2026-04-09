@@ -34,7 +34,6 @@ export default function TVShows() {
 
   const fetchShows = useCallback(async () => {
     setLoading(true);
-
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
@@ -55,10 +54,7 @@ export default function TVShows() {
       // Auto-open modal if ?open=ID is in the URL
       if (openId) {
         const match = items.find((s) => s.id === openId);
-        if (match) {
-          setSelectedItem(match);
-          setDetailMessage('');
-        }
+        if (match) { setSelectedItem(match); setDetailMessage(''); }
       }
     } catch {
       try {
@@ -90,28 +86,26 @@ export default function TVShows() {
   useEffect(() => {
     api.get('/ratings/my?media_type=tv_show')
       .then((ratings) => {
-        const nextRatings = {};
-        ratings.forEach((rating) => {
-          nextRatings[rating.media_id] = rating.rating;
-        });
-        setUserRatings(nextRatings);
+        const next = {};
+        ratings.forEach((r) => { next[r.media_id] = r; });
+        setUserRatings(next);
       })
       .catch(() => {});
   }, []);
 
-  async function handleRate(item, rating) {
+  async function handleRate(item, categories, review) {
     try {
-      await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, rating });
-      setUserRatings((current) => ({ ...current, [item.id]: rating }));
+      await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, categories, review });
+      setUserRatings((cur) => ({ ...cur, [item.id]: { ...categories, media_id: item.id, review } }));
+      setDetailMessage('Rating saved!');
     } catch (error) {
-      alert(error.message);
+      setDetailMessage(error.message);
     }
   }
 
   async function handleWatchlist(item) {
     setIsAddingWatchlist(true);
     setDetailMessage('');
-
     try {
       await api.post('/watchlist', { media_type: 'tv_show', media_id: item.id });
       setDetailMessage(`"${item.title}" added to your watchlist.`);
@@ -174,9 +168,7 @@ export default function TVShows() {
             >
               <option value="">All Genres</option>
               {genreOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+                <option key={option} value={option}>{option}</option>
               ))}
             </select>
             <select
@@ -218,7 +210,6 @@ export default function TVShows() {
                   item={show}
                   mediaType="tv_show"
                   userRating={userRatings[show.id]}
-                  onRate={usingFallbackCatalog ? undefined : handleRate}
                   onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
                   onOpenDetails={openItemDetails}
                 />
