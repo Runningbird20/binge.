@@ -4,6 +4,11 @@ import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { api } from '../api';
+import {
+  buildMediaGenreFacets,
+  filterMediaItems,
+  loadFallbackMovies,
+} from '../catalogFallback';
 
 function normalizeMediaItems(data) {
   if (Array.isArray(data)) return data;
@@ -25,6 +30,7 @@ export default function Movies() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
+  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
 
   const fetchMovies = useCallback(async () => {
     setLoading(true);
@@ -36,17 +42,40 @@ export default function Movies() {
 
       const data = await api.get(`/media/movies?${params}`);
       const items = normalizeMediaItems(data);
+      if (items.length === 0) {
+        throw new Error('Movie catalog is empty');
+      }
+
       setMovies(items);
       setFacets({
         genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
       });
+      setUsingFallbackCatalog(false);
+      // Auto-open modal if ?open=ID is in the URL
       if (openId) {
         const match = items.find((m) => m.id === openId);
         if (match) { setSelectedItem(match); setDetailMessage(''); }
       }
     } catch {
-      setMovies([]);
-      setFacets({ genres: [] });
+      try {
+        const fallbackItems = await loadFallbackMovies();
+        const filteredItems = filterMediaItems(fallbackItems, { search, genre, sortOrder });
+        setMovies(filteredItems);
+        setFacets({ genres: buildMediaGenreFacets(fallbackItems) });
+        setUsingFallbackCatalog(true);
+
+        if (openId) {
+          const match = filteredItems.find((movie) => movie.id === openId);
+          if (match) {
+            setSelectedItem(match);
+            setDetailMessage('');
+          }
+        }
+      } catch {
+        setMovies([]);
+        setFacets({ genres: [] });
+        setUsingFallbackCatalog(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -113,6 +142,9 @@ export default function Movies() {
               <p className="surface-panel-copy">
                 Search by title, narrow by genre, and sort without leaving the page.
               </p>
+              {usingFallbackCatalog && (
+                <p className="surface-panel-copy">Showing the bundled movie catalog snapshot.</p>
+              )}
             </div>
             <p className="surface-panel-meta">
               {loading ? 'Loading movies...' : `${movies.length} movie${movies.length === 1 ? '' : 's'} found`}
@@ -178,7 +210,7 @@ export default function Movies() {
                   item={movie}
                   mediaType="movie"
                   userRating={userRatings[movie.id]}
-                  onWatchlist={handleWatchlist}
+                  onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
                   onOpenDetails={openItemDetails}
                 />
               ))}
@@ -192,11 +224,13 @@ export default function Movies() {
           item={selectedItem}
           mediaType="movie"
           onClose={closeItemDetails}
-          onRate={handleRate}
-          onWatchlist={handleWatchlist}
+          onRate={usingFallbackCatalog ? undefined : handleRate}
+          onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
           userRating={userRatings[selectedItem.id]}
           isAddingWatchlist={isAddingWatchlist}
           detailMessage={detailMessage}
+          allowActions={!usingFallbackCatalog}
+          browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}
     </div>

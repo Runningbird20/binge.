@@ -34,6 +34,8 @@ export default function MediaDetailsModal({
   userRating,
   isAddingWatchlist,
   detailMessage,
+  allowActions = true,
+  browseOnlyMessage = '',
 }) {
   const [draftScores, setDraftScores] = useState({});
   const [draftReview, setDraftReview] = useState('');
@@ -78,7 +80,7 @@ export default function MediaDetailsModal({
   const displayScore = computeNormalizedScore(mediaType, draftScores);
 
   async function handleSave() {
-    if (!canSave || isSaving) return;
+    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
     setIsSaving(true);
     try {
       await onRate(item, draftScores, draftReview);
@@ -178,7 +180,7 @@ export default function MediaDetailsModal({
             <RatingInput
               mediaType={mediaType}
               value={draftScores}
-              onChange={setDraftScores}
+              onChange={allowActions ? setDraftScores : () => {}}
             />
             <textarea
               className="review-textarea"
@@ -187,17 +189,18 @@ export default function MediaDetailsModal({
               onChange={(e) => setDraftReview(e.target.value)}
               rows={3}
               maxLength={2000}
+              disabled={!allowActions}
             />
             <div className="rating-section-actions">
               <button
                 type="button"
-                className={`btn-primary${canSave ? '' : ' btn-disabled'}`}
+                className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
                 onClick={handleSave}
-                disabled={!canSave || isSaving}
+                disabled={!allowActions || !canSave || isSaving}
               >
-                {isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+                {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
               </button>
-              {!canSave && (
+              {allowActions && !canSave && (
                 <span className="rating-incomplete-hint">Rate all categories to save</span>
               )}
             </div>
@@ -209,12 +212,17 @@ export default function MediaDetailsModal({
                 type="button"
                 className="btn-primary book-detail-library-btn"
                 onClick={() => onWatchlist(item)}
-                disabled={isAddingWatchlist}
+                disabled={!allowActions || isAddingWatchlist}
               >
                 {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
               </button>
             )}
-            <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
+            {allowActions && (
+              <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
+            )}
+            {!allowActions && browseOnlyMessage && (
+              <p className="book-detail-status">{browseOnlyMessage}</p>
+            )}
             {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
           </div>
         </div>
