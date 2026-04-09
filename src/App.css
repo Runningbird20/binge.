@@ -2545,3 +2545,120 @@ body {
   .chatbot-panel { width: calc(100vw - 2rem); right: 1rem; bottom: 5rem; }
   .chatbot-fab { right: 1rem; bottom: 1rem; }
 }
+
+
+.req-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.req-close {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.2rem;
+  line-height: 1;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.req-close:hover { color: #e8e8e8; }
+
+.req-subtitle {
+  margin: 0 0 1.25rem 0;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.req-error {
+  background: rgba(240,128,128,0.1);
+  border: 1px solid rgba(240,128,128,0.25);
+  border-radius: 8px;
+  color: #f08080;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.req-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.req-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+}
+
+.req-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #a0a0a0;
+  letter-spacing: 0.02em;
+}
+
+.req-optional {
+  font-weight: 400;
+  color: #555;
+}
+
+.req-field input,
+.req-field select,
+.req-field textarea {
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid #2a2a2a;
+  background-color: #0f0f0f;
+  color: #e8e8e8;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.req-field input:focus,
+.req-field select:focus,
+.req-field textarea:focus { border-color: #e8c97a; }
+.req-field input::placeholder,
+.req-field textarea::placeholder { color: #444; }
+.req-field textarea { resize: vertical; min-height: 70px; }
+.req-field select option { background: #111; }
+
+.req-field-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.req-submit {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #e8c97a 0%, #c9a94e 100%);
+  color: #0f0f0f;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  margin-top: 0.25rem;
+}
+.req-submit:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.req-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.req-success {
+  text-align: center;
+  padding: 1.5rem 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.req-success-icon { font-size: 2.8rem; }
+.req-success h3 { margin: 0; color: #fff; font-size: 1.2rem; }
+.req-success p { margin: 0; color: #888; font-size: 0.9rem; }
+.req-success .btn-primary { margin-top: 1rem; }

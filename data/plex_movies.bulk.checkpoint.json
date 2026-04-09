@@ -1,14 +1,14 @@
 {
   "source": "plex",
   "mediaType": "movie",
-  "catalogPath": "/movie-database/2026",
-  "catalogLabel": "2026",
+  "catalogPath": "/movie-database/2027",
+  "catalogLabel": "2027",
   "totalPages": 108,
-  "processedPages": 1,
-  "collected": 1050,
-  "currentItemIndex": 1626,
-  "currentPageItemCount": 6137,
-  "currentItemSlug": "the-falling-sun",
-  "nextPage": 2,
-  "updatedAt": "2026-04-09T00:21:24.088Z"
+  "processedPages": 0,
+  "collected": 0,
+  "currentItemIndex": 100,
+  "currentPageItemCount": 364,
+  "currentItemSlug": "neanderthal-2027",
+  "nextPage": 1,
+  "updatedAt": "2026-04-09T17:15:26.232Z"
 }

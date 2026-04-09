@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
+import ForYou from '../components/ForYou';
 
 export default function Home() {
   const { user } = useAuth();
@@ -73,6 +74,8 @@ export default function Home() {
               </Link>
             </div>
           </section>
+
+          <ForYou />
 
           <section className="home-section">
             <div className="section-header">
