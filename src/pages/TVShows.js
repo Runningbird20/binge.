@@ -24,11 +24,13 @@ export default function TVShows() {
 
   const fetchShows = useCallback(async () => {
     setLoading(true);
+
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (genre) params.set('genre', genre);
       if (sortOrder) params.set('sort', sortOrder);
+
       const data = await api.get(`/media/tv-shows?${params}`);
       setShows(normalizeMediaItems(data));
       setFacets({
@@ -49,11 +51,11 @@ export default function TVShows() {
   useEffect(() => {
     api.get('/ratings/my?media_type=tv_show')
       .then((ratings) => {
-        const map = {};
+        const nextRatings = {};
         ratings.forEach((rating) => {
-          map[rating.media_id] = rating.rating;
+          nextRatings[rating.media_id] = rating.rating;
         });
-        setUserRatings(map);
+        setUserRatings(nextRatings);
       })
       .catch(() => {});
   }, []);
@@ -61,20 +63,21 @@ export default function TVShows() {
   async function handleRate(item, rating) {
     try {
       await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, rating });
-      setUserRatings((prev) => ({ ...prev, [item.id]: rating }));
-    } catch (err) {
-      alert(err.message);
+      setUserRatings((current) => ({ ...current, [item.id]: rating }));
+    } catch (error) {
+      alert(error.message);
     }
   }
 
   async function handleWatchlist(item) {
     setIsAddingWatchlist(true);
     setDetailMessage('');
+
     try {
       await api.post('/watchlist', { media_type: 'tv_show', media_id: item.id });
       setDetailMessage(`"${item.title}" added to your watchlist.`);
-    } catch (err) {
-      setDetailMessage(err.message);
+    } catch (error) {
+      setDetailMessage(error.message);
     } finally {
       setIsAddingWatchlist(false);
     }
@@ -105,83 +108,95 @@ export default function TVShows() {
       <Navbar />
       <main className="page-content">
         <div className="page-header">
-          <div>
-            <h1>TV Shows</h1>
-            <p>Browse TV shows and open a tile to see full details and quick actions.</p>
-          </div>
-        </div>
-
-        <div className="filter-bar">
-          <input
-            className="search-input"
-            type="text"
-            aria-label="Search TV shows"
-            placeholder="Search TV shows..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className="filter-input"
-            aria-label="Genre"
-            value={genre}
-            onChange={(e) => setGenre(e.target.value)}
-          >
-            <option value="">All Genres</option>
-            {genreOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-          <select
-            className="filter-input"
-            aria-label="Sort by"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
-          >
-            <option value="title-asc">Title A-Z</option>
-            <option value="title-desc">Title Z-A</option>
-            <option value="year-desc">Newest First</option>
-            <option value="year-asc">Oldest First</option>
-          </select>
-          {hasActiveFilters && (
-            <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-              Clear
-            </button>
-          )}
-        </div>
-
-        <div className="books-results-header">
-          <p className="books-results-count">
-            {loading ? 'Loading shows...' : `${shows.length} show${shows.length === 1 ? '' : 's'} found`}
+          <p className="page-kicker">Browse</p>
+          <h1>TV Shows</h1>
+          <p className="page-subtitle">
+            Explore series, compare genres, and jump from discovery into ratings, watchlists, and shared planning.
           </p>
-          {hasActiveFilters && !loading && (
-            <p className="books-results-summary">Showing results for your active filters.</p>
-          )}
         </div>
 
-        {loading ? (
-          <div className="loading-state">Loading...</div>
-        ) : shows.length === 0 ? (
-          <div className="empty-state">
-            <p>No TV shows found.</p>
-            <p className="empty-hint">Try a different search or clear the filters.</p>
+        <section className="surface-panel">
+          <div className="surface-panel-header">
+            <div>
+              <h2>Filter the Catalog</h2>
+              <p className="surface-panel-copy">
+                Search by title, narrow by genre, and sort your shortlist in one place.
+              </p>
+            </div>
+            <p className="surface-panel-meta">
+              {loading ? 'Loading shows...' : `${shows.length} show${shows.length === 1 ? '' : 's'} found`}
+            </p>
           </div>
-        ) : (
-          <div className="media-grid">
-            {shows.map((show) => (
-              <MediaCard
-                key={show.id}
-                item={show}
-                mediaType="tv_show"
-                userRating={userRatings[show.id]}
-                onRate={handleRate}
-                onWatchlist={handleWatchlist}
-                onOpenDetails={openItemDetails}
-              />
-            ))}
+
+          <div className="filter-bar">
+            <input
+              className="search-input"
+              type="text"
+              aria-label="Search TV shows"
+              placeholder="Search TV shows..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="filter-input"
+              aria-label="Genre"
+              value={genre}
+              onChange={(event) => setGenre(event.target.value)}
+            >
+              <option value="">All Genres</option>
+              {genreOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select
+              className="filter-input"
+              aria-label="Sort by"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            >
+              <option value="title-asc">Title A-Z</option>
+              <option value="title-desc">Title Z-A</option>
+              <option value="year-desc">Newest First</option>
+              <option value="year-asc">Oldest First</option>
+            </select>
+            {hasActiveFilters && (
+              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
+                Clear
+              </button>
+            )}
           </div>
-        )}
+
+          {hasActiveFilters && !loading && (
+            <p className="surface-panel-copy">Showing results for your active filters.</p>
+          )}
+        </section>
+
+        <section className="surface-panel surface-panel-spacious">
+          {loading ? (
+            <div className="loading-state">Loading...</div>
+          ) : shows.length === 0 ? (
+            <div className="empty-state">
+              <p>No TV shows found.</p>
+              <p className="empty-hint">Try a different search or clear the filters.</p>
+            </div>
+          ) : (
+            <div className="media-grid">
+              {shows.map((show) => (
+                <MediaCard
+                  key={show.id}
+                  item={show}
+                  mediaType="tv_show"
+                  userRating={userRatings[show.id]}
+                  onRate={handleRate}
+                  onWatchlist={handleWatchlist}
+                  onOpenDetails={openItemDetails}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       {selectedItem && (
