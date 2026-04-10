@@ -590,8 +590,16 @@ body {
   gap: 0.75rem;
 }
 
+.badge-card-tier-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .badge-card-kicker,
-.badge-card-status {
+.badge-card-status,
+.badge-card-tier {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -619,6 +627,36 @@ body {
   background-color: rgba(232, 201, 122, 0.12);
   border-color: rgba(232, 201, 122, 0.24);
   color: #f1dfb0;
+}
+
+.badge-card-tier-copy {
+  color: #d2d2d2;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.badge-card-tier-bronze {
+  background-color: rgba(179, 122, 67, 0.16);
+  border: 1px solid rgba(179, 122, 67, 0.28);
+  color: #deb58e;
+}
+
+.badge-card-tier-silver {
+  background-color: rgba(172, 182, 193, 0.16);
+  border: 1px solid rgba(172, 182, 193, 0.28);
+  color: #e0e7ee;
+}
+
+.badge-card-tier-gold {
+  background-color: rgba(232, 201, 122, 0.16);
+  border: 1px solid rgba(232, 201, 122, 0.28);
+  color: #f1dfb0;
+}
+
+.badge-card-tier-platinum {
+  background-color: rgba(108, 210, 214, 0.16);
+  border: 1px solid rgba(108, 210, 214, 0.28);
+  color: #c8f5f6;
 }
 
 .badge-card h3 {
@@ -661,6 +699,31 @@ body {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #5db88a 0%, #e8c97a 100%);
+}
+
+.badge-card.badge-card-tier-bronze .badge-progress-track span {
+  background: linear-gradient(90deg, #b37a43 0%, #deb58e 100%);
+}
+
+.badge-card.badge-card-tier-silver .badge-progress-track span {
+  background: linear-gradient(90deg, #97a7b5 0%, #dbe2e8 100%);
+}
+
+.badge-card.badge-card-tier-gold .badge-progress-track span {
+  background: linear-gradient(90deg, #c9a24b 0%, #f1dfb0 100%);
+}
+
+.badge-card.badge-card-tier-platinum .badge-progress-track span {
+  background: linear-gradient(90deg, #71cfd1 0%, #d4f7f8 100%);
+}
+
+.badge-progress-caption {
+  margin: -0.15rem 0 0 0;
+  color: #8f8f8f;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .home-recap-summary {
