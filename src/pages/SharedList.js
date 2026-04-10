@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,7 +68,7 @@ export default function SharedList() {
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  async function loadList({ silent = false } = {}) {
+  const loadList = useCallback(async ({ silent = false } = {}) => {
     if (!shareCode) {
       setErrorMessage('Missing list link.');
       setLoading(false);
@@ -91,7 +91,7 @@ export default function SharedList() {
         setLoading(false);
       }
     }
-  }
+  }, [shareCode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +114,7 @@ export default function SharedList() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [shareCode]);
+  }, [shareCode, loadList]);
 
   async function handleVote(item, value) {
     if (!list?.permissions?.canVote) return;

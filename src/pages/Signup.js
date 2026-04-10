@@ -1,14 +1,13 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api';
 import UserAvatar from '../components/UserAvatar';
 
 const MAX_BIO_LENGTH = 280;
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 
 export default function Signup() {
-  const { login } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
   const avatarInputRef = useRef(null);
   const [form, setForm] = useState({
@@ -20,6 +19,7 @@ export default function Signup() {
   });
   const [avatarFileName, setAvatarFileName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   function updateForm(key, value) {
@@ -76,6 +76,7 @@ export default function Signup() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (form.password.length < 6) {
       setError('Password must be at least 6 characters');
@@ -95,8 +96,11 @@ export default function Signup() {
         email: form.email.trim(),
         bio: form.bio.trim(),
       };
-      const { token, user } = await api.post('/auth/signup', payload);
-      login(user, token);
+      const result = await signUp(payload);
+      if (result.requiresEmailConfirmation) {
+        setSuccess('Check your email to confirm your account, then come back here to log in.');
+        return;
+      }
       navigate('/home');
     } catch (err) {
       setError(err.message);
@@ -115,6 +119,7 @@ export default function Signup() {
         </p>
 
         {error && <div className="auth-error">{error}</div>}
+        {success && <div className="settings-success">{success}</div>}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="avatar-field">

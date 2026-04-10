@@ -6,6 +6,13 @@ import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import { api } from '../api';
 import {
+  addSupabaseWatchlistItem,
+  fetchSupabaseRatingMap,
+  fetchSupabaseWatchlist,
+  saveSupabaseRating,
+} from '../utils/supabaseData';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
+import {
   buildMediaGenreFacets,
   filterBooksCatalog,
   loadFallbackBooks,
@@ -98,6 +105,7 @@ function BookDetailsModal({
   const cats = RATING_CATEGORIES.book;
   const canSave = cats.every((cat) => draftScores[cat.key] >= 1);
   const displayScore = computeNormalizedScore('book', draftScores);
+  const canUseLegacyBackend = hasLegacyBackendSession();
 
   async function handleSave() {
     if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
@@ -203,7 +211,7 @@ function BookDetailsModal({
                 {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
               </button>
             )}
-            {allowActions && (
+            {allowActions && canUseLegacyBackend && (
               <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
             )}
             {!allowActions && browseOnlyMessage && (
@@ -364,12 +372,12 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, sortOrder, page]);
+  }, [debouncedSearch, genre, sortOrder, page, openId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    api.get('/watchlist?media_type=book')
+    fetchSupabaseWatchlist({ mediaType: 'book' })
       .then((items) => {
         if (cancelled) return;
         const nextLibraryIds = {};
@@ -382,12 +390,8 @@ export default function Books() {
   }, []);
 
   useEffect(() => {
-    api.get('/ratings/my?media_type=book')
-      .then((ratings) => {
-        const next = {};
-        ratings.forEach((r) => { next[r.media_id] = r; });
-        setUserRatings(next);
-      })
+    fetchSupabaseRatingMap('book')
+      .then(setUserRatings)
       .catch(() => {});
   }, []);
 
@@ -441,7 +445,7 @@ export default function Books() {
 
   async function handleRate(book, categories, review) {
     try {
-      await api.post('/ratings', { media_type: 'book', media_id: book.id, categories, review });
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, review });
       setUserRatings((cur) => ({ ...cur, [book.id]: { ...categories, media_id: book.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
@@ -454,9 +458,9 @@ export default function Books() {
     setAddingBookId(book.id);
 
     try {
-      await api.post('/watchlist', {
-        media_type: 'book',
-        media_id: book.id,
+      await addSupabaseWatchlistItem({
+        mediaType: 'book',
+        mediaId: book.id,
         status: 'plan_to_read',
       });
 

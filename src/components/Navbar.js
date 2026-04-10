@@ -1,13 +1,15 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
 import UserAvatar from './UserAvatar';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const canUseLegacyBackend = hasLegacyBackendSession();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate('/');
   }
 
@@ -21,7 +23,9 @@ export default function Navbar() {
             <NavLink to="/tv-shows"  className={({ isActive }) => isActive ? 'active' : ''}>TV Shows</NavLink>
             <NavLink to="/books"     className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
             <NavLink to="/ratings"   className={({ isActive }) => isActive ? 'active' : ''}>My Ratings</NavLink>
-            <NavLink to="/lists"     className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
+            {canUseLegacyBackend && (
+              <NavLink to="/lists" className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
+            )}
             <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
           </div>
           <div className="navbar-user">
