@@ -237,6 +237,44 @@ test('shows milestone badges and an annual recap on the home page', async () => 
       created_at: '2025-11-21 10:00:00',
     },
   ];
+  const watchlist = [
+    {
+      id: 1,
+      media_type: 'movie',
+      title: 'Harry Potter and the Sorcerer\'s Stone',
+      status: 'watched',
+    },
+    {
+      id: 2,
+      media_type: 'movie',
+      title: 'Harry Potter and the Chamber of Secrets',
+      status: 'watched',
+    },
+    {
+      id: 3,
+      media_type: 'movie',
+      title: 'Harry Potter and the Prisoner of Azkaban',
+      status: 'watched',
+    },
+    {
+      id: 4,
+      media_type: 'movie',
+      title: 'Harry Potter and the Goblet of Fire',
+      status: 'watched',
+    },
+    {
+      id: 5,
+      media_type: 'book',
+      title: 'Harry Potter and the Prisoner of Azkaban',
+      status: 'read',
+    },
+    {
+      id: 6,
+      media_type: 'tv_show',
+      title: 'The Bear',
+      status: 'watched',
+    },
+  ];
 
   global.fetch.mockImplementation((url) => {
     if (url === '/api/ratings/my') {
@@ -250,7 +288,7 @@ test('shows milestone badges and an annual recap on the home page', async () => 
     if (url === '/api/watchlist') {
       return Promise.resolve(
         mockResponse({
-          body: JSON.stringify([{ id: 1 }, { id: 2 }]),
+          body: JSON.stringify(watchlist),
         })
       );
     }
@@ -270,8 +308,12 @@ test('shows milestone badges and an annual recap on the home page', async () => 
   );
 
   expect(await screen.findByRole('heading', { name: /milestones/i })).toBeInTheDocument();
-  expect(screen.getByText(/4 of 5 earned/i)).toBeInTheDocument();
+  expect(screen.getByText(/4 of 5 completed/i)).toBeInTheDocument();
+  expect(screen.getByText(/badges advance from bronze to rarer metals/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/^bronze$/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/^silver$/i).length).toBeGreaterThan(0);
   expect(screen.getByText(/trilogy finisher/i)).toBeInTheDocument();
+  expect(screen.getByText(/best series progress: harry potter \(4 watched films\)\./i)).toBeInTheDocument();
   expect(screen.getByText(/read the book and watched the film/i)).toBeInTheDocument();
   expect(screen.getByText(/you logged 5 titles in 2026\./i)).toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: /choose recap year/i })).toHaveValue('2026');

@@ -45,30 +45,96 @@ const sampleRatings = [
   },
 ];
 
-test('buildHomeInsights returns milestone badges and a recap for the newest year by default', () => {
-  const insights = buildHomeInsights(sampleRatings);
+const sampleWatchlist = [
+  {
+    id: 1,
+    media_type: 'movie',
+    title: 'Harry Potter and the Sorcerer\'s Stone',
+    status: 'watched',
+  },
+  {
+    id: 2,
+    media_type: 'movie',
+    title: 'Harry Potter and the Chamber of Secrets',
+    status: 'watched',
+  },
+  {
+    id: 3,
+    media_type: 'movie',
+    title: 'Harry Potter and the Prisoner of Azkaban',
+    status: 'watched',
+  },
+  {
+    id: 4,
+    media_type: 'movie',
+    title: 'Harry Potter and the Goblet of Fire',
+    status: 'watched',
+  },
+  {
+    id: 5,
+    media_type: 'book',
+    title: 'Harry Potter and the Prisoner of Azkaban',
+    status: 'read',
+  },
+  {
+    id: 6,
+    media_type: 'tv_show',
+    title: 'The Bear',
+    status: 'watched',
+  },
+  {
+    id: 7,
+    media_type: 'movie',
+    title: 'Arrival',
+    status: 'plan_to_watch',
+  },
+];
+
+test('buildHomeInsights returns tiered badges from completed library items and recap data from ratings', () => {
+  const insights = buildHomeInsights(sampleRatings, sampleWatchlist);
 
   expect(insights.availableYears).toEqual([2026, 2025]);
   expect(insights.selectedYear).toBe(2026);
   expect(insights.earnedBadgeCount).toBe(4);
 
+  expect(insights.badges.find((badge) => badge.id === 'completion-collector')).toEqual(
+    expect.objectContaining({
+      completed: true,
+      displayTier: expect.objectContaining({
+        key: 'bronze',
+        label: 'Bronze',
+      }),
+      progressLabel: '6 / 15',
+      progressCaption: 'Toward Silver',
+    })
+  );
+
   expect(insights.badges.find((badge) => badge.id === 'film-centurion')).toEqual(
     expect.objectContaining({
-      earned: false,
+      completed: false,
       progressLabel: '4 / 100',
+      tierSummary: 'Working toward Bronze',
     })
   );
 
   expect(insights.badges.find((badge) => badge.id === 'trilogy-finisher')).toEqual(
     expect.objectContaining({
-      earned: true,
-      detail: 'Best progress: Harry Potter (3 of 3).',
+      completed: true,
+      displayTier: expect.objectContaining({
+        key: 'silver',
+        label: 'Silver',
+      }),
+      detail: 'Best series progress: Harry Potter (4 watched films).',
+      progressCaption: 'Toward Gold',
     })
   );
 
   expect(insights.badges.find((badge) => badge.id === 'book-and-film')).toEqual(
     expect.objectContaining({
-      earned: true,
+      completed: true,
+      displayTier: expect.objectContaining({
+        key: 'bronze',
+      }),
       detail: 'Matched Harry Potter and the Prisoner of Azkaban.',
     })
   );
@@ -99,7 +165,7 @@ test('buildHomeInsights returns milestone badges and a recap for the newest year
 });
 
 test('buildHomeInsights can switch the recap to an older year', () => {
-  const insights = buildHomeInsights(sampleRatings, 2025);
+  const insights = buildHomeInsights(sampleRatings, sampleWatchlist, 2025);
 
   expect(insights.selectedYear).toBe(2025);
   expect(insights.recap.totalLogged).toBe(1);

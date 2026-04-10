@@ -56,6 +56,13 @@ const TYPE_LABELS = {
   book: 'Books',
 };
 
+const BADGE_TIERS = [
+  { key: 'bronze', label: 'Bronze' },
+  { key: 'silver', label: 'Silver' },
+  { key: 'gold', label: 'Gold' },
+  { key: 'platinum', label: 'Platinum' },
+];
+
 function pluralize(count, singular, plural = `${singular}s`) {
   return count === 1 ? singular : plural;
 }
@@ -120,20 +127,46 @@ function getMovieFranchiseKeys(title) {
   return [...keys];
 }
 
-function getMovieSeriesProgress(ratings) {
+function isCompletedLibraryItem(item) {
+  if (!item || !item.media_type) return false;
+  if (item.media_type === 'book') return item.status === 'read';
+  return item.status === 'watched';
+}
+
+function getCompletedLibraryItems(watchlistItems = []) {
+  return watchlistItems.filter((item) => isCompletedLibraryItem(item));
+}
+
+function getCompletedTypeCounts(completedItems) {
+  const counts = {
+    movie: 0,
+    tv_show: 0,
+    book: 0,
+  };
+
+  completedItems.forEach((item) => {
+    if (Object.prototype.hasOwnProperty.call(counts, item.media_type)) {
+      counts[item.media_type] += 1;
+    }
+  });
+
+  return counts;
+}
+
+function getMovieSeriesProgress(completedItems) {
   const franchiseGroups = new Map();
 
-  ratings
-    .filter((rating) => rating.media_type === 'movie' && rating.title)
-    .forEach((rating) => {
-      const titleKey = normalizeTitle(rating.title);
+  completedItems
+    .filter((item) => item.media_type === 'movie' && item.title)
+    .forEach((item) => {
+      const titleKey = normalizeTitle(item.title);
 
-      for (const key of getMovieFranchiseKeys(rating.title)) {
+      for (const key of getMovieFranchiseKeys(item.title)) {
         if (!franchiseGroups.has(key)) {
           franchiseGroups.set(key, new Map());
         }
 
-        franchiseGroups.get(key).set(titleKey, rating.title);
+        franchiseGroups.get(key).set(titleKey, item.title);
       }
     });
 
@@ -158,26 +191,26 @@ function getMovieSeriesProgress(ratings) {
   };
 }
 
-function getAdaptationPairs(ratings) {
+function getAdaptationPairs(completedItems) {
   const booksByTitle = new Map();
   const moviesByTitle = new Map();
 
-  ratings.forEach((rating) => {
-    const normalizedTitle = normalizeTitle(rating.title);
+  completedItems.forEach((item) => {
+    const normalizedTitle = normalizeTitle(item.title);
     if (!normalizedTitle || normalizedTitle.length < 4) return;
 
-    if (rating.media_type === 'book' && !booksByTitle.has(normalizedTitle)) {
-      booksByTitle.set(normalizedTitle, rating.title);
+    if (item.media_type === 'book' && !booksByTitle.has(normalizedTitle)) {
+      booksByTitle.set(normalizedTitle, item.title);
     }
 
-    if (rating.media_type === 'movie' && !moviesByTitle.has(normalizedTitle)) {
-      moviesByTitle.set(normalizedTitle, rating.title);
+    if (item.media_type === 'movie' && !moviesByTitle.has(normalizedTitle)) {
+      moviesByTitle.set(normalizedTitle, item.title);
     }
   });
 
   return [...booksByTitle.entries()]
     .filter(([normalizedTitle]) => moviesByTitle.has(normalizedTitle))
-    .map(([normalizedTitle, title]) => title || moviesByTitle.get(normalizedTitle))
+    .map(([, title]) => title)
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -213,91 +246,131 @@ function getAvailableYears(ratings, fallbackYear) {
   return years.length ? years : [fallbackYear];
 }
 
-function getActiveTypeCount(ratings) {
-  return new Set(ratings.map((rating) => rating.media_type).filter(Boolean)).size;
+function getTierState(value, thresholds) {
+  const earnedTierIndex = thresholds.reduce(
+    (currentIndex, threshold, index) => (value >= threshold ? index : currentIndex),
+    -1
+  );
+  const completed = earnedTierIndex >= 0;
+  const maxed = earnedTierIndex === thresholds.length - 1;
+  const currentTier = completed ? BADGE_TIERS[earnedTierIndex] : null;
+  const displayTier = currentTier || BADGE_TIERS[0];
+  const nextTier = maxed ? null : BADGE_TIERS[earnedTierIndex + 1];
+  const progressTarget = maxed ? thresholds[thresholds.length - 1] : thresholds[earnedTierIndex + 1];
+  const progressCurrent = Math.min(value, progressTarget);
+  const progressPercent = progressTarget > 0
+    ? Math.round((progressCurrent / progressTarget) * 100)
+    : 0;
+
+  return {
+    completed,
+    maxed,
+    currentTier,
+    displayTier,
+    nextTier,
+    progressCurrent,
+    progressTarget,
+    progressPercent,
+    progressLabel: `${progressCurrent} / ${progressTarget}`,
+    progressCaption: maxed ? `${displayTier.label} complete` : `Toward ${nextTier.label}`,
+    tierSummary: currentTier ? `${currentTier.label} unlocked` : `Working toward ${displayTier.label}`,
+    statusLabel: completed ? 'Completed' : 'In Progress',
+  };
 }
 
-function buildBadges(ratings) {
-  const totalLogged = ratings.length;
-  const movieCount = ratings.filter((rating) => rating.media_type === 'movie').length;
-  const activeTypeCount = getActiveTypeCount(ratings);
-  const movieSeries = getMovieSeriesProgress(ratings);
-  const adaptationPairs = getAdaptationPairs(ratings);
+function createTieredBadge({
+  id,
+  kicker,
+  name,
+  description,
+  value,
+  thresholds,
+  detail,
+}) {
+  const tierState = getTierState(value, thresholds);
+
+  return {
+    id,
+    kicker,
+    name,
+    description,
+    detail,
+    value,
+    thresholds,
+    ...tierState,
+    earned: tierState.completed,
+  };
+}
+
+function buildBadges(watchlistItems) {
+  const completedItems = getCompletedLibraryItems(watchlistItems);
+  const completedTypeCounts = getCompletedTypeCounts(completedItems);
+  const movieSeries = getMovieSeriesProgress(completedItems);
+  const adaptationPairs = getAdaptationPairs(completedItems);
+  const crossMediaSetCount = Math.min(
+    completedTypeCounts.movie,
+    completedTypeCounts.tv_show,
+    completedTypeCounts.book
+  );
   const completedTypeLabels = Object.entries(TYPE_LABELS)
-    .filter(([mediaType]) => ratings.some((rating) => rating.media_type === mediaType))
+    .filter(([mediaType]) => completedTypeCounts[mediaType] > 0)
     .map(([, label]) => label);
 
   return [
-    {
-      id: 'first-log',
-      kicker: 'START',
-      name: 'First Log',
-      description: 'Rate your first title to start your history.',
-      earned: totalLogged >= 1,
-      progressCurrent: Math.min(totalLogged, 1),
-      progressTarget: 1,
-      progressLabel: `${Math.min(totalLogged, 1)} / 1`,
-      detail: totalLogged
-        ? `Logged ${totalLogged} ${pluralize(totalLogged, 'title')} so far.`
-        : 'No ratings yet.',
-    },
-    {
+    createTieredBadge({
+      id: 'completion-collector',
+      kicker: 'COMPLETE',
+      name: 'Completion Collector',
+      description: 'Finish titles from your Watched and Read lists.',
+      value: completedItems.length,
+      thresholds: [5, 15, 30, 60],
+      detail: completedItems.length
+        ? `Completed ${completedItems.length} ${pluralize(completedItems.length, 'title')} across your finished library.`
+        : 'Mark titles as Watched or Read to begin unlocking tiers.',
+    }),
+    createTieredBadge({
       id: 'film-centurion',
       kicker: 'MOVIES',
-      name: '100 Films Logged',
-      description: 'Log 100 movies across your rating history.',
-      earned: movieCount >= 100,
-      progressCurrent: Math.min(movieCount, 100),
-      progressTarget: 100,
-      progressLabel: `${Math.min(movieCount, 100)} / 100`,
-      detail: `${movieCount} ${pluralize(movieCount, 'movie')} logged.`,
-    },
-    {
+      name: 'Film Finisher',
+      description: 'Turn watched movies into higher-tier movie badges.',
+      value: completedTypeCounts.movie,
+      thresholds: [100, 150, 200, 300],
+      detail: `${completedTypeCounts.movie} watched ${pluralize(completedTypeCounts.movie, 'movie')}. Bronze starts at 100.`,
+    }),
+    createTieredBadge({
       id: 'trilogy-finisher',
       kicker: 'SERIES',
       name: 'Trilogy Finisher',
-      description: 'Finish three films from the same franchise.',
-      earned: movieSeries.count >= 3,
-      progressCurrent: Math.min(movieSeries.count, 3),
-      progressTarget: 3,
-      progressLabel: `${Math.min(movieSeries.count, 3)} / 3`,
+      description: 'Complete films from the same franchise on your Watched list.',
+      value: movieSeries.count,
+      thresholds: [3, 4, 5, 6],
       detail: movieSeries.seriesName
-        ? `Best progress: ${movieSeries.seriesName} (${Math.min(movieSeries.count, 3)} of 3).`
-        : 'No film trilogy in progress yet.',
-    },
-    {
+        ? `Best series progress: ${movieSeries.seriesName} (${movieSeries.count} watched ${pluralize(movieSeries.count, 'film')}).`
+        : 'No watched franchise streak yet.',
+    }),
+    createTieredBadge({
       id: 'book-and-film',
       kicker: 'ADAPTATION',
       name: 'Read The Book And Watched The Film',
-      description: 'Log a book and its film adaptation with the same title.',
-      earned: adaptationPairs.length >= 1,
-      progressCurrent: Math.min(adaptationPairs.length, 1),
-      progressTarget: 1,
-      progressLabel: `${Math.min(adaptationPairs.length, 1)} / 1`,
+      description: 'Complete matching book and movie titles to climb each metal tier.',
+      value: adaptationPairs.length,
+      thresholds: [1, 2, 3, 5],
       detail: adaptationPairs.length
         ? `Matched ${adaptationPairs[0]}${adaptationPairs.length > 1 ? ` and ${adaptationPairs.length - 1} more.` : '.'}`
-        : 'Try logging a book and movie version of the same story.',
-    },
-    {
+        : 'Complete a book and its movie adaptation with the same title.',
+    }),
+    createTieredBadge({
       id: 'cross-media',
       kicker: 'RANGE',
       name: 'Cross-Media Critic',
-      description: 'Log a movie, TV show, and book.',
-      earned: activeTypeCount >= 3,
-      progressCurrent: Math.min(activeTypeCount, 3),
-      progressTarget: 3,
-      progressLabel: `${Math.min(activeTypeCount, 3)} / 3`,
+      description: 'Finish movies, shows, and books in balanced sets.',
+      value: crossMediaSetCount,
+      thresholds: [1, 3, 5, 10],
       detail: completedTypeLabels.length
-        ? `Completed: ${completedTypeLabels.join(', ')}.`
-        : 'No media types logged yet.',
-    },
-  ].map((badge) => ({
-    ...badge,
-    progressPercent:
-      badge.progressTarget > 0
-        ? Math.round((badge.progressCurrent / badge.progressTarget) * 100)
-        : 0,
-  }));
+        ? `${completedTypeLabels.join(', ')} completed. Sets available: ${crossMediaSetCount}.`
+        : 'Complete at least one movie, one show, and one book for Bronze.',
+    }),
+  ];
 }
 
 function buildAnnualRecap(ratings, year) {
@@ -370,19 +443,20 @@ export function buildRecapNarrative(recap) {
   return parts.join(' ');
 }
 
-export function buildHomeInsights(ratings = [], requestedYear) {
+export function buildHomeInsights(ratings = [], watchlistItems = [], requestedYear) {
   const safeRatings = Array.isArray(ratings) ? ratings.filter(Boolean) : [];
+  const safeWatchlistItems = Array.isArray(watchlistItems) ? watchlistItems.filter(Boolean) : [];
   const fallbackYear = new Date().getFullYear();
   const availableYears = getAvailableYears(safeRatings, fallbackYear);
   const parsedRequestedYear = Number(requestedYear);
   const selectedYear = availableYears.includes(parsedRequestedYear)
     ? parsedRequestedYear
     : availableYears[0];
-  const badges = buildBadges(safeRatings);
+  const badges = buildBadges(safeWatchlistItems);
 
   return {
     badges,
-    earnedBadgeCount: badges.filter((badge) => badge.earned).length,
+    earnedBadgeCount: badges.filter((badge) => badge.completed).length,
     availableYears,
     selectedYear,
     recap: buildAnnualRecap(safeRatings, selectedYear),

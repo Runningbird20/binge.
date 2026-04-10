@@ -11,8 +11,9 @@ export default function Home() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [ratings, setRatings] = useState([]);
+  const [watchlistItems, setWatchlistItems] = useState([]);
   const [selectedYear, setSelectedYear] = useState();
-  const insights = buildHomeInsights(ratings, selectedYear);
+  const insights = buildHomeInsights(ratings, watchlistItems, selectedYear);
 
   useEffect(() => {
     async function fetchStats() {
@@ -24,13 +25,15 @@ export default function Home() {
         const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
         const nextWatchlist = Array.isArray(watchlist) ? watchlist : [];
         setRatings(nextRatings);
+        setWatchlistItems(nextWatchlist);
         setStats({ ratings: nextRatings.length, watchlist: nextWatchlist.length });
         setSelectedYear((currentYear) => (
-          currentYear == null ? buildHomeInsights(nextRatings).selectedYear : currentYear
+          currentYear == null ? buildHomeInsights(nextRatings, nextWatchlist).selectedYear : currentYear
         ));
       } catch {
         // stats stay at zero if request fails
         setRatings([]);
+        setWatchlistItems([]);
         setStats({ ratings: 0, watchlist: 0 });
       }
     }
@@ -67,7 +70,7 @@ export default function Home() {
           </div>
           <div className="stat-card">
             <div className="stat-number">{insights.earnedBadgeCount}</div>
-            <div className="stat-label">Badges Earned</div>
+            <div className="stat-label">Badges Complete</div>
           </div>
         </div>
 
@@ -77,11 +80,11 @@ export default function Home() {
               <div>
                 <h2>Milestones</h2>
                 <p className="home-panel-copy">
-                  Earn progress badges as you keep logging what you finish.
+                  Badges advance from bronze to rarer metals based on titles marked Watched or Read.
                 </p>
               </div>
               <p className="surface-panel-meta">
-                {insights.earnedBadgeCount} of {insights.badges.length} earned
+                {insights.earnedBadgeCount} of {insights.badges.length} completed
               </p>
             </div>
 
@@ -89,15 +92,21 @@ export default function Home() {
               {insights.badges.map((badge) => (
                 <article
                   key={badge.id}
-                  className={`badge-card${badge.earned ? ' badge-card-earned' : ''}`}
+                  className={`badge-card badge-card-tier-${badge.displayTier.key}${badge.completed ? ' badge-card-earned' : ''}`}
                 >
                   <div className="badge-card-header">
                     <span className="badge-card-kicker">{badge.kicker}</span>
                     <span
-                      className={`badge-card-status${badge.earned ? ' badge-card-status-earned' : ''}`}
+                      className={`badge-card-status${badge.completed ? ' badge-card-status-earned' : ''}`}
                     >
-                      {badge.earned ? 'Earned' : 'In Progress'}
+                      {badge.statusLabel}
                     </span>
+                  </div>
+                  <div className="badge-card-tier-row">
+                    <span className={`badge-card-tier badge-card-tier-${badge.displayTier.key}`}>
+                      {badge.displayTier.label}
+                    </span>
+                    <span className="badge-card-tier-copy">{badge.tierSummary}</span>
                   </div>
                   <h3>{badge.name}</h3>
                   <p className="badge-card-copy">{badge.description}</p>
@@ -108,6 +117,7 @@ export default function Home() {
                   <div className="badge-progress-track" aria-hidden="true">
                     <span style={{ width: `${badge.progressPercent}%` }} />
                   </div>
+                  <p className="badge-progress-caption">{badge.progressCaption}</p>
                   <p className="badge-card-detail">{badge.detail}</p>
                 </article>
               ))}
