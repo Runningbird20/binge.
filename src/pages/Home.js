@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../api';
 import ForYou from '../components/ForYou';
+import SupabaseTodos from '../components/SupabaseTodos';
 import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
 
 function BadgeIcon({ iconKey, label, toneKey }) {
   const commonProps = {
@@ -102,6 +105,7 @@ function BadgeIcon({ iconKey, label, toneKey }) {
 
 export default function Home() {
   const { user } = useAuth();
+  const canUseLegacyBackend = hasLegacyBackendSession();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [ratings, setRatings] = useState([]);
   const [watchlistItems, setWatchlistItems] = useState([]);
