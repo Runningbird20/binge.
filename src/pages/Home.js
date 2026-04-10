@@ -5,6 +5,7 @@ import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
 import ForYou from '../components/ForYou';
+import SupabaseTodos from '../components/SupabaseTodos';
 
 export default function Home() {
   const { user } = useAuth();
@@ -121,6 +122,13 @@ export default function Home() {
                 </p>
                 <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
               </div>
+            </section>
+
+            <section className="home-section surface-panel">
+              <div className="section-header">
+                <h2>Supabase Todos</h2>
+              </div>
+              <SupabaseTodos />
             </section>
           </div>
         </div>
