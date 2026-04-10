@@ -3,22 +3,21 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api';
 import ForYou from '../components/ForYou';
 import SupabaseTodos from '../components/SupabaseTodos';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
+import { fetchSupabaseDashboardCounts } from '../utils/supabaseData';
 
 export default function Home() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
+  const canUseLegacyBackend = hasLegacyBackendSession();
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [ratings, watchlist] = await Promise.all([
-          api.get('/ratings/my'),
-          api.get('/watchlist'),
-        ]);
-        setStats({ ratings: ratings.length, watchlist: watchlist.length });
+        const counts = await fetchSupabaseDashboardCounts();
+        setStats(counts);
       } catch {
         // stats stay at zero if request fails
       }
@@ -77,15 +76,17 @@ export default function Home() {
                 <h3>Books</h3>
                 <p>Search the shelf, open book details, and save future reads.</p>
               </Link>
-              <Link to="/lists" className="browse-card browse-lists">
-                <div className="browse-card-badge">LIST</div>
-                <h3>Shared Lists</h3>
-                <p>Build collaborative watchlists and book-club queues with vibe voting.</p>
-              </Link>
+              {canUseLegacyBackend && (
+                <Link to="/lists" className="browse-card browse-lists">
+                  <div className="browse-card-badge">LIST</div>
+                  <h3>Shared Lists</h3>
+                  <p>Build collaborative watchlists and book-club queues with vibe voting.</p>
+                </Link>
+              )}
             </div>
           </section>
 
-          <ForYou />
+          {canUseLegacyBackend && <ForYou />}
 
           <div className="home-secondary-grid">
             <section className="home-section surface-panel">
@@ -111,18 +112,20 @@ export default function Home() {
               )}
             </section>
 
-            <section className="home-section surface-panel">
-              <div className="section-header">
-                <h2>Plan Together</h2>
-                <Link to="/lists" className="section-link">Open lists</Link>
-              </div>
-              <div className="home-action-card">
-                <p className="home-panel-copy">
-                  Create public or private lists, invite collaborators, and let anonymous vibe votes surface the group favorite.
-                </p>
-                <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
-              </div>
-            </section>
+            {canUseLegacyBackend && (
+              <section className="home-section surface-panel">
+                <div className="section-header">
+                  <h2>Plan Together</h2>
+                  <Link to="/lists" className="section-link">Open lists</Link>
+                </div>
+                <div className="home-action-card">
+                  <p className="home-panel-copy">
+                    Create public or private lists, invite collaborators, and let anonymous vibe votes surface the group favorite.
+                  </p>
+                  <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
+                </div>
+              </section>
+            )}
 
             <section className="home-section surface-panel">
               <div className="section-header">

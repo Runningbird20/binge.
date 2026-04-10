@@ -15,6 +15,7 @@ import SharedList from './pages/SharedList';
 import AccountSettings from './pages/AccountSettings';
 import AdminRequests from './pages/AdminRequests';
 import Ratings from './pages/Ratings';
+import { hasLegacyBackendSession } from './utils/legacyBackend';
 import './App.css';
 
 export default function App() {
@@ -37,7 +38,7 @@ export default function App() {
           <Route path="/admin/requests" element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
-        <ChatBot />
+        {hasLegacyBackendSession() && <ChatBot />}
       </BrowserRouter>
     </AuthProvider>
   );

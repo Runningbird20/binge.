@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
-import { api } from '../api';
+import {
+  fetchSupabaseWatchlist,
+  removeSupabaseWatchlistItem,
+  updateSupabaseWatchlistStatus,
+} from '../utils/supabaseData';
 
 const TABS = [
   { label: 'All', value: '', types: ['movie', 'tv_show', 'book'] },
@@ -38,9 +42,7 @@ export default function Watchlist() {
     async function fetchList() {
       setLoading(true);
       try {
-        const params = new URLSearchParams();
-        if (activeTab) params.set('status', activeTab);
-        const data = await api.get(`/watchlist?${params}`);
+        const data = await fetchSupabaseWatchlist({ status: activeTab });
         setItems(Array.isArray(data) ? data : []);
       } catch {
         setItems([]);
@@ -54,7 +56,7 @@ export default function Watchlist() {
 
   async function handleStatusChange(item, newStatus) {
     try {
-      await api.patch(`/watchlist/${item.id}`, { status: newStatus });
+      await updateSupabaseWatchlistStatus(item.id, newStatus);
       setItems((current) =>
         current.map((entry) => (
           entry.id === item.id ? { ...entry, status: newStatus } : entry
@@ -69,7 +71,7 @@ export default function Watchlist() {
     if (!window.confirm(`Remove "${item.title}" from your library?`)) return;
 
     try {
-      await api.delete(`/watchlist/${item.id}`);
+      await removeSupabaseWatchlistItem(item.id);
       setItems((current) => current.filter((entry) => entry.id !== item.id));
     } catch (error) {
       alert(error.message);
