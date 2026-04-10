@@ -559,56 +559,129 @@ body {
 }
 
 .home-badge-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.58rem;
 }
 
 .badge-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.2rem;
-  border-radius: 18px;
+  --badge-metal: #deb58e;
+  --badge-metal-soft: rgba(179, 122, 67, 0.16);
+  --badge-metal-border: rgba(179, 122, 67, 0.28);
+  --badge-metal-glow: rgba(179, 122, 67, 0.26);
+  --badge-icon-size: 46px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.58rem;
+  width: 100%;
+  padding: 0.5rem 0.68rem;
+  border-radius: 22px;
   border: 1px solid #252525;
+  overflow: hidden;
   background:
     linear-gradient(180deg, rgba(21, 21, 21, 0.98) 0%, rgba(14, 14, 14, 0.98) 100%);
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.16);
 }
 
 .badge-card-earned {
-  border-color: rgba(232, 201, 122, 0.32);
+  border-color: var(--badge-metal-border);
   background:
-    radial-gradient(circle at top right, rgba(232, 201, 122, 0.12), transparent 46%),
+    radial-gradient(circle at top right, var(--badge-metal-glow), transparent 46%),
     linear-gradient(180deg, rgba(24, 21, 14, 0.98) 0%, rgba(15, 14, 11, 0.98) 100%);
+}
+
+.badge-card-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.26rem;
 }
 
 .badge-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  min-width: 0;
 }
 
-.badge-card-tier-row {
+.badge-card-chip-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.24rem;
+  min-width: 0;
 }
 
+.badge-card-icon-shell {
+  width: var(--badge-icon-size);
+  height: var(--badge-icon-size);
+  min-width: var(--badge-icon-size);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--badge-metal);
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.28), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, var(--badge-metal-soft) 100%);
+  border: 1px solid var(--badge-metal-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 26px rgba(0, 0, 0, 0.22),
+    0 0 22px var(--badge-metal-glow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.badge-card-icon-shell.badge-card-icon-shell-locked {
+  color: #7f7f7f;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.015) 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 16px rgba(0, 0, 0, 0.14);
+}
+
+.badge-card:hover .badge-card-icon-shell {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.badge-card-icon-shell svg {
+  width: 58%;
+  height: 58%;
+}
+
+.badge-card-copy-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.badge-card-progress-chip,
 .badge-card-kicker,
 .badge-card-status,
 .badge-card-tier {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.32rem 0.65rem;
+  padding: 0.14rem 0.36rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.56rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
   text-transform: uppercase;
+}
+
+.badge-card-progress-chip {
+  background-color: var(--badge-metal-soft);
+  border: 1px solid var(--badge-metal-border);
+  color: var(--badge-metal);
 }
 
 .badge-card-kicker {
@@ -623,37 +696,63 @@ body {
   color: #8e8e8e;
 }
 
-.badge-card-status-earned {
-  background-color: rgba(232, 201, 122, 0.12);
-  border-color: rgba(232, 201, 122, 0.24);
-  color: #f1dfb0;
+.badge-card-status-locked {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.07);
+  color: #747474;
 }
 
-.badge-card-tier-copy {
-  color: #d2d2d2;
-  font-size: 0.84rem;
-  font-weight: 600;
+.badge-card.badge-card-tier-bronze {
+  --badge-metal: #deb58e;
+  --badge-metal-soft: rgba(179, 122, 67, 0.16);
+  --badge-metal-border: rgba(179, 122, 67, 0.28);
+  --badge-metal-glow: rgba(179, 122, 67, 0.26);
+  --badge-icon-size: 46px;
 }
 
-.badge-card-tier-bronze {
+.badge-card-tier.badge-card-tier-bronze {
   background-color: rgba(179, 122, 67, 0.16);
   border: 1px solid rgba(179, 122, 67, 0.28);
   color: #deb58e;
 }
 
-.badge-card-tier-silver {
+.badge-card.badge-card-tier-silver {
+  --badge-metal: #e0e7ee;
+  --badge-metal-soft: rgba(172, 182, 193, 0.16);
+  --badge-metal-border: rgba(172, 182, 193, 0.28);
+  --badge-metal-glow: rgba(172, 182, 193, 0.24);
+  --badge-icon-size: 51px;
+}
+
+.badge-card-tier.badge-card-tier-silver {
   background-color: rgba(172, 182, 193, 0.16);
   border: 1px solid rgba(172, 182, 193, 0.28);
   color: #e0e7ee;
 }
 
-.badge-card-tier-gold {
+.badge-card.badge-card-tier-gold {
+  --badge-metal: #f1dfb0;
+  --badge-metal-soft: rgba(232, 201, 122, 0.16);
+  --badge-metal-border: rgba(232, 201, 122, 0.28);
+  --badge-metal-glow: rgba(232, 201, 122, 0.28);
+  --badge-icon-size: 56px;
+}
+
+.badge-card-tier.badge-card-tier-gold {
   background-color: rgba(232, 201, 122, 0.16);
   border: 1px solid rgba(232, 201, 122, 0.28);
   color: #f1dfb0;
 }
 
-.badge-card-tier-platinum {
+.badge-card.badge-card-tier-platinum {
+  --badge-metal: #c8f5f6;
+  --badge-metal-soft: rgba(108, 210, 214, 0.16);
+  --badge-metal-border: rgba(108, 210, 214, 0.28);
+  --badge-metal-glow: rgba(108, 210, 214, 0.28);
+  --badge-icon-size: 62px;
+}
+
+.badge-card-tier.badge-card-tier-platinum {
   background-color: rgba(108, 210, 214, 0.16);
   border: 1px solid rgba(108, 210, 214, 0.28);
   color: #c8f5f6;
@@ -662,33 +761,49 @@ body {
 .badge-card h3 {
   margin: 0;
   color: #fff;
-  font-size: 1.05rem;
+  font-size: 0.82rem;
 }
 
 .badge-card-copy,
 .badge-card-detail {
   margin: 0;
   color: #a7a7a7;
-  line-height: 1.6;
+  line-height: 1.16;
+}
+
+.badge-card-copy {
+  font-size: 0.76rem;
 }
 
 .badge-card-detail {
   color: #d2d2d2;
-  font-size: 0.88rem;
+  font-size: 0.64rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.badge-progress-meta {
+.badge-progress-row,
+.badge-card-footer {
   display: flex;
   align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.badge-progress-row {
+  min-width: 0;
+}
+
+.badge-card-footer {
   justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.82rem;
-  color: #d8d8d8;
+  flex-wrap: wrap;
 }
 
 .badge-progress-track {
-  width: 100%;
-  height: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background-color: rgba(255, 255, 255, 0.08);
@@ -698,32 +813,27 @@ body {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #5db88a 0%, #e8c97a 100%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.24) 0%, var(--badge-metal) 100%);
 }
 
-.badge-card.badge-card-tier-bronze .badge-progress-track span {
-  background: linear-gradient(90deg, #b37a43 0%, #deb58e 100%);
-}
-
-.badge-card.badge-card-tier-silver .badge-progress-track span {
-  background: linear-gradient(90deg, #97a7b5 0%, #dbe2e8 100%);
-}
-
-.badge-card.badge-card-tier-gold .badge-progress-track span {
-  background: linear-gradient(90deg, #c9a24b 0%, #f1dfb0 100%);
-}
-
-.badge-card.badge-card-tier-platinum .badge-progress-track span {
-  background: linear-gradient(90deg, #71cfd1 0%, #d4f7f8 100%);
+.badge-progress-value {
+  min-width: 32px;
+  color: var(--badge-metal);
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 .badge-progress-caption {
-  margin: -0.15rem 0 0 0;
+  margin: 0;
   color: #8f8f8f;
-  font-size: 0.8rem;
+  flex-shrink: 0;
+  font-size: 0.62rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
+  white-space: normal;
 }
 
 .home-recap-summary {
@@ -3029,7 +3139,6 @@ body {
 
   .browse-grid,
   .home-secondary-grid,
-  .home-badge-grid,
   .home-recap-grid { grid-template-columns: 1fr; }
   .home-highlight-grid {
     grid-template-columns: 1fr;
@@ -3070,6 +3179,26 @@ body {
   .navbar { padding: 0 1rem; gap: 0.75rem; }
   .navbar-user-copy { display: none; }
   .home-profile { flex-direction: column; }
+  .badge-card {
+    grid-template-columns: 1fr;
+    justify-items: flex-start;
+    border-radius: 20px;
+    padding: 0.72rem;
+  }
+  .badge-card-main,
+  .badge-card-header,
+  .badge-card-footer,
+  .badge-progress-row {
+    width: 100%;
+  }
+  .badge-card-header,
+  .badge-card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .badge-card-detail {
+    white-space: normal;
+  }
   .page-content { padding: 1.5rem 1rem; }
   .books-filter-card-header,
   .books-results-header,

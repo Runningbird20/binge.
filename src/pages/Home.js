@@ -7,6 +7,100 @@ import { api } from '../api';
 import ForYou from '../components/ForYou';
 import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
 
+function BadgeIcon({ iconKey, label, toneKey }) {
+  const commonProps = {
+    viewBox: '0 0 64 64',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: '2.6',
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': 'true',
+  };
+
+  const icons = {
+    collection: (
+      <svg {...commonProps}>
+        <rect x="14" y="18" width="18" height="28" rx="5" />
+        <rect x="32" y="14" width="18" height="28" rx="5" />
+        <path d="M22 31l4 4 8-9" />
+      </svg>
+    ),
+    film: (
+      <svg {...commonProps}>
+        <rect x="14" y="18" width="36" height="28" rx="6" />
+        <path d="M24 18v28M40 18v28M14 26h36M14 38h36" />
+        <circle cx="22" cy="24" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="42" cy="24" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="22" cy="40" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="42" cy="40" r="1.5" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+    tv: (
+      <svg {...commonProps}>
+        <rect x="14" y="18" width="36" height="22" rx="5" />
+        <path d="M24 46h16M32 40v6M22 14l10 8 10-8" />
+        <path d="M19 24h26M19 30h18" />
+      </svg>
+    ),
+    book: (
+      <svg {...commonProps}>
+        <path d="M18 18h14c4 0 7 3 7 7v21c-2.2-2-4.8-3-8-3H18z" />
+        <path d="M46 18H32c-4 0-7 3-7 7v21c2.2-2 4.8-3 8-3h13z" />
+        <path d="M32 22v20" />
+      </svg>
+    ),
+    review: (
+      <svg {...commonProps}>
+        <path d="M18 18h20c4.4 0 8 3.6 8 8v12c0 4.4-3.6 8-8 8H28l-10 8v-8h-2c-4.4 0-8-3.6-8-8V26c0-4.4 3.6-8 8-8z" />
+        <path d="M24 28h16M24 34h12" />
+        <path d="M42 18l4-4" />
+      </svg>
+    ),
+    trilogy: (
+      <svg {...commonProps}>
+        <path d="M16 40c3-11 11-18 16-18s13 7 16 18" />
+        <circle cx="20" cy="40" r="6" />
+        <circle cx="32" cy="24" r="6" />
+        <circle cx="44" cy="40" r="6" />
+      </svg>
+    ),
+    adaptation: (
+      <svg {...commonProps}>
+        <path d="M18 18h12c4 0 7 3 7 7v21c-2-2-4.8-3-8-3H18z" />
+        <path d="M46 18H34c-4 0-7 3-7 7v21c2-2 4.8-3 8-3h11z" />
+        <path d="M43 31l7 5-7 5z" />
+      </svg>
+    ),
+    spectrum: (
+      <svg {...commonProps}>
+        <circle cx="20" cy="22" r="6" />
+        <rect x="27" y="34" width="10" height="10" rx="2" />
+        <path d="M44 18h8l-4 10z" />
+        <path d="M25 26l7 8M39 33l7-10M22 28l10 10" />
+      </svg>
+    ),
+    shelf: (
+      <svg {...commonProps}>
+        <path d="M18 18v28M46 18v28M18 46h28" />
+        <rect x="22" y="22" width="6" height="20" rx="2" />
+        <rect x="30" y="20" width="7" height="22" rx="2" />
+        <rect x="39" y="24" width="4" height="18" rx="2" />
+      </svg>
+    ),
+  };
+
+  return (
+    <div
+      className={`badge-card-icon-shell badge-card-icon-shell-${toneKey}`}
+      aria-label={label}
+      role="img"
+    >
+      {icons[iconKey] || icons.collection}
+    </div>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
@@ -75,55 +169,6 @@ export default function Home() {
         </div>
 
         <div className="home-sections">
-          <section className="home-section surface-panel">
-            <div className="section-header home-insights-header">
-              <div>
-                <h2>Milestones</h2>
-                <p className="home-panel-copy">
-                  Badges advance from bronze to rarer metals based on titles marked Watched or Read.
-                </p>
-              </div>
-              <p className="surface-panel-meta">
-                {insights.earnedBadgeCount} of {insights.badges.length} completed
-              </p>
-            </div>
-
-            <div className="home-badge-grid">
-              {insights.badges.map((badge) => (
-                <article
-                  key={badge.id}
-                  className={`badge-card badge-card-tier-${badge.displayTier.key}${badge.completed ? ' badge-card-earned' : ''}`}
-                >
-                  <div className="badge-card-header">
-                    <span className="badge-card-kicker">{badge.kicker}</span>
-                    <span
-                      className={`badge-card-status${badge.completed ? ' badge-card-status-earned' : ''}`}
-                    >
-                      {badge.statusLabel}
-                    </span>
-                  </div>
-                  <div className="badge-card-tier-row">
-                    <span className={`badge-card-tier badge-card-tier-${badge.displayTier.key}`}>
-                      {badge.displayTier.label}
-                    </span>
-                    <span className="badge-card-tier-copy">{badge.tierSummary}</span>
-                  </div>
-                  <h3>{badge.name}</h3>
-                  <p className="badge-card-copy">{badge.description}</p>
-                  <div className="badge-progress-meta">
-                    <span>{badge.progressLabel}</span>
-                    <span>{badge.progressPercent}%</span>
-                  </div>
-                  <div className="badge-progress-track" aria-hidden="true">
-                    <span style={{ width: `${badge.progressPercent}%` }} />
-                  </div>
-                  <p className="badge-progress-caption">{badge.progressCaption}</p>
-                  <p className="badge-card-detail">{badge.detail}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
           <section className="home-section surface-panel">
             <div className="section-header home-insights-header">
               <div>
@@ -307,6 +352,62 @@ export default function Home() {
               </div>
             </section>
           </div>
+
+          <section className="home-section surface-panel">
+            <div className="section-header home-insights-header">
+              <div>
+                <h2>Achievements</h2>
+                <p className="home-panel-copy">
+                  Achievements level up from bronze to rarer metals based on what you finish and save in your library.
+                </p>
+              </div>
+              <p className="surface-panel-meta">
+                {insights.earnedBadgeCount} of {insights.badges.length} unlocked
+              </p>
+            </div>
+
+            <div className="home-badge-grid">
+              {insights.badges.map((badge) => (
+                <article
+                  key={badge.id}
+                  className={`badge-card badge-card-tier-${badge.displayTier.key}${badge.completed ? ' badge-card-earned' : ''}`}
+                >
+                  <BadgeIcon
+                    iconKey={badge.iconKey}
+                    label={badge.iconLabel}
+                    toneKey={badge.currentTier ? badge.currentTier.key : 'locked'}
+                  />
+                  <div className="badge-card-main">
+                    <div className="badge-card-header">
+                      <div className="badge-card-chip-row">
+                        <span className="badge-card-progress-chip">{badge.progressLabel}</span>
+                        <span className="badge-card-kicker">{badge.kicker}</span>
+                      </div>
+                      <span
+                        className={`badge-card-status${badge.currentTier ? ` badge-card-tier badge-card-tier-${badge.currentTier.key}` : ' badge-card-status-locked'}`}
+                      >
+                        {badge.statusLabel}
+                      </span>
+                    </div>
+                    <div className="badge-card-copy-block">
+                      <h3>{badge.name}</h3>
+                      <p className="badge-card-copy">{badge.description}</p>
+                    </div>
+                    <div className="badge-progress-row">
+                      <div className="badge-progress-track" aria-hidden="true">
+                        <span style={{ width: `${badge.progressPercent}%` }} />
+                      </div>
+                      <span className="badge-progress-value">{badge.progressPercent}%</span>
+                    </div>
+                    <div className="badge-card-footer">
+                      <p className="badge-progress-caption">{badge.progressCaption}</p>
+                      <p className="badge-card-detail">{badge.detail}</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
     </div>

@@ -7,6 +7,7 @@ const sampleRatings = [
     title: 'Harry Potter and the Sorcerer\'s Stone',
     genre: 'Fantasy, Adventure',
     created_at: '2026-01-09 10:00:00',
+    review: 'Still magical on every revisit.',
   },
   {
     media_type: 'movie',
@@ -14,6 +15,7 @@ const sampleRatings = [
     title: 'Harry Potter and the Chamber of Secrets',
     genre: 'Fantasy, Adventure',
     created_at: '2026-02-11 10:00:00',
+    review: 'Darker and more confident than the first one.',
   },
   {
     media_type: 'movie',
@@ -95,7 +97,7 @@ test('buildHomeInsights returns tiered badges from completed library items and r
 
   expect(insights.availableYears).toEqual([2026, 2025]);
   expect(insights.selectedYear).toBe(2026);
-  expect(insights.earnedBadgeCount).toBe(4);
+  expect(insights.earnedBadgeCount).toBe(5);
 
   expect(insights.badges.find((badge) => badge.id === 'completion-collector')).toEqual(
     expect.objectContaining({
@@ -113,7 +115,35 @@ test('buildHomeInsights returns tiered badges from completed library items and r
     expect.objectContaining({
       completed: false,
       progressLabel: '4 / 100',
-      tierSummary: 'Working toward Bronze',
+      tierSummary: 'No tier unlocked yet',
+    })
+  );
+
+  expect(insights.badges.find((badge) => badge.id === 'show-runner')).toEqual(
+    expect.objectContaining({
+      completed: false,
+      progressLabel: '1 / 2',
+      detail: '1 finished show. Bronze starts at 2.',
+    })
+  );
+
+  expect(insights.badges.find((badge) => badge.id === 'bookworm')).toEqual(
+    expect.objectContaining({
+      completed: false,
+      progressLabel: '1 / 2',
+      detail: '1 finished book. Bronze starts at 2.',
+    })
+  );
+
+  expect(insights.badges.find((badge) => badge.id === 'review-writer')).toEqual(
+    expect.objectContaining({
+      completed: true,
+      displayTier: expect.objectContaining({
+        key: 'bronze',
+        label: 'Bronze',
+      }),
+      progressLabel: '2 / 5',
+      detail: '2 written reviews. Silver starts at 5.',
     })
   );
 
@@ -136,6 +166,14 @@ test('buildHomeInsights returns tiered badges from completed library items and r
         key: 'bronze',
       }),
       detail: 'Matched Harry Potter and the Prisoner of Azkaban.',
+    })
+  );
+
+  expect(insights.badges.find((badge) => badge.id === 'library-curator')).toEqual(
+    expect.objectContaining({
+      completed: false,
+      progressLabel: '7 / 10',
+      detail: '7 saved titles in your library. Bronze starts at 10.',
     })
   );
 

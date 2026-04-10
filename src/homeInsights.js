@@ -214,6 +214,10 @@ function getAdaptationPairs(completedItems) {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function getWrittenReviewCount(ratings = []) {
+  return ratings.filter((rating) => typeof rating?.review === 'string' && rating.review.trim().length > 0).length;
+}
+
 function parseLoggedAt(value) {
   if (typeof value !== 'string' || value.length < 7) return null;
 
@@ -268,13 +272,14 @@ function getTierState(value, thresholds) {
     currentTier,
     displayTier,
     nextTier,
+    statusTone: currentTier ? currentTier.key : 'locked',
     progressCurrent,
     progressTarget,
     progressPercent,
     progressLabel: `${progressCurrent} / ${progressTarget}`,
     progressCaption: maxed ? `${displayTier.label} complete` : `Toward ${nextTier.label}`,
-    tierSummary: currentTier ? `${currentTier.label} unlocked` : `Working toward ${displayTier.label}`,
-    statusLabel: completed ? 'Completed' : 'In Progress',
+    tierSummary: currentTier ? `${currentTier.label} unlocked` : `No tier unlocked yet`,
+    statusLabel: currentTier ? currentTier.label : 'Locked',
   };
 }
 
@@ -286,6 +291,8 @@ function createTieredBadge({
   value,
   thresholds,
   detail,
+  iconKey,
+  iconLabel,
 }) {
   const tierState = getTierState(value, thresholds);
 
@@ -295,6 +302,8 @@ function createTieredBadge({
     name,
     description,
     detail,
+    iconKey,
+    iconLabel,
     value,
     thresholds,
     ...tierState,
@@ -302,11 +311,12 @@ function createTieredBadge({
   };
 }
 
-function buildBadges(watchlistItems) {
+function buildBadges(watchlistItems, ratings = []) {
   const completedItems = getCompletedLibraryItems(watchlistItems);
   const completedTypeCounts = getCompletedTypeCounts(completedItems);
   const movieSeries = getMovieSeriesProgress(completedItems);
   const adaptationPairs = getAdaptationPairs(completedItems);
+  const writtenReviewCount = getWrittenReviewCount(ratings);
   const crossMediaSetCount = Math.min(
     completedTypeCounts.movie,
     completedTypeCounts.tv_show,
@@ -324,6 +334,8 @@ function buildBadges(watchlistItems) {
       description: 'Finish titles from your Watched and Read lists.',
       value: completedItems.length,
       thresholds: [5, 15, 30, 60],
+      iconKey: 'collection',
+      iconLabel: 'Collection badge icon',
       detail: completedItems.length
         ? `Completed ${completedItems.length} ${pluralize(completedItems.length, 'title')} across your finished library.`
         : 'Mark titles as Watched or Read to begin unlocking tiers.',
@@ -335,7 +347,44 @@ function buildBadges(watchlistItems) {
       description: 'Turn watched movies into higher-tier movie badges.',
       value: completedTypeCounts.movie,
       thresholds: [100, 150, 200, 300],
+      iconKey: 'film',
+      iconLabel: 'Film badge icon',
       detail: `${completedTypeCounts.movie} watched ${pluralize(completedTypeCounts.movie, 'movie')}. Bronze starts at 100.`,
+    }),
+    createTieredBadge({
+      id: 'show-runner',
+      kicker: 'TV',
+      name: 'Show Runner',
+      description: 'Build momentum by finishing shows from your Watched list.',
+      value: completedTypeCounts.tv_show,
+      thresholds: [2, 5, 10, 20],
+      iconKey: 'tv',
+      iconLabel: 'TV achievement icon',
+      detail: `${completedTypeCounts.tv_show} finished ${pluralize(completedTypeCounts.tv_show, 'show')}. Bronze starts at 2.`,
+    }),
+    createTieredBadge({
+      id: 'bookworm',
+      kicker: 'BOOKS',
+      name: 'Bookworm',
+      description: 'Turn finished books into reading metals of your own.',
+      value: completedTypeCounts.book,
+      thresholds: [2, 5, 10, 20],
+      iconKey: 'book',
+      iconLabel: 'Book achievement icon',
+      detail: `${completedTypeCounts.book} finished ${pluralize(completedTypeCounts.book, 'book')}. Bronze starts at 2.`,
+    }),
+    createTieredBadge({
+      id: 'review-writer',
+      kicker: 'REVIEWS',
+      name: 'Review Writer',
+      description: 'Leave written reviews to build your voice as a critic.',
+      value: writtenReviewCount,
+      thresholds: [1, 5, 10, 25],
+      iconKey: 'review',
+      iconLabel: 'Review achievement icon',
+      detail: writtenReviewCount
+        ? `${writtenReviewCount} written ${pluralize(writtenReviewCount, 'review')}. Silver starts at 5.`
+        : 'Write your first review on a rated title to unlock Bronze.',
     }),
     createTieredBadge({
       id: 'trilogy-finisher',
@@ -344,6 +393,8 @@ function buildBadges(watchlistItems) {
       description: 'Complete films from the same franchise on your Watched list.',
       value: movieSeries.count,
       thresholds: [3, 4, 5, 6],
+      iconKey: 'trilogy',
+      iconLabel: 'Trilogy badge icon',
       detail: movieSeries.seriesName
         ? `Best series progress: ${movieSeries.seriesName} (${movieSeries.count} watched ${pluralize(movieSeries.count, 'film')}).`
         : 'No watched franchise streak yet.',
@@ -355,9 +406,22 @@ function buildBadges(watchlistItems) {
       description: 'Complete matching book and movie titles to climb each metal tier.',
       value: adaptationPairs.length,
       thresholds: [1, 2, 3, 5],
+      iconKey: 'adaptation',
+      iconLabel: 'Adaptation badge icon',
       detail: adaptationPairs.length
         ? `Matched ${adaptationPairs[0]}${adaptationPairs.length > 1 ? ` and ${adaptationPairs.length - 1} more.` : '.'}`
         : 'Complete a book and its movie adaptation with the same title.',
+    }),
+    createTieredBadge({
+      id: 'library-curator',
+      kicker: 'LIBRARY',
+      name: 'Library Curator',
+      description: 'Grow a deeper bench by saving titles across your library.',
+      value: watchlistItems.length,
+      thresholds: [10, 25, 50, 100],
+      iconKey: 'shelf',
+      iconLabel: 'Library achievement icon',
+      detail: `${watchlistItems.length} saved ${pluralize(watchlistItems.length, 'title')} in your library. Bronze starts at 10.`,
     }),
     createTieredBadge({
       id: 'cross-media',
@@ -366,6 +430,8 @@ function buildBadges(watchlistItems) {
       description: 'Finish movies, shows, and books in balanced sets.',
       value: crossMediaSetCount,
       thresholds: [1, 3, 5, 10],
+      iconKey: 'spectrum',
+      iconLabel: 'Cross-media badge icon',
       detail: completedTypeLabels.length
         ? `${completedTypeLabels.join(', ')} completed. Sets available: ${crossMediaSetCount}.`
         : 'Complete at least one movie, one show, and one book for Bronze.',
@@ -452,7 +518,7 @@ export function buildHomeInsights(ratings = [], watchlistItems = [], requestedYe
   const selectedYear = availableYears.includes(parsedRequestedYear)
     ? parsedRequestedYear
     : availableYears[0];
-  const badges = buildBadges(safeWatchlistItems);
+  const badges = buildBadges(safeWatchlistItems, safeRatings);
 
   return {
     badges,
