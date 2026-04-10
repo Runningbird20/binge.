@@ -285,15 +285,16 @@ function createBookUpsertStatement() {
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_key ON books(source_key)');
 
   return db.prepare(`
-    INSERT INTO books (title, author, year, genre, synopsis, cover_url, source_key)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO books (title, author, year, genre, synopsis, cover_url, item_url, source_key)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(source_key) DO UPDATE SET
       title = excluded.title,
       author = excluded.author,
       year = excluded.year,
       genre = excluded.genre,
       synopsis = excluded.synopsis,
-      cover_url = excluded.cover_url
+      cover_url = excluded.cover_url,
+      item_url = excluded.item_url
   `);
 }
 
@@ -314,12 +315,13 @@ function syncArchiveBookItems(items, syncOptions = {}) {
       const synopsis =
         normalizeString(item?.synopsis || item?.description) || 'No description available yet.';
       const coverUrl = normalizeString(item?.coverUrl || item?.cover_url);
+      const itemUrl = normalizeString(item?.itemUrl || item?.item_url);
       const sourceKey =
         normalizeString(item?.sourceKey) ||
         `internet-archive:${normalizeString(item?.identifier) || `${title}:${author || ''}`}`;
 
       sourceKeys.push(sourceKey);
-      upsertBook.run(title, author, year, genre, synopsis, coverUrl, sourceKey);
+      upsertBook.run(title, author, year, genre, synopsis, coverUrl, itemUrl, sourceKey);
     }
 
     pruneImportedRows(
@@ -446,7 +448,7 @@ function syncMoviesFromPlex() {
 function syncMoviesFromTmdbBulk() {
   return syncJsonlSeedFile(tmdbMoviesBulkDataPath, tmdbMovieBulkSyncState, syncMovieItems, {
     activeSourcePrefixes: ['tmdb:movie:'],
-    inactiveSourcePrefixes: ['plex:movie:'],
+    inactiveSourcePrefixes: [],
     defaultSourceKeyPrefix: 'tmdb:movie:',
   });
 }
@@ -454,7 +456,7 @@ function syncMoviesFromTmdbBulk() {
 function syncMoviesFromPlexBulk() {
   return syncJsonlSeedFile(plexMoviesBulkDataPath, plexMovieBulkSyncState, syncMovieItems, {
     activeSourcePrefixes: ['plex:movie:'],
-    inactiveSourcePrefixes: ['tmdb:movie:'],
+    inactiveSourcePrefixes: [],
     defaultSourceKeyPrefix: 'plex:movie:',
   });
 }
@@ -551,7 +553,7 @@ function syncTvShowsFromPlex() {
 function syncTvShowsFromTmdbBulk() {
   return syncJsonlSeedFile(tmdbTvBulkDataPath, tmdbTvBulkSyncState, syncTvShowItems, {
     activeSourcePrefixes: ['tmdb:tv:'],
-    inactiveSourcePrefixes: ['plex:tv:'],
+    inactiveSourcePrefixes: [],
     defaultSourceKeyPrefix: 'tmdb:tv:',
   });
 }
@@ -559,7 +561,7 @@ function syncTvShowsFromTmdbBulk() {
 function syncTvShowsFromPlexBulk() {
   return syncJsonlSeedFile(plexTvBulkDataPath, plexTvBulkSyncState, syncTvShowItems, {
     activeSourcePrefixes: ['plex:tv:'],
-    inactiveSourcePrefixes: ['tmdb:tv:'],
+    inactiveSourcePrefixes: [],
     defaultSourceKeyPrefix: 'plex:tv:',
   });
 }
@@ -665,45 +667,49 @@ function syncBooksFromOpenLibrary() {
 }
 
 function syncPreferredMovies() {
-  if (fileHasContent(plexMoviesBulkDataPath)) {
-    return syncMoviesFromPlexBulk();
-  }
-
-  if (fileHasContent(plexMoviesDataPath)) {
-    return syncMoviesFromPlex();
-  }
-
+  let loaded = false;
+  // Load ALL available sources — both Plex and TMDB
   if (fileHasContent(tmdbMoviesBulkDataPath)) {
-    return syncMoviesFromTmdbBulk();
+    syncMoviesFromTmdbBulk();
+    loaded = true;
+  } else if (fileHasContent(tmdbMoviesDataPath)) {
+    syncMoviesFromTmdb();
+    loaded = true;
   }
-
-  if (fileHasContent(tmdbMoviesDataPath)) {
-    return syncMoviesFromTmdb();
+  if (fileHasContent(plexMoviesBulkDataPath)) {
+    syncMoviesFromPlexBulk();
+    loaded = true;
+  } else if (fileHasContent(plexMoviesDataPath)) {
+    syncMoviesFromPlex();
+    loaded = true;
   }
-
-  pruneImportedRows('movies', ['plex:movie:', 'tmdb:movie:'], []);
-  return false;
+  if (!loaded) {
+    pruneImportedRows('movies', ['plex:movie:', 'tmdb:movie:'], []);
+  }
+  return loaded;
 }
 
 function syncPreferredTvShows() {
-  if (fileHasContent(plexTvBulkDataPath)) {
-    return syncTvShowsFromPlexBulk();
-  }
-
-  if (fileHasContent(plexTvDataPath)) {
-    return syncTvShowsFromPlex();
-  }
-
+  let loaded = false;
+  // Load ALL available sources — both Plex and TMDB
   if (fileHasContent(tmdbTvBulkDataPath)) {
-    return syncTvShowsFromTmdbBulk();
+    syncTvShowsFromTmdbBulk();
+    loaded = true;
+  } else if (fileHasContent(tmdbTvDataPath)) {
+    syncTvShowsFromTmdb();
+    loaded = true;
   }
-
-  if (fileHasContent(tmdbTvDataPath)) {
-    return syncTvShowsFromTmdb();
+  if (fileHasContent(plexTvBulkDataPath)) {
+    syncTvShowsFromPlexBulk();
+    loaded = true;
+  } else if (fileHasContent(plexTvDataPath)) {
+    syncTvShowsFromPlex();
+    loaded = true;
   }
-
-  pruneImportedRows('tv_shows', ['plex:tv:', 'tmdb:tv:'], []);
-  return false;
+  if (!loaded) {
+    pruneImportedRows('tv_shows', ['plex:tv:', 'tmdb:tv:'], []);
+  }
+  return loaded;
 }
 
 function syncPreferredBooks() {
@@ -775,6 +781,7 @@ db.exec(`
     genre TEXT,
     synopsis TEXT,
     cover_url TEXT,
+    item_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -968,6 +975,10 @@ if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rati
 }
 
 // ── New table migrations (safe to run on existing databases) ──────────────────
+if (!hasColumn('books', 'item_url')) {
+  db.exec('ALTER TABLE books ADD COLUMN item_url TEXT');
+}
+
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS episode_progress (
