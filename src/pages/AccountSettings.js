@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api';
 
 const MIN_PASSWORD_LENGTH = 6;
 
 export default function AccountSettings() {
-  const { user, login } = useAuth();
+  const { user, updateProfile, updatePassword } = useAuth();
   const [profileForm, setProfileForm] = useState({
     username: user?.username || '',
     email: user?.email || '',
   });
   const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
@@ -58,11 +56,12 @@ export default function AccountSettings() {
 
     setProfileLoading(true);
     try {
-      const { token, user: updatedUser } = await api.patch('/auth/account', {
+      await updateProfile({
         username,
         email,
+        bio: user?.bio || '',
+        avatarUrl: user?.avatarUrl || null,
       });
-      login(updatedUser, token);
       setProfileSuccess('Account details updated.');
     } catch (err) {
       setProfileError(err.message);
@@ -76,8 +75,8 @@ export default function AccountSettings() {
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      setPasswordError('Fill in your current password and your new password');
+    if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordError('Fill in your new password in both fields');
       return;
     }
 
@@ -93,13 +92,8 @@ export default function AccountSettings() {
 
     setPasswordLoading(true);
     try {
-      const { token, user: updatedUser } = await api.patch('/auth/account', {
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword,
-      });
-      login(updatedUser, token);
+      await updatePassword(passwordForm.newPassword);
       setPasswordForm({
-        currentPassword: '',
         newPassword: '',
         confirmPassword: '',
       });
@@ -165,25 +159,13 @@ export default function AccountSettings() {
           <section className="settings-card">
             <div className="settings-card-header">
               <h2>Password</h2>
-              <p>Use your current password to set a new one.</p>
+              <p>Set a new password for your Supabase account.</p>
             </div>
 
             {passwordError && <div className="auth-error">{passwordError}</div>}
             {passwordSuccess && <div className="settings-success">{passwordSuccess}</div>}
 
             <form className="auth-form settings-form" onSubmit={handlePasswordSubmit}>
-              <label>
-                Current password
-                <input
-                  type="password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => updatePasswordForm('currentPassword', e.target.value)}
-                  placeholder="Enter current password"
-                  autoComplete="current-password"
-                  required
-                />
-              </label>
-
               <label>
                 New password
                 <input

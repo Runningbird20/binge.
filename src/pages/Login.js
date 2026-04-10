@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -15,8 +14,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const { token, user } = await api.post('/auth/login', form);
-      login(user, token);
+      await signIn(form);
       navigate('/home');
     } catch (err) {
       setError(err.message);

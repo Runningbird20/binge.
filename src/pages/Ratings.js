@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
-import { api } from '../api';
+import { fetchSupabaseRatings } from '../utils/supabaseData';
 
 const TYPE_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const TYPE_TABS   = [
@@ -18,7 +18,7 @@ export default function Ratings() {
 
   useEffect(() => {
     setLoading(true);
-    api.get('/ratings/my')
+    fetchSupabaseRatings()
       .then(setRatings)
       .catch(() => setRatings([]))
       .finally(() => setLoading(false));

@@ -3,7 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 
 export default function Landing() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authLoading } = useAuth();
+  if (authLoading) return null;
   if (isAuthenticated) return <Navigate to="/home" replace />;
 
   return (
