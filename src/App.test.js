@@ -37,6 +37,7 @@ jest.mock(
     ),
     Navigate: ({ to }) => <div data-testid="navigate" data-to={to} />,
     useNavigate: () => mockNavigate,
+    useSearchParams: () => [new URLSearchParams(), jest.fn()],
   }),
   { virtual: true }
 );
@@ -156,17 +157,6 @@ test('creates an account with bio and avatar details', async () => {
 });
 
 test('shows avatar and bio on the signed-in home page', async () => {
-  renderWithAuth(
-    <Home />,
-    {
-      id: 7,
-      username: 'mediafan',
-      email: 'mediafan@example.com',
-      bio: 'Always logging the next favorite.',
-      avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
-
   global.fetch.mockImplementation((url) => {
     if (url === '/api/ratings/my' || url === '/api/watchlist') {
       return Promise.resolve(
@@ -178,6 +168,17 @@ test('shows avatar and bio on the signed-in home page', async () => {
 
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
+
+  renderWithAuth(
+    <Home />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
 
   expect(
     screen.getByRole('heading', { name: /welcome back, mediafan\./i })
@@ -191,7 +192,105 @@ test('shows avatar and bio on the signed-in home page', async () => {
   });
 });
 
-test('shows an account settings gear link for signed-in users', () => {
+test('shows milestone badges and an annual recap on the home page', async () => {
+  const ratings = [
+    {
+      media_type: 'movie',
+      media_id: 1,
+      title: 'Harry Potter and the Sorcerer\'s Stone',
+      genre: 'Fantasy, Adventure',
+      created_at: '2026-01-09 10:00:00',
+    },
+    {
+      media_type: 'movie',
+      media_id: 2,
+      title: 'Harry Potter and the Chamber of Secrets',
+      genre: 'Fantasy, Adventure',
+      created_at: '2026-02-11 10:00:00',
+    },
+    {
+      media_type: 'movie',
+      media_id: 3,
+      title: 'Harry Potter and the Prisoner of Azkaban',
+      genre: 'Fantasy, Adventure',
+      created_at: '2026-03-03 10:00:00',
+    },
+    {
+      media_type: 'book',
+      media_id: 4,
+      title: 'Harry Potter and the Prisoner of Azkaban',
+      genre: 'Fantasy',
+      created_at: '2026-03-15 10:00:00',
+    },
+    {
+      media_type: 'tv_show',
+      media_id: 5,
+      title: 'The Bear',
+      genre: 'Drama',
+      created_at: '2026-04-07 10:00:00',
+    },
+    {
+      media_type: 'movie',
+      media_id: 6,
+      title: 'Dune',
+      genre: 'Science Fiction',
+      created_at: '2025-11-21 10:00:00',
+    },
+  ];
+
+  global.fetch.mockImplementation((url) => {
+    if (url === '/api/ratings/my') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify(ratings),
+        })
+      );
+    }
+
+    if (url === '/api/watchlist') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([{ id: 1 }, { id: 2 }]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
+  renderWithAuth(
+    <Home />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  expect(await screen.findByRole('heading', { name: /milestones/i })).toBeInTheDocument();
+  expect(screen.getByText(/4 of 5 earned/i)).toBeInTheDocument();
+  expect(screen.getByText(/trilogy finisher/i)).toBeInTheDocument();
+  expect(screen.getByText(/read the book and watched the film/i)).toBeInTheDocument();
+  expect(screen.getByText(/you logged 5 titles in 2026\./i)).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: /choose recap year/i })).toHaveValue('2026');
+  expect(screen.getAllByText(/fantasy/i).length).toBeGreaterThan(0);
+});
+
+test('shows an account settings gear link for signed-in users', async () => {
+  global.fetch.mockImplementation((url) => {
+    if (url === '/api/ratings/my' || url === '/api/watchlist') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
   renderWithAuth(
     <Home />,
     {
@@ -204,6 +303,10 @@ test('shows an account settings gear link for signed-in users', () => {
   );
 
   expect(screen.getByRole('link', { name: /account settings/i })).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(global.fetch).toHaveBeenCalled();
+  });
 });
 
 test('updates username and email from account settings', async () => {
