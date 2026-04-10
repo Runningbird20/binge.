@@ -67,9 +67,21 @@ function BookDetailsModal({
   const [draftScores, setDraftScores] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
-  const archiveId = book?.source_key?.startsWith('internet-archive:')
+  // Extract the archive.org identifier from source_key for IA books
+  const rawId = book?.source_key?.startsWith('internet-archive:')
     ? book.source_key.replace('internet-archive:', '')
-    : book?.identifier || null;
+    : null;
+
+  // archive.org embed works for most IA identifiers
+  // OL-prefixed IDs (ol-works-...) can't be embedded — use item_url instead
+  const isOlRecord = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
+  const archiveId = rawId && !isOlRecord ? rawId : null;
+
+  // item_url stored in DB (e.g. https://archive.org/details/... or https://openlibrary.org/works/...)
+  const itemUrl = book?.item_url || book?.itemUrl || null;
+
+  // Can read if we have an embeddable IA ID or any item URL
+  const canRead = !!(archiveId || itemUrl);
 
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
@@ -254,13 +266,13 @@ function BookDetailsModal({
                 <p className="book-detail-status">{browseOnlyMessage}</p>
               )}
               {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
-              {archiveId && (
+              {canRead && (
                 <button
                   type="button"
                   className="btn-watch"
                   onClick={() => setShowReader(true)}
                 >
-                  Read Now
+                  📖 Read Now
                 </button>
               )}
               {archiveId && (
@@ -287,10 +299,11 @@ function BookDetailsModal({
         </div>
       </div>
 
-      {showReader && archiveId && (
+      {showReader && canRead && (
         <BookReader
           book={book}
           archiveId={archiveId}
+          itemUrl={itemUrl}
           onClose={() => setShowReader(false)}
         />
       )}
@@ -298,7 +311,7 @@ function BookDetailsModal({
   );
 }
 
-function BookReader({ book, archiveId, onClose }) {
+function BookReader({ book, archiveId, itemUrl, onClose }) {
   const iframeRef = useRef(null);
   const modalRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -319,7 +332,10 @@ function BookReader({ book, archiveId, onClose }) {
     }
   }
 
-  const embedUrl = `https://archive.org/embed/${archiveId}`;
+  // Internet Archive embed for IA books, or direct link for OL books
+  const embedUrl = archiveId
+    ? `https://archive.org/embed/${archiveId}`
+    : itemUrl || null;
 
   return (
     <div className="player-overlay" onClick={onClose}>
@@ -346,7 +362,7 @@ function BookReader({ book, archiveId, onClose }) {
         <div className="player-frame-wrap">
           <iframe
             ref={iframeRef}
-            src={embedUrl}
+            src={embedUrl || ""}
             className="player-frame"
             allowFullScreen
             allow="fullscreen"

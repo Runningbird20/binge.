@@ -226,12 +226,32 @@ router.get('/movies', (req, res) => {
   }
 
   const { search, genre, year, sort } = req.query;
-  let query = 'SELECT * FROM movies WHERE source_key IS NOT NULL';
   const params = [];
-  if (search) { query += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { query += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  if (year)   { query += ' AND year = ?';       params.push(Number(year)); }
-  const items = sortMediaItems(db.prepare(query).all(...params), sort);
+
+  // Deduplicate by title+year — prefer TMDB over Plex for same title
+  // Uses MIN(id) on TMDB records when available, otherwise Plex
+  let whereClause = 'WHERE source_key IS NOT NULL';
+  if (search) { whereClause += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  if (genre)  { whereClause += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+  if (year)   { whereClause += ' AND year = ?';       params.push(Number(year)); }
+
+  const dedupeQuery = `
+    SELECT m.*
+    FROM movies m
+    INNER JOIN (
+      SELECT
+        LOWER(TRIM(title)) AS norm_title,
+        COALESCE(year, 0) AS norm_year,
+        -- Prefer TMDB source keys, fall back to min id
+        MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
+        MIN(id) AS any_id
+      FROM movies
+      WHERE source_key IS NOT NULL
+      GROUP BY LOWER(TRIM(title)), COALESCE(year, 0)
+    ) dedup ON m.id = COALESCE(dedup.tmdb_id, dedup.any_id)
+    ${whereClause}
+  `;
+  const items = sortMediaItems(db.prepare(dedupeQuery).all(...params), sort);
   const genres = buildMediaGenreFacets(
     db.prepare(`
       SELECT DISTINCT genre
@@ -274,11 +294,27 @@ router.get('/tv-shows', (req, res) => {
   }
 
   const { search, genre, sort } = req.query;
-  let query = 'SELECT * FROM tv_shows WHERE source_key IS NOT NULL';
   const params = [];
-  if (search) { query += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { query += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  const items = sortMediaItems(db.prepare(query).all(...params), sort);
+
+  let whereClause = 'WHERE source_key IS NOT NULL';
+  if (search) { whereClause += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  if (genre)  { whereClause += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+
+  const dedupeQuery = `
+    SELECT t.*
+    FROM tv_shows t
+    INNER JOIN (
+      SELECT
+        LOWER(TRIM(title)) AS norm_title,
+        MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
+        MIN(id) AS any_id
+      FROM tv_shows
+      WHERE source_key IS NOT NULL
+      GROUP BY LOWER(TRIM(title))
+    ) dedup ON t.id = COALESCE(dedup.tmdb_id, dedup.any_id)
+    ${whereClause}
+  `;
+  const items = sortMediaItems(db.prepare(dedupeQuery).all(...params), sort);
   const genres = buildMediaGenreFacets(
     db.prepare(`
       SELECT DISTINCT genre
@@ -470,18 +506,44 @@ router.get('/tmdb-id', async (req, res) => {
   const TMDB_KEY = process.env.TMDB_API_KEY;
   if (!TMDB_KEY) return res.json({ id: null });
 
-  try {
-    const mediaType = type === 'tv_show' ? 'tv' : 'movie';
-    const params = new URLSearchParams({
-      api_key: TMDB_KEY,
-      query: title,
-      ...(year ? { first_air_date_year: year, year } : {}),
-    });
+  const mediaType = type === 'tv_show' ? 'tv' : 'movie';
+
+  async function searchTmdb(query, extraParams = {}) {
+    const params = new URLSearchParams({ api_key: TMDB_KEY, query, ...extraParams });
     const url = `https://api.themoviedb.org/3/search/${mediaType}?${params}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) return res.json({ id: null });
+    const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!response.ok) return null;
     const data = await response.json();
-    const result = data.results?.[0];
+    return data.results?.[0] || null;
+  }
+
+  try {
+    // Strategy 1: exact title + year
+    let result = year ? await searchTmdb(title, { year, first_air_date_year: year }) : null;
+
+    // Strategy 2: title without year
+    if (!result) result = await searchTmdb(title);
+
+    // Strategy 3: strip common subtitle separators (e.g. "Title: Subtitle" -> "Title")
+    if (!result && title.includes(':')) {
+      result = await searchTmdb(title.split(':')[0].trim());
+    }
+
+    // Strategy 4: strip parenthetical year from title e.g. "Show (2021)"
+    if (!result && /\s*\(\d{4}\)\s*$/.test(title)) {
+      result = await searchTmdb(title.replace(/\s*\(\d{4}\)\s*$/, '').trim());
+    }
+
+    // Strategy 5: try removing "Season X" or "Part X" suffixes
+    if (!result && /\s+(season|part)\s+\d+/i.test(title)) {
+      result = await searchTmdb(title.replace(/\s+(season|part)\s+\d+.*/i, '').trim());
+    }
+
+    // Strategy 6: for anime — try with "!" removed or common alt punctuation
+    if (!result && /[!?]/.test(title)) {
+      result = await searchTmdb(title.replace(/[!?]/g, '').trim());
+    }
+
     if (!result) return res.json({ id: null });
     return res.json({ id: result.id, title: result.title || result.name });
   } catch (err) {
