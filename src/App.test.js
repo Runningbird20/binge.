@@ -192,7 +192,7 @@ test('shows avatar and bio on the signed-in home page', async () => {
   });
 });
 
-test('shows milestone badges and an annual recap on the home page', async () => {
+test('shows achievement badges and an annual recap on the home page', async () => {
   const ratings = [
     {
       media_type: 'movie',
@@ -200,6 +200,7 @@ test('shows milestone badges and an annual recap on the home page', async () => 
       title: 'Harry Potter and the Sorcerer\'s Stone',
       genre: 'Fantasy, Adventure',
       created_at: '2026-01-09 10:00:00',
+      review: 'Still magical on every revisit.',
     },
     {
       media_type: 'movie',
@@ -207,6 +208,7 @@ test('shows milestone badges and an annual recap on the home page', async () => 
       title: 'Harry Potter and the Chamber of Secrets',
       genre: 'Fantasy, Adventure',
       created_at: '2026-02-11 10:00:00',
+      review: 'Darker and more confident than the first one.',
     },
     {
       media_type: 'movie',
@@ -307,11 +309,15 @@ test('shows milestone badges and an annual recap on the home page', async () => 
     }
   );
 
-  expect(await screen.findByRole('heading', { name: /milestones/i })).toBeInTheDocument();
-  expect(screen.getByText(/4 of 5 completed/i)).toBeInTheDocument();
-  expect(screen.getByText(/badges advance from bronze to rarer metals/i)).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: /achievements/i })).toBeInTheDocument();
+  expect(screen.getByText(/5 of 9 unlocked/i)).toBeInTheDocument();
+  expect(screen.getByText(/achievements level up from bronze to rarer metals/i)).toBeInTheDocument();
   expect(screen.getAllByText(/^bronze$/i).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/^silver$/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/show runner/i)).toBeInTheDocument();
+  expect(screen.getByText(/bookworm/i)).toBeInTheDocument();
+  expect(screen.getByText(/review writer/i)).toBeInTheDocument();
+  expect(screen.getByText(/library curator/i)).toBeInTheDocument();
   expect(screen.getByText(/trilogy finisher/i)).toBeInTheDocument();
   expect(screen.getByText(/best series progress: harry potter \(4 watched films\)\./i)).toBeInTheDocument();
   expect(screen.getByText(/read the book and watched the film/i)).toBeInTheDocument();
