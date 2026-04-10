@@ -401,6 +401,7 @@ body {
 
 .stats-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 2.5rem;
 }
@@ -536,6 +537,282 @@ body {
   gap: 0.9rem;
   align-items: flex-start;
   text-align: left;
+}
+.home-insights-header {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.home-year-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: #9f9f9f;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home-year-filter .filter-input {
+  min-width: 120px;
+}
+
+.home-badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.badge-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.2rem;
+  border-radius: 18px;
+  border: 1px solid #252525;
+  background:
+    linear-gradient(180deg, rgba(21, 21, 21, 0.98) 0%, rgba(14, 14, 14, 0.98) 100%);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.16);
+}
+
+.badge-card-earned {
+  border-color: rgba(232, 201, 122, 0.32);
+  background:
+    radial-gradient(circle at top right, rgba(232, 201, 122, 0.12), transparent 46%),
+    linear-gradient(180deg, rgba(24, 21, 14, 0.98) 0%, rgba(15, 14, 11, 0.98) 100%);
+}
+
+.badge-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.badge-card-kicker,
+.badge-card-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.32rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.badge-card-kicker {
+  background-color: rgba(93, 184, 138, 0.12);
+  border: 1px solid rgba(93, 184, 138, 0.24);
+  color: #93dab6;
+}
+
+.badge-card-status {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8e8e8e;
+}
+
+.badge-card-status-earned {
+  background-color: rgba(232, 201, 122, 0.12);
+  border-color: rgba(232, 201, 122, 0.24);
+  color: #f1dfb0;
+}
+
+.badge-card h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.badge-card-copy,
+.badge-card-detail {
+  margin: 0;
+  color: #a7a7a7;
+  line-height: 1.6;
+}
+
+.badge-card-detail {
+  color: #d2d2d2;
+  font-size: 0.88rem;
+}
+
+.badge-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: #d8d8d8;
+}
+
+.badge-progress-track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.badge-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5db88a 0%, #e8c97a 100%);
+}
+
+.home-recap-summary {
+  margin: 0 0 1.25rem 0;
+  color: #c9c9c9;
+  line-height: 1.7;
+  max-width: 760px;
+}
+
+.home-recap-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.home-recap-stat-card,
+.home-highlight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.home-recap-stat-card strong,
+.home-highlight-card strong {
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.home-recap-stat-label,
+.home-highlight-label {
+  color: #8f8f8f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home-recap-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 1rem;
+}
+
+.home-recap-card {
+  padding: 1.1rem;
+  border-radius: 18px;
+  border: 1px solid #252525;
+  background:
+    linear-gradient(180deg, rgba(18, 18, 18, 0.98) 0%, rgba(13, 13, 13, 0.98) 100%);
+}
+
+.home-recap-card-header {
+  margin-bottom: 1rem;
+}
+
+.home-recap-card-header h3,
+.home-genre-block h4 {
+  margin: 0;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.home-monthly-chart {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.home-month-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.home-month-bar-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 128px;
+  padding: 0.28rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.08) 100%);
+}
+
+.home-month-bar-fill {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #7fd8b2 0%, #e8c97a 100%);
+}
+
+.home-month-bar-label,
+.home-month-bar-count {
+  font-size: 0.76rem;
+}
+
+.home-month-bar-label {
+  color: #9a9a9a;
+}
+
+.home-month-bar-count {
+  color: #f2f2f2;
+  font-weight: 600;
+}
+
+.home-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.home-genre-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.home-genre-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.home-genre-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(93, 184, 138, 0.24);
+  background-color: rgba(93, 184, 138, 0.12);
+  color: #d9f0e4;
+  font-size: 0.84rem;
+}
+
+.home-genre-chip strong {
+  color: #fff;
+}
+
+.home-genre-empty {
+  margin: 0;
+  color: #8d8d8d;
 }
 
 /* ─── Auth pages ────────────────────────────────────────────────────────── */
@@ -2688,7 +2965,23 @@ body {
   .footer { flex-direction: column; gap: 0.5rem; text-align: center; padding: 2rem; }
 
   .browse-grid,
-  .home-secondary-grid { grid-template-columns: 1fr; }
+  .home-secondary-grid,
+  .home-badge-grid,
+  .home-recap-grid { grid-template-columns: 1fr; }
+  .home-highlight-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-insights-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .home-year-filter {
+    width: 100%;
+  }
+  .home-year-filter .filter-input {
+    width: 100%;
+    min-width: 0;
+  }
   .books-shell { grid-template-columns: 1fr; }
   .lists-shell { grid-template-columns: 1fr; }
   .books-filter-sidebar {

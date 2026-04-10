@@ -5,21 +5,33 @@ import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
 import ForYou from '../components/ForYou';
+import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
 
 export default function Home() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
+  const [ratings, setRatings] = useState([]);
+  const [selectedYear, setSelectedYear] = useState();
+  const insights = buildHomeInsights(ratings, selectedYear);
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [ratings, watchlist] = await Promise.all([
+        const [ratingsData, watchlist] = await Promise.all([
           api.get('/ratings/my'),
           api.get('/watchlist'),
         ]);
-        setStats({ ratings: ratings.length, watchlist: watchlist.length });
+        const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
+        const nextWatchlist = Array.isArray(watchlist) ? watchlist : [];
+        setRatings(nextRatings);
+        setStats({ ratings: nextRatings.length, watchlist: nextWatchlist.length });
+        setSelectedYear((currentYear) => (
+          currentYear == null ? buildHomeInsights(nextRatings).selectedYear : currentYear
+        ));
       } catch {
         // stats stay at zero if request fails
+        setRatings([]);
+        setStats({ ratings: 0, watchlist: 0 });
       }
     }
 
@@ -53,9 +65,171 @@ export default function Home() {
             <div className="stat-number">{stats.watchlist}</div>
             <div className="stat-label">Saved Titles</div>
           </div>
+          <div className="stat-card">
+            <div className="stat-number">{insights.earnedBadgeCount}</div>
+            <div className="stat-label">Badges Earned</div>
+          </div>
         </div>
 
         <div className="home-sections">
+          <section className="home-section surface-panel">
+            <div className="section-header home-insights-header">
+              <div>
+                <h2>Milestones</h2>
+                <p className="home-panel-copy">
+                  Earn progress badges as you keep logging what you finish.
+                </p>
+              </div>
+              <p className="surface-panel-meta">
+                {insights.earnedBadgeCount} of {insights.badges.length} earned
+              </p>
+            </div>
+
+            <div className="home-badge-grid">
+              {insights.badges.map((badge) => (
+                <article
+                  key={badge.id}
+                  className={`badge-card${badge.earned ? ' badge-card-earned' : ''}`}
+                >
+                  <div className="badge-card-header">
+                    <span className="badge-card-kicker">{badge.kicker}</span>
+                    <span
+                      className={`badge-card-status${badge.earned ? ' badge-card-status-earned' : ''}`}
+                    >
+                      {badge.earned ? 'Earned' : 'In Progress'}
+                    </span>
+                  </div>
+                  <h3>{badge.name}</h3>
+                  <p className="badge-card-copy">{badge.description}</p>
+                  <div className="badge-progress-meta">
+                    <span>{badge.progressLabel}</span>
+                    <span>{badge.progressPercent}%</span>
+                  </div>
+                  <div className="badge-progress-track" aria-hidden="true">
+                    <span style={{ width: `${badge.progressPercent}%` }} />
+                  </div>
+                  <p className="badge-card-detail">{badge.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="home-section surface-panel">
+            <div className="section-header home-insights-header">
+              <div>
+                <h2>Annual Recap</h2>
+                <p className="home-panel-copy">
+                  See how your movies, shows, and books add up over the year.
+                </p>
+              </div>
+              <label className="home-year-filter">
+                <span>Year</span>
+                <select
+                  className="filter-input"
+                  aria-label="Choose recap year"
+                  value={insights.selectedYear}
+                  onChange={(event) => setSelectedYear(Number(event.target.value))}
+                >
+                  {insights.availableYears.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {stats.ratings === 0 ? (
+              <div className="empty-state home-empty-card">
+                <p>Your recap will fill in as soon as you start rating titles.</p>
+                <p className="empty-hint">
+                  Log a movie, TV show, or book to unlock milestones and a yearly summary.
+                </p>
+                <Link to="/movies" className="btn-secondary">Browse the catalog</Link>
+              </div>
+            ) : (
+              <>
+                <p className="home-recap-summary">{buildRecapNarrative(insights.recap)}</p>
+
+                <div className="home-recap-stat-grid">
+                  <div className="home-recap-stat-card">
+                    <span className="home-recap-stat-label">Logged</span>
+                    <strong>{insights.recap.totalLogged}</strong>
+                  </div>
+                  <div className="home-recap-stat-card">
+                    <span className="home-recap-stat-label">Movies</span>
+                    <strong>{insights.recap.countsByType.movie}</strong>
+                  </div>
+                  <div className="home-recap-stat-card">
+                    <span className="home-recap-stat-label">TV Shows</span>
+                    <strong>{insights.recap.countsByType.tv_show}</strong>
+                  </div>
+                  <div className="home-recap-stat-card">
+                    <span className="home-recap-stat-label">Books</span>
+                    <strong>{insights.recap.countsByType.book}</strong>
+                  </div>
+                </div>
+
+                <div className="home-recap-grid">
+                  <div className="home-recap-card">
+                    <div className="home-recap-card-header">
+                      <h3>Monthly Pace</h3>
+                    </div>
+                    <div className="home-monthly-chart" aria-label="Monthly recap chart">
+                      {insights.recap.monthly.map((month) => (
+                        <div key={month.label} className="home-month-bar">
+                          <div className="home-month-bar-track">
+                            <span
+                              className="home-month-bar-fill"
+                              style={{ height: `${month.percent}%` }}
+                            />
+                          </div>
+                          <span className="home-month-bar-label">{month.label}</span>
+                          <span className="home-month-bar-count">{month.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="home-recap-card">
+                    <div className="home-recap-card-header">
+                      <h3>Highlights</h3>
+                    </div>
+                    <div className="home-highlight-grid">
+                      <div className="home-highlight-card">
+                        <span className="home-highlight-label">Active Months</span>
+                        <strong>{insights.recap.activeMonths}</strong>
+                      </div>
+                      <div className="home-highlight-card">
+                        <span className="home-highlight-label">Busiest Month</span>
+                        <strong>
+                          {insights.recap.busiestMonth
+                            ? insights.recap.busiestMonth.label
+                            : 'None yet'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="home-genre-block">
+                      <h4>Top Genres</h4>
+                      {insights.recap.topGenres.length === 0 ? (
+                        <p className="home-genre-empty">No genre breakdown yet.</p>
+                      ) : (
+                        <div className="home-genre-list">
+                          {insights.recap.topGenres.map((genre) => (
+                            <span key={genre.label} className="home-genre-chip">
+                              {genre.label} <strong>{genre.count}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
           <section className="home-section">
             <div className="section-header">
               <h2>Explore the Library</h2>
