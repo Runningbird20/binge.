@@ -988,6 +988,42 @@ body {
   color: #8d8d8d;
 }
 
+.supabase-todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.supabase-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 10px;
+  background-color: #151515;
+  border: 1px solid #242424;
+  color: #dedede;
+}
+
+.supabase-todo-bullet {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #3ecf8e 0%, #1b8a5a 100%);
+  box-shadow: 0 0 0 4px rgba(62, 207, 142, 0.12);
+  flex-shrink: 0;
+}
+
+.supabase-error-text {
+  margin: 0;
+  color: #b88d8d;
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
 /* ─── Auth pages ────────────────────────────────────────────────────────── */
 
 .books-page-header {

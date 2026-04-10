@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-const PORT = Number(process.env.SERVER_PORT) || 5001;
+const PORT = Number(process.env.PORT) || Number(process.env.SERVER_PORT) || 5001;
 
 const configuredClientUrl = process.env.CLIENT_URL?.trim();
 const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i;
@@ -28,6 +28,10 @@ app.use(
 );
 
 app.use(express.json({ limit: '5mb' }));
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/lists', require('./routes/lists'));
