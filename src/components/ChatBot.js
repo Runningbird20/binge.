@@ -203,10 +203,26 @@ export default function ChatBot() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  const runStatusCheck = useCallback(async () => {
+    try {
+      const data = await api.get('/chat/status');
+      setApiStatus(data.ok);
+      if (data.ok && messages.length === 0) {
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: `Hey ${user?.username || 'there'}! ðŸ¦‰ Ask me anything about movies, TV shows, or books â€” reviews, themes, cast, recommendations, you name it. I'll search the web and show you what's available on binge.!`,
+        }]);
+      }
+    } catch {
+      setApiStatus(false);
+    }
+  }, [messages.length, user?.username]);
+
   useEffect(() => {
     if (!isOpen || apiStatus !== null) return;
-    checkStatus();
-  }, [isOpen, apiStatus]);
+    runStatusCheck();
+  }, [isOpen, apiStatus, runStatusCheck]);
 
   async function checkStatus() {
     try {

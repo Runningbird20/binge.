@@ -364,7 +364,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, sortOrder, page]);
+  }, [debouncedSearch, genre, sortOrder, page, openId]);
 
   useEffect(() => {
     let cancelled = false;
