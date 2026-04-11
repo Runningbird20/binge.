@@ -226,47 +226,55 @@ router.get('/movies', (req, res) => {
   }
 
   const { search, genre, year, sort } = req.query;
-  const params = [];
+  const page     = normalizePage(req.query.page, 1);
+  const pageSize = normalizePageSize(req.query.page_size, 48, 100);
+  const offset   = (page - 1) * pageSize;
+  const params   = [];
 
-  // Deduplicate by title+year — prefer TMDB over Plex for same title
-  // Uses MIN(id) on TMDB records when available, otherwise Plex
-  let whereClause = 'WHERE source_key IS NOT NULL';
-  if (search) { whereClause += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { whereClause += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  if (year)   { whereClause += ' AND year = ?';       params.push(Number(year)); }
+  // Dedup subquery — prefer TMDB over Plex for same title+year
+  let innerWhere = 'WHERE source_key IS NOT NULL';
+  if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+  if (year)   { innerWhere += ' AND year = ?';       params.push(Number(year)); }
 
-  const dedupeQuery = `
+  // Determine ORDER BY for SQL (sort in DB, not in memory)
+  const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
+                : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
+                : sort === 'title-desc'? 'title DESC'
+                : 'title ASC';
+
+  const dedupeBase = `
     SELECT m.*
     FROM movies m
     INNER JOIN (
       SELECT
-        LOWER(TRIM(title)) AS norm_title,
-        COALESCE(year, 0) AS norm_year,
-        -- Prefer TMDB source keys, fall back to min id
         MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
         MIN(id) AS any_id
       FROM movies
-      WHERE source_key IS NOT NULL
+      ${innerWhere}
       GROUP BY LOWER(TRIM(title)), COALESCE(year, 0)
     ) dedup ON m.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    ${whereClause}
+    ${innerWhere}
   `;
-  const items = sortMediaItems(db.prepare(dedupeQuery).all(...params), sort);
+
+  const countParams = [...params, ...params]; // params used twice (inner + outer WHERE)
+  const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
+  const items = db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
+
   const genres = buildMediaGenreFacets(
     db.prepare(`
-      SELECT DISTINCT genre
-      FROM movies
-      WHERE source_key IS NOT NULL
-        AND genre IS NOT NULL
-        AND TRIM(genre) <> ''
+      SELECT DISTINCT genre FROM movies
+      WHERE source_key IS NOT NULL AND genre IS NOT NULL AND TRIM(genre) <> ''
     `).all().map((row) => row.genre)
   );
 
   res.json({
     items,
-    facets: {
-      genres,
-    },
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+    facets: { genres },
   });
 });
 
@@ -294,27 +302,37 @@ router.get('/tv-shows', (req, res) => {
   }
 
   const { search, genre, sort } = req.query;
-  const params = [];
+  const page     = normalizePage(req.query.page, 1);
+  const pageSize = normalizePageSize(req.query.page_size, 48, 100);
+  const offset   = (page - 1) * pageSize;
+  const params   = [];
 
-  let whereClause = 'WHERE source_key IS NOT NULL';
-  if (search) { whereClause += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { whereClause += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+  let innerWhere = 'WHERE source_key IS NOT NULL';
+  if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
 
-  const dedupeQuery = `
+  const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
+                : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
+                : sort === 'title-desc'? 'title DESC'
+                : 'title ASC';
+
+  const dedupeBase = `
     SELECT t.*
     FROM tv_shows t
     INNER JOIN (
       SELECT
-        LOWER(TRIM(title)) AS norm_title,
         MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
         MIN(id) AS any_id
       FROM tv_shows
-      WHERE source_key IS NOT NULL
+      ${innerWhere}
       GROUP BY LOWER(TRIM(title))
     ) dedup ON t.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    ${whereClause}
+    ${innerWhere}
   `;
-  const items = sortMediaItems(db.prepare(dedupeQuery).all(...params), sort);
+
+  const countParams = [...params, ...params];
+  const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
+  const items = db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
   const genres = buildMediaGenreFacets(
     db.prepare(`
       SELECT DISTINCT genre
@@ -327,9 +345,11 @@ router.get('/tv-shows', (req, res) => {
 
   res.json({
     items,
-    facets: {
-      genres,
-    },
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+    facets: { genres },
   });
 });
 
