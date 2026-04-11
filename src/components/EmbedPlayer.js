@@ -1,11 +1,94 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 
+// Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
-  { id: 'vidsrc-embed-ru', label: 'vidsrc-embed.ru', baseUrl: 'https://vidsrc-embed.ru' },
-  { id: 'vidsrc-embed-su', label: 'vidsrc-embed.su', baseUrl: 'https://vidsrc-embed.su' },
-  { id: 'vidsrcme-su', label: 'vidsrcme.su', baseUrl: 'https://vidsrcme.su' },
-  { id: 'vsrc-su', label: 'vsrc.su', baseUrl: 'https://vsrc.su' },
+  {
+    id: 'vidsrc-embed-ru',
+    label: 'Vidsrc',
+    buildUrl(id, mediaType, season, episode) {
+      const base = 'https://vidsrc-embed.ru';
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', base);
+      url.searchParams.set(id.kind, id.value);
+      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); url.searchParams.set('autonext', '1'); }
+      url.searchParams.set('autoplay', '1');
+      return url.toString();
+    },
+  },
+  {
+    id: 'vidsrc2',
+    label: 'Vidsrc 2',
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vidsrc-embed.su');
+      url.searchParams.set(id.kind, id.value);
+      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
+      url.searchParams.set('autoplay', '1');
+      return url.toString();
+    },
+  },
+  {
+    id: '2embed',
+    label: '2Embed ★ anime',
+    buildUrl(id, mediaType, season, episode) {
+      // 2embed.stream — great anime coverage, uses TMDB or IMDB
+      const isTV = mediaType === 'tv_show';
+      if (isTV) {
+        return `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`;
+      }
+      return `https://www.2embed.stream/embed/movie/${id.value}`;
+    },
+  },
+  {
+    id: 'autoembed',
+    label: 'AutoEmbed ★ anime',
+    buildUrl(id, mediaType, season, episode) {
+      // autoembed.co — explicitly supports anime via TMDB or IMDB ID
+      const isTV = mediaType === 'tv_show';
+      if (isTV) {
+        return `https://autoembed.co/tv/${id.kind}/${id.value}-${season}-${episode}`;
+      }
+      return `https://autoembed.co/movie/${id.kind}/${id.value}`;
+    },
+  },
+  {
+    id: 'vidlink',
+    label: 'VidLink',
+    buildUrl(id, mediaType, season, episode) {
+      // vidlink.pro — clean player, good anime support
+      const isTV = mediaType === 'tv_show';
+      if (isTV) {
+        return `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true`;
+      }
+      return `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+    },
+  },
+  {
+    id: 'superembed',
+    label: 'SuperEmbed',
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      const tmdbFlag = id.kind === 'tmdb' ? '&tmdb=1' : '';
+      if (isTV) {
+        return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}&s=${season}&e=${episode}`;
+      }
+      return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}`;
+    },
+  },
+  {
+    id: 'vsrc-su',
+    label: 'Vidsrc 3',
+    buildUrl(id, mediaType, season, episode) {
+      const base = 'https://vsrc.su';
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', base);
+      url.searchParams.set(id.kind, id.value);
+      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
+      url.searchParams.set('autoplay', '1');
+      return url.toString();
+    },
+  },
 ];
 
 const AUTO_WATCH_SECONDS = 5 * 60;
@@ -43,21 +126,12 @@ function getEmbeddedId(item) {
 
 function buildUrl(providerId, externalId, mediaType, season, episode) {
   const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
-  const isTV = mediaType === 'tv_show';
-
   if (!provider || !externalId) return null;
-
-  const url = new URL(isTV ? '/embed/tv' : '/embed/movie', provider.baseUrl);
-  url.searchParams.set(externalId.kind, externalId.value);
-  url.searchParams.set('autoplay', '1');
-
-  if (isTV) {
-    url.searchParams.set('season', String(season));
-    url.searchParams.set('episode', String(episode));
-    url.searchParams.set('autonext', '1');
+  try {
+    return provider.buildUrl(externalId, mediaType, season, episode);
+  } catch {
+    return null;
   }
-
-  return url.toString();
 }
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
@@ -464,6 +538,9 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
             </button>
           ))}
         </div>
+        <p className="player-anime-hint">
+          For anime try <strong>2Embed</strong> or <strong>AutoEmbed</strong> — they have the best anime coverage.
+        </p>
 
         <div className="player-frame-wrap">
           {embedUrl ? (

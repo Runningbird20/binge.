@@ -1,93 +1,89 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { api } from '../api';
-import {
-  buildMediaGenreFacets,
-  filterMediaItems,
-  loadFallbackTvShows,
-} from '../catalogFallback';
 
-function normalizeMediaItems(data) {
-  if (Array.isArray(data)) return data;
-  if (data?.items && Array.isArray(data.items)) return data.items;
-  return [];
-}
+const PAGE_SIZE = 48;
 
 export default function TVShows() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
 
-  const [shows, setShows] = useState([]);
-  const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [genre, setGenre] = useState('');
-  const [sortOrder, setSortOrder] = useState('title-asc');
-  const [facets, setFacets] = useState({ genres: [] });
+  const [shows, setShows]           = useState([]);
+  const [search, setSearch]         = useState(searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [genre, setGenre]           = useState('');
+  const [sortOrder, setSortOrder]   = useState('title-asc');
+  const [facets, setFacets]         = useState({ genres: [] });
   const [userRatings, setUserRatings] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]       = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage]             = useState(1);
+  const [total, setTotal]           = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedItem, setSelectedItem] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
-  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
+  const loadMoreRef = useRef(null);
 
-  const fetchShows = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => { setPage(1); setShows([]); }, [debouncedSearch, genre, sortOrder]);
+
+  const fetchShows = useCallback(async (pageNum) => {
+    if (pageNum === 1) setLoading(true); else setLoadingMore(true);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set('search', search);
+      const params = new URLSearchParams({
+        page: pageNum,
+        page_size: PAGE_SIZE,
+        sort: sortOrder,
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (genre) params.set('genre', genre);
-      if (sortOrder) params.set('sort', sortOrder);
 
       const data = await api.get(`/media/tv-shows?${params}`);
-      const items = normalizeMediaItems(data);
-      if (items.length === 0) {
-        throw new Error('TV catalog is empty');
-      }
+      const items = Array.isArray(data?.items) ? data.items : [];
 
-      setShows(items);
-      setFacets({
-        genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
-      });
-      setUsingFallbackCatalog(false);
-      // Auto-open modal if ?open=ID is in the URL
-      if (openId) {
-        const match = items.find((s) => s.id === openId);
+      setShows(prev => pageNum === 1 ? items : [...prev, ...items]);
+      setTotal(data?.total || 0);
+      setTotalPages(data?.totalPages || 1);
+      if (data?.facets?.genres) setFacets({ genres: data.facets.genres });
+
+      if (openId && pageNum === 1) {
+        const match = items.find(s => s.id === openId);
         if (match) { setSelectedItem(match); setDetailMessage(''); }
       }
     } catch {
-      try {
-        const fallbackItems = await loadFallbackTvShows();
-        const filteredItems = filterMediaItems(fallbackItems, { search, genre, sortOrder });
-        setShows(filteredItems);
-        setFacets({ genres: buildMediaGenreFacets(fallbackItems) });
-        setUsingFallbackCatalog(true);
-
-        if (openId) {
-          const match = filteredItems.find((show) => show.id === openId);
-          if (match) {
-            setSelectedItem(match);
-            setDetailMessage('');
-          }
-        }
-      } catch {
-        setShows([]);
-        setFacets({ genres: [] });
-        setUsingFallbackCatalog(false);
-      }
+      if (pageNum === 1) setShows([]);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [search, genre, sortOrder, openId]);
+  }, [debouncedSearch, genre, sortOrder, openId]);
 
-  useEffect(() => { fetchShows(); }, [fetchShows]);
+  useEffect(() => { fetchShows(page); }, [page, fetchShows]);
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const node = loadMoreRef.current;
+    if (!node || loadingMore || page >= totalPages) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setPage(p => p + 1);
+    }, { rootMargin: '300px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadingMore, page, totalPages]);
 
   useEffect(() => {
     api.get('/ratings/my?media_type=tv_show')
-      .then((ratings) => {
+      .then(ratings => {
         const next = {};
-        ratings.forEach((r) => { next[r.media_id] = r; });
+        ratings.forEach(r => { next[r.media_id] = r; });
         setUserRatings(next);
       })
       .catch(() => {});
@@ -96,11 +92,9 @@ export default function TVShows() {
   async function handleRate(item, categories, review) {
     try {
       await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, categories, review });
-      setUserRatings((cur) => ({ ...cur, [item.id]: { ...categories, media_id: item.id, review } }));
+      setUserRatings(cur => ({ ...cur, [item.id]: { ...categories, media_id: item.id, review } }));
       setDetailMessage('Rating saved!');
-    } catch (error) {
-      setDetailMessage(error.message);
-    }
+    } catch (err) { setDetailMessage(err.message); }
   }
 
   async function handleWatchlist(item) {
@@ -109,11 +103,8 @@ export default function TVShows() {
     try {
       await api.post('/watchlist', { media_type: 'tv_show', media_id: item.id });
       setDetailMessage(`"${item.title}" added to your watchlist.`);
-    } catch (error) {
-      setDetailMessage(error.message);
-    } finally {
-      setIsAddingWatchlist(false);
-    }
+    } catch (err) { setDetailMessage(err.message); }
+    finally { setIsAddingWatchlist(false); }
   }
 
   function openItemDetails(item) { setSelectedItem(item); setDetailMessage(''); }
@@ -121,7 +112,6 @@ export default function TVShows() {
   function clearFilters() { setSearch(''); setGenre(''); setSortOrder('title-asc'); }
 
   const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
-  const genreOptions = facets.genres;
 
   return (
     <div className="app-layout">
@@ -131,7 +121,7 @@ export default function TVShows() {
           <p className="page-kicker">Browse</p>
           <h1>TV Shows</h1>
           <p className="page-subtitle">
-            Explore series, compare genres, and jump from discovery into ratings, watchlists, and shared planning.
+            Search the catalog, narrow by genre, and open any show for ratings, watchlist saves, and episode tracking.
           </p>
         </div>
 
@@ -139,15 +129,10 @@ export default function TVShows() {
           <div className="surface-panel-header">
             <div>
               <h2>Filter the Catalog</h2>
-              <p className="surface-panel-copy">
-                Search by title, narrow by genre, and sort your shortlist in one place.
-              </p>
-              {usingFallbackCatalog && (
-                <p className="surface-panel-copy">Showing the bundled TV catalog snapshot.</p>
-              )}
+              <p className="surface-panel-copy">Search by title, narrow by genre, and sort without leaving the page.</p>
             </div>
             <p className="surface-panel-meta">
-              {loading ? 'Loading shows...' : `${shows.length} show${shows.length === 1 ? '' : 's'} found`}
+              {loading ? 'Loading...' : `${total.toLocaleString()} show${total === 1 ? '' : 's'}`}
             </p>
           </div>
 
@@ -158,40 +143,20 @@ export default function TVShows() {
               aria-label="Search TV shows"
               placeholder="Search TV shows..."
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={e => setSearch(e.target.value)}
             />
-            <select
-              className="filter-input"
-              aria-label="Genre"
-              value={genre}
-              onChange={(event) => setGenre(event.target.value)}
-            >
+            <select className="filter-input" aria-label="Genre" value={genre} onChange={e => setGenre(e.target.value)}>
               <option value="">All Genres</option>
-              {genreOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
+              {facets.genres.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
-            <select
-              className="filter-input"
-              aria-label="Sort by"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value)}
-            >
+            <select className="filter-input" aria-label="Sort by" value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
               <option value="title-asc">Title A-Z</option>
               <option value="title-desc">Title Z-A</option>
               <option value="year-desc">Newest First</option>
               <option value="year-asc">Oldest First</option>
             </select>
-            {hasActiveFilters && (
-              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-                Clear
-              </button>
-            )}
+            {hasActiveFilters && <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>Clear</button>}
           </div>
-
-          {hasActiveFilters && !loading && (
-            <p className="surface-panel-copy">Showing results for your active filters.</p>
-          )}
         </section>
 
         <section className="surface-panel surface-panel-spacious">
@@ -203,18 +168,25 @@ export default function TVShows() {
               <p className="empty-hint">Try a different search or clear the filters.</p>
             </div>
           ) : (
-            <div className="media-grid">
-              {shows.map((show) => (
-                <MediaCard
-                  key={show.id}
-                  item={show}
-                  mediaType="tv_show"
-                  userRating={userRatings[show.id]}
-                  onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
-                  onOpenDetails={openItemDetails}
-                />
-              ))}
-            </div>
+            <>
+              <div className="media-grid">
+                {shows.map(show => (
+                  <MediaCard
+                    key={show.id}
+                    item={show}
+                    mediaType="tv_show"
+                    userRating={userRatings[show.id]}
+                    onWatchlist={handleWatchlist}
+                    onOpenDetails={openItemDetails}
+                  />
+                ))}
+              </div>
+              <div style={{ textAlign: 'center', padding: '1rem', color: '#555', fontSize: '0.8rem' }}>
+                {loadingMore && 'Loading more...'}
+                {!loadingMore && page >= totalPages && shows.length > 0 && `All ${total.toLocaleString()} shows loaded`}
+                {page < totalPages && !loadingMore && <div ref={loadMoreRef} style={{ height: 1 }} />}
+              </div>
+            </>
           )}
         </section>
       </main>
@@ -224,13 +196,11 @@ export default function TVShows() {
           item={selectedItem}
           mediaType="tv_show"
           onClose={closeItemDetails}
-          onRate={usingFallbackCatalog ? undefined : handleRate}
-          onWatchlist={usingFallbackCatalog ? undefined : handleWatchlist}
+          onRate={handleRate}
+          onWatchlist={handleWatchlist}
           userRating={userRatings[selectedItem.id]}
           isAddingWatchlist={isAddingWatchlist}
           detailMessage={detailMessage}
-          allowActions={!usingFallbackCatalog}
-          browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}
     </div>

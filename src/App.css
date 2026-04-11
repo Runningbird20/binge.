@@ -4597,3 +4597,13 @@ body {
   font-size: 0.7rem;
   color: #555;
 }
+
+/* Anime hint in player */
+.player-anime-hint {
+  margin: 0;
+  padding: 0.3rem 1.25rem 0;
+  font-size: 0.72rem;
+  color: #555;
+  flex-shrink: 0;
+}
+.player-anime-hint strong { color: #e8c97a; }
