@@ -173,15 +173,14 @@ function syncJsonSeedFile(filePath, syncState, selectItems, syncItems, syncOptio
 }
 
 // FIX 1: Removed syncJsonlStreamBatched (it loaded whole file anyway — no benefit)
-// FIX 2: Fixed regex in syncJsonlSeedFile — was corrupted to literal newlines
 function syncJsonlSeedFile(filePath, syncState, syncItems, syncOptions = {}) {
   const signature = getFileSignature(filePath);
   if (!signature) { resetSeedSyncState(syncState); return false; }
 
-  // Check in-process cache
+  // Check in-process cache (fastest — same process lifetime)
   if (syncState.loaded && syncState.signature === signature) return true;
 
-  // Check persistent DB cache — skip re-import if file unchanged since last import
+  // Check persistent DB cache — skip if already imported with same file signature
   const fileKey = path.basename(filePath);
   const persistedSig = getSyncedSignature(fileKey);
   if (persistedSig === signature) {
@@ -191,39 +190,59 @@ function syncJsonlSeedFile(filePath, syncState, syncItems, syncOptions = {}) {
     return true;
   }
 
-  console.log(`[db] Importing ${fileKey}...`);
   const fileSize = fs.statSync(filePath).size;
-  const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB
+  const fileSizeMB = Math.round(fileSize / 1024 / 1024);
+  console.log(`[db] Importing ${fileKey} (${fileSizeMB}MB)...`);
 
-  if (fileSize > LARGE_FILE_THRESHOLD) {
-    // FIX 3: Correct regex /\r?\n/ — was corrupted in the previous version
-    console.log(`[db] Large file (${Math.round(fileSize / 1024 / 1024)}MB) — using batched import`);
-    const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
-    const BATCH = 500;
-    let batch = [];
-    let total = 0;
+  // Stream line-by-line using a read buffer — never loads whole file into memory
+  const BATCH = 1000;
+  const CHUNK = 64 * 1024; // 64KB read chunks
+  let batch = [];
+  let total = 0;
+  let leftover = '';
 
-    const flush = () => {
-      if (batch.length === 0) return;
-      syncItems(batch, { ...syncOptions, inactiveSourcePrefixes: [] });
-      total += batch.length;
-      batch = [];
-    };
+  // During batched import, NEVER prune — pruning per-batch deletes records from previous batches
+  // Pass empty arrays for both prefix lists so pruneImportedRows is a no-op
+  const batchOptions = { ...syncOptions, activeSourcePrefixes: [], inactiveSourcePrefixes: [] };
 
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t) continue;
-      try { const r = JSON.parse(t); if (r) batch.push(r); } catch { /* skip */ }
-      if (batch.length >= BATCH) flush();
+  const flush = () => {
+    if (batch.length === 0) return;
+    syncItems(batch, batchOptions);
+    total += batch.length;
+    batch = [];
+  };
+
+  const fd = fs.openSync(filePath, 'r');
+  const buf = Buffer.allocUnsafe(CHUNK);
+  let bytesRead;
+
+  try {
+    while ((bytesRead = fs.readSync(fd, buf, 0, CHUNK, null)) > 0) {
+      const chunk = leftover + buf.subarray(0, bytesRead).toString('utf8');
+      const lines = chunk.split('\n');
+      // Last element may be incomplete — save for next chunk
+      leftover = lines.pop();
+
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          const r = JSON.parse(t);
+          if (r) batch.push(r);
+        } catch { /* skip malformed lines */ }
+        if (batch.length >= BATCH) flush();
+      }
+    }
+    // Process any remaining leftover
+    if (leftover.trim()) {
+      try { const r = JSON.parse(leftover.trim()); if (r) batch.push(r); } catch {}
     }
     flush();
-    console.log(`[db] Imported ${total} records from ${fileKey}`);
-  } else {
-    const records = readJsonlIfExists(filePath);
-    if (!records) return false;
-    syncItems(records, syncOptions);
+  } finally {
+    fs.closeSync(fd);
   }
 
+  console.log(`[db] Imported ${total} records from ${fileKey}`);
   setSyncedSignature(fileKey, signature);
   syncState.signature = signature;
   syncState.loaded = true;
@@ -275,7 +294,6 @@ function extractSynopsis(doc, workDescriptionById) {
 }
 
 function createBookUpsertStatement() {
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_key ON books(source_key)');
   return db.prepare(`
     INSERT INTO books (title, author, year, genre, synopsis, cover_url, item_url, source_key)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -317,7 +335,6 @@ function syncArchiveBookItems(items, syncOptions = {}) {
 
 function syncMovieItems(items, syncOptions = {}) {
   if (!Array.isArray(items)) return false;
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_source_key ON movies(source_key)');
   const upsertMovie = db.prepare(`
     INSERT INTO movies (title, year, genre, director, writers, cast_members, age_rating, overview, synopsis, poster_url, source_key)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -376,7 +393,6 @@ function syncMoviesFromPlexBulk() {
 
 function syncTvShowItems(items, syncOptions = {}) {
   if (!Array.isArray(items)) return false;
-  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_shows_source_key ON tv_shows(source_key)');
   const upsertShow = db.prepare(`
     INSERT INTO tv_shows (title, year, genre, creator, writers, cast_members, age_rating, overview, synopsis, poster_url, seasons, source_key)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -460,7 +476,6 @@ function syncBooksFromOpenLibrary() {
       workDescriptionById.set(parsed.workDetail.workId, pickFirstString(parsed.workDetail.description));
     }
 
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_key ON books(source_key)');
     const upsertBook = db.prepare(`
       INSERT INTO books (title, author, year, genre, synopsis, cover_url, source_key)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -693,6 +708,14 @@ if (!hasColumn('tv_shows', 'overview'))      db.exec('ALTER TABLE tv_shows ADD C
 if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ratings'").get()) {
   db.exec('DROP TABLE ratings');
 }
+
+// ── Unique indexes (required for ON CONFLICT upserts) ────────────────────────
+// Must be created BEFORE any sync functions run
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_source_key_unique ON movies(source_key);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_shows_source_key_unique ON tv_shows(source_key);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_key_unique ON books(source_key);
+`);
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
 db.exec(`
