@@ -226,49 +226,500 @@ router.get('/movies', (req, res) => {
   }
 
   const { search, genre, year, sort } = req.query;
-  const params = [];
+  const page     = normalizePage(req.query.page, 1);
+  const pageSize = normalizePageSize(req.query.page_size, 48, 100);
+  const offset   = (page - 1) * pageSize;
+  const params   = [];
 
-  // Deduplicate by title+year — prefer TMDB over Plex for same title
-  // Uses MIN(id) on TMDB records when available, otherwise Plex
-  let whereClause = 'WHERE source_key IS NOT NULL';
-  if (search) { whereClause += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { whereClause += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  if (year)   { whereClause += ' AND year = ?';       params.push(Number(year)); }
+  // Dedup subquery — prefer TMDB over Plex for same title+year
+  let innerWhere = 'WHERE source_key IS NOT NULL';
+  if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+  if (year)   { innerWhere += ' AND year = ?';       params.push(Number(year)); }
 
-  const dedupeQuery = `
+  // Determine ORDER BY for SQL (sort in DB, not in memory)
+  const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
+                : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
+                : sort === 'title-desc'? 'title DESC'
+                : 'title ASC';
+
+  const dedupeBase = `
     SELECT m.*
     FROM movies m
     INNER JOIN (
       SELECT
-        LOWER(TRIM(title)) AS norm_title,
-        COALESCE(year, 0) AS norm_year,
-        -- Prefer TMDB source keys, fall back to min id
         MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
         MIN(id) AS any_id
       FROM movies
-      WHERE source_key IS NOT NULL
+      ${innerWhere}
       GROUP BY LOWER(TRIM(title)), COALESCE(year, 0)
     ) dedup ON m.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    ${whereClause}
+    ${innerWhere}
   `;
-  const items = sortMediaItems(db.prepare(dedupeQuery).all(...params), sort);
+
+  const countParams = [...params, ...params]; // params used twice (inner + outer WHERE)
+  const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
+  const items = db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
+
   const genres = buildMediaGenreFacets(
     db.prepare(`
-      SELECT DISTINCT genre
-      FROM movies
-      WHERE source_key IS NOT NULL
-        AND genre IS NOT NULL
-        AND TRIM(genre) <> ''
+      SELECT DISTINCT genre FROM movies
+      WHERE source_key IS NOT NULL AND genre IS NOT NULL AND TRIM(genre) <> ''
     `).all().map((row) => row.genre)
   );
 
   res.json({
     items,
-    facets: {
-      genres,
-    },
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+    facets: { genres },
   });
 });
+
+// ─── Curated rows endpoint ────────────────────────────────────────────────────
+// Returns multiple named buckets in one call for the Netflix-style homepage layout
+
+function getTopDeduped(table, where, orderBy, limit, extraParams = []) {
+  // Returns deduplicated rows (prefer tmdb) matching a WHERE clause
+  const alias = table === 'movies' ? 'm' : 't';
+  const idCol  = table === 'movies' ? 'tmdb_id' : 'tmdb_id';
+  const q = `
+    SELECT ${alias}.*
+    FROM ${table} ${alias}
+    INNER JOIN (
+      SELECT
+        MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
+        MIN(id) AS any_id
+      FROM ${table}
+      WHERE source_key IS NOT NULL
+      GROUP BY LOWER(TRIM(title))${table === 'movies' ? ', COALESCE(year, 0)' : ''}
+    ) dedup ON ${alias}.id = COALESCE(dedup.tmdb_id, dedup.any_id)
+    WHERE ${alias}.source_key IS NOT NULL ${where ? 'AND ' + where : ''}
+    ORDER BY ${orderBy}
+    LIMIT ?
+  `;
+  try {
+    return db.prepare(q).all(...extraParams, limit);
+  } catch (e) {
+    console.error('curated query error:', e.message, q);
+    return [];
+  }
+}
+
+// Movie row definitions
+function buildMovieRows() {
+  const rows = [
+    {
+      id: 'trending',
+      title: '🔥 Trending Now',
+      seeAll: '/movies?sort=year-desc',
+      items: getTopDeduped('movies',
+        "year >= strftime('%Y', date('now', '-1 year'))",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'top_rated',
+      title: '⭐ Top Rated',
+      seeAll: '/movies?sort=year-desc&min_rating=7',
+      items: getTopDeduped('movies',
+        "poster_url IS NOT NULL AND year IS NOT NULL AND year >= 1980",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'new_releases',
+      title: '🆕 New Releases',
+      seeAll: '/movies?sort=year-desc&year_min=2024',
+      items: getTopDeduped('movies',
+        "year >= 2024 AND poster_url IS NOT NULL",
+        'year DESC, RANDOM()', 48),
+    },
+    {
+      id: 'action',
+      title: '💥 Action & Adventure',
+      seeAll: '/movies?genre=Action',
+      items: getTopDeduped('movies',
+        "genre LIKE '%Action%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'superhero',
+      title: '🦸 Superhero',
+      seeAll: '/movies?category=superhero',
+      items: getTopDeduped('movies',
+        "(title LIKE '%Marvel%' OR title LIKE '%Spider%' OR title LIKE '%Batman%' OR title LIKE '%Superman%' OR title LIKE '%Avengers%' OR title LIKE '%Iron Man%' OR title LIKE '%Thor%' OR title LIKE '%Captain America%' OR title LIKE '%Black Panther%' OR title LIKE '%Doctor Strange%' OR title LIKE '%Guardians%' OR title LIKE '%X-Men%' OR title LIKE '%Deadpool%' OR title LIKE '%Wonder Woman%' OR title LIKE '%Aquaman%' OR title LIKE '%Shazam%' OR genre LIKE '%Superhero%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'comedy',
+      title: '😂 Comedy',
+      seeAll: '/movies?genre=Comedy',
+      items: getTopDeduped('movies',
+        "genre LIKE '%Comedy%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'horror',
+      title: '👻 Horror',
+      seeAll: '/movies?genre=Horror',
+      items: getTopDeduped('movies',
+        "genre LIKE '%Horror%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'scifi',
+      title: '🚀 Sci-Fi',
+      seeAll: '/movies?genre=Science+Fiction',
+      items: getTopDeduped('movies',
+        "(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'drama',
+      title: '🎭 Drama',
+      seeAll: '/movies?genre=Drama',
+      items: getTopDeduped('movies',
+        "genre LIKE '%Drama%' AND poster_url IS NOT NULL AND (genre NOT LIKE '%Horror%')",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'family',
+      title: '👨‍👩‍👧 Family & Animation',
+      seeAll: '/movies?genre=Family',
+      items: getTopDeduped('movies',
+        "(genre LIKE '%Family%' OR genre LIKE '%Animation%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'romance',
+      title: '💘 Romance',
+      seeAll: '/movies?genre=Romance',
+      items: getTopDeduped('movies',
+        "genre LIKE '%Romance%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'thriller',
+      title: '🔪 Thriller & Mystery',
+      seeAll: '/movies?genre=Thriller',
+      items: getTopDeduped('movies',
+        "(genre LIKE '%Thriller%' OR genre LIKE '%Mystery%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'documentary',
+      title: '🎥 Documentary',
+      seeAll: '/movies?genre=Documentary',
+      items: getTopDeduped('movies',
+        "genre LIKE '%Documentary%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'international',
+      title: '🌍 International',
+      seeAll: '/movies?genre=International',
+      items: getTopDeduped('movies',
+        "poster_url IS NOT NULL AND (cast_members LIKE '%김%' OR cast_members LIKE '%이%' OR title LIKE '%%' OR (year >= 2000 AND genre LIKE '%Drama%' AND director IS NOT NULL AND director NOT LIKE '%Smith%' AND director NOT LIKE '%Johnson%' AND director NOT LIKE '%Williams%'))",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'holiday',
+      title: '🎄 Holiday & Christmas',
+      seeAll: '/movies?category=holiday',
+      items: getTopDeduped('movies',
+        "(title LIKE '%Christmas%' OR title LIKE '%Holiday%' OR title LIKE '%Santa%' OR title LIKE '%Noel%' OR title LIKE '%Xmas%' OR synopsis LIKE '%Christmas%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'classics',
+      title: '🏛️ Timeless Classics',
+      seeAll: '/movies?sort=year-asc&year_max=1990',
+      items: getTopDeduped('movies',
+        "year < 1990 AND year > 1920 AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'war',
+      title: '⚔️ War & History',
+      seeAll: '/movies?genre=War',
+      items: getTopDeduped('movies',
+        "(genre LIKE '%War%' OR genre LIKE '%History%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'fantasy',
+      title: '🧙 Fantasy & Adventure',
+      seeAll: '/movies?genre=Fantasy',
+      items: getTopDeduped('movies',
+        "(genre LIKE '%Fantasy%' OR genre LIKE '%Adventure%') AND poster_url IS NOT NULL AND genre NOT LIKE '%Horror%'",
+        'RANDOM()', 48),
+    },
+  ];
+  return rows.filter(r => r.items.length > 0);
+}
+
+function buildTvRows() {
+  const rows = [
+    {
+      id: 'trending',
+      title: '🔥 Trending Now',
+      seeAll: '/tv-shows?sort=year-desc',
+      items: getTopDeduped('tv_shows',
+        "year >= strftime('%Y', date('now', '-1 year')) AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'top_rated',
+      title: '⭐ Top Rated',
+      seeAll: '/tv-shows',
+      items: getTopDeduped('tv_shows',
+        "poster_url IS NOT NULL AND year IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'superhero',
+      title: '🦸 Superhero Shows',
+      seeAll: '/tv-shows?category=superhero',
+      items: getTopDeduped('tv_shows',
+        "(title LIKE '%Marvel%' OR title LIKE '%Arrow%' OR title LIKE '%Flash%' OR title LIKE '%Supergirl%' OR title LIKE '%Batman%' OR title LIKE '%Superman%' OR title LIKE '%Avengers%' OR title LIKE '%Loki%' OR title LIKE '%WandaVision%' OR title LIKE '%Hawkeye%' OR title LIKE '%Daredevil%' OR title LIKE '%Punisher%' OR genre LIKE '%Superhero%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'anime',
+      title: '⛩️ Anime',
+      seeAll: '/tv-shows?genre=Anime',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Anime%' OR genre LIKE '%Animation%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'drama',
+      title: '🎭 Drama',
+      seeAll: '/tv-shows?genre=Drama',
+      items: getTopDeduped('tv_shows',
+        "genre LIKE '%Drama%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'comedy',
+      title: '😂 Comedy & Sitcoms',
+      seeAll: '/tv-shows?genre=Comedy',
+      items: getTopDeduped('tv_shows',
+        "genre LIKE '%Comedy%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'crime',
+      title: '🔍 Crime & Mystery',
+      seeAll: '/tv-shows?genre=Crime',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Crime%' OR genre LIKE '%Mystery%' OR genre LIKE '%Thriller%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'scifi',
+      title: '🚀 Sci-Fi & Fantasy',
+      seeAll: '/tv-shows?genre=Sci-Fi',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%' OR genre LIKE '%Fantasy%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'kdrama',
+      title: '🌸 K-Drama & Asian',
+      seeAll: '/tv-shows?category=kdrama',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Korean%' OR synopsis LIKE '%Korea%' OR title LIKE '%Korean%' OR cast_members LIKE '%Park%' OR cast_members LIKE '%Kim%' OR cast_members LIKE '%Lee%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'reality',
+      title: '⭐ Reality & Competition',
+      seeAll: '/tv-shows?genre=Reality',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Reality%' OR genre LIKE '%Talk%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'kids',
+      title: '🎠 Kids & Family',
+      seeAll: '/tv-shows?genre=Kids',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Kids%' OR genre LIKE '%Family%' OR genre LIKE '%Children%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'documentary',
+      title: '📡 Documentary',
+      seeAll: '/tv-shows?genre=Documentary',
+      items: getTopDeduped('tv_shows',
+        "genre LIKE '%Documentary%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'binge',
+      title: '🍿 Binge-Worthy (4+ Seasons)',
+      seeAll: '/tv-shows?min_seasons=4',
+      items: getTopDeduped('tv_shows',
+        "seasons >= 4 AND poster_url IS NOT NULL",
+        'seasons DESC, RANDOM()', 48),
+    },
+    {
+      id: 'classics',
+      title: '📺 Classic TV',
+      seeAll: '/tv-shows?sort=year-asc',
+      items: getTopDeduped('tv_shows',
+        "year < 2000 AND year > 1950 AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'horror',
+      title: '👻 Horror & Supernatural',
+      seeAll: '/tv-shows?genre=Horror',
+      items: getTopDeduped('tv_shows',
+        "(genre LIKE '%Horror%' OR genre LIKE '%Supernatural%') AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+    {
+      id: 'action',
+      title: '💥 Action & Adventure',
+      seeAll: '/tv-shows?genre=Action',
+      items: getTopDeduped('tv_shows',
+        "genre LIKE '%Action%' AND poster_url IS NOT NULL",
+        'RANDOM()', 48),
+    },
+  ];
+  return rows.filter(r => r.items.length > 0);
+}
+
+function dedupBooks(items) {
+  const seen = new Set();
+  return items.filter(b => {
+    const key = b.title?.toLowerCase().trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getBooksDeduped(where, limit = 48) {
+  try {
+    const rows = db.prepare(
+      `SELECT * FROM books WHERE source_key IS NOT NULL ${where} AND cover_url IS NOT NULL ORDER BY RANDOM() LIMIT ${limit * 3}`
+    ).all();
+    return dedupBooks(rows).slice(0, limit);
+  } catch(e) { console.error('book query error:', e.message); return []; }
+}
+
+function buildBookRows() {
+  const rows = [
+    {
+      id: 'fiction',
+      title: '📖 Popular Fiction',
+      seeAll: '/books?genre=Fiction',
+      items: getBooksDeduped("AND (genre LIKE '%Fiction%' OR genre = 'General Fiction')"),
+    },
+    {
+      id: 'scifi',
+      title: '🚀 Science Fiction',
+      seeAll: '/books?genre=Science+Fiction',
+      items: getBooksDeduped("AND genre LIKE '%Science Fiction%'"),
+    },
+    {
+      id: 'fantasy',
+      title: '🧙 Fantasy',
+      seeAll: '/books?genre=Fantasy',
+      items: getBooksDeduped("AND genre LIKE '%Fantasy%'"),
+    },
+    {
+      id: 'mystery',
+      title: '🔍 Mystery & Thriller',
+      seeAll: '/books?genre=Mystery',
+      items: getBooksDeduped("AND (genre LIKE '%Mystery%' OR genre LIKE '%Thriller%' OR genre LIKE '%Crime%')"),
+    },
+    {
+      id: 'romance',
+      title: '💘 Romance',
+      seeAll: '/books?genre=Romance',
+      items: getBooksDeduped("AND genre LIKE '%Romance%'"),
+    },
+    {
+      id: 'biography',
+      title: '👤 Biography & Memoir',
+      seeAll: '/books?genre=Biography',
+      items: getBooksDeduped("AND (genre LIKE '%Biography%' OR genre LIKE '%Memoir%')"),
+    },
+    {
+      id: 'history',
+      title: '🏛️ History',
+      seeAll: '/books?genre=History',
+      items: getBooksDeduped("AND genre LIKE '%History%'"),
+    },
+    {
+      id: 'horror',
+      title: '👻 Horror',
+      seeAll: '/books?genre=Horror',
+      items: getBooksDeduped("AND genre LIKE '%Horror%'"),
+    },
+    {
+      id: 'selfhelp',
+      title: '🧠 Self Help & Psychology',
+      seeAll: '/books?genre=Self+Help',
+      items: getBooksDeduped("AND (genre LIKE '%Self Help%' OR genre LIKE '%Psychology%' OR genre LIKE '%Philosophy%')"),
+    },
+    {
+      id: 'classics',
+      title: '📜 Classic Literature',
+      seeAll: '/books?genre=Classic',
+      items: getBooksDeduped("AND (genre LIKE '%Classic%' OR (year < 1960 AND year > 1800))"),
+    },
+    {
+      id: 'adventure',
+      title: '⚔️ Adventure',
+      seeAll: '/books?genre=Adventure',
+      items: getBooksDeduped("AND genre LIKE '%Adventure%'"),
+    },
+    {
+      id: 'truecrime',
+      title: '🔪 True Crime',
+      seeAll: '/books?genre=True+Crime',
+      items: getBooksDeduped("AND genre LIKE '%True Crime%'"),
+    },
+  ];
+  return rows.filter(r => r.items.length > 0);
+}
+
+router.get('/movies/curated', requireAuth, (req, res) => {
+  try {
+    const rows = buildMovieRows();
+    res.json({ rows });
+  } catch (err) {
+    console.error('Movie curated error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/tv-shows/curated', requireAuth, (req, res) => {
+  try {
+    const rows = buildTvRows();
+    res.json({ rows });
+  } catch (err) {
+    console.error('TV curated error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/books/curated', requireAuth, (req, res) => {
+  try {
+    const rows = buildBookRows();
+    res.json({ rows });
+  } catch (err) {
+    console.error('Books curated error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 router.get('/movies/:id', (req, res) => {
   if (typeof db.syncImportedMovies === 'function') {
@@ -294,27 +745,37 @@ router.get('/tv-shows', (req, res) => {
   }
 
   const { search, genre, sort } = req.query;
-  const params = [];
+  const page     = normalizePage(req.query.page, 1);
+  const pageSize = normalizePageSize(req.query.page_size, 48, 100);
+  const offset   = (page - 1) * pageSize;
+  const params   = [];
 
-  let whereClause = 'WHERE source_key IS NOT NULL';
-  if (search) { whereClause += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { whereClause += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+  let innerWhere = 'WHERE source_key IS NOT NULL';
+  if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
+  if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
 
-  const dedupeQuery = `
+  const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
+                : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
+                : sort === 'title-desc'? 'title DESC'
+                : 'title ASC';
+
+  const dedupeBase = `
     SELECT t.*
     FROM tv_shows t
     INNER JOIN (
       SELECT
-        LOWER(TRIM(title)) AS norm_title,
         MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
         MIN(id) AS any_id
       FROM tv_shows
-      WHERE source_key IS NOT NULL
+      ${innerWhere}
       GROUP BY LOWER(TRIM(title))
     ) dedup ON t.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    ${whereClause}
+    ${innerWhere}
   `;
-  const items = sortMediaItems(db.prepare(dedupeQuery).all(...params), sort);
+
+  const countParams = [...params, ...params];
+  const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
+  const items = db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
   const genres = buildMediaGenreFacets(
     db.prepare(`
       SELECT DISTINCT genre
@@ -327,9 +788,11 @@ router.get('/tv-shows', (req, res) => {
 
   res.json({
     items,
-    facets: {
-      genres,
-    },
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+    facets: { genres },
   });
 });
 
@@ -576,6 +1039,10 @@ router.get('/tmdb-show', async (req, res) => {
 });
 
 // ─── TMDB season episode count ────────────────────────────────────────────────
+// In-memory cache for TMDB season data (avoids hammering API on repeat views)
+const tmdbSeasonCache = new Map();
+const TMDB_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 router.get('/tmdb-season', async (req, res) => {
   const { tmdbId, season } = req.query;
   if (!tmdbId || !season) return res.status(400).json({ error: 'tmdbId and season required' });
@@ -583,12 +1050,18 @@ router.get('/tmdb-season', async (req, res) => {
   const TMDB_KEY = process.env.TMDB_API_KEY;
   if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
 
+  const cacheKey = `${tmdbId}:${season}`;
+  const cached = tmdbSeasonCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < TMDB_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
   try {
     const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${TMDB_KEY}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
     const data = await r.json();
-    res.json({
+    const result = {
       season: data.season_number,
       episodeCount: data.episodes?.length || 0,
       episodes: (data.episodes || []).map(e => ({
@@ -596,7 +1069,9 @@ router.get('/tmdb-season', async (req, res) => {
         name: e.name,
         airDate: e.air_date,
       })),
-    });
+    };
+    tmdbSeasonCache.set(cacheKey, { data: result, ts: Date.now() });
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -670,107 +1145,3 @@ router.delete('/episode-progress', requireAuth, (req, res) => {
 });
 
 module.exports = router;
-
-// ─── Book download proxy ──────────────────────────────────────────────────────
-// Streams the file from Internet Archive directly to the user — no redirect
-router.get('/book-download', async (req, res) => {
-  const { identifier, format } = req.query;
-
-  if (!identifier) return res.status(400).json({ error: 'identifier required' });
-
-  // Only allow safe formats
-  const allowedFormats = ['pdf', 'epub', 'txt'];
-  const fmt = allowedFormats.includes(format) ? format : 'pdf';
-
-  // Internet Archive direct download URL
-  // They store files as: /download/{identifier}/{identifier}.{ext}
-  const url = `https://archive.org/download/${identifier}/${identifier}.${fmt}`;
-
-  try {
-    const upstream = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; binge-app/1.0)' },
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!upstream.ok) {
-      // Try alternate filename pattern (some books use different names)
-      const altUrl = `https://archive.org/download/${identifier}`;
-      const listRes = await fetch(`https://archive.org/metadata/${identifier}/files`, {
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        const files = listData.result || [];
-        // Find a downloadable file in preferred format order
-        const preferred = ['pdf', 'epub', 'txt'];
-        let match = null;
-        for (const ext of preferred) {
-          match = files.find(f => f.name?.toLowerCase().endsWith(`.${ext}`) && f.source !== 'derivative');
-          if (match) break;
-        }
-        if (!match) {
-          match = files.find(f =>
-            ['.pdf', '.epub', '.txt'].some(ext => f.name?.toLowerCase().endsWith(ext))
-          );
-        }
-
-        if (match) {
-          const fileUrl = `https://archive.org/download/${identifier}/${match.name}`;
-          const fileRes = await fetch(fileUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; binge-app/1.0)' },
-            signal: AbortSignal.timeout(30000),
-          });
-
-          if (fileRes.ok) {
-            const ext = match.name.split('.').pop().toLowerCase();
-            const contentTypes = {
-              pdf:  'application/pdf',
-              epub: 'application/epub+zip',
-              txt:  'text/plain',
-            };
-            res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
-            res.setHeader('Content-Disposition', `attachment; filename="${match.name}"`);
-            if (fileRes.headers.get('content-length')) {
-              res.setHeader('Content-Length', fileRes.headers.get('content-length'));
-            }
-            fileRes.body.pipeTo(new WritableStream({
-              write(chunk) { res.write(chunk); },
-              close() { res.end(); },
-              abort(err) { res.destroy(err); },
-            }));
-            return;
-          }
-        }
-      }
-
-      return res.status(404).json({ error: 'No downloadable file found for this book.' });
-    }
-
-    // Stream the file directly to the client
-    const ext = fmt;
-    const contentTypes = {
-      pdf:  'application/pdf',
-      epub: 'application/epub+zip',
-      txt:  'text/plain',
-    };
-    const safeFilename = identifier.replace(/[^a-z0-9\-_]/gi, '_');
-    res.setHeader('Content-Type', contentTypes[ext]);
-    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.${ext}"`);
-    if (upstream.headers.get('content-length')) {
-      res.setHeader('Content-Length', upstream.headers.get('content-length'));
-    }
-
-    upstream.body.pipeTo(new WritableStream({
-      write(chunk) { res.write(chunk); },
-      close() { res.end(); },
-      abort(err) { res.destroy(err); },
-    }));
-
-  } catch (err) {
-    console.error('Book download error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Download failed: ' + err.message });
-    }
-  }
-});

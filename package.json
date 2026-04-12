@@ -50,11 +50,13 @@
     "import:tmdb": "node tmdb_scraper.js --type both --pages 20",
     "import:tmdb:movies": "node tmdb_scraper.js --type movie --pages 20",
     "import:tmdb:tv": "node tmdb_scraper.js --type tv --pages 20",
-    "import:tmdb:large": "node tmdb_scraper.js --type both --pages 50",
-    "import:tmdb:resume": "node tmdb_scraper.js --type both --pages 50 --resume",
+    "import:tmdb:large": "node tmdb_scraper.js --type both --pages 100",
+    "import:tmdb:resume": "node tmdb_scraper.js --type both --pages 500 --resume",
     "import:openlibrary": "node openlibrary_scraper.js --pages 5",
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
-    "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume"
+    "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
+    "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
+    "clean:adult": "node clean_adult_content.js"
   },
   "eslintConfig": {
     "extends": [

@@ -29,7 +29,7 @@ async function fetchPlutoChannels() {
         'Origin': 'https://pluto.tv',
         'Referer': 'https://pluto.tv/',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(4000),
     });
 
     if (!res.ok) {
@@ -61,7 +61,7 @@ async function fetchPlutoChannels() {
     return mapped;
 
   } catch (err) {
-    console.error('Failed to fetch Pluto channels:', err.message);
+    console.log('Pluto TV API unavailable, using fallback channels:', err.message);
     return getFallbackChannels();
   }
 }
