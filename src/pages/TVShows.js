@@ -3,205 +3,184 @@ import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
+import MediaRow from '../components/MediaRow';
 import { api } from '../api';
 
 const PAGE_SIZE = 48;
 
-export default function TVShows() {
-  const [searchParams] = useSearchParams();
-  const openId = Number(searchParams.get('open'));
-
-  const [shows, setShows]           = useState([]);
-  const [search, setSearch]         = useState(searchParams.get('search') || '');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [genre, setGenre]           = useState('');
-  const [sortOrder, setSortOrder]   = useState('title-asc');
-  const [facets, setFacets]         = useState({ genres: [] });
-  const [userRatings, setUserRatings] = useState({});
-  const [loading, setLoading]       = useState(true);
+function BrowseView({ onItemClick, onWatchlist, userRatings, initialGenre, initialSearch, initialSort }) {
+  const [shows, setShows]             = useState([]);
+  const [search, setSearch]           = useState(initialSearch || '');
+  const [debouncedSearch, setDebSearch] = useState(initialSearch || '');
+  const [genre, setGenre]             = useState(initialGenre || '');
+  const [sortOrder, setSortOrder]     = useState(initialSort || 'title-asc');
+  const [facets, setFacets]           = useState({ genres: [] });
+  const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage]             = useState(1);
-  const [total, setTotal]           = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [detailMessage, setDetailMessage] = useState('');
-  const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
+  const [page, setPage]               = useState(1);
+  const [total, setTotal]             = useState(0);
+  const [totalPages, setTotalPages]   = useState(1);
   const loadMoreRef = useRef(null);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(t);
-  }, [search]);
-
+  useEffect(() => { const t = setTimeout(() => setDebSearch(search.trim()), 300); return () => clearTimeout(t); }, [search]);
   useEffect(() => { setPage(1); setShows([]); }, [debouncedSearch, genre, sortOrder]);
 
   const fetchShows = useCallback(async (pageNum) => {
     if (pageNum === 1) setLoading(true); else setLoadingMore(true);
     try {
-      const params = new URLSearchParams({
-        page: pageNum,
-        page_size: PAGE_SIZE,
-        sort: sortOrder,
-      });
+      const params = new URLSearchParams({ page: pageNum, page_size: PAGE_SIZE, sort: sortOrder });
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (genre) params.set('genre', genre);
-
       const data = await api.get(`/media/tv-shows?${params}`);
       const items = Array.isArray(data?.items) ? data.items : [];
-
       setShows(prev => pageNum === 1 ? items : [...prev, ...items]);
-      setTotal(data?.total || 0);
-      setTotalPages(data?.totalPages || 1);
-      if (data?.facets?.genres) setFacets({ genres: data.facets.genres });
-
-      if (openId && pageNum === 1) {
-        const match = items.find(s => s.id === openId);
-        if (match) { setSelectedItem(match); setDetailMessage(''); }
-      }
-    } catch {
-      if (pageNum === 1) setShows([]);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [debouncedSearch, genre, sortOrder, openId]);
+      setTotal(data?.total || 0); setTotalPages(data?.totalPages || 1);
+      if (data?.facets?.genres?.length) setFacets({ genres: data.facets.genres });
+    } catch { if (pageNum === 1) setShows([]); }
+    finally { setLoading(false); setLoadingMore(false); }
+  }, [debouncedSearch, genre, sortOrder]);
 
   useEffect(() => { fetchShows(page); }, [page, fetchShows]);
 
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
     const node = loadMoreRef.current;
     if (!node || loadingMore || page >= totalPages) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) setPage(p => p + 1);
-    }, { rootMargin: '300px' });
-    observer.observe(node);
-    return () => observer.disconnect();
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setPage(p => p + 1); }, { rootMargin: '300px' });
+    obs.observe(node); return () => obs.disconnect();
   }, [loadingMore, page, totalPages]);
+
+  return (
+    <div className="browse-view">
+      <div className="browse-view-filters">
+        <input className="search-input" type="text" placeholder="Search TV shows..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="filter-input" value={genre} onChange={e => setGenre(e.target.value)}>
+          <option value="">All Genres</option>
+          {facets.genres.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select className="filter-input" value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
+          <option value="title-asc">Title A–Z</option>
+          <option value="title-desc">Title Z–A</option>
+          <option value="year-desc">Newest First</option>
+          <option value="year-asc">Oldest First</option>
+        </select>
+        {(search || genre || sortOrder !== 'title-asc') && (
+          <button type="button" className="btn-ghost btn-sm" onClick={() => { setSearch(''); setGenre(''); setSortOrder('title-asc'); }}>Clear</button>
+        )}
+        <span className="browse-view-count">{loading ? '...' : `${total.toLocaleString()} shows`}</span>
+      </div>
+      {loading ? <div className="loading-state">Loading...</div>
+      : shows.length === 0 ? <div className="empty-state"><p>No shows found.</p></div>
+      : (
+        <>
+          <div className="media-grid">
+            {shows.map(s => <MediaCard key={s.id} item={s} mediaType="tv_show" userRating={userRatings[s.id]} onWatchlist={onWatchlist} onOpenDetails={onItemClick} />)}
+          </div>
+          <div className="infinite-scroll-footer">
+            {loadingMore && <span>Loading more…</span>}
+            {!loadingMore && page >= totalPages && <span>All {total.toLocaleString()} shows loaded</span>}
+            {page < totalPages && !loadingMore && <div ref={loadMoreRef} style={{ height: 1 }} />}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CuratedView({ onItemClick, onSeeAll, userRatings }) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/media/tv-shows/curated')
+      .then(d => setRows(d.rows || []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="curated-loading"><div className="curated-loading-shimmer" /></div>;
+
+  return (
+    <div className="curated-view">
+      {rows.map((row, i) => (
+        <div key={row.id} style={{ animationDelay: `${i * 0.06}s` }} className="curated-row-appear">
+          <MediaRow row={row} mediaType="tv_show" onItemClick={onItemClick} onSeeAll={onSeeAll} userRatings={userRatings} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function TVShows() {
+  const [searchParams] = useSearchParams();
+  const openId = Number(searchParams.get('open'));
+
+  const [view, setView]                   = useState('curated');
+  const [browseGenre, setBrowseGenre]     = useState('');
+  const [browseSearch, setBrowseSearch]   = useState('');
+  const [browseSort, setBrowseSort]       = useState('title-asc');
+  const [selectedItem, setSelectedItem]   = useState(null);
+  const [detailMessage, setDetailMessage] = useState('');
+  const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
+  const [userRatings, setUserRatings]     = useState({});
 
   useEffect(() => {
     api.get('/ratings/my?media_type=tv_show')
-      .then(ratings => {
-        const next = {};
-        ratings.forEach(r => { next[r.media_id] = r; });
-        setUserRatings(next);
-      })
+      .then(r => { const n = {}; r.forEach(x => { n[x.media_id] = x; }); setUserRatings(n); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!openId) return;
+    api.get(`/media/tv-shows/${openId}`).then(d => { if (d?.id) { setSelectedItem(d); setDetailMessage(''); } }).catch(() => {});
+  }, [openId]);
+
+  function handleSeeAll(row) {
+    const url = row.seeAll || '';
+    const params = new URLSearchParams(url.split('?')[1] || '');
+    setBrowseGenre(params.get('genre') || '');
+    setBrowseSearch(params.get('search') || '');
+    setBrowseSort(params.get('sort') || 'title-asc');
+    setView('browse');
+  }
+
+  function switchToDiscover() {
+    setBrowseGenre(''); setBrowseSearch(''); setBrowseSort('title-asc');
+    setView('curated');
+  }
 
   async function handleRate(item, categories, review) {
     try {
       await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, categories, review });
-      setUserRatings(cur => ({ ...cur, [item.id]: { ...categories, media_id: item.id, review } }));
+      setUserRatings(c => ({ ...c, [item.id]: { ...categories, media_id: item.id, review } }));
       setDetailMessage('Rating saved!');
-    } catch (err) { setDetailMessage(err.message); }
+    } catch (e) { setDetailMessage(e.message); }
   }
 
   async function handleWatchlist(item) {
-    setIsAddingWatchlist(true);
-    setDetailMessage('');
-    try {
-      await api.post('/watchlist', { media_type: 'tv_show', media_id: item.id });
-      setDetailMessage(`"${item.title}" added to your watchlist.`);
-    } catch (err) { setDetailMessage(err.message); }
+    setIsAddingWatchlist(true); setDetailMessage('');
+    try { await api.post('/watchlist', { media_type: 'tv_show', media_id: item.id }); setDetailMessage(`"${item.title}" added.`); }
+    catch (e) { setDetailMessage(e.message); }
     finally { setIsAddingWatchlist(false); }
   }
-
-  function openItemDetails(item) { setSelectedItem(item); setDetailMessage(''); }
-  function closeItemDetails() { setSelectedItem(null); setDetailMessage(''); setIsAddingWatchlist(false); }
-  function clearFilters() { setSearch(''); setGenre(''); setSortOrder('title-asc'); }
-
-  const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
 
   return (
     <div className="app-layout">
       <Navbar />
-      <main className="page-content">
-        <div className="page-header">
-          <p className="page-kicker">Browse</p>
-          <h1>TV Shows</h1>
-          <p className="page-subtitle">
-            Search the catalog, narrow by genre, and open any show for ratings, watchlist saves, and episode tracking.
-          </p>
+      <main className="page-content curated-page">
+        <div className="curated-page-header">
+          <h1 className="curated-page-title">TV Shows</h1>
+          <div className="curated-view-toggle">
+            <button className={`curated-toggle-btn ${view === 'curated' ? 'active' : ''}`} onClick={switchToDiscover} type="button">✦ Discover</button>
+            <button className={`curated-toggle-btn ${view === 'browse' ? 'active' : ''}`} onClick={() => setView('browse')} type="button">☰ Browse All</button>
+          </div>
         </div>
-
-        <section className="surface-panel">
-          <div className="surface-panel-header">
-            <div>
-              <h2>Filter the Catalog</h2>
-              <p className="surface-panel-copy">Search by title, narrow by genre, and sort without leaving the page.</p>
-            </div>
-            <p className="surface-panel-meta">
-              {loading ? 'Loading...' : `${total.toLocaleString()} show${total === 1 ? '' : 's'}`}
-            </p>
-          </div>
-
-          <div className="filter-bar">
-            <input
-              className="search-input"
-              type="text"
-              aria-label="Search TV shows"
-              placeholder="Search TV shows..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <select className="filter-input" aria-label="Genre" value={genre} onChange={e => setGenre(e.target.value)}>
-              <option value="">All Genres</option>
-              {facets.genres.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <select className="filter-input" aria-label="Sort by" value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
-              <option value="title-asc">Title A-Z</option>
-              <option value="title-desc">Title Z-A</option>
-              <option value="year-desc">Newest First</option>
-              <option value="year-asc">Oldest First</option>
-            </select>
-            {hasActiveFilters && <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>Clear</button>}
-          </div>
-        </section>
-
-        <section className="surface-panel surface-panel-spacious">
-          {loading ? (
-            <div className="loading-state">Loading...</div>
-          ) : shows.length === 0 ? (
-            <div className="empty-state">
-              <p>No TV shows found.</p>
-              <p className="empty-hint">Try a different search or clear the filters.</p>
-            </div>
-          ) : (
-            <>
-              <div className="media-grid">
-                {shows.map(show => (
-                  <MediaCard
-                    key={show.id}
-                    item={show}
-                    mediaType="tv_show"
-                    userRating={userRatings[show.id]}
-                    onWatchlist={handleWatchlist}
-                    onOpenDetails={openItemDetails}
-                  />
-                ))}
-              </div>
-              <div style={{ textAlign: 'center', padding: '1rem', color: '#555', fontSize: '0.8rem' }}>
-                {loadingMore && 'Loading more...'}
-                {!loadingMore && page >= totalPages && shows.length > 0 && `All ${total.toLocaleString()} shows loaded`}
-                {page < totalPages && !loadingMore && <div ref={loadMoreRef} style={{ height: 1 }} />}
-              </div>
-            </>
-          )}
-        </section>
+        {view === 'curated'
+          ? <CuratedView onItemClick={item => { setSelectedItem(item); setDetailMessage(''); }} onSeeAll={handleSeeAll} userRatings={userRatings} />
+          : <BrowseView onItemClick={item => { setSelectedItem(item); setDetailMessage(''); }} onWatchlist={handleWatchlist} userRatings={userRatings} initialGenre={browseGenre} initialSearch={browseSearch} initialSort={browseSort} />
+        }
       </main>
-
       {selectedItem && (
-        <MediaDetailsModal
-          item={selectedItem}
-          mediaType="tv_show"
-          onClose={closeItemDetails}
-          onRate={handleRate}
-          onWatchlist={handleWatchlist}
-          userRating={userRatings[selectedItem.id]}
-          isAddingWatchlist={isAddingWatchlist}
-          detailMessage={detailMessage}
-        />
+        <MediaDetailsModal item={selectedItem} mediaType="tv_show" onClose={() => { setSelectedItem(null); setDetailMessage(''); setIsAddingWatchlist(false); }} onRate={handleRate} onWatchlist={handleWatchlist} userRating={userRatings[selectedItem.id]} isAddingWatchlist={isAddingWatchlist} detailMessage={detailMessage} />
       )}
     </div>
   );
