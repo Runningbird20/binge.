@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '../api';
 
 const MEDIA_ICONS = { movie: '🎬', tv_show: '📺', book: '📚' };

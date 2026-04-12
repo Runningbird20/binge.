@@ -6,6 +6,13 @@ import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import { api } from '../api';
 import {
+  addSupabaseWatchlistItem,
+  fetchSupabaseRatingMap,
+  fetchSupabaseWatchlist,
+  saveSupabaseRating,
+} from '../utils/supabaseData';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
+import {
   buildMediaGenreFacets,
   filterBooksCatalog,
   loadFallbackBooks,
@@ -67,21 +74,13 @@ function BookDetailsModal({
   const [draftScores, setDraftScores] = useState({});
   const [isSaving, setIsSaving] = useState(false);
 
-  // Extract the archive.org identifier from source_key for IA books
   const rawId = book?.source_key?.startsWith('internet-archive:')
     ? book.source_key.replace('internet-archive:', '')
     : null;
-
-  // archive.org embed works for most IA identifiers
-  // OL-prefixed IDs (ol-works-...) can't be embedded — use item_url instead
   const isOlRecord = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
   const archiveId = rawId && !isOlRecord ? rawId : null;
-
-  // item_url stored in DB (e.g. https://archive.org/details/... or https://openlibrary.org/works/...)
   const itemUrl = book?.item_url || book?.itemUrl || null;
-
-  // Can read if we have an embeddable IA ID or any item URL
-  const canRead = !!(archiveId || itemUrl);
+  const canRead = Boolean(archiveId || itemUrl);
 
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
@@ -116,22 +115,24 @@ function BookDetailsModal({
 
   async function handleDownload(format) {
     if (!archiveId) return;
+
     setDownloading(format);
     setDownloadError('');
+
     try {
       const url = `/api/media/book-download?identifier=${encodeURIComponent(archiveId)}&format=${format}`;
+      const token = window.localStorage.getItem('token');
       const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Download failed');
       }
 
       const disposition = res.headers.get('content-disposition') || '';
-      const nameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const nameMatch = disposition.match(/filename="?([^\"]+)"?/);
       const filename = nameMatch ? nameMatch[1] : `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
 
       const blob = await res.blob();
@@ -153,9 +154,11 @@ function BookDetailsModal({
   const cats = RATING_CATEGORIES.book;
   const canSave = cats.every((cat) => draftScores[cat.key] >= 1);
   const displayScore = computeNormalizedScore('book', draftScores);
+  const canUseLegacyBackend = hasLegacyBackendSession();
 
   async function handleSave() {
     if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+
     setIsSaving(true);
     try {
       await onRate(book, draftScores);
@@ -205,15 +208,11 @@ function BookDetailsModal({
             <p className="book-detail-author">by {book.author}</p>
 
             <div className="book-detail-meta">
-              {book.genre && (
-                <span className="book-detail-meta-chip">{book.genre}</span>
-              )}
-              {book.year && (
-                <span className="book-detail-meta-chip">{book.year}</span>
-              )}
+              {book.genre && <span className="book-detail-meta-chip">{book.genre}</span>}
+              {book.year && <span className="book-detail-meta-chip">{book.year}</span>}
             </div>
 
-            <p className="book-detail-description">{book.synopsis}</p>
+            {book.synopsis && <p className="book-detail-description">{book.synopsis}</p>}
 
             <div className="book-detail-summary">
               <div className="book-detail-summary-row">
@@ -259,7 +258,7 @@ function BookDetailsModal({
                   {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
                 </button>
               )}
-              {allowActions && (
+              {allowActions && canUseLegacyBackend && (
                 <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
               )}
               {!allowActions && browseOnlyMessage && (
@@ -272,7 +271,7 @@ function BookDetailsModal({
                   className="btn-watch"
                   onClick={() => setShowReader(true)}
                 >
-                  📖 Read Now
+                  Read Now
                 </button>
               )}
               {archiveId && (
@@ -318,8 +317,9 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
 
   useEffect(() => {
     function onFsChange() {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(Boolean(document.fullscreenElement));
     }
+
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
@@ -332,7 +332,6 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
     }
   }
 
-  // Internet Archive embed for IA books, or direct link for OL books
   const embedUrl = archiveId
     ? `https://archive.org/embed/${archiveId}`
     : itemUrl || null;
@@ -362,7 +361,7 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
         <div className="player-frame-wrap">
           <iframe
             ref={iframeRef}
-            src={embedUrl || ""}
+            src={embedUrl || ''}
             className="player-frame"
             allowFullScreen
             allow="fullscreen"
@@ -429,12 +428,14 @@ export default function Books() {
 
     async function fetchBooks() {
       setLoading(true);
+
       try {
         const params = new URLSearchParams({
           page: String(page),
           page_size: String(BOOKS_PAGE_SIZE),
           sort: sortOrder,
         });
+
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (genre) params.set('genre', genre);
 
@@ -460,8 +461,9 @@ export default function Books() {
             genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
           });
           setUsingFallbackCatalog(false);
+
           if (openId && page === 1) {
-            const match = (Array.isArray(data?.items) ? data.items : []).find((book) => book.id === openId);
+            const match = nextItems.find((book) => book.id === openId);
             if (match) {
               setSelectedBook(match);
               setDetailMessage('');
@@ -524,12 +526,12 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, sortOrder, page]);
+  }, [debouncedSearch, genre, sortOrder, page, openId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    api.get('/watchlist?media_type=book')
+    fetchSupabaseWatchlist({ mediaType: 'book' })
       .then((items) => {
         if (cancelled) return;
         const nextLibraryIds = {};
@@ -546,14 +548,8 @@ export default function Books() {
   }, []);
 
   useEffect(() => {
-    api.get('/ratings/my?media_type=book')
-      .then((ratings) => {
-        const next = {};
-        ratings.forEach((rating) => {
-          next[rating.media_id] = rating;
-        });
-        setUserRatings(next);
-      })
+    fetchSupabaseRatingMap('book')
+      .then(setUserRatings)
       .catch(() => {});
   }, []);
 
@@ -607,7 +603,7 @@ export default function Books() {
 
   async function handleRate(book, categories, review) {
     try {
-      await api.post('/ratings', { media_type: 'book', media_id: book.id, categories, review });
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, review });
       setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
@@ -620,9 +616,9 @@ export default function Books() {
     setAddingBookId(book.id);
 
     try {
-      await api.post('/watchlist', {
-        media_type: 'book',
-        media_id: book.id,
+      await addSupabaseWatchlistItem({
+        mediaType: 'book',
+        mediaId: book.id,
         status: 'plan_to_read',
       });
 

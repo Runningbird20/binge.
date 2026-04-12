@@ -19,20 +19,34 @@ export default function AdminRequests() {
   const [noteFor, setNoteFor]     = useState(null);
   const [error, setError]         = useState('');
 
-  async function fetchRequests() {
-    setLoading(true);
-    try {
-      const params = filter !== 'all' ? `?status=${filter}` : '';
-      const data = await api.get(`/requests/admin${params}`);
-      setRequests(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    let cancelled = false;
 
-  useEffect(() => { fetchRequests(); }, [filter]);
+    async function fetchRequests() {
+      setLoading(true);
+      try {
+        const params = filter !== 'all' ? `?status=${filter}` : '';
+        const data = await api.get(`/requests/admin${params}`);
+        if (!cancelled) {
+          setRequests(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchRequests();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filter]);
 
   async function updateStatus(id, status) {
     setActionId(id);
