@@ -132,8 +132,12 @@ function BookDetailsModal({
       }
 
       const disposition = res.headers.get('content-disposition') || '';
-      const nameMatch = disposition.match(/filename="?([^"]+)"?/);
-      const filename = nameMatch ? nameMatch[1] : `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
+      const filenameToken = disposition
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.toLowerCase().startsWith('filename='));
+      const headerFilename = filenameToken?.slice('filename='.length).replace(/^"|"$/g, '');
+      const filename = headerFilename || `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
 
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
