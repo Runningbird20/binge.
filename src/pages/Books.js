@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import MediaRow from '../components/MediaRow';
 import Navbar from '../components/Navbar';
 import ListSaveControls from '../components/ListSaveControls';
 import RatingInput from '../components/RatingInput';
@@ -24,16 +25,10 @@ function getCoverUrl(book) {
 function BookCoverImage({ book, imageClassName, placeholderClassName }) {
   const [coverUrl, setCoverUrl] = useState(() => getCoverUrl(book));
 
-  useEffect(() => {
-    setCoverUrl(getCoverUrl(book));
-  }, [book]);
+  useEffect(() => { setCoverUrl(getCoverUrl(book)); }, [book]);
 
   if (!coverUrl) {
-    return (
-      <div className={placeholderClassName}>
-        <span>{book.title?.charAt(0)}</span>
-      </div>
-    );
+    return <div className={placeholderClassName}><span>{book.title?.charAt(0)}</span></div>;
   }
 
   return (
@@ -50,66 +45,34 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
 }
 
 function BookDetailsModal({
-  book,
-  onClose,
-  onAddToLibrary,
-  isInLibrary,
-  isAddingToLibrary,
-  onRate,
-  userRating,
-  detailMessage,
-  allowActions = true,
-  browseOnlyMessage = '',
+  book, onClose, onAddToLibrary, isInLibrary, isAddingToLibrary,
+  onRate, userRating, detailMessage, allowActions = true, browseOnlyMessage = '',
 }) {
-  const [showReader, setShowReader] = useState(false);
+  const [showReader, setShowReader]   = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
   const [draftScores, setDraftScores] = useState({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving]       = useState(false);
 
-  // Extract the archive.org identifier from source_key for IA books
-  const rawId = book?.source_key?.startsWith('internet-archive:')
-    ? book.source_key.replace('internet-archive:', '')
-    : null;
-
-  // archive.org embed works for most IA identifiers
-  // OL-prefixed IDs (ol-works-...) can't be embedded — use item_url instead
+  const rawId     = book?.source_key?.startsWith('internet-archive:')
+    ? book.source_key.replace('internet-archive:', '') : null;
   const isOlRecord = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
-  const archiveId = rawId && !isOlRecord ? rawId : null;
-
-  // item_url stored in DB (e.g. https://archive.org/details/... or https://openlibrary.org/works/...)
-  const itemUrl = book?.item_url || book?.itemUrl || null;
-
-  // Can read if we have an embeddable IA ID or any item URL
-  const canRead = !!(archiveId || itemUrl);
+  const archiveId  = rawId && !isOlRecord ? rawId : null;
+  const itemUrl    = book?.item_url || book?.itemUrl || null;
+  const canRead    = !!(archiveId || itemUrl);
 
   useEffect(() => {
-    if (userRating && typeof userRating === 'object') {
-      setDraftScores(userRating);
-    } else {
-      setDraftScores({});
-    }
+    if (userRating && typeof userRating === 'object') setDraftScores(userRating);
+    else setDraftScores({});
   }, [userRating, book]);
 
   useEffect(() => {
-    if (!book) {
-      return undefined;
-    }
-
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    }
-
+    if (!book) return undefined;
+    function handleKeyDown(e) { if (e.key === 'Escape') onClose(); }
     document.addEventListener('keydown', handleKeyDown);
-    const previousOverflow = document.body.style.overflow;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
+    return () => { document.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = prev; };
   }, [book, onClose]);
 
   if (!book) return null;
@@ -120,34 +83,20 @@ function BookDetailsModal({
     setDownloadError('');
     try {
       const url = `/api/media/book-download?identifier=${encodeURIComponent(archiveId)}&format=${format}`;
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Download failed');
-      }
-
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Download failed'); }
       const disposition = res.headers.get('content-disposition') || '';
       const nameMatch = disposition.match(/filename="?([^"]+)"?/);
       const filename = nameMatch ? nameMatch[1] : `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
-
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+      const a = document.createElement('a');
+      a.href = blobUrl; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
       setDownloadError(err.message || 'Download failed. This book may not be available.');
-    } finally {
-      setDownloading(null);
-    }
+    } finally { setDownloading(null); }
   }
 
   const cats = RATING_CATEGORIES.book;
@@ -157,11 +106,7 @@ function BookDetailsModal({
   async function handleSave() {
     if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
     setIsSaving(true);
-    try {
-      await onRate(book, draftScores);
-    } finally {
-      setIsSaving(false);
-    }
+    try { await onRate(book, draftScores); } finally { setIsSaving(false); }
   }
 
   return (
@@ -169,33 +114,18 @@ function BookDetailsModal({
       <div className="book-detail-overlay" onClick={onClose}>
         <div
           className="book-detail-modal book-detail-modal-wide"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="book-detail-title"
-          onClick={(event) => event.stopPropagation()}
+          role="dialog" aria-modal="true" aria-labelledby="book-detail-title"
+          onClick={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            className="book-detail-close"
-            onClick={onClose}
-            aria-label="Close book details"
-          >
-            &times;
-          </button>
+          <button type="button" className="book-detail-close" onClick={onClose} aria-label="Close book details">&times;</button>
 
           <div className="book-detail-cover-panel">
             <div className="book-detail-cover-frame">
-              <BookCoverImage
-                book={book}
-                imageClassName="book-detail-cover-image"
-                placeholderClassName="book-detail-cover-placeholder"
-              />
+              <BookCoverImage book={book} imageClassName="book-detail-cover-image" placeholderClassName="book-detail-cover-placeholder" />
             </div>
             <div className="artifact-panel">
               <RatingArtifact mediaType="book" scores={draftScores} size={220} />
-              {displayScore !== null && (
-                <p className="artifact-score">{displayScore}<span>/10</span></p>
-              )}
+              {displayScore !== null && <p className="artifact-score">{displayScore}<span>/10</span></p>}
             </div>
           </div>
 
@@ -203,36 +133,19 @@ function BookDetailsModal({
             <p className="book-detail-kicker">Book Details</p>
             <h2 id="book-detail-title">{book.title}</h2>
             <p className="book-detail-author">by {book.author}</p>
-
             <div className="book-detail-meta">
-              {book.genre && (
-                <span className="book-detail-meta-chip">{book.genre}</span>
-              )}
-              {book.year && (
-                <span className="book-detail-meta-chip">{book.year}</span>
-              )}
+              {book.genre && <span className="book-detail-meta-chip">{book.genre}</span>}
+              {book.year  && <span className="book-detail-meta-chip">{book.year}</span>}
             </div>
-
             <p className="book-detail-description">{book.synopsis}</p>
-
             <div className="book-detail-summary">
-              <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Author</span>
-                <span>{book.author}</span>
-              </div>
-              <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Genre</span>
-                <span>{book.genre || 'General Fiction'}</span>
-              </div>
+              <div className="book-detail-summary-row"><span className="book-detail-summary-label">Author</span><span>{book.author}</span></div>
+              <div className="book-detail-summary-row"><span className="book-detail-summary-label">Genre</span><span>{book.genre || 'General Fiction'}</span></div>
             </div>
 
             <div className="rating-section">
               <p className="rating-section-title">Your Rating</p>
-              <RatingInput
-                mediaType="book"
-                value={draftScores}
-                onChange={allowActions ? setDraftScores : () => {}}
-              />
+              <RatingInput mediaType="book" value={draftScores} onChange={allowActions ? setDraftScores : () => {}} />
               <div className="rating-section-actions">
                 <button
                   type="button"
@@ -242,9 +155,7 @@ function BookDetailsModal({
                 >
                   {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
                 </button>
-                {allowActions && !canSave && (
-                  <span className="rating-incomplete-hint">Rate all categories to save</span>
-                )}
+                {allowActions && !canSave && <span className="rating-incomplete-hint">Rate all categories to save</span>}
               </div>
             </div>
 
@@ -259,53 +170,30 @@ function BookDetailsModal({
                   {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
                 </button>
               )}
-              {allowActions && (
-                <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
-              )}
-              {!allowActions && browseOnlyMessage && (
-                <p className="book-detail-status">{browseOnlyMessage}</p>
-              )}
+              {allowActions && <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />}
+              {!allowActions && browseOnlyMessage && <p className="book-detail-status">{browseOnlyMessage}</p>}
               {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
               {canRead && (
-                <button
-                  type="button"
-                  className="btn-watch"
-                  onClick={() => setShowReader(true)}
-                >
-                  📖 Read Now
-                </button>
+                <button type="button" className="btn-watch" onClick={() => setShowReader(true)}>📖 Read Now</button>
               )}
               {archiveId && (
                 <div className="book-download-row">
                   <span className="book-download-label">Download:</span>
                   {['pdf', 'epub', 'txt'].map((fmt) => (
-                    <button
-                      key={fmt}
-                      type="button"
-                      className="book-download-btn"
-                      onClick={() => handleDownload(fmt)}
-                      disabled={downloading !== null}
-                    >
+                    <button key={fmt} type="button" className="book-download-btn" onClick={() => handleDownload(fmt)} disabled={downloading !== null}>
                       {downloading === fmt ? '...' : 'Download'} {fmt.toUpperCase()}
                     </button>
                   ))}
                 </div>
               )}
-              {downloadError && (
-                <p className="book-download-error">{downloadError}</p>
-              )}
+              {downloadError && <p className="book-download-error">{downloadError}</p>}
             </div>
           </div>
         </div>
       </div>
 
       {showReader && canRead && (
-        <BookReader
-          book={book}
-          archiveId={archiveId}
-          itemUrl={itemUrl}
-          onClose={() => setShowReader(false)}
-        />
+        <BookReader book={book} archiveId={archiveId} itemUrl={itemUrl} onClose={() => setShowReader(false)} />
       )}
     </>
   );
@@ -313,67 +201,75 @@ function BookDetailsModal({
 
 function BookReader({ book, archiveId, itemUrl, onClose }) {
   const iframeRef = useRef(null);
-  const modalRef = useRef(null);
+  const modalRef  = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    function onFsChange() {
-      setIsFullscreen(!!document.fullscreenElement);
-    }
+    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
   function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      (iframeRef.current || modalRef.current)?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
+    if (!document.fullscreenElement) (iframeRef.current || modalRef.current)?.requestFullscreen();
+    else document.exitFullscreen();
   }
 
-  // Internet Archive embed for IA books, or direct link for OL books
-  const embedUrl = archiveId
-    ? `https://archive.org/embed/${archiveId}`
-    : itemUrl || null;
+  const embedUrl = archiveId ? `https://archive.org/embed/${archiveId}` : itemUrl || null;
 
   return (
     <div className="player-overlay" onClick={onClose}>
-      <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
+      <div className="player-modal" ref={modalRef} onClick={(e) => e.stopPropagation()}>
         <div className="player-header">
           <div className="player-title">
-            <span>Book</span>
+            <span>📚</span>
             <div>
               <strong>{book.title}</strong>
               {book.author && <span className="player-year">by {book.author}</span>}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button
-              className="player-close"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            >
-              {isFullscreen ? '<' : '>'}
+            <button className="player-close" onClick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+              {isFullscreen ? '↙' : '↗'}
             </button>
-            <button className="player-close" onClick={onClose} title="Close">X</button>
+            <button className="player-close" onClick={onClose} title="Close">✕</button>
           </div>
         </div>
         <div className="player-frame-wrap">
-          <iframe
-            ref={iframeRef}
-            src={embedUrl || ""}
-            className="player-frame"
-            allowFullScreen
-            allow="fullscreen"
-            title={`Read ${book.title}`}
-            style={{ minHeight: '600px' }}
+          <iframe ref={iframeRef} src={embedUrl || ''} className="player-frame" allowFullScreen allow="fullscreen" title={`Read ${book.title}`} style={{ minHeight: '600px' }} />
+        </div>
+        <p className="player-note">Powered by Internet Archive. Some books may require borrowing.</p>
+      </div>
+    </div>
+  );
+}
+
+function CuratedBooksView({ onBookClick, onSeeAll }) {
+  const [rows, setRows]       = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/media/books/curated')
+      .then(data => setRows(data.rows || []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="curated-loading"><div className="curated-loading-shimmer" /></div>;
+
+  return (
+    <div className="curated-view">
+      {rows.map((row, i) => (
+        <div key={row.id} style={{ animationDelay: `${i * 0.06}s` }} className="curated-row-appear">
+          <MediaRow
+            row={{ ...row, items: row.items.map(b => ({ ...b, poster_url: b.cover_url })) }}
+            mediaType="book"
+            onItemClick={onBookClick}
+            onSeeAll={onSeeAll}
+            userRatings={{}}
           />
         </div>
-        <p className="player-note">
-          Powered by Internet Archive. Some books may require borrowing.
-        </p>
-      </div>
+      ))}
     </div>
   );
 }
@@ -382,16 +278,17 @@ export default function Books() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
 
-  const [books, setBooks] = useState([]);
-  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [view, setView]           = useState('curated');
+  const [books, setBooks]         = useState([]);
+  const [search, setSearch]       = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [genre, setGenre] = useState('');
+  const [genre, setGenre]         = useState('');
   const [sortOrder, setSortOrder] = useState('title-asc');
-  const [page, setPage] = useState(1);
+  const [page, setPage]           = useState(1);
   const [totalBooks, setTotalBooks] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [facets, setFacets] = useState({ genres: [] });
-  const [loading, setLoading] = useState(true);
+  const [facets, setFacets]       = useState({ genres: [] });
+  const [loading, setLoading]     = useState(true);
   const [libraryIds, setLibraryIds] = useState({});
   const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
@@ -402,390 +299,198 @@ export default function Books() {
   const loadMoreRef = useRef(null);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
+    const t = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(t);
   }, [search]);
 
   useEffect(() => {
-    function handleScroll() {
-      setShowScrollTop(window.scrollY > 360);
-    }
-
+    function handleScroll() { setShowScrollTop(window.scrollY > 360); }
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-
     async function fetchBooks() {
       setLoading(true);
       try {
-        const params = new URLSearchParams({
-          page: String(page),
-          page_size: String(BOOKS_PAGE_SIZE),
-          sort: sortOrder,
-        });
+        const params = new URLSearchParams({ page: String(page), page_size: String(BOOKS_PAGE_SIZE), sort: sortOrder });
         if (debouncedSearch) params.set('search', debouncedSearch);
         if (genre) params.set('genre', genre);
-
         const data = await api.get(`/media/books?${params.toString()}`);
         if (!cancelled) {
           const nextItems = Array.isArray(data?.items) ? data.items : [];
-          if (nextItems.length === 0 && page === 1) {
-            throw new Error('Book catalog is empty');
-          }
-
-          setBooks((current) => {
-            if (page === 1) {
-              return nextItems;
-            }
-
-            const seenIds = new Set(current.map((book) => book.id));
-            const appendedItems = nextItems.filter((book) => !seenIds.has(book.id));
-            return [...current, ...appendedItems];
-          });
+          if (nextItems.length === 0 && page === 1) throw new Error('empty');
+          setBooks(cur => page === 1 ? nextItems : [...cur, ...nextItems.filter(b => !cur.find(c => c.id === b.id))]);
           setTotalBooks(Number(data?.total) || 0);
           setTotalPages(Number(data?.totalPages) || 1);
-          setFacets({
-            genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
-          });
+          setFacets({ genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] });
           setUsingFallbackCatalog(false);
           if (openId && page === 1) {
-            const match = (Array.isArray(data?.items) ? data.items : []).find((book) => book.id === openId);
-            if (match) {
-              setSelectedBook(match);
-              setDetailMessage('');
-            }
+            const match = nextItems.find(b => b.id === openId);
+            if (match) { setSelectedBook(match); setDetailMessage(''); }
           }
         }
       } catch {
         if (!cancelled) {
           try {
             const fallbackItems = await loadFallbackBooks();
-            const result = filterBooksCatalog(fallbackItems, {
-              search: debouncedSearch,
-              genre,
-              sortOrder,
-              page,
-              pageSize: BOOKS_PAGE_SIZE,
-            });
-
-            setBooks((current) => {
-              if (page === 1) {
-                return result.items;
-              }
-
-              const seenIds = new Set(current.map((book) => book.id));
-              const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
-              return [...current, ...appendedItems];
-            });
-            setTotalBooks(result.total);
-            setTotalPages(result.totalPages);
-            setFacets({
-              genres: buildMediaGenreFacets(fallbackItems),
-            });
+            const result = filterBooksCatalog(fallbackItems, { search: debouncedSearch, genre, sortOrder, page, pageSize: BOOKS_PAGE_SIZE });
+            setBooks(cur => page === 1 ? result.items : [...cur, ...result.items.filter(b => !cur.find(c => c.id === b.id))]);
+            setTotalBooks(result.total); setTotalPages(result.totalPages);
+            setFacets({ genres: buildMediaGenreFacets(fallbackItems) });
             setUsingFallbackCatalog(true);
-
-            if (openId && page === 1) {
-              const match = fallbackItems.find((book) => book.id === openId);
-              if (match) {
-                setSelectedBook(match);
-                setDetailMessage('');
-              }
-            }
+            if (openId && page === 1) { const m = fallbackItems.find(b => b.id === openId); if (m) { setSelectedBook(m); setDetailMessage(''); } }
           } catch {
-            if (page === 1) {
-              setBooks([]);
-            }
-            setTotalBooks(0);
-            setTotalPages(1);
-            setUsingFallbackCatalog(false);
+            if (page === 1) setBooks([]);
+            setTotalBooks(0); setTotalPages(1); setUsingFallbackCatalog(false);
           }
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+      } finally { if (!cancelled) setLoading(false); }
     }
-
     fetchBooks();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedSearch, genre, sortOrder, page]);
+    return () => { cancelled = true; };
+  }, [debouncedSearch, genre, sortOrder, page, openId]);
 
   useEffect(() => {
     let cancelled = false;
-
     api.get('/watchlist?media_type=book')
-      .then((items) => {
-        if (cancelled) return;
-        const nextLibraryIds = {};
-        items.forEach((item) => {
-          nextLibraryIds[item.media_id] = true;
-        });
-        setLibraryIds(nextLibraryIds);
-      })
+      .then(items => { if (cancelled) return; const ids = {}; items.forEach(i => { ids[i.media_id] = true; }); setLibraryIds(ids); })
       .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     api.get('/ratings/my?media_type=book')
-      .then((ratings) => {
-        const next = {};
-        ratings.forEach((rating) => {
-          next[rating.media_id] = rating;
-        });
-        setUserRatings(next);
-      })
+      .then(ratings => { const next = {}; ratings.forEach(r => { next[r.media_id] = r; }); setUserRatings(next); })
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, genre, sortOrder]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, genre, sortOrder]);
 
   useEffect(() => {
-    if (typeof window.IntersectionObserver !== 'function') {
-      return undefined;
-    }
-
+    if (typeof window.IntersectionObserver !== 'function') return undefined;
     const node = loadMoreRef.current;
-    if (!node || loading || page >= totalPages) {
-      return undefined;
-    }
-
-    let queuedNextPage = false;
-    const observer = new window.IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (!entry?.isIntersecting || queuedNextPage) {
-          return;
-        }
-
-        queuedNextPage = true;
-        setPage((current) => (current < totalPages ? current + 1 : current));
-      },
-      {
-        rootMargin: '260px 0px',
-      }
-    );
-
+    if (!node || loading || page >= totalPages) return undefined;
+    let queued = false;
+    const observer = new window.IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting || queued) return;
+      queued = true;
+      setPage(cur => cur < totalPages ? cur + 1 : cur);
+    }, { rootMargin: '260px 0px' });
     observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, [loading, page, totalPages]);
 
-  function openBookDetails(book) {
-    setSelectedBook(book);
-    setDetailMessage('');
-  }
+  function openBookDetails(book) { setSelectedBook(book); setDetailMessage(''); }
+  function closeBookDetails()   { setSelectedBook(null); setDetailMessage(''); setAddingBookId(null); }
 
-  function closeBookDetails() {
-    setSelectedBook(null);
-    setDetailMessage('');
-    setAddingBookId(null);
-  }
-
-  async function handleRate(book, categories, review) {
+  async function handleRate(book, categories) {
     try {
-      await api.post('/ratings', { media_type: 'book', media_id: book.id, categories, review });
-      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
+      await api.post('/ratings', { media_type: 'book', media_id: book.id, categories });
+      setUserRatings(cur => ({ ...cur, [book.id]: { ...categories, media_id: book.id } }));
       setDetailMessage('Rating saved!');
-    } catch (err) {
-      setDetailMessage(err.message);
-    }
+    } catch (err) { setDetailMessage(err.message); }
   }
 
   async function handleAddToLibrary(book) {
-    setDetailMessage('');
-    setAddingBookId(book.id);
-
+    setDetailMessage(''); setAddingBookId(book.id);
     try {
-      await api.post('/watchlist', {
-        media_type: 'book',
-        media_id: book.id,
-        status: 'plan_to_read',
-      });
-
-      setLibraryIds((current) => ({ ...current, [book.id]: true }));
+      await api.post('/watchlist', { media_type: 'book', media_id: book.id, status: 'plan_to_read' });
+      setLibraryIds(cur => ({ ...cur, [book.id]: true }));
       setDetailMessage('Added to your Library.');
     } catch (err) {
-      if (/already in watchlist/i.test(err.message)) {
-        setLibraryIds((current) => ({ ...current, [book.id]: true }));
-        setDetailMessage('This book is already in your Library.');
-      } else {
-        setDetailMessage(err.message);
-      }
-    } finally {
-      setAddingBookId(null);
-    }
+      if (/already in watchlist/i.test(err.message)) { setLibraryIds(cur => ({ ...cur, [book.id]: true })); setDetailMessage('Already in your Library.'); }
+      else setDetailMessage(err.message);
+    } finally { setAddingBookId(null); }
   }
 
   const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
-  const genreOptions = facets.genres;
 
-  function clearFilters() {
-    setSearch('');
-    setDebouncedSearch('');
-    setGenre('');
-    setSortOrder('title-asc');
-    setPage(1);
-  }
-
-  function scrollToTop() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  function clearFilters() { setSearch(''); setDebouncedSearch(''); setGenre(''); setSortOrder('title-asc'); setPage(1); }
+  function scrollToTop()  { window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
   return (
     <div className="app-layout">
       <Navbar />
-      <main className="page-content">
-        <div className="page-header books-page-header">
-          <div>
-            <p className="page-kicker">Browse</p>
-            <h1>Books</h1>
-            <p className="page-subtitle books-page-subtitle">
-              Search the shelf, open richer book details, and save future reads to your library or shared lists.
-            </p>
+      <main className="page-content curated-page">
+
+        {/* Header with toggle */}
+        <div className="curated-page-header">
+          <h1 className="curated-page-title">Books</h1>
+          <div className="curated-view-toggle">
+            <button className={`curated-toggle-btn ${view === 'curated' ? 'active' : ''}`} onClick={() => setView('curated')} type="button">✦ Discover</button>
+            <button className={`curated-toggle-btn ${view === 'browse' ? 'active' : ''}`} onClick={() => setView('browse')} type="button">☰ Browse All</button>
           </div>
         </div>
 
-        <section className="surface-panel">
-          <div className="surface-panel-header">
-            <div>
-              <h2>Filter the Shelf</h2>
-              <p className="surface-panel-copy">
-                Search by title or author, narrow by genre, and sort the shelf without leaving the page.
-              </p>
-              {usingFallbackCatalog && (
-                <p className="surface-panel-copy">Showing the bundled book catalog snapshot.</p>
+        {/* Curated view */}
+        {view === 'curated' && (
+          <CuratedBooksView
+            onBookClick={openBookDetails}
+            onSeeAll={(row) => {
+              const url = row.seeAll || '';
+              const params = new URLSearchParams(url.split('?')[1] || '');
+              setView('browse');
+            }}
+          />
+        )}
+
+        {/* Browse view */}
+        {view === 'browse' && (
+          <>
+            <section className="surface-panel">
+              <div className="surface-panel-header">
+                <div>
+                  <h2>Filter the Shelf</h2>
+                  <p className="surface-panel-copy">Search by title or author, narrow by genre, and sort the shelf.</p>
+                  {usingFallbackCatalog && <p className="surface-panel-copy">Showing the bundled book catalog snapshot.</p>}
+                </div>
+                <p className="surface-panel-meta">{loading ? 'Loading books...' : `${totalBooks.toLocaleString()} book${totalBooks === 1 ? '' : 's'}`}</p>
+              </div>
+              <div className="filter-bar">
+                <input className="search-input" type="text" aria-label="Search books" placeholder="Search books..." value={search} onChange={e => setSearch(e.target.value)} />
+                <select className="filter-input" aria-label="Genre" value={genre} onChange={e => setGenre(e.target.value)}>
+                  <option value="">All Genres</option>
+                  {facets.genres.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+                <select className="filter-input" aria-label="Sort by" value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
+                  <option value="title-asc">Title A-Z</option>
+                  <option value="year-desc">Newest First</option>
+                  <option value="year-asc">Oldest First</option>
+                </select>
+                {hasActiveFilters && <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>Clear</button>}
+              </div>
+            </section>
+
+            <section className="surface-panel surface-panel-spacious books-results-panel">
+              {loading ? (
+                <div className="loading-state">Loading...</div>
+              ) : books.length === 0 ? (
+                <div className="empty-state"><p>No books found.</p><p className="empty-hint">Try a different search or clear the filters.</p></div>
+              ) : (
+                <>
+                  <div className="book-library-grid">
+                    {books.map(book => (
+                      <button key={book.id} type="button" className="book-shelf-card" onClick={() => openBookDetails(book)} aria-label={`Open details for ${book.title}`}>
+                        <div className="book-shelf-cover-frame">
+                          <BookCoverImage book={book} imageClassName="book-shelf-cover-image" placeholderClassName="book-shelf-cover-placeholder" />
+                        </div>
+                        <div className="book-shelf-copy"><h3>{book.title}</h3><p>{book.author}</p></div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="books-infinite-footer">
+                    {loading && page > 1 && <p className="books-pagination-copy">Loading more books...</p>}
+                    {!loading && page >= totalPages && <p className="books-pagination-copy">You have reached the end of the shelf.</p>}
+                    {page < totalPages && <div ref={loadMoreRef} className="books-load-trigger" aria-hidden="true" />}
+                  </div>
+                </>
               )}
-            </div>
-            <p className="surface-panel-meta">
-              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
-            </p>
-          </div>
-
-          <div className="filter-bar">
-            <input
-              className="search-input"
-              type="text"
-              aria-label="Search books"
-              placeholder="Search books..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <select
-              className="filter-input"
-              aria-label="Genre"
-              value={genre}
-              onChange={(event) => setGenre(event.target.value)}
-            >
-              <option value="">All Genres</option>
-              {genreOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <select
-              className="filter-input"
-              aria-label="Sort by"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value)}
-            >
-              <option value="title-asc">Title A-Z</option>
-              <option value="year-desc">Newest First</option>
-              <option value="year-asc">Oldest First</option>
-            </select>
-            {hasActiveFilters && (
-              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-                Clear
-              </button>
-            )}
-          </div>
-
-          {hasActiveFilters && !loading && (
-            <p className="surface-panel-copy">Showing results for your active filters.</p>
-          )}
-        </section>
-
-        <section className="surface-panel surface-panel-spacious books-results-panel">
-          <div className="books-results-header">
-            <p className="books-results-count">
-              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
-            </p>
-            {hasActiveFilters && !loading && (
-              <p className="books-results-summary">
-                Showing results for your active filters.
-              </p>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="loading-state">Loading...</div>
-          ) : books.length === 0 ? (
-            <div className="empty-state">
-              <p>No books found.</p>
-              <p className="empty-hint">Try a different search or clear the filters.</p>
-            </div>
-          ) : (
-            <>
-              <div className="book-library-grid">
-                {books.map((book) => (
-                  <button
-                    key={book.id}
-                    type="button"
-                    className="book-shelf-card"
-                    onClick={() => openBookDetails(book)}
-                    aria-label={`Open details for ${book.title}`}
-                  >
-                    <div className="book-shelf-cover-frame">
-                      <BookCoverImage
-                        book={book}
-                        imageClassName="book-shelf-cover-image"
-                        placeholderClassName="book-shelf-cover-placeholder"
-                      />
-                    </div>
-                    <div className="book-shelf-copy">
-                      <h3>{book.title}</h3>
-                      <p>{book.author}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="books-infinite-footer">
-                {loading && page > 1 && (
-                  <p className="books-pagination-copy">Loading more books...</p>
-                )}
-                {!loading && page >= totalPages && (
-                  <p className="books-pagination-copy">You have reached the end of the shelf.</p>
-                )}
-                {page < totalPages && <div ref={loadMoreRef} className="books-load-trigger" aria-hidden="true" />}
-              </div>
-            </>
-          )}
-        </section>
+            </section>
+          </>
+        )}
       </main>
 
       {selectedBook && (
@@ -804,13 +509,8 @@ export default function Books() {
       )}
 
       {showScrollTop && (
-        <button
-          type="button"
-          className="books-scroll-top"
-          onClick={scrollToTop}
-          aria-label="Back to top"
-        >
-          <span aria-hidden="true">^</span>
+        <button type="button" className="books-scroll-top" onClick={scrollToTop} aria-label="Back to top">
+          <span aria-hidden="true">↑</span>
         </button>
       )}
     </div>
