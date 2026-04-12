@@ -376,3 +376,438 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
     </div>
   );
 }
+
+export default function Books() {
+  const [searchParams] = useSearchParams();
+  const openId = Number(searchParams.get('open'));
+
+  const [books, setBooks] = useState([]);
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [genre, setGenre] = useState('');
+  const [sortOrder, setSortOrder] = useState('title-asc');
+  const [page, setPage] = useState(1);
+  const [totalBooks, setTotalBooks] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [facets, setFacets] = useState({ genres: [] });
+  const [loading, setLoading] = useState(true);
+  const [libraryIds, setLibraryIds] = useState({});
+  const [userRatings, setUserRatings] = useState({});
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [addingBookId, setAddingBookId] = useState(null);
+  const [detailMessage, setDetailMessage] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
+  const loadMoreRef = useRef(null);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [search]);
+
+  useEffect(() => {
+    function handleScroll() {
+      setShowScrollTop(window.scrollY > 360);
+    }
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchBooks() {
+      setLoading(true);
+
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+          page_size: String(BOOKS_PAGE_SIZE),
+          sort: sortOrder,
+        });
+
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (genre) params.set('genre', genre);
+
+        const data = await api.get(`/media/books?${params.toString()}`);
+        if (!cancelled) {
+          const nextItems = Array.isArray(data?.items) ? data.items : [];
+          if (nextItems.length === 0 && page === 1) {
+            throw new Error('Book catalog is empty');
+          }
+
+          setBooks((current) => {
+            if (page === 1) {
+              return nextItems;
+            }
+
+            const seenIds = new Set(current.map((book) => book.id));
+            const appendedItems = nextItems.filter((book) => !seenIds.has(book.id));
+            return [...current, ...appendedItems];
+          });
+          setTotalBooks(Number(data?.total) || 0);
+          setTotalPages(Number(data?.totalPages) || 1);
+          setFacets({
+            genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
+          });
+          setUsingFallbackCatalog(false);
+
+          if (openId && page === 1) {
+            const match = nextItems.find((book) => book.id === openId);
+            if (match) {
+              setSelectedBook(match);
+              setDetailMessage('');
+            }
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          try {
+            const fallbackItems = await loadFallbackBooks();
+            const result = filterBooksCatalog(fallbackItems, {
+              search: debouncedSearch,
+              genre,
+              sortOrder,
+              page,
+              pageSize: BOOKS_PAGE_SIZE,
+            });
+
+            setBooks((current) => {
+              if (page === 1) {
+                return result.items;
+              }
+
+              const seenIds = new Set(current.map((book) => book.id));
+              const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
+              return [...current, ...appendedItems];
+            });
+            setTotalBooks(result.total);
+            setTotalPages(result.totalPages);
+            setFacets({
+              genres: buildMediaGenreFacets(fallbackItems),
+            });
+            setUsingFallbackCatalog(true);
+
+            if (openId && page === 1) {
+              const match = fallbackItems.find((book) => book.id === openId);
+              if (match) {
+                setSelectedBook(match);
+                setDetailMessage('');
+              }
+            }
+          } catch {
+            if (page === 1) {
+              setBooks([]);
+            }
+            setTotalBooks(0);
+            setTotalPages(1);
+            setUsingFallbackCatalog(false);
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchBooks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, genre, sortOrder, page, openId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchSupabaseWatchlist({ mediaType: 'book' })
+      .then((items) => {
+        if (cancelled) return;
+        const nextLibraryIds = {};
+        items.forEach((item) => {
+          nextLibraryIds[item.media_id] = true;
+        });
+        setLibraryIds(nextLibraryIds);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    fetchSupabaseRatingMap('book')
+      .then(setUserRatings)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, genre, sortOrder]);
+
+  useEffect(() => {
+    if (typeof window.IntersectionObserver !== 'function') {
+      return undefined;
+    }
+
+    const node = loadMoreRef.current;
+    if (!node || loading || page >= totalPages) {
+      return undefined;
+    }
+
+    let queuedNextPage = false;
+    const observer = new window.IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting || queuedNextPage) {
+          return;
+        }
+
+        queuedNextPage = true;
+        setPage((current) => (current < totalPages ? current + 1 : current));
+      },
+      {
+        rootMargin: '260px 0px',
+      }
+    );
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [loading, page, totalPages]);
+
+  function openBookDetails(book) {
+    setSelectedBook(book);
+    setDetailMessage('');
+  }
+
+  function closeBookDetails() {
+    setSelectedBook(null);
+    setDetailMessage('');
+    setAddingBookId(null);
+  }
+
+  async function handleRate(book, categories, review = '') {
+    try {
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, review });
+      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
+      setDetailMessage('Rating saved!');
+    } catch (err) {
+      setDetailMessage(err.message);
+    }
+  }
+
+  async function handleAddToLibrary(book) {
+    setDetailMessage('');
+    setAddingBookId(book.id);
+
+    try {
+      await addSupabaseWatchlistItem({
+        mediaType: 'book',
+        mediaId: book.id,
+        status: 'plan_to_read',
+      });
+
+      setLibraryIds((current) => ({ ...current, [book.id]: true }));
+      setDetailMessage('Added to your Library.');
+    } catch (err) {
+      if (/already in watchlist/i.test(err.message)) {
+        setLibraryIds((current) => ({ ...current, [book.id]: true }));
+        setDetailMessage('This book is already in your Library.');
+      } else {
+        setDetailMessage(err.message);
+      }
+    } finally {
+      setAddingBookId(null);
+    }
+  }
+
+  const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
+
+  function clearFilters() {
+    setSearch('');
+    setDebouncedSearch('');
+    setGenre('');
+    setSortOrder('title-asc');
+    setPage(1);
+  }
+
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  return (
+    <div className="app-layout">
+      <Navbar />
+      <main className="page-content">
+        <div className="page-header books-page-header">
+          <div>
+            <p className="page-kicker">Browse</p>
+            <h1>Books</h1>
+            <p className="page-subtitle books-page-subtitle">
+              Search the shelf, open richer book details, and save future reads to your library or shared lists.
+            </p>
+          </div>
+        </div>
+
+        <section className="surface-panel">
+          <div className="surface-panel-header">
+            <div>
+              <h2>Filter the Shelf</h2>
+              <p className="surface-panel-copy">
+                Search by title or author, narrow by genre, and sort the shelf without leaving the page.
+              </p>
+              {usingFallbackCatalog && (
+                <p className="surface-panel-copy">Showing the bundled book catalog snapshot.</p>
+              )}
+            </div>
+            <p className="surface-panel-meta">
+              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
+            </p>
+          </div>
+
+          <div className="filter-bar">
+            <input
+              className="search-input"
+              type="text"
+              aria-label="Search books"
+              placeholder="Search books..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="filter-input"
+              aria-label="Genre"
+              value={genre}
+              onChange={(event) => setGenre(event.target.value)}
+            >
+              <option value="">All Genres</option>
+              {facets.genres.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select
+              className="filter-input"
+              aria-label="Sort by"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            >
+              <option value="title-asc">Title A-Z</option>
+              <option value="year-desc">Newest First</option>
+              <option value="year-asc">Oldest First</option>
+            </select>
+            {hasActiveFilters && (
+              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
+                Clear
+              </button>
+            )}
+          </div>
+
+          {hasActiveFilters && !loading && (
+            <p className="surface-panel-copy">Showing results for your active filters.</p>
+          )}
+        </section>
+
+        <section className="surface-panel surface-panel-spacious books-results-panel">
+          <div className="books-results-header">
+            <p className="books-results-count">
+              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
+            </p>
+            {hasActiveFilters && !loading && (
+              <p className="books-results-summary">
+                Showing results for your active filters.
+              </p>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="loading-state">Loading...</div>
+          ) : books.length === 0 ? (
+            <div className="empty-state">
+              <p>No books found.</p>
+              <p className="empty-hint">Try a different search or clear the filters.</p>
+            </div>
+          ) : (
+            <>
+              <div className="book-library-grid">
+                {books.map((book) => (
+                  <button
+                    key={book.id}
+                    type="button"
+                    className="book-shelf-card"
+                    onClick={() => openBookDetails(book)}
+                    aria-label={`Open details for ${book.title}`}
+                  >
+                    <div className="book-shelf-cover-frame">
+                      <BookCoverImage
+                        book={book}
+                        imageClassName="book-shelf-cover-image"
+                        placeholderClassName="book-shelf-cover-placeholder"
+                      />
+                    </div>
+                    <div className="book-shelf-copy">
+                      <h3>{book.title}</h3>
+                      <p>{book.author}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="books-infinite-footer">
+                {loading && page > 1 && (
+                  <p className="books-pagination-copy">Loading more books...</p>
+                )}
+                {!loading && page >= totalPages && (
+                  <p className="books-pagination-copy">You have reached the end of the shelf.</p>
+                )}
+                {page < totalPages && <div ref={loadMoreRef} className="books-load-trigger" aria-hidden="true" />}
+              </div>
+            </>
+          )}
+        </section>
+      </main>
+
+      {selectedBook && (
+        <BookDetailsModal
+          book={selectedBook}
+          onClose={closeBookDetails}
+          onAddToLibrary={handleAddToLibrary}
+          isInLibrary={!!libraryIds[selectedBook?.id]}
+          isAddingToLibrary={addingBookId === selectedBook?.id}
+          onRate={handleRate}
+          userRating={userRatings[selectedBook?.id]}
+          detailMessage={detailMessage}
+          allowActions={!usingFallbackCatalog}
+          browseOnlyMessage="Fallback catalog mode is browse-only."
+        />
+      )}
+
+      {showScrollTop && (
+        <button
+          type="button"
+          className="books-scroll-top"
+          onClick={scrollToTop}
+          aria-label="Back to top"
+        >
+          <span aria-hidden="true">^</span>
+        </button>
+      )}
+    </div>
+  );
+}
