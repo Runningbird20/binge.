@@ -1,0 +1,9 @@
+build
+node_modules
+data
+server
+server-live.stderr.log
+server-live.stdout.log
+*.db
+*.db-shm
+*.db-wal

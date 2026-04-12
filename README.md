@@ -10,6 +10,8 @@ Install the project dependencies with:
 npm install
 ```
 
+Copy `.env.example` to `.env` and fill in the Supabase values before starting the app locally or deploying it.
+
 Recommended runtime:
 
 - Node.js `18+`
@@ -129,10 +131,31 @@ Runs the test suite.
 ## Notes
 
 - The frontend can call the API through `REACT_APP_API_URL` in development, and falls back to the CRA proxy when no explicit API URL is set.
-- `better-sqlite3` is rebuilt during `postinstall` so the local native binding matches the current machine and Node version.
+- `better-sqlite3` is rebuilt during local `postinstall` so the native binding matches the current machine and Node version. Vercel skips that rebuild for the frontend deployment.
+- Vercel deployments in this repo are configured as a frontend-first Create React App build. Keep `REACT_APP_ENABLE_LEGACY_BACKEND=false` in Vercel unless you separately host and migrate the old Express backend.
 - The import scripts use Node's built-in `fetch`, so no separate `node-fetch` install is needed on modern Node versions.
 - The server automatically seeds from `data/plex_movies.json`, `data/plex_tv.json`, `data/plex_movies.bulk.jsonl`, `data/plex_tv.bulk.jsonl`, `data/internet_archive_books.json`, and `data/internet_archive_books.bulk.jsonl` when those files exist.
 - Internet Archive imports exclude explicit/pornographic records with a keyword filter.
+
+## Vercel Deployment
+
+This repository is ready to deploy to Vercel as the Supabase-backed frontend.
+
+Required Vercel environment variables:
+
+- `REACT_APP_SUPABASE_URL`
+- `REACT_APP_SUPABASE_PUBLISHABLE_KEY`
+- `REACT_APP_ENABLE_LEGACY_BACKEND=false`
+
+Optional only if you separately host the legacy backend:
+
+- `REACT_APP_API_URL`
+
+Notes:
+
+- `vercel.json` includes an SPA fallback so client-side routes like `/movies`, `/books`, and `/watchlist` load correctly on refresh.
+- The linked Vercel project should use Node `20.x` to match `package.json`.
+- Legacy Express + SQLite features such as `Lists`, `Live TV`, chat-backed recommendations, and admin request workflows are not part of the Vercel frontend deployment yet. Those screens stay hidden or show the legacy notice unless you intentionally wire up that older backend elsewhere.
 
 ## Internet Archive Books
 

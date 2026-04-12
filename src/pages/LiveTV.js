@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 
@@ -32,28 +32,28 @@ export default function LiveTV() {
   const iframeRef = useRef(null);
   const playerRef = useRef(null);
 
-  useEffect(() => { fetchChannels(); }, []);
-
-  useEffect(() => {
-    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  async function fetchChannels() {
+  const fetchChannels = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const data = await api.get('/livetv/channels');
       const list = data.channels || [];
       setChannels(list);
-      if (list.length > 0 && !selectedChannel) setSelectedChannel(list[0]);
+      setSelectedChannel((current) => (list.length > 0 && !current ? list[0] : current));
     } catch (err) {
       setError(err.message || 'Failed to load channels');
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => { fetchChannels(); }, [fetchChannels]);
+
+  useEffect(() => {
+    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
