@@ -14,6 +14,7 @@ import Lists from './pages/Lists';
 import SharedList from './pages/SharedList';
 import AccountSettings from './pages/AccountSettings';
 import AdminRequests from './pages/AdminRequests';
+import LiveTV from './pages/LiveTV';
 import Ratings from './pages/Ratings';
 import LegacyBackendNotice from './components/LegacyBackendNotice';
 import { hasLegacyBackendSession, isLegacyBackendEnabled } from './utils/legacyBackend';
@@ -53,6 +54,12 @@ export default function App() {
             element={legacyBackendEnabled
               ? <ProtectedRoute><AdminRequests /></ProtectedRoute>
               : <ProtectedRoute><LegacyBackendNotice featureName="Admin Requests" isProtected /></ProtectedRoute>}
+          />
+          <Route
+            path="/live-tv"
+            element={legacyBackendEnabled
+              ? <ProtectedRoute><LiveTV /></ProtectedRoute>
+              : <ProtectedRoute><LegacyBackendNotice featureName="Live TV" isProtected /></ProtectedRoute>}
           />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>

@@ -68,7 +68,7 @@ export default function ForYou() {
           <p className="foryou-idle-text">
             Get personalized picks based on everything you've rated — our AI owl will analyze your taste and find hidden gems just for you.
           </p>
-          <button className="foryou-generate-btn" onClick={fetchRecommendations}>
+          <button type="button" className="foryou-generate-btn" onClick={e => { e.preventDefault(); e.stopPropagation(); fetchRecommendations(); }}>
             Generate My Recommendations
           </button>
         </div>
@@ -85,7 +85,7 @@ export default function ForYou() {
       {state === 'error' && (
         <div className="foryou-error">
           <p>⚠️ {error}</p>
-          <button className="foryou-generate-btn" onClick={fetchRecommendations}>Try again</button>
+          <button type="button" className="foryou-generate-btn" onClick={e => { e.preventDefault(); e.stopPropagation(); fetchRecommendations(); }}>Try again</button>
         </div>
       )}
 
