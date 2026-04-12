@@ -1039,6 +1039,10 @@ router.get('/tmdb-show', async (req, res) => {
 });
 
 // ─── TMDB season episode count ────────────────────────────────────────────────
+// In-memory cache for TMDB season data (avoids hammering API on repeat views)
+const tmdbSeasonCache = new Map();
+const TMDB_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 router.get('/tmdb-season', async (req, res) => {
   const { tmdbId, season } = req.query;
   if (!tmdbId || !season) return res.status(400).json({ error: 'tmdbId and season required' });
@@ -1046,12 +1050,18 @@ router.get('/tmdb-season', async (req, res) => {
   const TMDB_KEY = process.env.TMDB_API_KEY;
   if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
 
+  const cacheKey = `${tmdbId}:${season}`;
+  const cached = tmdbSeasonCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < TMDB_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
   try {
     const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${TMDB_KEY}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
     const data = await r.json();
-    res.json({
+    const result = {
       season: data.season_number,
       episodeCount: data.episodes?.length || 0,
       episodes: (data.episodes || []).map(e => ({
@@ -1059,7 +1069,9 @@ router.get('/tmdb-season', async (req, res) => {
         name: e.name,
         airDate: e.air_date,
       })),
-    });
+    };
+    tmdbSeasonCache.set(cacheKey, { data: result, ts: Date.now() });
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -693,6 +693,15 @@ if (!hasColumn('users', 'bio'))              db.exec("ALTER TABLE users ADD COLU
 if (!hasColumn('users', 'avatar_url'))       db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT');
 if (!hasColumn('books', 'source_key'))       db.exec('ALTER TABLE books ADD COLUMN source_key TEXT');
 if (!hasColumn('books', 'item_url'))         db.exec('ALTER TABLE books ADD COLUMN item_url TEXT');
+
+// Watchlist progress tracking columns
+if (!hasColumn('watchlist', 'current_season'))  db.exec('ALTER TABLE watchlist ADD COLUMN current_season INTEGER');
+if (!hasColumn('watchlist', 'current_episode')) db.exec('ALTER TABLE watchlist ADD COLUMN current_episode INTEGER');
+if (!hasColumn('watchlist', 'current_page'))    db.exec('ALTER TABLE watchlist ADD COLUMN current_page INTEGER');
+if (!hasColumn('watchlist', 'current_chapter')) db.exec('ALTER TABLE watchlist ADD COLUMN current_chapter TEXT');
+if (!hasColumn('watchlist', 'notes'))           db.exec('ALTER TABLE watchlist ADD COLUMN notes TEXT');
+if (!hasColumn('watchlist', 'completed_at'))    db.exec('ALTER TABLE watchlist ADD COLUMN completed_at DATETIME');
+if (!hasColumn('watchlist', 'updated_at'))      db.exec('ALTER TABLE watchlist ADD COLUMN updated_at DATETIME');
 if (!hasColumn('movies', 'source_key'))      db.exec('ALTER TABLE movies ADD COLUMN source_key TEXT');
 if (!hasColumn('movies', 'writers'))         db.exec('ALTER TABLE movies ADD COLUMN writers TEXT');
 if (!hasColumn('movies', 'cast_members'))    db.exec('ALTER TABLE movies ADD COLUMN cast_members TEXT');

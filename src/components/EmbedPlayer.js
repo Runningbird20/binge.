@@ -156,6 +156,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
   const isTV = mediaType === 'tv_show';
   const tmdbId = externalId?.kind === 'tmdb' ? externalId.value : null;
+  const autoAddedRef = useRef(false);
   const itemSeasonCount = Number.isFinite(Number(item?.seasons)) ? Number(item.seasons) : null;
   const totalSeasons = Math.max(1, realSeasonCount ?? itemSeasonCount ?? 1);
   const currentEpisodeKey = `${season}:${episode}`;
@@ -200,6 +201,14 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         api.post('/media/episode-progress', { media_id: item.id, season, episode })
           .then(() => {
             setWatched((previous) => new Set([...previous, key]));
+            // Auto-add to watchlist and update current progress
+            api.patch('/watchlist/progress', {
+              media_type: 'tv_show',
+              media_id: item.id,
+              current_season: season,
+              current_episode: episode,
+              status: 'watching',
+            }).catch(() => {});
           })
           .catch(() => {});
       }
@@ -212,6 +221,21 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       }
     };
   }, [episode, isTV, item?.id, season, watched]);
+
+  // Auto-add movies to watchlist after 2 minutes of watching
+  useEffect(() => {
+    if (isTV || !item?.id || autoAddedRef.current) return;
+    const timer = setTimeout(() => {
+      if (autoAddedRef.current) return;
+      autoAddedRef.current = true;
+      api.patch('/watchlist/progress', {
+        media_type: 'movie',
+        media_id: item.id,
+        status: 'watching',
+      }).catch(() => {});
+    }, 2 * 60 * 1000); // 2 minutes
+    return () => clearTimeout(timer);
+  }, [isTV, item?.id]);
 
   useEffect(() => {
     const embeddedId = getEmbeddedId(item);
@@ -306,9 +330,11 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       if (err.message?.includes('TMDB_API_KEY')) {
         setMetadataWarning('Add TMDB_API_KEY to your .env for accurate episode counts.');
       }
+      // Don't fall back to a hardcoded number — leave as null so UI shows "Loading..."
+      // Only set a fallback if we have NO other info at all
       setSeasonEpisodeCounts((previous) => ({
         ...previous,
-        [seasonNumber]: DEFAULT_EPISODE_COUNT,
+        [seasonNumber]: previous[seasonNumber] ?? null,
       }));
     } finally {
       setLoadingEpisodes(false);
@@ -321,13 +347,8 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     }
   }, [fetchSeasonEpisodes, isTV, season, tmdbId]);
 
-  useEffect(() => {
-    if (!tmdbId || !isTV) return;
-
-    for (let seasonNumber = 1; seasonNumber <= totalSeasons; seasonNumber += 1) {
-      fetchSeasonEpisodes(seasonNumber);
-    }
-  }, [fetchSeasonEpisodes, isTV, tmdbId, totalSeasons]);
+  // Removed: pre-fetching all seasons at once causes rate limiting and slow loads
+  // Episodes are now fetched on-demand when a season is selected
 
   useEffect(() => {
     if (!item?.id || !isTV) return;
@@ -376,6 +397,14 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           episode: selectedEpisode,
         });
         setWatched((previous) => new Set([...previous, key]));
+        // Auto-add to watchlist and update progress
+        api.patch('/watchlist/progress', {
+          media_type: 'tv_show',
+          media_id: item.id,
+          current_season: selectedSeason,
+          current_episode: selectedEpisode,
+          status: 'watching',
+        }).catch(() => {});
       }
     } catch {
       // Keep playback usable even if watch tracking fails.
@@ -385,9 +414,8 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   }
 
   const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
-  const episodeCount = isTV
-    ? seasonEpisodeCounts[season] ?? (tmdbId ? undefined : DEFAULT_EPISODE_COUNT)
-    : undefined;
+  // Only show episode count when we actually have data from TMDB
+  const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
   return (
