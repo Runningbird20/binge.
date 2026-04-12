@@ -47,7 +47,9 @@ export default function LiveTV() {
     }
   }, []);
 
-  useEffect(() => { fetchChannels(); }, [fetchChannels]);
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
 
   useEffect(() => {
     function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
