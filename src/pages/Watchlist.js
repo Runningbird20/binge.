@@ -39,29 +39,46 @@ export default function Watchlist() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchList() {
       setLoading(true);
       try {
         const data = await fetchSupabaseWatchlist({ status: activeTab });
-        setItems(Array.isArray(data) ? data : []);
+        if (!cancelled) {
+          setItems(Array.isArray(data) ? data : []);
+        }
       } catch {
-        setItems([]);
+        if (!cancelled) {
+          setItems([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     fetchList();
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab]);
 
   async function handleStatusChange(item, newStatus) {
     try {
       await updateSupabaseWatchlistStatus(item.id, newStatus);
-      setItems((current) =>
-        current.map((entry) => (
+      setItems((current) => {
+        const updatedItems = current.map((entry) => (
           entry.id === item.id ? { ...entry, status: newStatus } : entry
-        ))
-      );
+        ));
+
+        if (!activeTab) {
+          return updatedItems;
+        }
+
+        return updatedItems.filter((entry) => entry.status === activeTab);
+      });
     } catch (error) {
       alert(error.message);
     }
@@ -91,12 +108,8 @@ export default function Watchlist() {
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredItems = items.filter((item) => {
-    const matchesSearch =
-      !normalizedSearch ||
-      item.title?.toLowerCase().includes(normalizedSearch);
-    const matchesType =
-      !mediaTypeFilter || item.media_type === mediaTypeFilter;
-
+    const matchesSearch = !normalizedSearch || item.title?.toLowerCase().includes(normalizedSearch);
+    const matchesType = !mediaTypeFilter || item.media_type === mediaTypeFilter;
     return matchesSearch && matchesType;
   });
 
