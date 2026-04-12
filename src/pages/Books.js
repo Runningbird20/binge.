@@ -29,6 +29,47 @@ function getCoverUrl(book) {
   return rawUrl;
 }
 
+function normalizeCuratedBookRows(rows) {
+  return rows.map((row) => ({
+    ...row,
+    items: Array.isArray(row.items)
+      ? row.items.map((item) => ({
+        ...item,
+        cover_url: item.cover_url || item.coverUrl || item.poster_url || item.posterUrl || '',
+      }))
+      : [],
+  }));
+}
+
+function buildFallbackBookRows(items) {
+  const featuredItems = filterBooksCatalog(items, {
+    sortOrder: 'year-desc',
+    page: 1,
+    pageSize: 12,
+  }).items;
+  const genres = buildMediaGenreFacets(items).slice(0, 4);
+
+  return [
+    {
+      id: 'featured',
+      title: 'Featured Books',
+      seeAll: '/books?sort=year-desc',
+      items: featuredItems,
+    },
+    ...genres.map((genre) => ({
+      id: `genre-${genre}`,
+      title: genre,
+      seeAll: `/books?genre=${encodeURIComponent(genre)}`,
+      items: filterBooksCatalog(items, {
+        genre,
+        sortOrder: 'year-desc',
+        page: 1,
+        pageSize: 12,
+      }).items,
+    })),
+  ].filter((row) => Array.isArray(row.items) && row.items.length > 0);
+}
+
 function BookCoverImage({ book, imageClassName, placeholderClassName }) {
   const [coverUrl, setCoverUrl] = useState(() => getCoverUrl(book));
 
