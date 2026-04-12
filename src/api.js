@@ -74,7 +74,9 @@ async function request(method, path, body) {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   } catch {
-    throw new Error('Unable to reach the API. Make sure the backend server is running.');
+    throw new Error(
+      'Unable to reach the legacy API. Make sure the Express backend is running for any non-Supabase features.'
+    );
   }
 
   const data = await parseResponseBody(res);

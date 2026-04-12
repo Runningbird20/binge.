@@ -5,6 +5,11 @@ import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { api } from '../api';
 import {
+  addSupabaseWatchlistItem,
+  fetchSupabaseRatingMap,
+  saveSupabaseRating,
+} from '../utils/supabaseData';
+import {
   buildMediaGenreFacets,
   filterMediaItems,
   loadFallbackTvShows,
@@ -84,18 +89,14 @@ export default function TVShows() {
   useEffect(() => { fetchShows(); }, [fetchShows]);
 
   useEffect(() => {
-    api.get('/ratings/my?media_type=tv_show')
-      .then((ratings) => {
-        const next = {};
-        ratings.forEach((r) => { next[r.media_id] = r; });
-        setUserRatings(next);
-      })
+    fetchSupabaseRatingMap('tv_show')
+      .then(setUserRatings)
       .catch(() => {});
   }, []);
 
   async function handleRate(item, categories, review) {
     try {
-      await api.post('/ratings', { media_type: 'tv_show', media_id: item.id, categories, review });
+      await saveSupabaseRating({ mediaType: 'tv_show', mediaId: item.id, categories, review });
       setUserRatings((cur) => ({ ...cur, [item.id]: { ...categories, media_id: item.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (error) {
@@ -107,7 +108,7 @@ export default function TVShows() {
     setIsAddingWatchlist(true);
     setDetailMessage('');
     try {
-      await api.post('/watchlist', { media_type: 'tv_show', media_id: item.id });
+      await addSupabaseWatchlistItem({ mediaType: 'tv_show', mediaId: item.id });
       setDetailMessage(`"${item.title}" added to your watchlist.`);
     } catch (error) {
       setDetailMessage(error.message);

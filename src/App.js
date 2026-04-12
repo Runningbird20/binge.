@@ -16,9 +16,13 @@ import AccountSettings from './pages/AccountSettings';
 import AdminRequests from './pages/AdminRequests';
 import LiveTV from './pages/LiveTV';
 import Ratings from './pages/Ratings';
+import LegacyBackendNotice from './components/LegacyBackendNotice';
+import { hasLegacyBackendSession, isLegacyBackendEnabled } from './utils/legacyBackend';
 import './App.css';
 
 export default function App() {
+  const legacyBackendEnabled = isLegacyBackendEnabled();
+
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -32,14 +36,34 @@ export default function App() {
           <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
           <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
           <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
-          <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
-          <Route path="/lists/:shareCode" element={<SharedList />} />
+          <Route
+            path="/lists"
+            element={legacyBackendEnabled
+              ? <ProtectedRoute><Lists /></ProtectedRoute>
+              : <ProtectedRoute><LegacyBackendNotice featureName="Shared Lists" isProtected /></ProtectedRoute>}
+          />
+          <Route
+            path="/lists/:shareCode"
+            element={legacyBackendEnabled
+              ? <SharedList />
+              : <LegacyBackendNotice featureName="Shared Lists" />}
+          />
           <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-          <Route path="/admin/requests" element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
-          <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
+          <Route
+            path="/admin/requests"
+            element={legacyBackendEnabled
+              ? <ProtectedRoute><AdminRequests /></ProtectedRoute>
+              : <ProtectedRoute><LegacyBackendNotice featureName="Admin Requests" isProtected /></ProtectedRoute>}
+          />
+          <Route
+            path="/live-tv"
+            element={legacyBackendEnabled
+              ? <ProtectedRoute><LiveTV /></ProtectedRoute>
+              : <ProtectedRoute><LegacyBackendNotice featureName="Live TV" isProtected /></ProtectedRoute>}
+          />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
-        <ChatBot />
+        {hasLegacyBackendSession() && <ChatBot />}
       </BrowserRouter>
     </AuthProvider>
   );

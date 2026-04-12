@@ -3,6 +3,7 @@ import EmbedPlayer from './EmbedPlayer';
 import ListSaveControls from './ListSaveControls';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
 
 function getImageUrl(item) {
   const raw = item.poster_url || item.cover_url || item.image_url || '';
@@ -87,6 +88,7 @@ export default function MediaDetailsModal({
   const canSave = allCategoriesFilled(mediaType, draftScores);
   const displayScore = computeNormalizedScore(mediaType, draftScores);
   const canWatch = mediaType === 'movie' || mediaType === 'tv_show';
+  const canUseLegacyBackend = hasLegacyBackendSession();
 
   async function handleSave() {
     if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
@@ -225,7 +227,7 @@ export default function MediaDetailsModal({
                   {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
                 </button>
               )}
-              {allowActions && (
+              {allowActions && canUseLegacyBackend && (
                 <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
               )}
               {!allowActions && browseOnlyMessage && (
