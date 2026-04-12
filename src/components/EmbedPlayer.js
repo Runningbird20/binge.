@@ -92,7 +92,6 @@ const PROVIDERS = [
 ];
 
 const AUTO_WATCH_SECONDS = 5 * 60;
-const DEFAULT_EPISODE_COUNT = 20;
 
 function normalizeExternalId(kind, value) {
   if (value == null) return null;
