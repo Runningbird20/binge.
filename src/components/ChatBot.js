@@ -337,7 +337,7 @@ export default function ChatBot() {
               {apiStatus === false && (
                 <div className="chatbot-offline-banner">
                   <strong>⚠️ AI not available.</strong>
-                  <p>Make sure <code>GROQ_API_KEY</code> is set in your <code>.env</code> file.</p>
+                  <p>Make sure <code>GROQ_API_KEY</code> is set in your <code>.env.local</code> file locally, or as an environment variable in Vercel.</p>
                   <button className="chatbot-retry-btn" onClick={() => { setApiStatus(null); checkStatus(); }}>Retry</button>
                 </div>
               )}
