@@ -16,6 +16,7 @@ Deno.serve(async (req) => {
         ok: true,
         message: 'ai-chat is live',
         hasGroqKey: !!Deno.env.get('GROQ_API_KEY'),
+        hasTavilyKey: !!Deno.env.get('TAVILY_API_KEY'),
       }),
       { status: 200, headers: corsHeaders }
     );
@@ -30,6 +31,7 @@ Deno.serve(async (req) => {
 
   try {
     const groqApiKey = Deno.env.get('GROQ_API_KEY');
+    const tavilyApiKey = Deno.env.get('TAVILY_API_KEY');
 
     if (!groqApiKey) {
       return new Response(
@@ -57,6 +59,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Get AI response from Groq
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -79,9 +82,46 @@ Deno.serve(async (req) => {
       });
     }
 
+    const content = groqData?.choices?.[0]?.message?.content ?? '';
+    let webSources = [];
+
+    // Search for sources using Tavily if available
+    if (tavilyApiKey && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1]?.content || '';
+      try {
+        const tavilyRes = await fetch('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            api_key: tavilyApiKey,
+            query: lastMessage,
+            max_results: 5,
+            include_answer: true,
+          }),
+        });
+
+        if (tavilyRes.ok) {
+          const tavilyData = await tavilyRes.json();
+          webSources = (tavilyData.results || []).map((result: any) => ({
+            title: result.title,
+            url: result.url,
+            source: new URL(result.url).hostname,
+            snippet: result.snippet || result.content,
+          }));
+        }
+      } catch (searchError) {
+        console.error('Tavily search error:', searchError);
+        // Continue without sources if search fails
+      }
+    }
+
     return new Response(
       JSON.stringify({
-        content: groqData?.choices?.[0]?.message?.content ?? '',
+        content,
+        webSources,
+        siteSources: [],
         raw: groqData,
       }),
       { status: 200, headers: corsHeaders }
