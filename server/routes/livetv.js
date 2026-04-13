@@ -99,7 +99,7 @@ function getFallbackChannels() {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Get all channels
-router.get('/channels', requireAuth, async (req, res) => {
+router.get('/channels', async (req, res) => {
   try {
     const channels = await fetchPlutoChannels();
     res.json({ channels, total: channels.length });
@@ -110,7 +110,7 @@ router.get('/channels', requireAuth, async (req, res) => {
 });
 
 // Force refresh cache
-router.post('/channels/refresh', requireAuth, async (req, res) => {
+router.post('/channels/refresh', async (req, res) => {
   channelCache = null;
   cacheTime = 0;
   try {

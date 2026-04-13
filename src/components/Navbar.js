@@ -19,17 +19,13 @@ export default function Navbar() {
       {user ? (
         <>
           <div className="navbar-links">
-            {canUseLegacyBackend && (
-              <NavLink to="/live-tv" className={({ isActive }) => isActive ? 'active' : ''}>Live TV</NavLink>
-            )}
+            <NavLink to="/live-tv" className={({ isActive }) => isActive ? 'active' : ''}>Live TV</NavLink>
             <NavLink to="/movies"    className={({ isActive }) => isActive ? 'active' : ''}>Movies</NavLink>
             <NavLink to="/tv-shows"  className={({ isActive }) => isActive ? 'active' : ''}>TV Shows</NavLink>
             <NavLink to="/books"     className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
             <NavLink to="/ratings"   className={({ isActive }) => isActive ? 'active' : ''}>My Ratings</NavLink>
             <NavLink to="/following" className={({ isActive }) => isActive ? 'active' : ''}>Following</NavLink>
-            {canUseLegacyBackend && (
-              <NavLink to="/lists" className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
-            )}
+            <NavLink to="/lists" className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
             <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
           </div>
           <div className="navbar-user">
