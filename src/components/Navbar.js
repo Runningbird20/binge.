@@ -1,10 +1,12 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { hasLegacyBackendSession } from '../utils/legacyBackend';
 import UserAvatar from './UserAvatar';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const canUseLegacyBackend = hasLegacyBackendSession();
 
   async function handleLogout() {
     await logout();
@@ -25,6 +27,7 @@ export default function Navbar() {
             <NavLink to="/following" className={({ isActive }) => isActive ? 'active' : ''}>Following</NavLink>
             <NavLink to="/lists" className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
             <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
+            <NavLink to="/forum"     className={({ isActive }) => isActive ? 'active' : ''}>Forum</NavLink>
           </div>
           <div className="navbar-user">
             <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
