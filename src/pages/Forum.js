@@ -666,7 +666,6 @@ function PostView() {
   const { slug, postId } = useParams();
   const { user } = useAuth();
   const isAdmin = normalizeUserType(user?.userType) === 'admin';
-  const navigate = useNavigate();
 
   const [post, setPost]             = useState(null);
   const [comments, setComments]     = useState([]);
@@ -884,7 +883,6 @@ function PostView() {
     );
   }
 
-  const flairColor = FLAIR_COLORS[post?.flair] || '#555';
   const isSpoiler = post?.flair === 'Spoiler';
   const postUrl = `${window.location.origin}/forum/${slug}/post/${postId}`;
 
