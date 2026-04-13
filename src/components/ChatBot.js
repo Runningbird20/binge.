@@ -36,7 +36,12 @@ function RequestModal({ prefill, onClose }) {
       await api.post('/requests', { title: title.trim(), media_type: mediaType, year: year || undefined, reason });
       setStatus('success');
     } catch (err) {
-      setError(err.message || 'Something went wrong.');
+      const message = String(err?.message || '').trim();
+      if (/unauthorized|invalid token/i.test(message)) {
+        setError('Media requests still use the legacy backend session. General chat works, but requesting new titles needs the old backend login.');
+      } else {
+        setError(message || 'Something went wrong.');
+      }
       setStatus(null);
     }
   }
