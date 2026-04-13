@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { invokeSupabaseFunction } from '../utils/supabase';
+import { invokeSupabaseFunction, isSupabaseConfigured, supabase } from '../utils/supabase';
 import { submitSupabaseRequest } from '../utils/supabaseData';
 
 const INTENT_LABELS = {
@@ -9,6 +9,33 @@ const INTENT_LABELS = {
   factual: '📋 Factual',
   general: '💬 General',
 };
+
+const MAX_CATALOG_LINKS = 5;
+const TITLE_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'answer',
+  'best',
+  'book',
+  'books',
+  'here',
+  'heres',
+  'i',
+  'it',
+  'movie',
+  'movies',
+  'show',
+  'shows',
+  'some',
+  'that',
+  'the',
+  'these',
+  'this',
+  'tv',
+  'what',
+  'you',
+]);
 
 const SUGGESTED_PROMPTS = [
   'Recommend something based on my ratings',
@@ -124,6 +151,231 @@ function RequestModal({ prefill, onClose }) {
   );
 }
 
+// ─── Utility function to extract titles from text ──────────────────────────────
+
+function normalizeTitleKey(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function buildCatalogSearchPattern(value) {
+  const normalized = String(value || '')
+    .replace(/[,%_"']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .join('%');
+
+  return normalized ? `%${normalized}%` : '';
+}
+
+function buildSiteUrl(mediaType, id) {
+  if (mediaType === 'movie') return `/movies?open=${id}`;
+  if (mediaType === 'tv_show') return `/tv-shows?open=${id}`;
+  return `/books?open=${id}`;
+}
+
+function sanitizeExtractedTitle(value) {
+  return String(value || '')
+    .replace(/^\s*(?:[-*]|\d+\.)\s+/, '')
+    .replace(/\s+\(\d{4}\)\s*$/, '')
+    .replace(/[.,:;!?]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function addUniqueTitle(titles, seenTitles, candidate) {
+  const title = sanitizeExtractedTitle(candidate);
+  const key = normalizeTitleKey(title);
+
+  if (!key || key.length < 2 || TITLE_STOP_WORDS.has(key) || seenTitles.has(key)) {
+    return;
+  }
+
+  titles.push(title);
+  seenTitles.add(key);
+}
+
+function extractTitlesFromText(text) {
+  const titles = [];
+  const seenTitles = new Set();
+  const quotedPattern = /"([^"\n]{2,120})"/g;
+  const boldPattern = /\*\*([^*\n]{2,120})\*\*/g;
+  let match;
+
+  while ((match = quotedPattern.exec(text || '')) !== null) {
+    addUniqueTitle(titles, seenTitles, match[1]);
+  }
+
+  while ((match = boldPattern.exec(text || '')) !== null) {
+    addUniqueTitle(titles, seenTitles, match[1]);
+  }
+
+  String(text || '')
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const bulletMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/);
+      if (!bulletMatch) return;
+
+      const candidate = bulletMatch[1]
+        .split(/\s+-\s+/)[0]
+        .split(/\s+by\s+/i)[0]
+        .trim();
+
+      addUniqueTitle(titles, seenTitles, candidate);
+    });
+
+  return titles.slice(0, MAX_CATALOG_LINKS);
+}
+
+function scoreCatalogMatch(candidateTitle, requestedTitle) {
+  const candidateKey = normalizeTitleKey(candidateTitle);
+  const requestedKey = normalizeTitleKey(requestedTitle);
+
+  if (!candidateKey || !requestedKey) {
+    return 0;
+  }
+
+  if (candidateKey === requestedKey) {
+    return 100;
+  }
+
+  if (candidateKey.startsWith(`${requestedKey} `) || candidateKey.startsWith(`${requestedKey}:`)) {
+    return 90;
+  }
+
+  if (requestedKey.startsWith(`${candidateKey} `) || candidateKey.includes(requestedKey)) {
+    return 75;
+  }
+
+  return 0;
+}
+
+function mapCatalogRowToSource(row, mediaType) {
+  return {
+    id: row.id,
+    title: row.title,
+    year: row.year || null,
+    media_type: mediaType,
+    siteUrl: buildSiteUrl(mediaType, row.id),
+  };
+}
+
+async function searchCatalogByTitle(title) {
+  if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  const pattern = buildCatalogSearchPattern(title);
+  if (!pattern) {
+    return null;
+  }
+
+  const queries = [
+    supabase.from('movies').select('id, title, year').ilike('title', pattern).limit(3),
+    supabase.from('tv_shows').select('id, title, year').ilike('title', pattern).limit(3),
+    supabase.from('books').select('id, title, year').ilike('title', pattern).limit(3),
+  ];
+
+  const [movieResult, tvResult, bookResult] = await Promise.allSettled(queries);
+  const candidates = [];
+
+  if (movieResult.status === 'fulfilled' && !movieResult.value.error) {
+    candidates.push(...(movieResult.value.data || []).map((row) => mapCatalogRowToSource(row, 'movie')));
+  }
+
+  if (tvResult.status === 'fulfilled' && !tvResult.value.error) {
+    candidates.push(...(tvResult.value.data || []).map((row) => mapCatalogRowToSource(row, 'tv_show')));
+  }
+
+  if (bookResult.status === 'fulfilled' && !bookResult.value.error) {
+    candidates.push(...(bookResult.value.data || []).map((row) => mapCatalogRowToSource(row, 'book')));
+  }
+
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      score: scoreCatalogMatch(candidate.title, title),
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score || (Number(right.year) || 0) - (Number(left.year) || 0))[0] || null;
+}
+
+function mergeSiteSources(...groups) {
+  const merged = [];
+  const seenSources = new Set();
+
+  groups.flat().filter(Boolean).forEach((source) => {
+    const key = `${source.media_type}:${source.id}`;
+    if (seenSources.has(key)) {
+      return;
+    }
+
+    seenSources.add(key);
+    merged.push(source);
+  });
+
+  return merged.slice(0, MAX_CATALOG_LINKS);
+}
+
+function stripLinkedTitleList(text, siteSources) {
+  if (!text || !(siteSources || []).length) {
+    return text;
+  }
+
+  const sourceTitleKeys = new Set(siteSources.map((source) => normalizeTitleKey(source.title)));
+  const lines = String(text).split(/\r?\n/);
+  const filteredLines = lines.filter((line) => {
+    const candidate = sanitizeExtractedTitle(line);
+    const normalizedCandidate = normalizeTitleKey(candidate);
+    const looksLikeListItem = /^\s*(?:[-*]|\d+\.)\s+/.test(line);
+
+    if (!looksLikeListItem || !normalizedCandidate) {
+      return true;
+    }
+
+    return !sourceTitleKeys.has(normalizedCandidate);
+  });
+
+  const cleaned = filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return cleaned || text;
+}
+
+function humanizeAssistantText(text) {
+  return String(text || '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// ─── Search Supabase for media matching extracted titles ──────────────────────
+
+async function searchMediaByTitles(titles) {
+  const uniqueTitles = [...new Set((titles || []).map((title) => sanitizeExtractedTitle(title)).filter(Boolean))]
+    .slice(0, MAX_CATALOG_LINKS);
+
+  const results = await Promise.all(uniqueTitles.map((title) => searchCatalogByTitle(title)));
+  const seenSources = new Set();
+
+  return results
+    .filter(Boolean)
+    .filter((source) => {
+      const key = `${source.media_type}:${source.id}`;
+      if (seenSources.has(key)) {
+        return false;
+      }
+
+      seenSources.add(key);
+      return true;
+    });
+}
+
 // ─── Source badges ─────────────────────────────────────────────────────────────
 
 function SiteBadge({ source }) {
@@ -148,60 +400,7 @@ function WebBadge({ source }) {
 
 // ─── Message ───────────────────────────────────────────────────────────────────
 
-function Message({ msg, onSearchMedia }) {
-  const renderContentWithLinks = (text) => {
-    // Simple version: find quoted titles and capitalized phrases that look like titles
-    const simplePattern = /"([^"]{2,})"|(?:^|\s)(The\s+[A-Z][^.!?\n]*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Movie|Show|TV|series|books?))?)/g;
-    
-    const parts = [];
-    let lastIndex = 0;
-    const matches = Array.from(text.matchAll(simplePattern));
-    
-    if (matches.length === 0) {
-      return <>{text}</>;
-    }
-
-    matches.forEach((m) => {
-      const matchStart = m.index;
-      const matchEnd = m.index + m[0].length;
-      const title = m[1] || m[2] || m[0];
-
-      // Add text before this match
-      if (matchStart > lastIndex) {
-        parts.push(text.substring(lastIndex, matchStart));
-      }
-
-      // Add clickable link for the title
-      parts.push(
-        <button
-          key={`title-${matchStart}`}
-          className="chat-title-link"
-          onClick={() => onSearchMedia?.(title.trim())}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#7c5cfa',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            padding: 0,
-            font: 'inherit',
-          }}
-        >
-          {title}
-        </button>
-      );
-
-      lastIndex = matchEnd;
-    });
-
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
-    }
-
-    return <>{parts}</>;
-  };
-
+function Message({ msg }) {
   return (
     <div className={`chat-message chat-message--${msg.role}`}>
       {msg.role === 'assistant' && (
@@ -217,13 +416,13 @@ function Message({ msg, onSearchMedia }) {
         </div>
       )}
       <div className="chat-message-body">
-        <p className="chat-message-text">{msg.role === 'assistant' ? renderContentWithLinks(msg.content) : msg.content}</p>
+        <p className="chat-message-text">{msg.content}</p>
 
         {(msg.siteSources?.length > 0 || msg.webSources?.length > 0) && (
           <div className="chat-sources-row">
             {msg.siteSources?.length > 0 && (
               <div className="chat-sources">
-                <span className="chat-sources-label">On binge.</span>
+                <span className="chat-sources-label">Open on binge.</span>
                 <div className="chat-sources-list">
                   {msg.siteSources.map(s => <SiteBadge key={`${s.media_type}:${s.id}`} source={s} />)}
                 </div>
@@ -328,14 +527,22 @@ export default function ChatBot() {
         ],
       });
 
-      const assistantContent = data?.content || data?.choices?.[0]?.message?.content || data?.response || 'No response.';
+      const rawAssistantContent = data?.content || data?.choices?.[0]?.message?.content || data?.response || 'No response.';
+      const extractedTitles = extractTitlesFromText(rawAssistantContent);
+      const resolvedSiteSources = mergeSiteSources(
+        Array.isArray(data?.siteSources) ? data.siteSources : [],
+        await searchMediaByTitles(extractedTitles)
+      );
+      const assistantContent = humanizeAssistantText(
+        stripLinkedTitleList(rawAssistantContent, resolvedSiteSources) || 'I found these on binge.'
+      );
 
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
         content: assistantContent,
         intent: null,
-        siteSources: data?.siteSources || [],
+        siteSources: resolvedSiteSources,
         webSources: data?.webSources || [],
         latency: data?.usage ? null : null,
       }]);
@@ -355,12 +562,6 @@ export default function ChatBot() {
   }
 
   function clearChat() { setMessages([]); setApiStatus(null); }
-
-  function handleSearchMedia(title) {
-    // Open binge search or catalog for the title
-    const searchUrl = `/movies?search=${encodeURIComponent(title)}`;
-    window.location.href = searchUrl;
-  }
 
   if (!user) return null;
 
@@ -414,7 +615,7 @@ export default function ChatBot() {
               )}
 
               <div className="chatbot-messages">
-                {messages.map(msg => <Message key={msg.id} msg={msg} onSearchMedia={handleSearchMedia} />)}
+                {messages.map(msg => <Message key={msg.id} msg={msg} />)}
                 {loading && (
                   <div className="chat-message chat-message--assistant">
                     <div className="chat-message-header"><span className="chat-avatar">🦉</span></div>

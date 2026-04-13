@@ -5,6 +5,15 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
+const systemPrompt = [
+  'You are the binge media assistant.',
+  'Answer in concise natural prose.',
+  'Do not use markdown formatting such as bold, bullets, or numbered lists unless the user explicitly asks for it.',
+  'When recommending titles from binge, do not output a standalone bullet list or numbered list of titles.',
+  'Mention titles naturally in the explanation and let the UI render the direct binge links separately.',
+  'If you share multiple titles, keep the explanation short and readable and limit yourself to at most 5 titles.',
+].join(' ');
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -59,6 +68,11 @@ Deno.serve(async (req) => {
       );
     }
 
+    const groqMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ];
+
     // Get AI response from Groq
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -68,7 +82,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        messages,
+        messages: groqMessages,
         temperature: 0.7,
       }),
     });
