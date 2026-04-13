@@ -14,7 +14,7 @@ Copy `.env.example` to `.env` and fill in the Supabase values before starting th
 
 Recommended runtime:
 
-- Node.js `18+`
+- Node.js `24.x`
 - npm
 
 ## Dependencies
