@@ -482,7 +482,6 @@ function ForumView() {
   const [showCreate, setShowCreate] = useState(false);
   const [myVotes, setMyVotes]     = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const navigate = useNavigate();
 
   const fetchPosts = useCallback(async (pageNum, sortVal) => {
     try {
@@ -666,6 +665,7 @@ function PostView() {
   const { slug, postId } = useParams();
   const { user } = useAuth();
   const isAdmin = normalizeUserType(user?.userType) === 'admin';
+  const navigate = useNavigate();
 
   const [post, setPost]             = useState(null);
   const [comments, setComments]     = useState([]);
