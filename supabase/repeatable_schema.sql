@@ -36,7 +36,7 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, username, bio, avatar_url)
+  insert into public.profiles (id, email, username, user_type, bio, avatar_url)
   values (
     new.id,
     new.email,
@@ -45,6 +45,7 @@ begin
       split_part(new.email, '@', 1),
       'media-fan'
     ),
+    coalesce(nullif(lower(new.raw_user_meta_data ->> 'user_type'), ''), 'user'),
     coalesce(new.raw_user_meta_data ->> 'bio', ''),
     nullif(new.raw_user_meta_data ->> 'avatar_url', '')
   )
@@ -52,6 +53,7 @@ begin
   set
     email = excluded.email,
     username = coalesce(public.profiles.username, excluded.username),
+    user_type = coalesce(nullif(lower(public.profiles.user_type), ''), excluded.user_type, 'user'),
     bio = coalesce(public.profiles.bio, excluded.bio),
     avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url);
 
@@ -69,6 +71,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   username text not null,
+  user_type text not null default 'user',
   bio text not null default '',
   avatar_url text,
   created_at timestamptz not null default now(),
@@ -78,10 +81,16 @@ create table if not exists public.profiles (
 alter table public.profiles
   add column if not exists email text,
   add column if not exists username text,
+  add column if not exists user_type text not null default 'user',
   add column if not exists bio text not null default '',
   add column if not exists avatar_url text,
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
+
+update public.profiles
+set user_type = 'user'
+where user_type is null
+   or btrim(user_type) = '';
 
 update public.profiles as p
 set email = u.email
@@ -110,6 +119,7 @@ where bio is null
    or updated_at is null;
 
 alter table public.profiles
+  alter column user_type set default 'user',
   alter column bio set default '',
   alter column created_at set default now(),
   alter column updated_at set default now();
@@ -124,6 +134,21 @@ begin
   ) then
     alter table public.profiles
       add constraint profiles_email_key unique (email);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.profiles'::regclass
+      and conname = 'profiles_user_type_check'
+  ) then
+    alter table public.profiles
+      add constraint profiles_user_type_check
+      check (user_type in ('user', 'coach', 'admin'));
   end if;
 end;
 $$;
