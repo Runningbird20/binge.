@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
 import {
-  ensureSupabaseProfile,
   getSupabaseSessionProfile,
+  resolveSupabaseProfile,
   signInWithSupabase,
   signOutFromSupabase,
   signUpWithSupabase,
@@ -73,7 +73,7 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const nextUser = await ensureSupabaseProfile(session.user);
+        const nextUser = await resolveSupabaseProfile(session.user);
         if (active) {
           setUser(nextUser);
         }

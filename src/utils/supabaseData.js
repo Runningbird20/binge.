@@ -5,6 +5,8 @@ import {
 } from './mediaMetadataCache';
 
 const PROFILE_TABLE = 'profiles';
+const AUTH_REQUEST_TIMEOUT_MS = 8000;
+const PROFILE_SYNC_TIMEOUT_MS = 4000;
 
 const RATING_TABLES = {
   movie: {
@@ -85,9 +87,45 @@ function buildUserProfile(authUser, profileRow) {
   };
 }
 
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
+function buildFallbackProfileRow(authUser, overrides = {}) {
+  return {
+    id: authUser?.id || null,
+    email: overrides.email ?? authUser?.email ?? '',
+    username:
+      overrides.username ??
+      authUser?.user_metadata?.username ??
+      (authUser?.email?.includes('@') ? authUser.email.split('@')[0] : 'media-fan'),
+    bio: overrides.bio ?? authUser?.user_metadata?.bio ?? '',
+    avatar_url:
+      overrides.avatarUrl ??
+      overrides.avatar_url ??
+      authUser?.user_metadata?.avatar_url ??
+      null,
+    created_at: authUser?.created_at ?? null,
+  };
+}
+
 async function getAuthenticatedUser() {
   const client = requireSupabase();
-  const { data, error } = await client.auth.getUser();
+  const { data, error } = await withTimeout(
+    client.auth.getUser(),
+    AUTH_REQUEST_TIMEOUT_MS,
+    'Reading the current Supabase user timed out.'
+  );
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to read your Supabase session.'));
@@ -163,9 +201,28 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
   return buildUserProfile(authUser, savedProfile);
 }
 
+export async function resolveSupabaseProfile(authUser, overrides = {}) {
+  const fallbackProfile = buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+
+  try {
+    return await withTimeout(
+      ensureSupabaseProfile(authUser, overrides),
+      PROFILE_SYNC_TIMEOUT_MS,
+      'Supabase profile sync timed out.'
+    );
+  } catch (error) {
+    console.warn('[auth] Falling back to auth metadata while profile sync is unavailable.', error);
+    return fallbackProfile;
+  }
+}
+
 export async function getSupabaseSessionProfile() {
   const client = requireSupabase();
-  const { data, error } = await client.auth.getSession();
+  const { data, error } = await withTimeout(
+    client.auth.getSession(),
+    AUTH_REQUEST_TIMEOUT_MS,
+    'Restoring the Supabase session timed out.'
+  );
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to restore your session.'));
@@ -175,12 +232,16 @@ export async function getSupabaseSessionProfile() {
     return null;
   }
 
-  return ensureSupabaseProfile(data.session.user);
+  return resolveSupabaseProfile(data.session.user);
 }
 
 export async function signInWithSupabase({ email, password }) {
   const client = requireSupabase();
-  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  const { data, error } = await withTimeout(
+    client.auth.signInWithPassword({ email, password }),
+    AUTH_REQUEST_TIMEOUT_MS,
+    'Supabase sign-in timed out.'
+  );
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to log in.'));
@@ -190,22 +251,26 @@ export async function signInWithSupabase({ email, password }) {
     throw new Error('Unable to log in.');
   }
 
-  return ensureSupabaseProfile(data.user);
+  return resolveSupabaseProfile(data.user);
 }
 
 export async function signUpWithSupabase({ username, email, password, bio, avatarUrl }) {
   const client = requireSupabase();
-  const { data, error } = await client.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        username,
-        bio,
-        avatar_url: avatarUrl || null,
+  const { data, error } = await withTimeout(
+    client.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+          bio,
+          avatar_url: avatarUrl || null,
+        },
       },
-    },
-  });
+    }),
+    AUTH_REQUEST_TIMEOUT_MS,
+    'Supabase sign-up timed out.'
+  );
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to create your account.'));
@@ -222,7 +287,7 @@ export async function signUpWithSupabase({ username, email, password, bio, avata
     };
   }
 
-  const user = await ensureSupabaseProfile(data.user, {
+  const user = await resolveSupabaseProfile(data.user, {
     username,
     email,
     bio,
