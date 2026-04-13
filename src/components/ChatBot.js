@@ -275,7 +275,7 @@ export default function ChatBot() {
         ],
       });
 
-      const assistantContent = data?.choices?.[0]?.message?.content || data?.response || 'No response.';
+      const assistantContent = data?.content || data?.choices?.[0]?.message?.content || data?.response || 'No response.';
 
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
