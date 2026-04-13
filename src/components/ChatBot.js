@@ -148,7 +148,60 @@ function WebBadge({ source }) {
 
 // ─── Message ───────────────────────────────────────────────────────────────────
 
-function Message({ msg }) {
+function Message({ msg, onSearchMedia }) {
+  const renderContentWithLinks = (text) => {
+    // Simple version: find quoted titles and capitalized phrases that look like titles
+    const simplePattern = /"([^"]{2,})"|(?:^|\s)(The\s+[A-Z][^.!?\n]*|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Movie|Show|TV|series|books?))?)/g;
+    
+    const parts = [];
+    let lastIndex = 0;
+    const matches = Array.from(text.matchAll(simplePattern));
+    
+    if (matches.length === 0) {
+      return <>{text}</>;
+    }
+
+    matches.forEach((m) => {
+      const matchStart = m.index;
+      const matchEnd = m.index + m[0].length;
+      const title = m[1] || m[2] || m[0];
+
+      // Add text before this match
+      if (matchStart > lastIndex) {
+        parts.push(text.substring(lastIndex, matchStart));
+      }
+
+      // Add clickable link for the title
+      parts.push(
+        <button
+          key={`title-${matchStart}`}
+          className="chat-title-link"
+          onClick={() => onSearchMedia?.(title.trim())}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#7c5cfa',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+            padding: 0,
+            font: 'inherit',
+          }}
+        >
+          {title}
+        </button>
+      );
+
+      lastIndex = matchEnd;
+    });
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return <>{parts}</>;
+  };
+
   return (
     <div className={`chat-message chat-message--${msg.role}`}>
       {msg.role === 'assistant' && (
@@ -164,7 +217,7 @@ function Message({ msg }) {
         </div>
       )}
       <div className="chat-message-body">
-        <p className="chat-message-text">{msg.content}</p>
+        <p className="chat-message-text">{msg.role === 'assistant' ? renderContentWithLinks(msg.content) : msg.content}</p>
 
         {(msg.siteSources?.length > 0 || msg.webSources?.length > 0) && (
           <div className="chat-sources-row">
@@ -303,6 +356,12 @@ export default function ChatBot() {
 
   function clearChat() { setMessages([]); setApiStatus(null); }
 
+  function handleSearchMedia(title) {
+    // Open binge search or catalog for the title
+    const searchUrl = `/movies?search=${encodeURIComponent(title)}`;
+    window.location.href = searchUrl;
+  }
+
   if (!user) return null;
 
   return (
@@ -355,7 +414,7 @@ export default function ChatBot() {
               )}
 
               <div className="chatbot-messages">
-                {messages.map(msg => <Message key={msg.id} msg={msg} />)}
+                {messages.map(msg => <Message key={msg.id} msg={msg} onSearchMedia={handleSearchMedia} />)}
                 {loading && (
                   <div className="chat-message chat-message--assistant">
                     <div className="chat-message-header"><span className="chat-avatar">🦉</span></div>
