@@ -46,6 +46,7 @@ app.use('/api/ratings', require('./routes/ratings'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/livetv', require('./routes/livetv'));
+app.use('/api/forum', require('./routes/forum'));
 app.use('/api/dev-lab', require('./routes/devLab'));
 
 module.exports = app;

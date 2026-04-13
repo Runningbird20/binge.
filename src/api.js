@@ -28,12 +28,23 @@ function resolveBaseUrl() {
 
 const BASE = resolveBaseUrl();
 
-function authHeaders() {
-  const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+async function getAuthToken() {
+  const legacyToken = localStorage.getItem('token');
+  if (legacyToken) {
+    return legacyToken;
+  }
+
+  try {
+    const { supabase } = await import('./utils/supabase');
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        return data.session.access_token;
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 async function parseResponseBody(res) {
@@ -76,17 +87,20 @@ function buildErrorMessage(res, data) {
 
 async function request(method, path, body) {
   let res;
+  const token = await getAuthToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 
   try {
     res = await fetch(`${BASE}${path}`, {
       method,
-      headers: authHeaders(),
+      headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   } catch {
-    throw new Error(
-      'Unable to reach the app service for this feature.'
-    );
+    throw new Error('Unable to reach the app service for this feature.');
   }
 
   const data = await parseResponseBody(res);
@@ -97,9 +111,9 @@ async function request(method, path, body) {
 }
 
 export const api = {
-  get:    (path)        => request('GET',    path),
-  post:   (path, body)  => request('POST',   path, body),
-  put:    (path, body)  => request('PUT',    path, body),
-  patch:  (path, body)  => request('PATCH',  path, body),
-  delete: (path, body)  => request('DELETE', path, body),
+  get: (path) => request('GET', path),
+  post: (path, body) => request('POST', path, body),
+  put: (path, body) => request('PUT', path, body),
+  patch: (path, body) => request('PATCH', path, body),
+  delete: (path, body) => request('DELETE', path, body),
 };

@@ -21,13 +21,14 @@ export default function Navbar({ minimal = false }) {
           {!minimal && (
             <div className="navbar-links">
               <NavLink to="/live-tv" className={({ isActive }) => isActive ? 'active' : ''}>Live TV</NavLink>
-              <NavLink to="/movies"    className={({ isActive }) => isActive ? 'active' : ''}>Movies</NavLink>
-              <NavLink to="/tv-shows"  className={({ isActive }) => isActive ? 'active' : ''}>TV Shows</NavLink>
-              <NavLink to="/books"     className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
-              <NavLink to="/ratings"   className={({ isActive }) => isActive ? 'active' : ''}>My Ratings</NavLink>
+              <NavLink to="/movies" className={({ isActive }) => isActive ? 'active' : ''}>Movies</NavLink>
+              <NavLink to="/tv-shows" className={({ isActive }) => isActive ? 'active' : ''}>TV Shows</NavLink>
+              <NavLink to="/books" className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
+              <NavLink to="/ratings" className={({ isActive }) => isActive ? 'active' : ''}>My Ratings</NavLink>
               <NavLink to="/following" className={({ isActive }) => isActive ? 'active' : ''}>Following</NavLink>
               <NavLink to="/lists" className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
               <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
+              <NavLink to="/forum" className={({ isActive }) => isActive ? 'active' : ''}>Forum</NavLink>
             </div>
           )}
           <div className="navbar-user">

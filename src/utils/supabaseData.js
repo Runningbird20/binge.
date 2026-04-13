@@ -73,6 +73,9 @@ function toFriendlyError(error, fallbackMessage) {
 
 function buildUserProfile(authUser, profileRow) {
   const email = profileRow?.email || authUser?.email || '';
+  const normalizedUserType = normalizeUserType(
+    profileRow?.user_type || authUser?.user_metadata?.user_type
+  );
   const fallbackUsername =
     profileRow?.username ||
     authUser?.user_metadata?.username ||
@@ -82,10 +85,11 @@ function buildUserProfile(authUser, profileRow) {
     id: authUser?.id || profileRow?.id,
     username: fallbackUsername,
     email,
-    userType: normalizeUserType(profileRow?.user_type || authUser?.user_metadata?.user_type),
+    userType: normalizedUserType,
     bio: profileRow?.bio || authUser?.user_metadata?.bio || '',
     avatarUrl: profileRow?.avatar_url || authUser?.user_metadata?.avatar_url || null,
     createdAt: profileRow?.created_at || authUser?.created_at || null,
+    isAdmin: normalizedUserType === 'admin',
   };
 }
 
@@ -274,6 +278,7 @@ export async function signUpWithSupabase({ username, email, password, bio, avata
           username,
           bio,
           avatar_url: avatarUrl || null,
+          user_type: 'user',
         },
       },
     }),
