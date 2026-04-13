@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
-import { api } from '../api';
+import { fetchClientLiveTvChannels } from '../utils/liveTvCatalog';
 
 const CATEGORY_ICONS = {
   'News': '📰', 'Movies': '🎬', 'Comedy': '😂', 'Drama': '🎭',
@@ -36,8 +36,7 @@ export default function LiveTV() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.get('/livetv/channels');
-      const list = data.channels || [];
+      const list = await fetchClientLiveTvChannels();
       setChannels(list);
       setSelectedChannel((current) => (list.length > 0 && !current ? list[0] : current));
     } catch (err) {
