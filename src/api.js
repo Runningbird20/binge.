@@ -18,7 +18,24 @@ function resolveBaseUrl() {
 
 const BASE = resolveBaseUrl();
 
+async function getAuthToken() {
+  // Try legacy Express JWT first
+  const legacyToken = localStorage.getItem('token');
+  if (legacyToken) return legacyToken;
+
+  // Fall back to Supabase session token
+  try {
+    const { supabase } = await import('./utils/supabase');
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) return data.session.access_token;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 function authHeaders() {
+  // Sync version — only gets legacy token (for backwards compat)
   const token = localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
@@ -66,17 +83,20 @@ function buildErrorMessage(res, data) {
 
 async function request(method, path, body) {
   let res;
+  const token = await getAuthToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 
   try {
     res = await fetch(`${BASE}${path}`, {
       method,
-      headers: authHeaders(),
+      headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   } catch {
-    throw new Error(
-      'Unable to reach the legacy API. Make sure the Express backend is running for any non-Supabase features.'
-    );
+    throw new Error('Unable to reach the API server (localhost:5001). Make sure the backend is running.');
   }
 
   const data = await parseResponseBody(res);
