@@ -14,6 +14,7 @@ const Movies = lazy(() => import('./pages/Movies'));
 const TVShows = lazy(() => import('./pages/TVShows'));
 const Books = lazy(() => import('./pages/Books'));
 const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Following = lazy(() => import('./pages/Following'));
 const Lists = lazy(() => import('./pages/Lists'));
 const SharedList = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
             <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
             <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+            <Route path="/following" element={<ProtectedRoute><Following /></ProtectedRoute>} />
             <Route
               path="/lists"
               element={legacyBackendEnabled

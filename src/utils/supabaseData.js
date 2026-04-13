@@ -347,6 +347,243 @@ export async function updateSupabasePassword(newPassword) {
   }
 }
 
+export async function fetchSupabaseProfiles({ excludeUserId = null, filter = '', limit = null } = {}) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  let query = client.from(PROFILE_TABLE).select('id,username,bio,avatar_url,created_at').order('created_at', { ascending: false });
+
+  if (limit != null) {
+    query = query.limit(limit);
+  }
+
+  let wrappedQuery = query;
+  if (excludeUserId || excludeUserId === null) {
+    wrappedQuery = wrappedQuery.not('id', 'eq', excludeUserId || authUser.id);
+  }
+
+  if (filter) {
+    wrappedQuery = wrappedQuery.ilike('username', `%${filter}%`);
+  }
+
+  const { data, error } = await wrappedQuery;
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load profiles.'));
+  }
+
+  return data || [];
+}
+
+export async function fetchSupabaseProfilesByIds(userIds = []) {
+  if (!userIds || userIds.length === 0) {
+    return [];
+  }
+
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from(PROFILE_TABLE)
+    .select('id,username,bio,avatar_url,created_at')
+    .in('id', userIds);
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load profiles.'));
+  }
+
+  return data || [];
+}
+
+export async function fetchSupabaseFollowingIds() {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { data, error } = await client
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', authUser.id);
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load your followed members.'));
+  }
+
+  return (data || []).map((row) => row.following_id);
+}
+
+export async function followSupabaseUser(profileId) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { error } = await client
+    .from('follows')
+    .insert({ follower_id: authUser.id, following_id: profileId });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to follow that member.'));
+  }
+
+  return true;
+}
+
+export async function unfollowSupabaseUser(profileId) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { error } = await client
+    .from('follows')
+    .delete()
+    .match({ follower_id: authUser.id, following_id: profileId });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to unfollow that member.'));
+  }
+
+  return true;
+}
+
+async function fetchSupabaseRatingsForUsers(userIds = []) {
+  if (!userIds.length) {
+    return [];
+  }
+
+  const grouped = await Promise.all(
+    Object.keys(RATING_TABLES).map(async (mediaType) => {
+      const client = requireSupabase();
+      const schema = RATING_TABLES[mediaType];
+      const selectColumns = ['id', 'user_id', 'media_id', ...schema.columns, 'review', 'created_at'].join(', ');
+
+      const { data, error } = await client
+        .from(schema.table)
+        .select(selectColumns)
+        .in('user_id', userIds)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw new Error(toFriendlyError(error, 'Unable to load feed ratings.'));
+      }
+
+      return (data || []).map((record) => ({
+        ...record,
+        media_type: mediaType,
+      }));
+    })
+  );
+
+  return enrichMediaRecords(grouped.flat())
+    .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
+}
+
+async function fetchSupabaseWatchlistForUsers(userIds = []) {
+  if (!userIds.length) {
+    return [];
+  }
+
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('watchlist')
+    .select('id, user_id, media_type, media_id, status, added_at')
+    .in('user_id', userIds)
+    .order('added_at', { ascending: false });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load feed library activity.'));
+  }
+
+  return enrichMediaRecords(data || []);
+}
+
+export async function fetchSupabaseFollowFeed({ limit = 24 } = {}) {
+  const followingIds = await fetchSupabaseFollowingIds();
+  if (!followingIds.length) {
+    return [];
+  }
+
+  const [ratingItems, watchlistItems] = await Promise.all([
+    fetchSupabaseRatingsForUsers(followingIds),
+    fetchSupabaseWatchlistForUsers(followingIds),
+  ]);
+
+  const activityItems = [
+    ...ratingItems.map((item) => ({
+      type: 'rating',
+      id: item.id,
+      userId: item.user_id,
+      mediaType: item.media_type,
+      mediaId: item.media_id,
+      title: item.title,
+      year: item.year,
+      review: item.review || null,
+      score: item.score,
+      createdAt: item.created_at,
+      metadata: item,
+    })),
+    ...watchlistItems.map((item) => ({
+      type: 'library',
+      id: item.id,
+      userId: item.user_id,
+      mediaType: item.media_type,
+      mediaId: item.media_id,
+      title: item.title,
+      year: item.year,
+      status: item.status,
+      createdAt: item.added_at,
+      metadata: item,
+    })),
+  ];
+
+  const profileMap = Object.fromEntries(
+    (await fetchSupabaseProfilesByIds([...new Set(activityItems.map((item) => item.userId))])).map((profile) => [profile.id, profile])
+  );
+
+  return activityItems
+    .map((item) => ({
+      ...item,
+      author: profileMap[item.userId] || { username: 'Unknown', avatar_url: null },
+    }))
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
+    .slice(0, limit);
+}
+
+export function calculateTasteMatch(currentRatings = [], otherRatings = []) {
+  const currentMap = new Map(
+    currentRatings.map((rating) => [
+      `${rating.media_type}:${rating.media_id}`,
+      averageRatingValue(rating),
+    ])
+  );
+
+  const shared = otherRatings
+    .map((rating) => ({
+      key: `${rating.media_type}:${rating.media_id}`,
+      value: averageRatingValue(rating),
+    }))
+    .filter((rating) => currentMap.has(rating.key));
+
+  if (!shared.length) {
+    return 0;
+  }
+
+  const totalSimilarity = shared.reduce((sum, rating) => {
+    const ownValue = currentMap.get(rating.key);
+    const difference = Math.abs(ownValue - rating.value);
+    return sum + Math.max(0, 1 - difference / 4);
+  }, 0);
+
+  return Math.round((totalSimilarity / shared.length) * 100);
+}
+
+function averageRatingValue(rating) {
+  const schema = RATING_TABLES[rating.media_type];
+  if (!schema) {
+    return 0;
+  }
+
+  const values = schema.columns
+    .map((column) => Number(rating[column]))
+    .filter((value) => Number.isFinite(value));
+
+  if (!values.length) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 function enrichMediaRecord(record, mediaType, metadata) {
   const item = metadata || null;
 
@@ -424,11 +661,17 @@ async function enrichMediaRecords(records = []) {
   });
 }
 
-export async function fetchSupabaseWatchlist({ mediaType = '', status = '' } = {}) {
+export async function fetchSupabaseWatchlist({ mediaType = '', status = '', userId = null } = {}) {
   const client = requireSupabase();
+  if (!userId) {
+    const authUser = await getAuthenticatedUser();
+    userId = authUser.id;
+  }
+
   let query = client
     .from('watchlist')
     .select('id, user_id, media_type, media_id, status, added_at')
+    .eq('user_id', userId)
     .order('added_at', { ascending: false });
 
   if (mediaType) {
@@ -510,7 +753,7 @@ export async function removeSupabaseWatchlistItem(id) {
   }
 }
 
-async function fetchRawRatingsForMediaType(mediaType) {
+async function fetchRawRatingsForMediaType(mediaType, userId = null) {
   const client = requireSupabase();
   const schema = RATING_TABLES[mediaType];
 
@@ -518,10 +761,16 @@ async function fetchRawRatingsForMediaType(mediaType) {
     return [];
   }
 
+  if (!userId) {
+    const authUser = await getAuthenticatedUser();
+    userId = authUser.id;
+  }
+
   const selectColumns = ['id', 'user_id', 'media_id', ...schema.columns, 'review', 'created_at'].join(', ');
   const { data, error } = await client
     .from(schema.table)
     .select(selectColumns)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -534,14 +783,15 @@ async function fetchRawRatingsForMediaType(mediaType) {
   }));
 }
 
-export async function fetchSupabaseRatings({ mediaType = '' } = {}) {
+export async function fetchSupabaseRatings({ mediaType = '', userId = null } = {}) {
   if (mediaType) {
-    const ratings = await fetchRawRatingsForMediaType(mediaType);
+    const ratings = await fetchRawRatingsForMediaType(mediaType, userId);
     return enrichMediaRecords(ratings);
   }
 
+  const selectedUserId = userId || (await getAuthenticatedUser()).id;
   const grouped = await Promise.all(
-    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type))
+    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type, selectedUserId))
   );
 
   const enrichedRatings = await enrichMediaRecords(grouped.flat());
