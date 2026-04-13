@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api';
+import {
+  fetchSupabaseSharedList,
+  voteSupabaseListItem,
+  moveSupabaseListItem,
+  removeSupabaseListItem,
+} from '../utils/supabaseData';
 
 function getTypeLabel(mediaType) {
   if (mediaType === 'movie') return 'Movie';
@@ -80,7 +85,7 @@ export default function SharedList() {
     }
 
     try {
-      const data = await api.get(`/lists/shared/${shareCode}`);
+      const data = await fetchSupabaseSharedList(shareCode);
       setList(data);
       setErrorMessage('');
     } catch (error) {
@@ -123,7 +128,7 @@ export default function SharedList() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.post(`/lists/${list.id}/items/${item.id}/vote`, { value });
+      const updatedList = await voteSupabaseListItem(list.id, item.id, value);
       setList(updatedList);
     } catch (error) {
       setStatusMessage(error.message);
@@ -139,7 +144,7 @@ export default function SharedList() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.patch(`/lists/${list.id}/items/${item.id}/move`, { direction });
+      const updatedList = await moveSupabaseListItem(list.id, item.id, direction);
       setList(updatedList);
     } catch (error) {
       setStatusMessage(error.message);
@@ -156,7 +161,7 @@ export default function SharedList() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.delete(`/lists/${list.id}/items/${item.id}`);
+      const updatedList = await removeSupabaseListItem(list.id, item.id);
       setList(updatedList);
     } catch (error) {
       setStatusMessage(error.message);

@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
-import { api } from '../api';
+import {
+  fetchSupabaseLists,
+  fetchSupabaseList,
+  createSupabaseList,
+  updateSupabaseList,
+  deleteSupabaseList,
+  inviteSupabaseListCollaborator,
+  removeSupabaseListCollaborator,
+  voteSupabaseListItem,
+  moveSupabaseListItem,
+  removeSupabaseListItem,
+} from '../utils/supabaseData';
 
 function getTypeLabel(mediaType) {
   if (mediaType === 'movie') return 'Movie';
@@ -134,8 +145,7 @@ export default function Lists() {
     setListsLoading(true);
 
     try {
-      const data = await api.get('/lists');
-      const nextLists = Array.isArray(data) ? data : [];
+      const nextLists = await fetchSupabaseLists();
       setLists(nextLists);
       setSelectedListId((current) => {
         const requestedId = preferredListId ?? current;
@@ -168,7 +178,7 @@ export default function Lists() {
     }
 
     try {
-      const data = await api.get(`/lists/${listId}`);
+      const data = await fetchSupabaseList(listId);
       setSelectedList(data);
       setEditName(data?.name || '');
       setEditPublic(Boolean(data?.is_public));
@@ -224,9 +234,9 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const createdList = await api.post('/lists', {
+      const createdList = await createSupabaseList({
         name: createName.trim(),
-        is_public: createPublic,
+        isPublic: createPublic,
       });
       setCreateName('');
       setCreatePublic(false);
@@ -250,9 +260,9 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.patch(`/lists/${selectedList.id}`, {
+      const updatedList = await updateSupabaseList(selectedList.id, {
         name: editName.trim(),
-        is_public: editPublic,
+        isPublic: editPublic,
       });
       setSelectedList(updatedList);
       setEditName(updatedList.name);
@@ -274,7 +284,7 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      await api.delete(`/lists/${selectedList.id}`);
+      await deleteSupabaseList(selectedList.id);
       setStatusMessage('List deleted.');
       setSelectedList(null);
       setSelectedListId(null);
@@ -298,9 +308,7 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.post(`/lists/${selectedList.id}/collaborators`, {
-        username: inviteUsername.trim(),
-      });
+      const updatedList = await inviteSupabaseListCollaborator(selectedList.id, inviteUsername.trim());
       setSelectedList(updatedList);
       setInviteUsername('');
       setStatusMessage(`Invited ${inviteUsername.trim()} to collaborate.`);
@@ -320,9 +328,7 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.delete(
-        `/lists/${selectedList.id}/collaborators/${collaboratorId}`
-      );
+      const updatedList = await removeSupabaseListCollaborator(selectedList.id, collaboratorId);
       setSelectedList(updatedList);
       setStatusMessage(`${username} was removed from the list.`);
       await loadLists(updatedList.id);
@@ -340,9 +346,7 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.post(`/lists/${selectedList.id}/items/${item.id}/vote`, {
-        value,
-      });
+      const updatedList = await voteSupabaseListItem(selectedList.id, item.id, value);
       setSelectedList(updatedList);
       await loadLists(updatedList.id);
     } catch (error) {
@@ -359,10 +363,7 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.patch(
-        `/lists/${selectedList.id}/items/${item.id}/move`,
-        { direction }
-      );
+      const updatedList = await moveSupabaseListItem(selectedList.id, item.id, direction);
       setSelectedList(updatedList);
       await loadLists(updatedList.id);
     } catch (error) {
@@ -380,7 +381,7 @@ export default function Lists() {
     setStatusMessage('');
 
     try {
-      const updatedList = await api.delete(`/lists/${selectedList.id}/items/${item.id}`);
+      const updatedList = await removeSupabaseListItem(selectedList.id, item.id);
       setSelectedList(updatedList);
       setStatusMessage(`Removed "${item.title}" from the list.`);
       await loadLists(updatedList.id);

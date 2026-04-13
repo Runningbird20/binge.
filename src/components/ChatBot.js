@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api';
+import { submitSupabaseRequest } from '../utils/supabaseData';
 
 const INTENT_LABELS = {
   recommendation: '🎯 Recommendation',
@@ -33,15 +34,11 @@ function RequestModal({ prefill, onClose }) {
     setStatus('loading');
     setError('');
     try {
-      await api.post('/requests', { title: title.trim(), media_type: mediaType, year: year || undefined, reason });
+      await submitSupabaseRequest({ title: title.trim(), media_type: mediaType, year: year || undefined, reason });
       setStatus('success');
     } catch (err) {
       const message = String(err?.message || '').trim();
-      if (/unauthorized|invalid token/i.test(message)) {
-        setError('Media requests still use the legacy backend session. General chat works, but requesting new titles needs the old backend login.');
-      } else {
-        setError(message || 'Something went wrong.');
-      }
+      setError(message || 'Something went wrong.');
       setStatus(null);
     }
   }

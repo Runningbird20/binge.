@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
+import {
+  fetchSupabaseLists,
+  addSupabaseListItem,
+} from '../utils/supabaseData';
 
 export default function ListSaveControls({ mediaType, mediaId, itemTitle }) {
   const [lists, setLists] = useState([]);
@@ -17,7 +20,7 @@ export default function ListSaveControls({ mediaType, mediaId, itemTitle }) {
       setMessage('');
 
       try {
-        const data = await api.get('/lists');
+const data = await fetchSupabaseLists();
         if (cancelled) return;
 
         const editableLists = Array.isArray(data)
@@ -61,9 +64,9 @@ export default function ListSaveControls({ mediaType, mediaId, itemTitle }) {
     setMessage('');
 
     try {
-      const response = await api.post(`/lists/${selectedListId}/items`, {
-        media_type: mediaType,
-        media_id: mediaId,
+      const response = await addSupabaseListItem(selectedListId, {
+        mediaType,
+        mediaId,
       });
 
       const savedListName = response?.name || lists.find((list) => String(list.id) === selectedListId)?.name;
