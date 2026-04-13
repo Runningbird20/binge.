@@ -282,8 +282,8 @@ export default function ChatBot() {
         role: 'assistant',
         content: assistantContent,
         intent: null,
-        siteSources: [],
-        webSources: [],
+        siteSources: data?.siteSources || [],
+        webSources: data?.webSources || [],
         latency: data?.usage ? null : null,
       }]);
     } catch (err) {
