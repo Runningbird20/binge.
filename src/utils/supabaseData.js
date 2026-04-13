@@ -883,18 +883,6 @@ async function buildSupabaseListPayload(client, list, currentUserId, collaborato
   };
 }
 
-async function getCurrentSupabaseUserId() {
-  const client = requireSupabase();
-  const { data, error } = await client.auth.getUser();
-  if (error) {
-    throw new Error(toFriendlyError(error, 'Unable to read your Supabase session.'));
-  }
-  if (!data?.user?.id) {
-    throw new Error('Please log in to continue.');
-  }
-  return data.user.id;
-}
-
 async function getOptionalSupabaseUserId() {
   const client = requireSupabase();
   const { data, error } = await client.auth.getSession();
@@ -1293,7 +1281,6 @@ export async function voteSupabaseListItem(listId, itemId, value) {
 }
 
 export async function moveSupabaseListItem(listId, itemId, direction) {
-  const authUser = await getAuthenticatedUser();
   const list = await fetchSupabaseList(listId);
   if (!list.permissions?.canEdit) {
     throw new Error('You do not have permission to change this list.');
@@ -1333,7 +1320,6 @@ export async function moveSupabaseListItem(listId, itemId, direction) {
 }
 
 export async function removeSupabaseListItem(listId, itemId) {
-  const authUser = await getAuthenticatedUser();
   const list = await fetchSupabaseList(listId);
   if (!list.permissions?.canEdit) {
     throw new Error('You do not have permission to remove items from this list.');
@@ -1370,7 +1356,6 @@ export async function removeSupabaseListItem(listId, itemId) {
 }
 
 export async function addSupabaseListItem(listId, { mediaType, mediaId }) {
-  const authUser = await getAuthenticatedUser();
   const list = await fetchSupabaseList(listId);
   if (!list.permissions?.canEdit) {
     throw new Error('You do not have permission to add items to this list.');
