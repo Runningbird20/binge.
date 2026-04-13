@@ -66,9 +66,7 @@ export default function App() {
             />
             <Route
               path="/live-tv"
-              element={legacyBackendEnabled
-                ? <ProtectedRoute><LiveTV /></ProtectedRoute>
-                : <ProtectedRoute><LegacyBackendNotice featureName="Live TV" isProtected /></ProtectedRoute>}
+              element={<ProtectedRoute><LiveTV /></ProtectedRoute>}
             />
             <Route path="*"          element={<Navigate to="/" replace />} />
           </Routes>
