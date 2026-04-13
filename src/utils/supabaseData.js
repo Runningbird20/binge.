@@ -1,5 +1,9 @@
-import { loadFallbackBooks, loadFallbackMovies, loadFallbackTvShows } from '../catalogFallback';
 import { isSupabaseConfigured, supabase } from './supabase';
+import {
+  cacheMediaMetadata,
+  cacheMediaMetadataList,
+  getCachedMediaMetadata,
+} from './mediaMetadataCache';
 
 const PROFILE_TABLE = 'profiles';
 
@@ -18,7 +22,20 @@ const RATING_TABLES = {
   },
 };
 
-let mediaLookupPromise;
+const MEDIA_METADATA_TABLES = {
+  movie: {
+    table: 'movies',
+    columns: 'id, title, year, genre, poster_url',
+  },
+  tv_show: {
+    table: 'tv_shows',
+    columns: 'id, title, year, genre, poster_url',
+  },
+  book: {
+    table: 'books',
+    columns: 'id, title, year, genre, cover_url',
+  },
+};
 
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
@@ -266,34 +283,83 @@ export async function updateSupabasePassword(newPassword) {
   }
 }
 
-async function getMediaLookup() {
-  if (!mediaLookupPromise) {
-    mediaLookupPromise = Promise.all([
-      loadFallbackMovies(),
-      loadFallbackTvShows(),
-      loadFallbackBooks(),
-    ]).then(([movies, tvShows, books]) => ({
-      movie: new Map(movies.map((item) => [Number(item.id), item])),
-      tv_show: new Map(tvShows.map((item) => [Number(item.id), item])),
-      book: new Map(books.map((item) => [Number(item.id), item])),
-    }));
-  }
-
-  return mediaLookupPromise;
-}
-
-function enrichMediaRecord(record, mediaType, mediaLookup) {
-  const mediaMap = mediaLookup[mediaType] || new Map();
-  const item = mediaMap.get(Number(record.media_id));
+function enrichMediaRecord(record, mediaType, metadata) {
+  const item = metadata || null;
 
   return {
     ...record,
     media_type: mediaType,
     title: item?.title || `Saved ${mediaType.replace('_', ' ')}`,
-    year: item?.year || null,
-    genre: item?.genre || null,
-    image_url: item?.poster_url || item?.cover_url || item?.image_url || null,
+    year: item?.year ?? null,
+    genre: item?.genre ?? null,
+    image_url: item?.image_url || null,
   };
+}
+
+async function fetchMediaMetadataMap(mediaType, mediaIds) {
+  const client = requireSupabase();
+  const schema = MEDIA_METADATA_TABLES[mediaType];
+  if (!schema || mediaIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await client
+    .from(schema.table)
+    .select(schema.columns)
+    .in('id', mediaIds);
+
+  if (error) {
+    return new Map();
+  }
+
+  cacheMediaMetadataList(mediaType, data || []);
+
+  return new Map(
+    (data || [])
+      .map((item) => {
+        const metadata = cacheMediaMetadata(mediaType, item);
+        return metadata ? [metadata.id, metadata] : null;
+      })
+      .filter(Boolean)
+  );
+}
+
+async function enrichMediaRecords(records = []) {
+  const pendingIdsByType = {
+    movie: new Set(),
+    tv_show: new Set(),
+    book: new Set(),
+  };
+
+  records.forEach((record) => {
+    const mediaType = record.media_type;
+    const mediaId = Number(record.media_id);
+    if (!MEDIA_METADATA_TABLES[mediaType] || !Number.isFinite(mediaId)) {
+      return;
+    }
+
+    if (!getCachedMediaMetadata(mediaType, mediaId)) {
+      pendingIdsByType[mediaType].add(mediaId);
+    }
+  });
+
+  const fetchedMaps = {};
+  await Promise.all(
+    Object.entries(pendingIdsByType).map(async ([mediaType, pendingIds]) => {
+      fetchedMaps[mediaType] = await fetchMediaMetadataMap(mediaType, [...pendingIds]);
+    })
+  );
+
+  return records.map((record) => {
+    const mediaType = record.media_type;
+    const mediaId = Number(record.media_id);
+    const metadata =
+      getCachedMediaMetadata(mediaType, mediaId) ||
+      fetchedMaps[mediaType]?.get(mediaId) ||
+      null;
+
+    return enrichMediaRecord(record, mediaType, metadata);
+  });
 }
 
 export async function fetchSupabaseWatchlist({ mediaType = '', status = '' } = {}) {
@@ -317,11 +383,10 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '' } = {
     throw new Error(toFriendlyError(error, 'Unable to load your library.'));
   }
 
-  const mediaLookup = await getMediaLookup();
-  return (data || []).map((record) => enrichMediaRecord(record, record.media_type, mediaLookup));
+  return enrichMediaRecords(data || []);
 }
 
-export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'plan_to_watch' }) {
+export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'plan_to_watch', media = null }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -355,8 +420,8 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
     throw new Error(toFriendlyError(error, 'Unable to save that title.'));
   }
 
-  const mediaLookup = await getMediaLookup();
-  return enrichMediaRecord(data, data.media_type, mediaLookup);
+  const metadata = media ? cacheMediaMetadata(mediaType, media) : getCachedMediaMetadata(mediaType, mediaId);
+  return enrichMediaRecord(data, data.media_type, metadata);
 }
 
 export async function updateSupabaseWatchlistStatus(id, status) {
@@ -383,7 +448,7 @@ export async function removeSupabaseWatchlistItem(id) {
   }
 }
 
-async function fetchRatingsForMediaType(mediaType) {
+async function fetchRawRatingsForMediaType(mediaType) {
   const client = requireSupabase();
   const schema = RATING_TABLES[mediaType];
 
@@ -401,33 +466,36 @@ async function fetchRatingsForMediaType(mediaType) {
     throw new Error(toFriendlyError(error, 'Unable to load your ratings.'));
   }
 
-  const mediaLookup = await getMediaLookup();
-  return (data || []).map((record) => enrichMediaRecord(record, mediaType, mediaLookup));
+  return (data || []).map((record) => ({
+    ...record,
+    media_type: mediaType,
+  }));
 }
 
 export async function fetchSupabaseRatings({ mediaType = '' } = {}) {
   if (mediaType) {
-    return fetchRatingsForMediaType(mediaType);
+    const ratings = await fetchRawRatingsForMediaType(mediaType);
+    return enrichMediaRecords(ratings);
   }
 
   const grouped = await Promise.all(
-    Object.keys(RATING_TABLES).map((type) => fetchRatingsForMediaType(type))
+    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type))
   );
 
-  return grouped
-    .flat()
+  const enrichedRatings = await enrichMediaRecords(grouped.flat());
+  return enrichedRatings
     .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
 }
 
 export async function fetchSupabaseRatingMap(mediaType) {
-  const ratings = await fetchSupabaseRatings({ mediaType });
+  const ratings = await fetchRawRatingsForMediaType(mediaType);
   return ratings.reduce((accumulator, rating) => {
     accumulator[rating.media_id] = rating;
     return accumulator;
   }, {});
 }
 
-export async function saveSupabaseRating({ mediaType, mediaId, categories, review = '' }) {
+export async function saveSupabaseRating({ mediaType, mediaId, categories, review = '', media = null }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const schema = RATING_TABLES[mediaType];
@@ -452,6 +520,10 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, revie
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to save your rating.'));
+  }
+
+  if (media) {
+    cacheMediaMetadata(mediaType, media);
   }
 }
 
