@@ -20,6 +20,7 @@ const SharedList = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminRequests = lazy(() => import('./pages/AdminRequests'));
 const LiveTV = lazy(() => import('./pages/LiveTV'));
+const Forum  = lazy(() => import('./pages/Forum'));
 const Ratings = lazy(() => import('./pages/Ratings'));
 const LegacyBackendNotice = lazy(() => import('./components/LegacyBackendNotice'));
 
@@ -68,6 +69,9 @@ export default function App() {
               path="/live-tv"
               element={<ProtectedRoute><LiveTV /></ProtectedRoute>}
             />
+            <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
+            <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
+            <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="*"          element={<Navigate to="/" replace />} />
           </Routes>
           <ChatBot />
