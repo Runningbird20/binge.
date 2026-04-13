@@ -445,6 +445,7 @@ export default function Movies() {
         mediaId: item.id,
         categories,
         review,
+        media: item,
       });
       setUserRatings((current) => ({
         ...current,
@@ -461,7 +462,7 @@ export default function Movies() {
     setDetailMessage('');
 
     try {
-      await addSupabaseWatchlistItem({ mediaType: 'movie', mediaId: item.id });
+      await addSupabaseWatchlistItem({ mediaType: 'movie', mediaId: item.id, media: item });
       setDetailMessage(`"${item.title}" added to your watchlist.`);
     } catch (error) {
       setDetailMessage(error.message);

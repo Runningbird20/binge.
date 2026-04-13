@@ -4,8 +4,7 @@ import { Navigate } from 'react-router-dom';
 
 export default function Landing() {
   const { isAuthenticated, authLoading } = useAuth();
-  if (authLoading) return null;
-  if (isAuthenticated) return <Navigate to="/home" replace />;
+  if (!authLoading && isAuthenticated) return <Navigate to="/home" replace />;
 
   return (
     <div className="App">
@@ -27,6 +26,7 @@ export default function Landing() {
             <Link to="/signup" className="btn-primary btn-large">Get Started — It's Free</Link>
             <a href="#features" className="btn-secondary btn-large">Learn More</a>
           </div>
+          {authLoading && <p className="hero-subtitle">Restoring your session...</p>}
         </div>
         <div className="hero-media-grid">
           <div className="media-card">

@@ -607,7 +607,7 @@ export default function Books() {
 
   async function handleRate(book, categories, review = '') {
     try {
-      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, review });
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, review, media: book });
       setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
@@ -624,6 +624,7 @@ export default function Books() {
         mediaType: 'book',
         mediaId: book.id,
         status: 'plan_to_read',
+        media: book,
       });
 
       setLibraryIds((current) => ({ ...current, [book.id]: true }));
