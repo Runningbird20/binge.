@@ -451,53 +451,19 @@ export default function Home() {
             <WatchlistGallery items={watchlistItems} loading={loading} />
           </section>
 
-          <div className="home-secondary-grid">
-            <section className="home-section surface-panel">
-              <div className="section-header">
-                <h2>My Library</h2>
-                <Link to="/watchlist" className="section-link">Open library</Link>
-              </div>
-              {stats.watchlist === 0 ? (
-                <div className="empty-state home-empty-card">
-                  <p>Your library is still empty.</p>
-                  <p className="empty-hint">
-                    Browse movies, TV shows, and books to save titles for later.
-                  </p>
-                  <Link to="/movies" className="btn-secondary">Browse the catalog</Link>
-                </div>
-              ) : (
-                <div className="home-action-card">
-                  <p className="home-panel-copy">
-                    You already have {stats.watchlist} saved title{stats.watchlist === 1 ? '' : 's'} across movies, shows, and books.
-                  </p>
-                  <Link to="/watchlist" className="btn-secondary">Open my library</Link>
-                </div>
-              )}
-            </section>
-
-            {canUseLegacyBackend && (
-              <section className="home-section surface-panel">
-                <div className="section-header">
-                  <h2>Plan Together</h2>
-                  <Link to="/lists" className="section-link">Open lists</Link>
-                </div>
-                <div className="home-action-card">
-                  <p className="home-panel-copy">
-                    Create public or private lists, invite collaborators, and let anonymous vibe votes surface the group favorite.
-                  </p>
-                  <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
-                </div>
-              </section>
-            )}
-
-            <section className="home-section surface-panel">
-              <div className="section-header">
-                <h2>Supabase Todos</h2>
-              </div>
-              <SupabaseTodos />
-            </section>
-          </div>
-
+          <section className="home-section surface-panel">
+            <div className="section-header">
+              <h2>Plan Together</h2>
+               <Link to="/lists" className="section-link">Open lists</Link>
+            </div>
+            <div className="home-action-card">
+              <p className="home-panel-copy">
+                Create public or private lists, invite collaborators, and let anonymous vibe votes surface the group favorite.
+              </p>
+              <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
+            </div>
+          </section>
+        
           <section className="home-section surface-panel">
             <div className="section-header home-insights-header">
               <div>
