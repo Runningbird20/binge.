@@ -1879,6 +1879,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.25rem;
+  align-items: start;
 }
 
 .media-card-full {
@@ -1890,6 +1891,8 @@ body {
   display: flex;
   flex-direction: column;
   transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  content-visibility: auto;
+  contain-intrinsic-size: 560px;
 }
 .media-card-full:hover {
   border-color: rgba(232, 201, 122, 0.22);

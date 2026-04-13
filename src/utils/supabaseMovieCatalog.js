@@ -15,6 +15,16 @@ const MOVIE_COLUMNS = [
   'source_key',
 ].join(', ');
 
+const MOVIE_BROWSE_COLUMNS = [
+  'id',
+  'title',
+  'year',
+  'genre',
+  'director',
+  'poster_url',
+  'source_key',
+].join(', ');
+
 const TV_SHOW_COLUMNS = [
   'id',
   'title',
@@ -26,6 +36,17 @@ const TV_SHOW_COLUMNS = [
   'age_rating',
   'overview',
   'synopsis',
+  'poster_url',
+  'seasons',
+  'source_key',
+].join(', ');
+
+const TV_SHOW_BROWSE_COLUMNS = [
+  'id',
+  'title',
+  'year',
+  'genre',
+  'creator',
   'poster_url',
   'seasons',
   'source_key',
@@ -85,6 +106,15 @@ function normalizeMovie(movie) {
   };
 }
 
+function normalizeMovieBrowseEntry(movie) {
+  if (!movie) return null;
+
+  return {
+    ...normalizeMovie(movie),
+    _summary: true,
+  };
+}
+
 function normalizeTvShow(show) {
   if (!show) return null;
 
@@ -94,6 +124,15 @@ function normalizeTvShow(show) {
     synopsis: show.synopsis || show.overview || DESCRIPTION_FALLBACK,
     poster_url: show.poster_url || null,
     seasons: Number.isFinite(Number(show.seasons)) ? Number(show.seasons) : null,
+  };
+}
+
+function normalizeTvShowBrowseEntry(show) {
+  if (!show) return null;
+
+  return {
+    ...normalizeTvShow(show),
+    _summary: true,
   };
 }
 
@@ -228,6 +267,45 @@ export async function fetchSupabaseBookGenres() {
   return fetchGenreValues('book_genres');
 }
 
+export async function fetchSupabaseMovieCatalogSegment({
+  offset = 0,
+  limit = 48,
+  search = '',
+  genre = '',
+  sortOrder = 'title-asc',
+  includeCount = true,
+  includeFacets = true,
+} = {}) {
+  const client = requireSupabaseCatalog();
+
+  let moviesQuery = client
+    .from('movies')
+    .select(MOVIE_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
+
+  moviesQuery = applyTitleGenreFilters(moviesQuery, { search, genre });
+  moviesQuery = applyBrowseSort(moviesQuery, sortOrder);
+
+  const tasks = [
+    moviesQuery.range(offset, offset + limit - 1),
+  ];
+
+  if (includeFacets) {
+    tasks.push(fetchSupabaseMovieGenres().catch(() => []));
+  }
+
+  const [movieResult, genres = []] = await Promise.all(tasks);
+
+  if (movieResult.error) {
+    throw movieResult.error;
+  }
+
+  return {
+    items: (movieResult.data || []).map((movie) => normalizeMovieBrowseEntry(movie)),
+    total: movieResult.count == null ? null : Number(movieResult.count),
+    facets: { genres },
+  };
+}
+
 export async function fetchSupabaseMoviesPage({
   page = 1,
   pageSize = 48,
@@ -235,27 +313,18 @@ export async function fetchSupabaseMoviesPage({
   genre = '',
   sortOrder = 'title-asc',
 } = {}) {
-  const client = requireSupabaseCatalog();
   const offset = Math.max(0, (page - 1) * pageSize);
-
-  let moviesQuery = client
-    .from('movies')
-    .select(MOVIE_COLUMNS, { count: 'exact' });
-
-  moviesQuery = applyTitleGenreFilters(moviesQuery, { search, genre });
-  moviesQuery = applyBrowseSort(moviesQuery, sortOrder);
-
-  const [movieResult, genres] = await Promise.all([
-    moviesQuery.range(offset, offset + pageSize - 1),
-    fetchSupabaseMovieGenres().catch(() => []),
-  ]);
-
-  if (movieResult.error) {
-    throw movieResult.error;
-  }
-
-  const items = (movieResult.data || []).map((movie) => normalizeMovie(movie));
-  const total = Number(movieResult.count) || items.length;
+  const segment = await fetchSupabaseMovieCatalogSegment({
+    offset,
+    limit: pageSize,
+    search,
+    genre,
+    sortOrder,
+    includeCount: true,
+    includeFacets: true,
+  });
+  const items = segment.items;
+  const total = segment.total ?? items.length;
 
   return {
     items,
@@ -263,7 +332,7 @@ export async function fetchSupabaseMoviesPage({
     page,
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    facets: { genres },
+    facets: segment.facets,
   };
 }
 
@@ -346,27 +415,18 @@ export async function fetchSupabaseTvShowsPage({
   genre = '',
   sortOrder = 'title-asc',
 } = {}) {
-  const client = requireSupabaseCatalog();
   const offset = Math.max(0, (page - 1) * pageSize);
-
-  let showsQuery = client
-    .from('tv_shows')
-    .select(TV_SHOW_COLUMNS, { count: 'exact' });
-
-  showsQuery = applyTitleGenreFilters(showsQuery, { search, genre });
-  showsQuery = applyBrowseSort(showsQuery, sortOrder);
-
-  const [showResult, genres] = await Promise.all([
-    showsQuery.range(offset, offset + pageSize - 1),
-    fetchSupabaseTvShowGenres().catch(() => []),
-  ]);
-
-  if (showResult.error) {
-    throw showResult.error;
-  }
-
-  const items = (showResult.data || []).map((show) => normalizeTvShow(show));
-  const total = Number(showResult.count) || items.length;
+  const segment = await fetchSupabaseTvShowCatalogSegment({
+    offset,
+    limit: pageSize,
+    search,
+    genre,
+    sortOrder,
+    includeCount: true,
+    includeFacets: true,
+  });
+  const items = segment.items;
+  const total = segment.total ?? items.length;
 
   return {
     items,
@@ -374,6 +434,45 @@ export async function fetchSupabaseTvShowsPage({
     page,
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    facets: segment.facets,
+  };
+}
+
+export async function fetchSupabaseTvShowCatalogSegment({
+  offset = 0,
+  limit = 48,
+  search = '',
+  genre = '',
+  sortOrder = 'title-asc',
+  includeCount = true,
+  includeFacets = true,
+} = {}) {
+  const client = requireSupabaseCatalog();
+
+  let showsQuery = client
+    .from('tv_shows')
+    .select(TV_SHOW_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
+
+  showsQuery = applyTitleGenreFilters(showsQuery, { search, genre });
+  showsQuery = applyBrowseSort(showsQuery, sortOrder);
+
+  const tasks = [
+    showsQuery.range(offset, offset + limit - 1),
+  ];
+
+  if (includeFacets) {
+    tasks.push(fetchSupabaseTvShowGenres().catch(() => []));
+  }
+
+  const [showResult, genres = []] = await Promise.all(tasks);
+
+  if (showResult.error) {
+    throw showResult.error;
+  }
+
+  return {
+    items: (showResult.data || []).map((show) => normalizeTvShowBrowseEntry(show)),
+    total: showResult.count == null ? null : Number(showResult.count),
     facets: { genres },
   };
 }

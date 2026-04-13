@@ -27,11 +27,12 @@ export default function MediaCard({
   userRating,
   onWatchlist,
   onOpenDetails,
+  showDescription = true,
 }) {
   const imageUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
-  const description = item.synopsis || item.overview || '';
+  const description = showDescription ? (item.synopsis || item.overview || '') : '';
   const userScore = computeNormalizedScore(mediaType, userRating);
 
   return (
@@ -50,7 +51,13 @@ export default function MediaCard({
     >
       <div className="media-card-poster">
         {imageUrl ? (
-          <img src={imageUrl} alt={item.title} referrerPolicy="no-referrer" />
+          <img
+            src={imageUrl}
+            alt={item.title}
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            decoding="async"
+          />
         ) : (
           <div className="media-card-placeholder-img">
             <span>{item.title?.charAt(0)}</span>
