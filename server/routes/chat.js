@@ -1,10 +1,15 @@
 const express = require('express');
 const db = require('../db');
 const { optionalAuth, requireAuth } = require('../middleware/auth');
+const {
+  isSupabaseConfigured,
+  fetchSupabaseCatalog,
+  fetchSupabaseCatalogItems,
+} = require('../utils/supabaseClient');
 
 const router = express.Router();
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.REACT_APP_GROQ_API_KEY;
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
@@ -97,7 +102,11 @@ function extractTerms(query) {
     .filter(t => t.length > 2 && !stop.has(t));
 }
 
-function searchSiteMedia(query, limit = 20) {
+async function searchSiteMedia(query, limit = 20) {
+  if (isSupabaseConfigured()) {
+    return await fetchSupabaseCatalog(query, limit);
+  }
+
   const mediaTypes = detectMediaTypes(query);
   const terms = extractTerms(query);
   const sources = [];
@@ -332,7 +341,7 @@ router.post('/', optionalAuth, async (req, res) => {
 
   try {
     const intent      = detectQueryIntent(message);
-    const siteDocs    = searchSiteMedia(message, 20);
+    const siteDocs    = await searchSiteMedia(message, 20);
     const userHistory = getUserRatingHistory(userId);
 
     // Always search the web — build a good query from the user's message
@@ -467,9 +476,20 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
     }
 
     // Get all site content to recommend from
-    const allMovies = db.prepare(`SELECT id, title, year, genre, director, cast_members, synopsis, overview, source_key, poster_url, 'movie' as media_type FROM movies WHERE source_key IS NOT NULL`).all();
-    const allTV    = db.prepare(`SELECT id, title, year, genre, creator, cast_members, synopsis, overview, seasons, source_key, poster_url, 'tv_show' as media_type FROM tv_shows WHERE source_key IS NOT NULL`).all();
-    const allBooks = db.prepare(`SELECT id, title, year, genre, author, synopsis, source_key, cover_url, 'book' as media_type FROM books WHERE source_key IS NOT NULL LIMIT 100`).all();
+    let allMovies;
+    let allTV;
+    let allBooks;
+
+    if (isSupabaseConfigured()) {
+      const allCatalog = await fetchSupabaseCatalogItems(200);
+      allMovies = allCatalog.filter((item) => item.media_type === 'movie');
+      allTV = allCatalog.filter((item) => item.media_type === 'tv_show');
+      allBooks = allCatalog.filter((item) => item.media_type === 'book');
+    } else {
+      allMovies = db.prepare(`SELECT id, title, year, genre, director, cast_members, synopsis, overview, source_key, poster_url, 'movie' as media_type FROM movies WHERE source_key IS NOT NULL`).all();
+      allTV    = db.prepare(`SELECT id, title, year, genre, creator, cast_members, synopsis, overview, seasons, source_key, poster_url, 'tv_show' as media_type FROM tv_shows WHERE source_key IS NOT NULL`).all();
+      allBooks = db.prepare(`SELECT id, title, year, genre, author, synopsis, source_key, cover_url, 'book' as media_type FROM books WHERE source_key IS NOT NULL LIMIT 100`).all();
+    }
 
     // Exclude already-rated items
     const ratedIds = new Set(history.map(r => `${r.media_type}:${r.media_id}`));
