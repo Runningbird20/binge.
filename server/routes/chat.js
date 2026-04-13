@@ -9,11 +9,7 @@ const {
 
 const router = express.Router();
 
-<<<<<<< HEAD
-const GROQ_API_KEY = process.env.local.GROQ_API_KEY;
-=======
 const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.REACT_APP_GROQ_API_KEY;
->>>>>>> 0c6e446710350b390781c01e6bc362d9348a933b
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const TAVILY_API_KEY = process.env.local.TAVILY_API_KEY;
