@@ -131,7 +131,7 @@ router.post('/', async (req, res) => {
   try {
     const sb = getSupabase();
     const { data: forum, error } = await sb.from('forums')
-      .insert({ name: name.trim(), slug, description, icon, banner_color, creator_id: user.id })
+      .insert({ name: name.trim(), slug, description, icon, banner_color, creator_id: user.id, rules: req.body.rules || null })
       .select().single();
     if (error) throw error;
 
@@ -272,12 +272,17 @@ router.get('/post/:id', async (req, res) => {
     if (error || !post) return res.status(404).json({ error: 'Post not found' });
 
     // Get all comments for this post
-    const { data: comments } = await sb.from('comments')
-      .select(`*, profiles!posts_user_id_fkey(username, avatar_url)`)
+    const { data: rawComments } = await sb.from('comments')
+      .select('*')
       .eq('post_id', req.params.id)
       .order('score', { ascending: false });
 
-    res.json({ post, comments: comments || [] });
+    const [enrichedPost, enrichedComments] = await Promise.all([
+      enrichWithProfiles(sb, [post]).then(r => r[0]),
+      enrichWithProfiles(sb, rawComments || []),
+    ]);
+
+    res.json({ post: enrichedPost, comments: enrichedComments });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -381,8 +386,9 @@ router.post('/post/:id/comments', async (req, res) => {
     const sb = getSupabase();
     const { data, error } = await sb.from('comments')
       .insert({ post_id: Number(req.params.id), user_id: user.id, body: body.trim(), parent_comment_id })
-      .select(`*, profiles!posts_user_id_fkey(username, avatar_url)`).single();
+      .select('*').single();
     if (error) throw error;
+    const [enrichedComment] = await enrichWithProfiles(sb, [data]);
 
     // Increment post comment count
     const { data: postForCount } = await sb.from('posts').select('comment_count').eq('id', req.params.id).single();
@@ -417,6 +423,107 @@ router.get('/user/my-forums', async (req, res) => {
       .eq('user_id', user.id);
     if (error) throw error;
     res.json((data || []).map(m => ({ ...m.forums, role: m.role })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /forum/comment/:id — edit own comment body
+router.patch('/comment/:id', async (req, res) => {
+  const user = await requireUser(req, res); if (!user) return;
+  const { body } = req.body;
+  if (!body?.trim()) return res.status(400).json({ error: 'Body is required' });
+
+  // Moderate edited content
+  const modResult = await moderateContent(body);
+  if (!modResult.allowed) return res.status(422).json({ error: `Edit rejected: ${modResult.reason}` });
+
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from('comments')
+      .update({ body: body.trim() })
+      .eq('id', req.params.id)
+      .eq('user_id', user.id) // can only edit own
+      .select('*').single();
+    if (error || !data) return res.status(404).json({ error: 'Comment not found or not yours' });
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function isAdmin(user) {
+  if (!user) return false;
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from('profiles').select('is_admin').eq('id', user.id).single();
+    return data?.is_admin === true;
+  } catch { return false; }
+}
+
+async function isForumMod(user, forumId) {
+  if (!user) return false;
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from('forum_members')
+      .select('role').eq('user_id', user.id).eq('forum_id', forumId).single();
+    return data?.role === 'moderator' || data?.role === 'owner';
+  } catch { return false; }
+}
+
+// Admin: delete a post (and all its comments)
+router.delete('/admin/post/:id', async (req, res) => {
+  const user = await requireUser(req, res); if (!user) return;
+  const admin = await isAdmin(user);
+  if (!admin) return res.status(403).json({ error: 'Admin access required' });
+
+  try {
+    const sb = getSupabase();
+    // Delete all comments first, then the post (cascade should handle it but be explicit)
+    await sb.from('comments').delete().eq('post_id', req.params.id);
+    await sb.from('post_votes').delete().eq('post_id', req.params.id);
+    const { error } = await sb.from('posts').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: redact a comment (replace body, mark removed)
+router.patch('/admin/comment/:id', async (req, res) => {
+  const user = await requireUser(req, res); if (!user) return;
+  const admin = await isAdmin(user);
+  if (!admin) return res.status(403).json({ error: 'Admin access required' });
+
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from('comments')
+      .update({
+        body: 'This comment was removed as it goes against community guidelines.',
+        is_removed: true,
+        removal_reason: req.body.reason || 'Violated community guidelines',
+      })
+      .eq('id', req.params.id)
+      .select('*').single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: get all posts across all forums (for moderation dashboard)
+router.get('/admin/posts', async (req, res) => {
+  const user = await requireUser(req, res); if (!user) return;
+  const admin = await isAdmin(user);
+  if (!admin) return res.status(403).json({ error: 'Admin access required' });
+
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from('posts')
+      .select('*, forums(name, slug)')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    const enriched = await enrichWithProfiles(sb, data || []);
+    res.json(enriched);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

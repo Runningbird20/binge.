@@ -84,6 +84,7 @@ function buildUserProfile(authUser, profileRow) {
     bio: profileRow?.bio || authUser?.user_metadata?.bio || '',
     avatarUrl: profileRow?.avatar_url || authUser?.user_metadata?.avatar_url || null,
     createdAt: profileRow?.created_at || authUser?.created_at || null,
+    isAdmin: profileRow?.is_admin === true,
   };
 }
 
