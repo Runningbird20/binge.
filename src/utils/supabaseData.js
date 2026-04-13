@@ -618,3 +618,919 @@ export async function fetchSupabaseDashboardCounts() {
     ratings: ratingResults.reduce((sum, result) => sum + (Number(result.count) || 0), 0),
   };
 }
+
+function normalizeSharedListName(name) {
+  const slug = String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return slug || 'shared-list';
+}
+
+function buildShareCode(name) {
+  const slug = normalizeSharedListName(name);
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${slug}-${random}`;
+}
+
+async function generateUniqueShareCode(client, name) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const shareCode = buildShareCode(name);
+    const { data, error } = await client
+      .from('media_lists')
+      .select('id')
+      .eq('share_code', shareCode)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(toFriendlyError(error, 'Unable to create a share code.'));
+    }
+
+    if (!data) {
+      return shareCode;
+    }
+  }
+
+  throw new Error('Unable to generate a unique share code. Please try again.');
+}
+
+function buildListPermissions(list, currentUserId, collaboratorUserIds = []) {
+  const isOwner = list.user_id === currentUserId;
+  const isCollaborator = collaboratorUserIds.includes(currentUserId);
+  const canEdit = isOwner || isCollaborator;
+  const canView = Boolean(list.is_public || canEdit);
+
+  return {
+    canView,
+    canEdit,
+    canManage: isOwner,
+    canVote: canEdit,
+    role: isOwner ? 'owner' : isCollaborator ? 'collaborator' : 'viewer',
+  };
+}
+
+function buildConsensusPick(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const [topItem] = [...items].sort((left, right) => {
+    if ((right.vibe_score || 0) !== (left.vibe_score || 0)) {
+      return (right.vibe_score || 0) - (left.vibe_score || 0);
+    }
+    if ((right.upvotes || 0) !== (left.upvotes || 0)) {
+      return (right.upvotes || 0) - (left.upvotes || 0);
+    }
+    if ((left.downvotes || 0) !== (right.downvotes || 0)) {
+      return (left.downvotes || 0) - (right.downvotes || 0);
+    }
+    return (left.position || 0) - (right.position || 0);
+  });
+
+  return topItem || null;
+}
+
+function mergeMediaMetadata(item, metadata) {
+  if (!metadata) {
+    return item;
+  }
+
+  const imageUrl =
+    item.media_type === 'book'
+      ? metadata.cover_url || null
+      : metadata.poster_url || null;
+
+  return {
+    ...item,
+    title: metadata.title || item.title,
+    year: metadata.year || item.year,
+    genre: metadata.genre || item.genre,
+    image_url: imageUrl || item.image_url || null,
+    creator_name:
+      item.media_type === 'movie'
+        ? metadata.director || item.creator_name
+        : item.media_type === 'tv_show'
+        ? metadata.creator || item.creator_name
+        : metadata.author || item.creator_name,
+    synopsis:
+      metadata.overview || metadata.synopsis || item.synopsis || null,
+  };
+}
+
+async function fetchMediaMetadata(client, mediaType, ids) {
+  if (!ids.length) {
+    return [];
+  }
+
+  const table = mediaType === 'movie' ? 'movies' : mediaType === 'tv_show' ? 'tv_shows' : 'books';
+  const selectColumns =
+    mediaType === 'book'
+      ? 'id,title,year,genre,cover_url,author,synopsis'
+      : mediaType === 'movie'
+      ? 'id,title,year,genre,poster_url,director,overview'
+      : 'id,title,year,genre,poster_url,creator,overview';
+
+  const { data, error } = await client.from(table).select(selectColumns).in('id', ids);
+  if (error) {
+    throw new Error(toFriendlyError(error, `Unable to load ${mediaType} metadata.`));
+  }
+
+  return data || [];
+}
+
+async function loadListItems(client, listId, currentUserId) {
+  const { data: rows, error } = await client
+    .from('media_list_items')
+    .select('id,list_id,media_type,media_id,position,added_at')
+    .eq('list_id', listId)
+    .order('position', { ascending: true })
+    .order('id', { ascending: true });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load list items.'));
+  }
+
+  const items = rows || [];
+  const groupedIds = items.reduce(
+    (groups, item) => {
+      if (!groups[item.media_type]) {
+        groups[item.media_type] = new Set();
+      }
+      groups[item.media_type].add(item.media_id);
+      return groups;
+    },
+    { movie: new Set(), tv_show: new Set(), book: new Set() }
+  );
+
+  const [movies, tvShows, books] = await Promise.all([
+    fetchMediaMetadata(client, 'movie', [...groupedIds.movie]),
+    fetchMediaMetadata(client, 'tv_show', [...groupedIds.tv_show]),
+    fetchMediaMetadata(client, 'book', [...groupedIds.book]),
+  ]);
+
+  const metadataByType = {
+    movie: Object.fromEntries((movies || []).map((item) => [item.id, item])),
+    tv_show: Object.fromEntries((tvShows || []).map((item) => [item.id, item])),
+    book: Object.fromEntries((books || []).map((item) => [item.id, item])),
+  };
+
+  const itemIds = items.map((item) => item.id);
+  const { data: voteRows, error: voteError } = await client
+    .from('media_list_votes')
+    .select('list_item_id,user_id,value')
+    .in('list_item_id', itemIds.length ? itemIds : [0]);
+
+  if (voteError) {
+    throw new Error(toFriendlyError(voteError, 'Unable to load list votes.'));
+  }
+
+  const voteMap = itemIds.reduce((acc, itemId) => {
+    acc[itemId] = { vibe_score: 0, upvotes: 0, downvotes: 0, my_vote: 0 };
+    return acc;
+  }, {});
+
+  (voteRows || []).forEach((vote) => {
+    const itemVotes = voteMap[vote.list_item_id];
+    if (!itemVotes) return;
+    const value = Number(vote.value) || 0;
+    itemVotes.vibe_score += value;
+    if (value === 1) itemVotes.upvotes += 1;
+    if (value === -1) itemVotes.downvotes += 1;
+    if (vote.user_id === currentUserId) {
+      itemVotes.my_vote = value;
+    }
+  });
+
+  return items
+    .map((item) => {
+      const metadata = metadataByType[item.media_type]?.[item.media_id] || null;
+      const merged = mergeMediaMetadata(item, metadata);
+      const votes = voteMap[item.id] || { vibe_score: 0, upvotes: 0, downvotes: 0, my_vote: 0 };
+      return {
+        ...merged,
+        vibe_score: Number(votes.vibe_score) || 0,
+        upvotes: Number(votes.upvotes) || 0,
+        downvotes: Number(votes.downvotes) || 0,
+        my_vote: Number(votes.my_vote) || 0,
+      };
+    })
+    .filter((item) => Boolean(item.title));
+}
+
+async function buildSupabaseListPayload(client, list, currentUserId, collaboratorUserIds = []) {
+  const ownerProfile = await client
+    .from('profiles')
+    .select('id,username')
+    .eq('id', list.user_id)
+    .maybeSingle();
+
+  if (ownerProfile.error) {
+    throw new Error(toFriendlyError(ownerProfile.error, 'Unable to load list owner details.'));
+  }
+
+  const collaboratorsQuery = await client
+    .from('media_list_collaborators')
+    .select('user_id')
+    .eq('list_id', list.id);
+
+  if (collaboratorsQuery.error) {
+    throw new Error(toFriendlyError(collaboratorsQuery.error, 'Unable to load collaborator details.'));
+  }
+
+  const collaboratorUserIdsFromRows = (collaboratorsQuery.data || []).map((row) => row.user_id);
+  const collaboratorProfiles = collaboratorUserIdsFromRows.length
+    ? await client.from('profiles').select('id,username').in('id', collaboratorUserIdsFromRows)
+    : { data: [] };
+
+  if (collaboratorProfiles.error) {
+    throw new Error(toFriendlyError(collaboratorProfiles.error, 'Unable to load collaborator profiles.'));
+  }
+
+  const allCollaborators = [
+    {
+      id: list.user_id,
+      username: ownerProfile.data?.username || 'Unknown',
+      role: 'owner',
+    },
+    ...(collaboratorProfiles.data || []).map((profile) => ({
+      id: profile.id,
+      username: profile.username,
+      role: 'collaborator',
+    })),
+  ];
+
+  const items = await loadListItems(client, list.id, currentUserId);
+  const permissions = buildListPermissions(list, currentUserId, collaboratorUserIdsFromRows);
+
+  return {
+    id: list.id,
+    name: list.name,
+    share_code: list.share_code,
+    is_public: Boolean(list.is_public),
+    created_at: list.created_at,
+    updated_at: list.updated_at,
+    owner: {
+      id: list.user_id,
+      username: ownerProfile.data?.username || 'Unknown',
+    },
+    permissions,
+    collaborators: allCollaborators,
+    items,
+    consensus_pick: buildConsensusPick(items),
+  };
+}
+
+async function getCurrentSupabaseUserId() {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getUser();
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to read your Supabase session.'));
+  }
+  if (!data?.user?.id) {
+    throw new Error('Please log in to continue.');
+  }
+  return data.user.id;
+}
+
+async function getOptionalSupabaseUserId() {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getSession();
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to read Supabase session.'));
+  }
+  return data?.session?.user?.id || null;
+}
+
+async function fetchSupabaseListById(listId, currentUserId) {
+  const client = requireSupabase();
+  const { data: list, error } = await client.from('media_lists').select('*').eq('id', Number(listId)).maybeSingle();
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load the list.'));
+  }
+  if (!list) {
+    throw new Error('List not found.');
+  }
+
+  const collaboratorRows = await client
+    .from('media_list_collaborators')
+    .select('user_id')
+    .eq('list_id', list.id);
+
+  if (collaboratorRows.error) {
+    throw new Error(toFriendlyError(collaboratorRows.error, 'Unable to load list collaborators.'));
+  }
+
+  const collaboratorUserIds = (collaboratorRows.data || []).map((row) => row.user_id);
+  const permissions = buildListPermissions(list, currentUserId, collaboratorUserIds);
+
+  if (!permissions.canView) {
+    throw new Error('List not found.');
+  }
+
+  return buildSupabaseListPayload(client, list, currentUserId, collaboratorUserIds);
+}
+
+export async function fetchSupabaseLists() {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const currentUserId = authUser.id;
+
+  const { data: collaboratorRows, error: collaboratorError } = await client
+    .from('media_list_collaborators')
+    .select('list_id')
+    .eq('user_id', currentUserId);
+
+  if (collaboratorError) {
+    throw new Error(toFriendlyError(collaboratorError, 'Unable to load your lists.'));
+  }
+
+  const collaboratorListIds = (collaboratorRows || []).map((row) => row.list_id);
+  const hasCollaboratorLists = collaboratorListIds.length > 0;
+
+  const query = client.from('media_lists').select('id,name,share_code,is_public,created_at,updated_at,user_id');
+  if (hasCollaboratorLists) {
+    query.or(`user_id.eq.${currentUserId},id.in.(${collaboratorListIds.join(',')})`);
+  } else {
+    query.eq('user_id', currentUserId);
+  }
+  query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
+
+  const { data: lists, error: listError } = await query;
+  if (listError) {
+    throw new Error(toFriendlyError(listError, 'Unable to load your lists.'));
+  }
+
+  const listRows = lists || [];
+  if (!listRows.length) {
+    return [];
+  }
+
+  const listIds = listRows.map((list) => list.id);
+  const { data: itemRows, error: itemError } = await client
+    .from('media_list_items')
+    .select('list_id')
+    .in('list_id', listIds);
+
+  if (itemError) {
+    throw new Error(toFriendlyError(itemError, 'Unable to load list counts.'));
+  }
+
+  const { data: collaboratorCountRows, error: collaboratorCountError } = await client
+    .from('media_list_collaborators')
+    .select('list_id')
+    .in('list_id', listIds);
+
+  if (collaboratorCountError) {
+    throw new Error(toFriendlyError(collaboratorCountError, 'Unable to load collaborator counts.'));
+  }
+
+  const ownerIds = [...new Set(listRows.map((list) => list.user_id))];
+  const { data: ownerProfiles, error: ownerError } = await client
+    .from('profiles')
+    .select('id,username')
+    .in('id', ownerIds);
+
+  if (ownerError) {
+    throw new Error(toFriendlyError(ownerError, 'Unable to load list owners.'));
+  }
+
+  const itemCounts = (itemRows || []).reduce((acc, row) => {
+    acc[row.list_id] = (acc[row.list_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const collaboratorCounts = (collaboratorCountRows || []).reduce((acc, row) => {
+    acc[row.list_id] = (acc[row.list_id] || 0) + 1;
+    return acc;
+  }, {});
+
+  const ownerMap = Object.fromEntries((ownerProfiles || []).map((profile) => [profile.id, profile.username]));
+
+  return listRows.map((list) => ({
+    id: list.id,
+    name: list.name,
+    share_code: list.share_code,
+    is_public: Boolean(list.is_public),
+    created_at: list.created_at,
+    updated_at: list.updated_at,
+    owner_username: ownerMap[list.user_id] || 'Unknown',
+    item_count: Number(itemCounts[list.id] || 0),
+    collaborator_count: Number(collaboratorCounts[list.id] || 0),
+    permissions: {
+      canView: true,
+      canEdit: true,
+      canManage: list.user_id === currentUserId,
+      canVote: true,
+      role: list.user_id === currentUserId ? 'owner' : 'collaborator',
+    },
+  }));
+}
+
+export async function createSupabaseList({ name, isPublic = false }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const normalizedName = String(name || '').trim().slice(0, 80);
+
+  if (!normalizedName) {
+    throw new Error('A list name is required.');
+  }
+
+  const shareCode = await generateUniqueShareCode(client, normalizedName);
+  const { data, error } = await client
+    .from('media_lists')
+    .insert([{ user_id: authUser.id, name: normalizedName, share_code: shareCode, is_public: Boolean(isPublic) }])
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(toFriendlyError(error, 'Unable to create the list.'));
+  }
+
+  return buildSupabaseListPayload(client, data, authUser.id);
+}
+
+export async function fetchSupabaseList(listId) {
+  const authUser = await getAuthenticatedUser();
+  return fetchSupabaseListById(listId, authUser.id);
+}
+
+export async function fetchSupabaseSharedList(shareCode) {
+  const client = requireSupabase();
+  const currentUserId = await getOptionalSupabaseUserId();
+  const { data: list, error } = await client
+    .from('media_lists')
+    .select('*')
+    .eq('share_code', shareCode)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load the shared list.'));
+  }
+  if (!list) {
+    throw new Error('List not found.');
+  }
+
+  const collaboratorRows = await client
+    .from('media_list_collaborators')
+    .select('user_id')
+    .eq('list_id', list.id);
+
+  if (collaboratorRows.error) {
+    throw new Error(toFriendlyError(collaboratorRows.error, 'Unable to load list collaborators.'));
+  }
+
+  const collaboratorUserIds = (collaboratorRows.data || []).map((row) => row.user_id);
+  const permissions = buildListPermissions(list, currentUserId, collaboratorUserIds);
+
+  if (!permissions.canView) {
+    throw new Error('List not found.');
+  }
+
+  return buildSupabaseListPayload(client, list, currentUserId, collaboratorUserIds);
+}
+
+export async function updateSupabaseList(listId, { name, isPublic }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { data: list, error: listError } = await client
+    .from('media_lists')
+    .select('*')
+    .eq('id', Number(listId))
+    .maybeSingle();
+
+  if (listError) {
+    throw new Error(toFriendlyError(listError, 'Unable to load the list.'));
+  }
+  if (!list) {
+    throw new Error('List not found.');
+  }
+  if (list.user_id !== authUser.id) {
+    throw new Error('You do not have permission to update this list.');
+  }
+
+  const normalizedName = String(name || '').trim().slice(0, 80);
+  if (!normalizedName) {
+    throw new Error('A list name is required.');
+  }
+
+  const { data: updatedList, error: updateError } = await client
+    .from('media_lists')
+    .update({ name: normalizedName, is_public: Boolean(isPublic) })
+    .eq('id', Number(listId))
+    .select()
+    .single();
+
+  if (updateError || !updatedList) {
+    throw new Error(toFriendlyError(updateError, 'Unable to save the list settings.'));
+  }
+
+  return buildSupabaseListPayload(client, updatedList, authUser.id);
+}
+
+export async function deleteSupabaseList(listId) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { data: list, error: listError } = await client
+    .from('media_lists')
+    .select('user_id')
+    .eq('id', Number(listId))
+    .maybeSingle();
+
+  if (listError) {
+    throw new Error(toFriendlyError(listError, 'Unable to load the list.'));
+  }
+  if (!list) {
+    throw new Error('List not found.');
+  }
+  if (list.user_id !== authUser.id) {
+    throw new Error('You do not have permission to delete this list.');
+  }
+
+  const { error: deleteError } = await client.from('media_lists').delete().eq('id', Number(listId));
+  if (deleteError) {
+    throw new Error(toFriendlyError(deleteError, 'Unable to delete the list.'));
+  }
+
+  return { success: true };
+}
+
+export async function inviteSupabaseListCollaborator(listId, username) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { data: list, error: listError } = await client
+    .from('media_lists')
+    .select('*')
+    .eq('id', Number(listId))
+    .maybeSingle();
+
+  if (listError) {
+    throw new Error(toFriendlyError(listError, 'Unable to load the list.'));
+  }
+  if (!list) {
+    throw new Error('List not found.');
+  }
+  if (list.user_id !== authUser.id) {
+    throw new Error('You do not have permission to invite collaborators.');
+  }
+
+  const normalizedUsername = String(username || '').trim();
+  if (!normalizedUsername) {
+    throw new Error('A username is required to invite a collaborator.');
+  }
+
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('id,username')
+    .ilike('username', normalizedUsername)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(toFriendlyError(profileError, 'Unable to look up that username.'));
+  }
+  if (!profile) {
+    throw new Error('No user with that username was found.');
+  }
+  if (profile.id === authUser.id) {
+    throw new Error('The owner already has access to this list.');
+  }
+
+  const { data: existing, error: existingError } = await client
+    .from('media_list_collaborators')
+    .select('id')
+    .match({ list_id: list.id, user_id: profile.id })
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(toFriendlyError(existingError, 'Unable to verify collaboration status.'));
+  }
+  if (existing) {
+    throw new Error('That user is already a collaborator.');
+  }
+
+  const { error: insertError } = await client.from('media_list_collaborators').insert([
+    { list_id: list.id, user_id: profile.id, invited_by_user_id: authUser.id },
+  ]);
+
+  if (insertError) {
+    throw new Error(toFriendlyError(insertError, 'Unable to add collaborator.'));
+  }
+
+  return fetchSupabaseList(list.id);
+}
+
+export async function removeSupabaseListCollaborator(listId, collaboratorId) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const { data: list, error: listError } = await client
+    .from('media_lists')
+    .select('*')
+    .eq('id', Number(listId))
+    .maybeSingle();
+
+  if (listError) {
+    throw new Error(toFriendlyError(listError, 'Unable to load the list.'));
+  }
+  if (!list) {
+    throw new Error('List not found.');
+  }
+  if (list.user_id !== authUser.id) {
+    throw new Error('You do not have permission to remove collaborators.');
+  }
+
+  const { error: deleteError } = await client
+    .from('media_list_collaborators')
+    .delete()
+    .match({ list_id: list.id, user_id: Number(collaboratorId) });
+
+  if (deleteError) {
+    throw new Error(toFriendlyError(deleteError, 'Unable to remove collaborator.'));
+  }
+
+  return fetchSupabaseList(list.id);
+}
+
+export async function voteSupabaseListItem(listId, itemId, value) {
+  const authUser = await getAuthenticatedUser();
+  const list = await fetchSupabaseList(listId);
+  if (!list.permissions?.canEdit) {
+    throw new Error('You do not have permission to vote in this list.');
+  }
+
+  const client = requireSupabase();
+  const normalizedValue = Number(value);
+
+  if (normalizedValue === 0) {
+    const { error } = await client
+      .from('media_list_votes')
+      .delete()
+      .match({ list_item_id: Number(itemId), user_id: authUser.id });
+    if (error) {
+      throw new Error(toFriendlyError(error, 'Unable to update your vote.'));
+    }
+  } else {
+    const { error } = await client
+      .from('media_list_votes')
+      .upsert(
+        {
+          list_item_id: Number(itemId),
+          user_id: authUser.id,
+          value: normalizedValue,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: ['list_item_id', 'user_id'] }
+      );
+
+    if (error) {
+      throw new Error(toFriendlyError(error, 'Unable to update your vote.'));
+    }
+  }
+
+  return fetchSupabaseList(listId);
+}
+
+export async function moveSupabaseListItem(listId, itemId, direction) {
+  const authUser = await getAuthenticatedUser();
+  const list = await fetchSupabaseList(listId);
+  if (!list.permissions?.canEdit) {
+    throw new Error('You do not have permission to change this list.');
+  }
+
+  const items = list.items;
+  const currentIndex = items.findIndex((item) => Number(item.id) === Number(itemId));
+  if (currentIndex === -1) {
+    throw new Error('List item not found.');
+  }
+
+  const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  if (swapIndex < 0 || swapIndex >= items.length) {
+    return list;
+  }
+
+  const itemA = items[currentIndex];
+  const itemB = items[swapIndex];
+  const client = requireSupabase();
+
+  const [updateA, updateB] = await Promise.all([
+    client
+      .from('media_list_items')
+      .update({ position: itemB.position })
+      .match({ id: itemA.id, list_id: list.id }),
+    client
+      .from('media_list_items')
+      .update({ position: itemA.position })
+      .match({ id: itemB.id, list_id: list.id }),
+  ]);
+
+  if (updateA.error || updateB.error) {
+    throw new Error(toFriendlyError(updateA.error || updateB.error, 'Unable to move list item.'));
+  }
+
+  return fetchSupabaseList(listId);
+}
+
+export async function removeSupabaseListItem(listId, itemId) {
+  const authUser = await getAuthenticatedUser();
+  const list = await fetchSupabaseList(listId);
+  if (!list.permissions?.canEdit) {
+    throw new Error('You do not have permission to remove items from this list.');
+  }
+
+  const client = requireSupabase();
+  const { error: deleteError } = await client
+    .from('media_list_items')
+    .delete()
+    .match({ id: Number(itemId), list_id: list.id });
+
+  if (deleteError) {
+    throw new Error(toFriendlyError(deleteError, 'Unable to remove the list item.'));
+  }
+
+  const { data: remainingItems, error: remainingError } = await client
+    .from('media_list_items')
+    .select('id')
+    .eq('list_id', list.id)
+    .order('position', { ascending: true })
+    .order('id', { ascending: true });
+
+  if (remainingError) {
+    throw new Error(toFriendlyError(remainingError, 'Unable to refresh list positions.'));
+  }
+
+  await Promise.all(
+    (remainingItems || []).map((item, index) =>
+      client.from('media_list_items').update({ position: index }).eq('id', item.id)
+    )
+  );
+
+  return fetchSupabaseList(listId);
+}
+
+export async function addSupabaseListItem(listId, { mediaType, mediaId }) {
+  const authUser = await getAuthenticatedUser();
+  const list = await fetchSupabaseList(listId);
+  if (!list.permissions?.canEdit) {
+    throw new Error('You do not have permission to add items to this list.');
+  }
+
+  const client = requireSupabase();
+  const existingItemQuery = await client
+    .from('media_list_items')
+    .select('id')
+    .match({ list_id: list.id, media_type: mediaType, media_id: Number(mediaId) })
+    .maybeSingle();
+
+  if (existingItemQuery.error) {
+    throw new Error(toFriendlyError(existingItemQuery.error, 'Unable to verify whether this item already exists.'));
+  }
+
+  if (existingItemQuery.data) {
+    throw new Error('This item is already in the list.');
+  }
+
+  const positionQuery = await client
+    .from('media_list_items')
+    .select('position')
+    .eq('list_id', list.id)
+    .order('position', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (positionQuery.error) {
+    throw new Error(toFriendlyError(positionQuery.error, 'Unable to determine list position.'));
+  }
+
+  const nextPosition = positionQuery.data ? Number(positionQuery.data.position || 0) + 1 : 0;
+
+  const { error } = await client.from('media_list_items').insert([
+    {
+      list_id: list.id,
+      media_type: mediaType,
+      media_id: Number(mediaId),
+      position: nextPosition,
+    },
+  ]);
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to add the item to the list.'));
+  }
+
+  return fetchSupabaseList(listId);
+}
+
+export async function submitSupabaseRequest({ title, media_type, year, reason }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const normalizedTitle = String(title || '').trim();
+  const normalizedMediaType = String(media_type || '').trim();
+
+  if (!normalizedTitle) {
+    throw new Error('Title is required.');
+  }
+  if (!['movie', 'tv_show', 'book'].includes(normalizedMediaType)) {
+    throw new Error('media_type must be movie, tv_show, or book.');
+  }
+
+  const { data: existing, error: existingError } = await client
+    .from('media_requests')
+    .select('id')
+    .eq('user_id', authUser.id)
+    .eq('media_type', normalizedMediaType)
+    .eq('status', 'pending')
+    .ilike('title', normalizedTitle);
+
+  if (existingError) {
+    throw new Error(toFriendlyError(existingError, 'Unable to verify existing requests.'));
+  }
+  if (existing?.length) {
+    throw new Error('You already have a pending request for this title.');
+  }
+
+  const { data, error } = await client
+    .from('media_requests')
+    .insert([
+      {
+        user_id: authUser.id,
+        title: normalizedTitle,
+        media_type: normalizedMediaType,
+        year: year ? Number(year) : null,
+        reason: String(reason || '').trim() || null,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(toFriendlyError(error, 'Unable to submit your request.'));
+  }
+
+  return data;
+}
+
+export async function fetchSupabaseAdminRequests(status) {
+  const client = requireSupabase();
+  const query = client.from('media_requests').select('id,user_id,title,media_type,year,reason,status,admin_note,created_at,updated_at');
+  if (status && status !== 'all') {
+    query.eq('status', status);
+  }
+  query.order('created_at', { ascending: false });
+
+  const { data: requests, error } = await query;
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load media requests.'));
+  }
+
+  const requestRows = requests || [];
+  if (!requestRows.length) {
+    return [];
+  }
+
+  const userIds = [...new Set(requestRows.map((request) => request.user_id))];
+  const { data: profiles, error: profileError } = await client.from('profiles').select('id,username').in('id', userIds);
+  if (profileError) {
+    throw new Error(toFriendlyError(profileError, 'Unable to load request authors.'));
+  }
+
+  const profileMap = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile.username]));
+
+  return requestRows.map((request) => ({
+    ...request,
+    username: profileMap[request.user_id] || 'Unknown',
+  }));
+}
+
+export async function updateSupabaseRequestStatus(id, status, adminNote) {
+  if (!['pending', 'approved', 'rejected'].includes(status)) {
+    throw new Error('Invalid status.');
+  }
+
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('media_requests')
+    .update({ status, admin_note: String(adminNote || '').trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', Number(id))
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(toFriendlyError(error, 'Unable to update the request.'));
+  }
+
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('username')
+    .eq('id', data.user_id)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(toFriendlyError(profileError, 'Unable to load request author.'));
+  }
+
+  return {
+    ...data,
+    username: profile?.username || 'Unknown',
+  };
+}

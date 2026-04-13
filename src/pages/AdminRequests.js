@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
-import { api } from '../api';
+import {
+  fetchSupabaseAdminRequests,
+  updateSupabaseRequestStatus,
+} from '../utils/supabaseData';
 
 const STATUS_COLORS = {
   pending:  { bg: 'rgba(250,204,21,0.12)',  border: 'rgba(250,204,21,0.3)',  color: '#fde68a' },
@@ -25,8 +28,7 @@ export default function AdminRequests() {
     async function fetchRequests() {
       setLoading(true);
       try {
-        const params = filter !== 'all' ? `?status=${filter}` : '';
-        const data = await api.get(`/requests/admin${params}`);
+        const data = await fetchSupabaseAdminRequests(filter);
         if (!cancelled) {
           setRequests(data);
         }
@@ -52,7 +54,8 @@ export default function AdminRequests() {
     setActionId(id);
     try {
       const note = noteFor === id ? adminNote : '';
-      await api.patch(`/requests/${id}`, { status, admin_note: note });
+      const updated = await updateSupabaseRequestStatus(id, status, note);
+      setRequests(prev => prev.map(r => r.id === id ? updated : r));
       setRequests(prev => prev.map(r => r.id === id ? { ...r, status, admin_note: note } : r));
       setNoteFor(null);
       setAdminNote('');
