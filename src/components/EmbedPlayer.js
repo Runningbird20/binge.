@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import { isLegacyBackendEnabled } from '../utils/legacyBackend';
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
@@ -118,6 +119,12 @@ function getEmbeddedId(item) {
     normalizeExternalId('imdb', item?.imdbId),
     normalizeExternalId('imdb', item?.imdb_id),
     normalizeExternalId('imdb', item?.imdb),
+    normalizeExternalId(
+      'tmdb',
+      typeof item?.source_key === 'string' && /^tmdb:(movie|tv):\d+$/i.test(item.source_key)
+        ? item.source_key.split(':')[2]
+        : null
+    ),
   ];
 
   return candidates.find(Boolean) || null;
@@ -134,6 +141,7 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
 }
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
+  const legacyBackendEnabled = isLegacyBackendEnabled();
   const [provider, setProvider] = useState(PROVIDERS[0].id);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
@@ -181,7 +189,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   }, []);
 
   useEffect(() => {
-    if (!isTV || !item?.id) return undefined;
+    if (!legacyBackendEnabled || !isTV || !item?.id) return undefined;
 
     watchSecondsRef.current = 0;
     if (watchTimerRef.current) {
@@ -219,11 +227,11 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         watchTimerRef.current = null;
       }
     };
-  }, [episode, isTV, item?.id, season, watched]);
+  }, [episode, isTV, item?.id, legacyBackendEnabled, season, watched]);
 
   // Auto-add movies to watchlist after 2 minutes of watching
   useEffect(() => {
-    if (isTV || !item?.id || autoAddedRef.current) return;
+    if (!legacyBackendEnabled || isTV || !item?.id || autoAddedRef.current) return;
     const timer = setTimeout(() => {
       if (autoAddedRef.current) return;
       autoAddedRef.current = true;
@@ -234,7 +242,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       }).catch(() => {});
     }, 2 * 60 * 1000); // 2 minutes
     return () => clearTimeout(timer);
-  }, [isTV, item?.id]);
+  }, [isTV, item?.id, legacyBackendEnabled]);
 
   useEffect(() => {
     const embeddedId = getEmbeddedId(item);
@@ -252,6 +260,14 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       setExternalId(null);
       setLookupState('loading');
       setLookupError('');
+
+      if (!legacyBackendEnabled) {
+        setLookupState('error');
+        setLookupError(
+          `This title is missing a TMDB or IMDb ID in Supabase, and the legacy lookup API is disabled. Reseed the catalog or add an ID for "${item.title}".`
+        );
+        return;
+      }
 
       try {
         const params = new URLSearchParams({
@@ -276,7 +292,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
         setLookupState('error');
         if (err.message?.includes('Unable to reach the API')) {
-          setLookupError('Unable to reach the API. Make sure the backend server is running on port 5001.');
+          setLookupError('Unable to reach the legacy API. This title needs a TMDB or IMDb ID stored in Supabase to play without the old Express backend.');
         } else {
           setLookupError(err.message || 'The stream lookup failed.');
         }
@@ -288,10 +304,17 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [item, mediaType]);
+  }, [item, legacyBackendEnabled, mediaType]);
 
   useEffect(() => {
     if (!isTV || !tmdbId) return undefined;
+
+    if (!legacyBackendEnabled) {
+      setMetadataWarning(
+        'Episode metadata is limited without the legacy backend. Use the season buttons and enter an episode number manually if needed.'
+      );
+      return undefined;
+    }
 
     let cancelled = false;
 
@@ -315,10 +338,10 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [isTV, tmdbId]);
+  }, [isTV, legacyBackendEnabled, tmdbId]);
 
   const fetchSeasonEpisodes = useCallback(async (seasonNumber) => {
-    if (!tmdbId || !isTV || seasonEpisodeCounts[seasonNumber] !== undefined) return;
+    if (!legacyBackendEnabled || !tmdbId || !isTV || seasonEpisodeCounts[seasonNumber] !== undefined) return;
 
     setLoadingEpisodes(true);
     try {
@@ -338,26 +361,26 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     } finally {
       setLoadingEpisodes(false);
     }
-  }, [tmdbId, isTV, seasonEpisodeCounts]);
+  }, [legacyBackendEnabled, tmdbId, isTV, seasonEpisodeCounts]);
 
   useEffect(() => {
-    if (tmdbId && isTV) {
+    if (legacyBackendEnabled && tmdbId && isTV) {
       fetchSeasonEpisodes(season);
     }
-  }, [fetchSeasonEpisodes, isTV, season, tmdbId]);
+  }, [fetchSeasonEpisodes, isTV, legacyBackendEnabled, season, tmdbId]);
 
   // Removed: pre-fetching all seasons at once causes rate limiting and slow loads
   // Episodes are now fetched on-demand when a season is selected
 
   useEffect(() => {
-    if (!item?.id || !isTV) return;
+    if (!legacyBackendEnabled || !item?.id || !isTV) return;
 
     api.get(`/media/episode-progress/${item.id}`)
       .then((rows) => {
         setWatched(new Set(rows.map((row) => `${row.season}:${row.episode}`)));
       })
       .catch(() => {});
-  }, [item?.id, isTV]);
+  }, [item?.id, isTV, legacyBackendEnabled]);
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -372,7 +395,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   }
 
   async function markWatched(selectedSeason, selectedEpisode) {
-    if (!item?.id) return;
+    if (!legacyBackendEnabled || !item?.id) return;
 
     const key = `${selectedSeason}:${selectedEpisode}`;
     setMarkingWatched(true);
@@ -415,6 +438,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
   // Only show episode count when we actually have data from TMDB
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
+  const usingManualEpisodeInput = isTV && !legacyBackendEnabled;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
   return (
@@ -504,7 +528,21 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
                 )}
               </label>
               <div className="player-episode-btns">
-                {episodeCount === undefined ? (
+                {usingManualEpisodeInput ? (
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={episode}
+                    onChange={(event) => {
+                      const nextEpisode = Math.max(1, Number(event.target.value) || 1);
+                      setEpisode(nextEpisode);
+                    }}
+                    className="filter-input"
+                    aria-label="Episode number"
+                    style={{ maxWidth: 140 }}
+                  />
+                ) : episodeCount === undefined ? (
                   <span className="player-ep-loading">Loading episodes...</span>
                 ) : (
                   Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => {
@@ -531,9 +569,11 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               <button
                 className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
                 onClick={() => markWatched(season, episode)}
-                disabled={!canTrackEpisodes || markingWatched}
+                disabled={!legacyBackendEnabled || !canTrackEpisodes || markingWatched}
                 title={
-                  !canTrackEpisodes
+                  !legacyBackendEnabled
+                    ? 'Watch tracking needs the legacy backend or a future Supabase progress migration.'
+                    : !canTrackEpisodes
                     ? 'Watch tracking is unavailable for this item.'
                     : watched.has(currentEpisodeKey)
                       ? 'Click to unmark as watched'
@@ -545,8 +585,9 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               </button>
               <span className="player-mark-hint">
                 S{season} E{episode}
-                {!watched.has(currentEpisodeKey) && canTrackEpisodes && ' | auto-tracks after 5 min'}
-                {!canTrackEpisodes && ' | tracking unavailable'}
+                {!legacyBackendEnabled && ' | tracking unavailable without backend'}
+                {legacyBackendEnabled && !watched.has(currentEpisodeKey) && canTrackEpisodes && ' | auto-tracks after 5 min'}
+                {legacyBackendEnabled && !canTrackEpisodes && ' | tracking unavailable'}
               </span>
             </div>
           </div>
