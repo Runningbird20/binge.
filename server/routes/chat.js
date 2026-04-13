@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { optionalAuth, requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -322,12 +322,12 @@ router.get('/status', (req, res) => {
   res.json({ ok: !!GROQ_API_KEY, models: [GROQ_MODEL] });
 });
 
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   const { message, conversationHistory = [] } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
   if (!GROQ_API_KEY)    return res.status(503).json({ error: 'GROQ_API_KEY is not configured.' });
 
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
   const startTime = Date.now();
 
   try {
@@ -392,11 +392,15 @@ ${formatUserHistory(userHistory)}
 
     const latency = Date.now() - startTime;
 
-    try {
-      db.prepare(`INSERT INTO chat_logs (user_id, query, intent, response_length, sources_count, latency_ms, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
-        .run(userId, message.slice(0, 500), intent, aiResponse.length, siteSources.length + webSources.length, latency);
-    } catch { /* non-fatal */ }
+    if (userId != null) {
+      try {
+        db.prepare(`INSERT INTO chat_logs (user_id, query, intent, response_length, sources_count, latency_ms, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`)
+          .run(userId, message.slice(0, 500), intent, aiResponse.length, siteSources.length + webSources.length, latency);
+      } catch {
+        /* non-fatal */
+      }
+    }
 
     res.json({
       response: aiResponse,
@@ -417,12 +421,20 @@ ${formatUserHistory(userHistory)}
 
 // ─── Dedicated recommendations endpoint ──────────────────────────────────────
 
-router.get('/recommendations', requireAuth, async (req, res) => {
+router.get('/recommendations', optionalAuth, async (req, res) => {
   if (!GROQ_API_KEY) return res.status(503).json({ error: 'GROQ_API_KEY not configured.' });
 
-  const userId = req.user.id;
+  const userId = req.user?.id || null;
 
   try {
+    if (!userId) {
+      return res.json({
+        recommendations: [],
+        tasteProfile: null,
+        message: 'Personalized recommendations are available when the legacy backend session is connected. The chat assistant still works for general questions.',
+      });
+    }
+
     // Get full rating history with more detail
     const movieHistory = db.prepare(`
       SELECT ROUND(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*5, 1) AS rating,

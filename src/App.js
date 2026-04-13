@@ -5,7 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import { hasLegacyBackendSession, isLegacyBackendEnabled } from './utils/legacyBackend';
+import { isLegacyBackendEnabled } from './utils/legacyBackend';
 import './App.css';
 
 const ChatBot = lazy(() => import('./components/ChatBot'));
@@ -70,7 +70,7 @@ export default function App() {
             />
             <Route path="*"          element={<Navigate to="/" replace />} />
           </Routes>
-          {hasLegacyBackendSession() && <ChatBot />}
+          <ChatBot />
         </Suspense>
       </BrowserRouter>
     </AuthProvider>
