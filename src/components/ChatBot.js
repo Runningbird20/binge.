@@ -454,6 +454,7 @@ export default function ChatBot() {
   const [loading, setLoading]           = useState(false);
   const [apiStatus, setApiStatus]       = useState(null);
   const [requestModal, setRequestModal] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -563,6 +564,14 @@ export default function ChatBot() {
 
   function clearChat() { setMessages([]); setApiStatus(null); }
 
+  function handleOpenModal(item) {
+    setSelectedItem(item);
+  }
+
+  function handleCloseModal() {
+    setSelectedItem(null);
+  }
+
   if (!user) return null;
 
   return (
@@ -615,7 +624,7 @@ export default function ChatBot() {
               )}
 
               <div className="chatbot-messages">
-                {messages.map(msg => <Message key={msg.id} msg={msg} />)}
+                {messages.map(msg => <Message key={msg.id} msg={msg} onOpenModal={handleOpenModal} />)}
                 {loading && (
                   <div className="chat-message chat-message--assistant">
                     <div className="chat-message-header"><span className="chat-avatar">🦉</span></div>
@@ -662,6 +671,16 @@ export default function ChatBot() {
 
       {requestModal && (
         <RequestModal prefill={requestModal} onClose={() => setRequestModal(null)} />
+      )}
+
+      {selectedItem && (
+        <MediaDetailsModal
+          item={selectedItem}
+          mediaType={selectedItem.mediaType}
+          onClose={handleCloseModal}
+          allowActions={false}
+          browseOnlyMessage="Chat preview mode - view only"
+        />
       )}
     </>
   );
