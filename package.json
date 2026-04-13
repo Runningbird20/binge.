@@ -55,6 +55,7 @@
     "generate:supabase:tv": "node scripts/generate-supabase-tv-seed.js",
     "generate:supabase:books": "node scripts/generate-supabase-book-seed.js",
     "generate:supabase:catalogs": "npm run generate:supabase:movies && npm run generate:supabase:tv && npm run generate:supabase:books",
+    "prepare:supabase:chunks": "node scripts/prepare-non-destructive-chunks.js",
     "supabase:sql": "node scripts/run-supabase-sql.js",
     "supabase:seed:catalogs": "node scripts/run-supabase-sql.js supabase/repeatable_schema.sql supabase/repeatable_movies_seed.sql supabase/repeatable_tv_shows_seed.sql supabase/repeatable_books_seed.sql",
     "build": "react-scripts build",

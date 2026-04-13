@@ -19,9 +19,9 @@ const path = require("path");
 const args = process.argv.slice(2);
 
 let start = 1;
-let end = 11;
-let dir = "supabase/chunks/tv";
-let base = "repeatable_tv_shows_seed_chunk_";
+let end = 40;
+let dir = "supabase/chunks/movies";
+let base = "repeatable_movies_seed_chunk_";
 let pad = 2;
 let delay = 1000;
 
