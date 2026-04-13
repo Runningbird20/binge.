@@ -26,8 +26,6 @@ export default function Navbar({ minimal = false }) {
               <NavLink to="/books" className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
               <NavLink to="/ratings" className={({ isActive }) => isActive ? 'active' : ''}>My Ratings</NavLink>
               <NavLink to="/following" className={({ isActive }) => isActive ? 'active' : ''}>Following</NavLink>
-              <NavLink to="/lists" className={({ isActive }) => isActive ? 'active' : ''}>Lists</NavLink>
-              <NavLink to="/watchlist" className={({ isActive }) => isActive ? 'active' : ''}>Watchlist</NavLink>
               <NavLink to="/forum" className={({ isActive }) => isActive ? 'active' : ''}>Forum</NavLink>
             </div>
           )}
