@@ -124,6 +124,11 @@ body {
   z-index: 100;
 }
 
+.navbar-minimal {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .navbar-logo {
   font-size: 1.2rem;
   font-weight: 800;
@@ -158,6 +163,12 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+.navbar-minimal .navbar-user {
+  margin-left: auto;
+  padding-left: 1rem;
+  border-left: 1px solid #1f1f1f;
 }
 
 .navbar-settings-link {
@@ -3698,6 +3709,284 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+/* Developer lab */
+.devlab-page {
+  padding: 2rem 1.5rem 3rem;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.devlab-hero {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+}
+
+.devlab-eyebrow {
+  margin: 0 0 0.45rem;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e8c97a;
+}
+
+.devlab-hero h1 {
+  margin: 0 0 0.65rem;
+  font-size: clamp(1.9rem, 3vw, 3rem);
+  line-height: 1.05;
+}
+
+.devlab-subtitle,
+.devlab-muted {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.devlab-subtitle {
+  margin: 0;
+  line-height: 1.65;
+  max-width: 72ch;
+}
+
+.devlab-count-grid,
+.devlab-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.devlab-count-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.devlab-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.devlab-grid--two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.devlab-count-card,
+.devlab-panel,
+.devlab-banner {
+  border: 1px solid #232323;
+  background:
+    radial-gradient(circle at top right, rgba(232, 201, 122, 0.05), transparent 42%),
+    linear-gradient(180deg, rgba(23, 23, 23, 0.98) 0%, rgba(15, 15, 15, 0.98) 100%);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
+  border-radius: 1rem;
+}
+
+.devlab-count-card {
+  padding: 0.95rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.devlab-count-card span {
+  font-size: 0.8rem;
+  color: #9a9a9a;
+}
+
+.devlab-count-card strong {
+  font-size: 1.75rem;
+  color: #fff;
+}
+
+.devlab-banner-row {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.devlab-banner {
+  padding: 0.85rem 1rem;
+}
+
+.devlab-banner--success {
+  border-color: rgba(74, 222, 128, 0.28);
+  color: #d1fae5;
+}
+
+.devlab-banner--error {
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+}
+
+.devlab-panel {
+  padding: 1.1rem;
+}
+
+.devlab-panel h2,
+.devlab-preview-block h3,
+.devlab-list-block h3 {
+  margin-top: 0;
+}
+
+.devlab-panel p,
+.devlab-list-copy p,
+.devlab-copy-stack p {
+  line-height: 1.55;
+}
+
+.devlab-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.devlab-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.devlab-form label,
+.devlab-inline-checkbox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.devlab-inline-checkbox {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 1.7rem;
+  gap: 0.55rem;
+}
+
+.devlab-form input,
+.devlab-form select,
+.devlab-form textarea {
+  width: 100%;
+  border-radius: 0.8rem;
+  border: 1px solid #2c2c2c;
+  background: #141414;
+  color: #fff;
+  font: inherit;
+  padding: 0.8rem 0.9rem;
+}
+
+.devlab-form textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.devlab-form input:focus,
+.devlab-form select:focus,
+.devlab-form textarea:focus {
+  outline: none;
+  border-color: rgba(232, 201, 122, 0.65);
+  box-shadow: 0 0 0 3px rgba(232, 201, 122, 0.15);
+}
+
+.devlab-button-row,
+.devlab-chip-row,
+.devlab-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.btn-ghost--danger {
+  border-color: rgba(248, 113, 113, 0.24);
+  color: #fca5a5;
+}
+
+.devlab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.devlab-list-item,
+.devlab-preview-block {
+  border: 1px solid #232323;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.9rem;
+}
+
+.devlab-list-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.devlab-list-copy {
+  min-width: 0;
+}
+
+.devlab-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  background: rgba(232, 201, 122, 0.08);
+  color: #f3e0ad;
+  font-size: 0.75rem;
+}
+
+.devlab-chip--success {
+  background: rgba(74, 222, 128, 0.18);
+  color: #dcfce7;
+}
+
+.devlab-chip--danger {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+}
+
+.devlab-preview {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.devlab-preview-block pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.devlab-copy-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (max-width: 1100px) {
+  .devlab-hero,
+  .devlab-grid,
+  .devlab-grid--two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .devlab-page {
+    padding: 1.25rem 1rem 2.5rem;
+  }
+
+  .devlab-count-grid,
+  .devlab-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .devlab-list-item {
+    flex-direction: column;
+  }
 }
 
 /* ══════════════════════════════════════════════

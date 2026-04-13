@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
+import { getDefaultRouteForUserType } from '../utils/userAccess';
 
 const MAX_BIO_LENGTH = 280;
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
@@ -101,7 +102,7 @@ export default function Signup() {
         setSuccess('Check your email to confirm your account, then come back here to log in.');
         return;
       }
-      navigate('/home');
+      navigate(getDefaultRouteForUserType(result.user?.userType));
     } catch (err) {
       setError(err.message);
     } finally {

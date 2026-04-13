@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getDefaultRouteForUserType } from '../utils/userAccess';
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -14,8 +15,8 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await signIn(form);
-      navigate('/home');
+      const user = await signIn(form);
+      navigate(getDefaultRouteForUserType(user?.userType));
     } catch (err) {
       setError(err.message);
     } finally {

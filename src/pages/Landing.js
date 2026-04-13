@@ -1,10 +1,11 @@
+import { Navigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { getDefaultRouteForUserType } from '../utils/userAccess';
 
 export default function Landing() {
-  const { isAuthenticated, authLoading } = useAuth();
-  if (!authLoading && isAuthenticated) return <Navigate to="/home" replace />;
+  const { isAuthenticated, authLoading, user } = useAuth();
+  if (!authLoading && isAuthenticated) return <Navigate to={getDefaultRouteForUserType(user?.userType)} replace />;
 
   return (
     <div className="App">

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../api';
+import {
+  fetchEpisodeProgress,
+  markEpisodeWatched as saveEpisodeWatched,
+  unmarkEpisodeWatched,
+  updateWatchlistProgress,
+} from '../utils/supabaseData';
 
 const AUTO_WATCH_SECONDS = 5 * 60;
+const DEFAULT_EPISODE_COUNT = 12;
+const DEFAULT_LONG_SEASON_EPISODE_COUNT = 24;
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
@@ -127,6 +134,44 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
   catch { return null; }
 }
 
+async function lookupExternalIdByTitle(item, mediaType) {
+  const title = String(item?.title || '').trim();
+  if (!title) {
+    return null;
+  }
+
+  const bucket = title[0]?.toLowerCase().replace(/[^a-z0-9]/g, '') || '_';
+  const url = `https://v2.sg.media-imdb.com/suggestion/${bucket}/${encodeURIComponent(title)}.json`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json();
+  const matches = Array.isArray(payload?.d) ? payload.d : [];
+  const match = matches.find((candidate) => {
+    const qid = String(candidate?.qid || '').toLowerCase();
+    if (mediaType === 'tv_show') {
+      return qid.includes('tv');
+    }
+    return qid === 'movie' || qid === 'feature' || !qid.includes('tv');
+  }) || matches[0];
+
+  return normalizeExternalId('imdb', match?.id);
+}
+
+function guessEpisodeCount(totalSeasons, seasonNumber) {
+  if (totalSeasons >= 8) {
+    return DEFAULT_LONG_SEASON_EPISODE_COUNT;
+  }
+
+  if (seasonNumber === 1 && totalSeasons >= 3) {
+    return DEFAULT_LONG_SEASON_EPISODE_COUNT;
+  }
+
+  return DEFAULT_EPISODE_COUNT;
+}
+
 export default function EmbedPlayer({ item, mediaType, onClose }) {
   const [provider, setProvider]   = useState(PROVIDERS[0].id);
   const [season, setSeason]       = useState(1);
@@ -140,7 +185,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const [watched, setWatched]     = useState(new Set());
   const [markingWatched, setMarkingWatched] = useState(false);
-  const [realSeasonCount, setRealSeasonCount] = useState(null);
 
   const modalRef        = useRef(null);
   const iframeRef       = useRef(null);
@@ -149,9 +193,8 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const autoAddedRef    = useRef(false);
 
   const isTV            = mediaType === 'tv_show';
-  const tmdbId          = externalId?.kind === 'tmdb' ? externalId.value : null;
   const itemSeasonCount = Number.isFinite(Number(item?.seasons)) ? Number(item.seasons) : null;
-  const totalSeasons    = Math.max(1, realSeasonCount ?? itemSeasonCount ?? 1);
+  const totalSeasons    = Math.max(1, itemSeasonCount ?? 1);
   const currentEpisodeKey = `${season}:${episode}`;
   const canTrackEpisodes  = Boolean(item?.id);
 
@@ -161,7 +204,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     setSeason(1);
     setEpisode(1);
     setSeasonEpisodeCounts({});
-    setRealSeasonCount(null);
     setWatched(new Set());
     setMetadataWarning('');
     autoAddedRef.current = false;
@@ -186,10 +228,16 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       if (watchSecondsRef.current >= AUTO_WATCH_SECONDS) {
         clearInterval(watchTimerRef.current);
         watchTimerRef.current = null;
-        api.post('/media/episode-progress', { media_id: item.id, season, episode })
+        saveEpisodeWatched({ mediaId: item.id, season, episode })
           .then(() => {
             setWatched((prev) => new Set([...prev, key]));
-            api.patch('/watchlist/progress', { media_type: 'tv_show', media_id: item.id, current_season: season, current_episode: episode, status: 'watching' }).catch(() => {});
+            updateWatchlistProgress({
+              mediaType: 'tv_show',
+              mediaId: item.id,
+              currentSeason: season,
+              currentEpisode: episode,
+              status: 'watching',
+            }).catch(() => {});
           })
           .catch(() => {});
       }
@@ -203,7 +251,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     const timer = setTimeout(() => {
       if (autoAddedRef.current) return;
       autoAddedRef.current = true;
-      api.patch('/watchlist/progress', { media_type: 'movie', media_id: item.id, status: 'watching' }).catch(() => {});
+      updateWatchlistProgress({ mediaType: 'movie', mediaId: item.id, status: 'watching' }).catch(() => {});
     }, 2 * 60 * 1000);
     return () => clearTimeout(timer);
   }, [isTV, item?.id]);
@@ -216,55 +264,41 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     async function fetchEmbedId() {
       setExternalId(null); setLookupState('loading'); setLookupError('');
       try {
-        const params = new URLSearchParams({ title: item.title, type: mediaType, ...(item.year ? { year: item.year } : {}) });
-        const data = await api.get(`/media/embed-id?${params}`);
+        const data = await lookupExternalIdByTitle(item, mediaType);
         if (cancelled) return;
         if (data?.kind && data?.value) { setExternalId({ kind: data.kind, value: String(data.value) }); setLookupState('done'); setLookupError(''); }
         else { setLookupState('error'); setLookupError(`Could not find a provider-compatible IMDb or TMDB ID for "${item.title}".`); }
       } catch (err) {
         if (cancelled) return;
         setLookupState('error');
-        setLookupError(err.message?.includes('Unable to reach the API')
-          ? 'Unable to reach the API. Make sure the backend server is running on port 5001.'
-          : err.message || 'The stream lookup failed.');
+        setLookupError(err.message || 'The stream lookup failed.');
       }
     }
     fetchEmbedId();
     return () => { cancelled = true; };
   }, [item, mediaType]);
 
-  // Fetch real season count from TMDB
-  useEffect(() => {
-    if (!isTV || !tmdbId) return undefined;
-    let cancelled = false;
-    api.get(`/media/tmdb-show?tmdbId=${tmdbId}`)
-      .then((data) => { if (!cancelled && data?.numberOfSeasons) setRealSeasonCount(data.numberOfSeasons); })
-      .catch((err) => { if (!cancelled && err.message?.includes('TMDB_API_KEY')) setMetadataWarning('Add TMDB_API_KEY to your .env for accurate episode counts.'); });
-    return () => { cancelled = true; };
-  }, [isTV, tmdbId]);
-
-  // Fetch episode count for the current season (on-demand)
+  // Populate a local episode estimate for the current season.
   const fetchSeasonEpisodes = useCallback(async (seasonNumber) => {
-    if (!tmdbId || !isTV || seasonEpisodeCounts[seasonNumber] !== undefined) return;
+    if (!isTV || seasonEpisodeCounts[seasonNumber] !== undefined) return;
     setLoadingEpisodes(true);
     try {
-      const data = await api.get(`/media/tmdb-season?tmdbId=${tmdbId}&season=${seasonNumber}`);
-      const count = Math.max(1, Number(data?.episodeCount) || 1);
+      const count = guessEpisodeCount(totalSeasons, seasonNumber);
       setSeasonEpisodeCounts((prev) => ({ ...prev, [seasonNumber]: count }));
-    } catch (err) {
-      if (err.message?.includes('TMDB_API_KEY')) setMetadataWarning('Add TMDB_API_KEY to your .env for accurate episode counts.');
-      setSeasonEpisodeCounts((prev) => ({ ...prev, [seasonNumber]: prev[seasonNumber] ?? null }));
+      setMetadataWarning('Episode counts are estimated from the Supabase catalog on this deployment.');
+    } catch {
+      setSeasonEpisodeCounts((prev) => ({ ...prev, [seasonNumber]: prev[seasonNumber] ?? DEFAULT_EPISODE_COUNT }));
     } finally { setLoadingEpisodes(false); }
-  }, [tmdbId, isTV, seasonEpisodeCounts]);
+  }, [isTV, seasonEpisodeCounts, totalSeasons]);
 
   useEffect(() => {
-    if (tmdbId && isTV) fetchSeasonEpisodes(season);
-  }, [fetchSeasonEpisodes, isTV, season, tmdbId]);
+    if (isTV) fetchSeasonEpisodes(season);
+  }, [fetchSeasonEpisodes, isTV, season]);
 
   // Load already-watched episodes
   useEffect(() => {
     if (!item?.id || !isTV) return;
-    api.get(`/media/episode-progress/${item.id}`)
+    fetchEpisodeProgress(item.id)
       .then((rows) => setWatched(new Set(rows.map((r) => `${r.season}:${r.episode}`))))
       .catch(() => {});
   }, [item?.id, isTV]);
@@ -280,12 +314,18 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     setMarkingWatched(true);
     try {
       if (watched.has(key)) {
-        await api.delete('/media/episode-progress', { media_id: item.id, season: selectedSeason, episode: selectedEpisode });
+        await unmarkEpisodeWatched({ mediaId: item.id, season: selectedSeason, episode: selectedEpisode });
         setWatched((prev) => { const next = new Set(prev); next.delete(key); return next; });
       } else {
-        await api.post('/media/episode-progress', { media_id: item.id, season: selectedSeason, episode: selectedEpisode });
+        await saveEpisodeWatched({ mediaId: item.id, season: selectedSeason, episode: selectedEpisode });
         setWatched((prev) => new Set([...prev, key]));
-        api.patch('/watchlist/progress', { media_type: 'tv_show', media_id: item.id, current_season: selectedSeason, current_episode: selectedEpisode, status: 'watching' }).catch(() => {});
+        updateWatchlistProgress({
+          mediaType: 'tv_show',
+          mediaId: item.id,
+          currentSeason: selectedSeason,
+          currentEpisode: selectedEpisode,
+          status: 'watching',
+        }).catch(() => {});
       }
     } catch { /* keep playback usable */ }
     finally { setMarkingWatched(false); }
@@ -346,7 +386,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
                 Episode
                 {episodeCount !== undefined && (
                   <span className="player-ep-meta">
-                    {loadingEpisodes && tmdbId ? ' ...' : ` (${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''})`}
+                    {loadingEpisodes ? ' ...' : ` (${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''})`}
                   </span>
                 )}
               </label>

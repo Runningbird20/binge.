@@ -6,7 +6,6 @@ import ForYou from '../components/ForYou';
 import { useAuth } from '../contexts/AuthContext';
 import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
-import { hasLegacyBackendSession } from '../utils/legacyBackend';
 
 const MEDIA_ICONS = {
   movie: '\ud83c\udfac',
@@ -211,7 +210,6 @@ function WatchlistGallery({ items, loading }) {
 
 export default function Home() {
   const { user } = useAuth();
-  const canUseLegacyBackend = hasLegacyBackendSession();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [ratings, setRatings] = useState([]);
   const [watchlistItems, setWatchlistItems] = useState([]);
@@ -430,17 +428,15 @@ export default function Home() {
                 <h3>Books</h3>
                 <p>Search the shelf, open book details, and save future reads.</p>
               </Link>
-              {canUseLegacyBackend && (
-                <Link to="/lists" className="browse-card browse-lists">
-                  <div className="browse-card-badge">LIST</div>
-                  <h3>Shared Lists</h3>
-                  <p>Build collaborative watchlists and book-club queues with vibe voting.</p>
-                </Link>
-              )}
+              <Link to="/lists" className="browse-card browse-lists">
+                <div className="browse-card-badge">LIST</div>
+                <h3>Shared Lists</h3>
+                <p>Build collaborative watchlists and book-club queues with vibe voting.</p>
+              </Link>
             </div>
           </section>
 
-          {canUseLegacyBackend && <ForYou />}
+          <ForYou />
 
           <section className="home-section">
             <div className="section-header">

@@ -8,6 +8,16 @@ function resolveBaseUrl() {
     return '/api';
   }
 
+  if (typeof window !== 'undefined') {
+    const currentHost = window.location.hostname;
+    const isConfiguredLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredApiUrl);
+    const isRunningLocally = ['localhost', '127.0.0.1'].includes(currentHost);
+
+    if (isConfiguredLocalhost && !isRunningLocally) {
+      return '/api';
+    }
+  }
+
   const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
   if (normalizedApiUrl.endsWith('/api')) {
     return normalizedApiUrl;
@@ -75,7 +85,7 @@ async function request(method, path, body) {
     });
   } catch {
     throw new Error(
-      'Unable to reach the legacy API. Make sure the Express backend is running for any non-Supabase features.'
+      'Unable to reach the app service for this feature.'
     );
   }
 
@@ -89,6 +99,7 @@ async function request(method, path, body) {
 export const api = {
   get:    (path)        => request('GET',    path),
   post:   (path, body)  => request('POST',   path, body),
+  put:    (path, body)  => request('PUT',    path, body),
   patch:  (path, body)  => request('PATCH',  path, body),
   delete: (path, body)  => request('DELETE', path, body),
 };

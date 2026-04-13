@@ -3,6 +3,7 @@ import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
 } from './mediaMetadataCache';
+import { normalizeUserType } from './userAccess';
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
@@ -81,6 +82,7 @@ function buildUserProfile(authUser, profileRow) {
     id: authUser?.id || profileRow?.id,
     username: fallbackUsername,
     email,
+    userType: normalizeUserType(profileRow?.user_type || authUser?.user_metadata?.user_type),
     bio: profileRow?.bio || authUser?.user_metadata?.bio || '',
     avatarUrl: profileRow?.avatar_url || authUser?.user_metadata?.avatar_url || null,
     createdAt: profileRow?.created_at || authUser?.created_at || null,
@@ -105,6 +107,7 @@ function buildFallbackProfileRow(authUser, overrides = {}) {
   return {
     id: authUser?.id || null,
     email: overrides.email ?? authUser?.email ?? '',
+    user_type: normalizeUserType(overrides.userType ?? authUser?.user_metadata?.user_type),
     username:
       overrides.username ??
       authUser?.user_metadata?.username ??
@@ -173,6 +176,11 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
 
   const nextProfile = {
     email: overrides.email ?? profileRow?.email ?? authUser.email ?? '',
+    user_type: normalizeUserType(
+      overrides.userType ??
+      profileRow?.user_type ??
+      authUser.user_metadata?.user_type
+    ),
     username:
       overrides.username ??
       profileRow?.username ??
@@ -190,6 +198,7 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
   const profileNeedsWrite =
     !profileRow ||
     profileRow.email !== nextProfile.email ||
+    normalizeUserType(profileRow?.user_type) !== nextProfile.user_type ||
     profileRow.username !== nextProfile.username ||
     profileRow.bio !== nextProfile.bio ||
     (profileRow.avatar_url || null) !== (nextProfile.avatar_url || null);

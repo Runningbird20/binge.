@@ -4,7 +4,6 @@ import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
-import { api } from '../api';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -110,30 +109,6 @@ function BrowseView({
     };
   }, [search]);
 
-  const fetchMoviesPageFromApi = useCallback(async (pageNum) => {
-    const params = new URLSearchParams({
-      page: String(pageNum),
-      page_size: String(PAGE_SIZE),
-      sort: sortOrder,
-    });
-
-    if (debouncedSearch) params.set('search', debouncedSearch);
-    if (genre) params.set('genre', genre);
-
-    const data = await api.get(`/media/movies?${params.toString()}`);
-    const nextItems = normalizeMediaItems(data);
-
-    return {
-      items: nextItems,
-      total: Number(data?.total) || nextItems.length,
-      totalPages: Number(data?.totalPages) || 1,
-      facets: {
-        genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
-      },
-      usingFallbackCatalog: false,
-    };
-  }, [debouncedSearch, genre, sortOrder]);
-
   const fetchMoviesPageFromFallback = useCallback(async (pageNum) => {
     const fallbackItems = fallbackItemsRef.current || await loadFallbackMovies();
     fallbackItemsRef.current = fallbackItems;
@@ -182,19 +157,10 @@ function BrowseView({
         usingFallbackCatalog: false,
       };
     } catch {
-      try {
-        const data = await fetchMoviesPageFromApi(1);
-        if (data.items.length === 0 && !debouncedSearch && !genre) {
-          throw new Error('Movie catalog is empty');
-        }
-
-        return { source: 'api', ...data };
-      } catch {
-        const data = await fetchMoviesPageFromFallback(1);
-        return { source: 'fallback', ...data };
-      }
+      const data = await fetchMoviesPageFromFallback(1);
+      return { source: 'fallback', ...data };
     }
-  }, [debouncedSearch, genre, sortOrder, fetchMoviesPageFromApi, fetchMoviesPageFromFallback]);
+  }, [debouncedSearch, genre, sortOrder, fetchMoviesPageFromFallback]);
 
   const loadRemainingMovies = useCallback(async ({ source, totalCount, requestToken }) => {
     if (totalCount <= PAGE_SIZE) {
@@ -249,9 +215,7 @@ function BrowseView({
         );
 
         const batchResults = await Promise.all(pageNumbers.map((nextPageNum) => (
-          source === 'api'
-            ? fetchMoviesPageFromApi(nextPageNum)
-            : fetchMoviesPageFromFallback(nextPageNum)
+          fetchMoviesPageFromFallback(nextPageNum)
         )));
 
         if (requestTokenRef.current !== requestToken) {
@@ -268,7 +232,7 @@ function BrowseView({
         setLoadingMore(false);
       }
     }
-  }, [debouncedSearch, genre, sortOrder, fetchMoviesPageFromApi, fetchMoviesPageFromFallback]);
+  }, [debouncedSearch, genre, sortOrder, fetchMoviesPageFromFallback]);
 
   useEffect(() => {
     let cancelled = false;
@@ -477,28 +441,15 @@ function CuratedView({ onItemClick, onSeeAll }) {
         }
       } catch {
         try {
-          const data = await api.get('/media/movies/curated');
-          const nextRows = Array.isArray(data?.rows) ? data.rows : [];
-          if (nextRows.length === 0) {
-            throw new Error('No curated rows available');
-          }
-
+          const fallbackItems = await loadFallbackMovies();
           if (!cancelled) {
-            setRows(nextRows);
-            setUsingFallbackRows(false);
+            setRows(buildFallbackCuratedRows(fallbackItems));
+            setUsingFallbackRows(true);
           }
         } catch {
-          try {
-            const fallbackItems = await loadFallbackMovies();
-            if (!cancelled) {
-              setRows(buildFallbackCuratedRows(fallbackItems));
-              setUsingFallbackRows(true);
-            }
-          } catch {
-            if (!cancelled) {
-              setRows([]);
-              setUsingFallbackRows(false);
-            }
+          if (!cancelled) {
+            setRows([]);
+            setUsingFallbackRows(false);
           }
         }
       } finally {
@@ -598,18 +549,6 @@ export default function Movies() {
           return;
         }
       } catch {
-        // Fall through to the legacy API and bundled catalog below.
-      }
-
-      try {
-        const item = await api.get(`/media/movies/${openId}`);
-        if (!cancelled && item?.id) {
-          setSelectedItem(item);
-          setSelectedItemBrowseOnly(false);
-          setDetailMessage('');
-          return;
-        }
-      } catch {
         // Fall back to the bundled catalog below.
       }
 
@@ -647,15 +586,6 @@ export default function Movies() {
       if (detailedItem?.id) {
         setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
         return;
-      }
-    } catch {
-      // Fall through to the legacy API below.
-    }
-
-    try {
-      const detailedItem = await api.get(`/media/movies/${item.id}`);
-      if (detailedItem?.id) {
-        setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
       }
     } catch {
       // Keep the summary item if full details are unavailable.
