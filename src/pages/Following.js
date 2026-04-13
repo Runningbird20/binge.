@@ -64,7 +64,7 @@ function FeedItem({ item }) {
 
 export default function Following() {
   const { user } = useAuth();
-  const [followedIds, setFollowedIds] = useState([]);
+  const [, setFollowedIds] = useState([]);
   const [followingProfiles, setFollowingProfiles] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
   const [suggestedProfiles, setSuggestedProfiles] = useState([]);
@@ -328,7 +328,7 @@ export default function Following() {
             </div>
           )}
         </section>
-        
+
       </main>
     </div>
   );

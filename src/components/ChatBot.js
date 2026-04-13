@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api';
+import { invokeSupabaseFunction } from '../utils/supabase';
 import { submitSupabaseRequest } from '../utils/supabaseData';
 
 const INTENT_LABELS = {
@@ -207,13 +207,15 @@ export default function ChatBot() {
 
   const runStatusCheck = useCallback(async () => {
     try {
-      const data = await api.get('/chat/status');
-      setApiStatus(data.ok);
-      if (data.ok && messages.length === 0) {
+      await invokeSupabaseFunction('ai-chat', {
+        messages: [{ role: 'system', content: 'Ping' }],
+      });
+      setApiStatus(true);
+      if (messages.length === 0) {
         setMessages([{
           id: 'welcome',
           role: 'assistant',
-          content: `Hey ${user?.username || 'there'}! ðŸ¦‰ Ask me anything about movies, TV shows, or books â€” reviews, themes, cast, recommendations, you name it. I'll search the web and show you what's available on binge.!`,
+          content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it.`,
         }]);
       }
     } catch {
@@ -228,13 +230,15 @@ export default function ChatBot() {
 
   async function checkStatus() {
     try {
-      const data = await api.get('/chat/status');
-      setApiStatus(data.ok);
-      if (data.ok && messages.length === 0) {
+      await invokeSupabaseFunction('ai-chat', {
+        messages: [{ role: 'system', content: 'Ping' }],
+      });
+      setApiStatus(true);
+      if (messages.length === 0) {
         setMessages([{
           id: 'welcome',
           role: 'assistant',
-          content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it. I'll search the web and show you what's available on binge.!`,
+          content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it.`,
         }]);
       }
     } catch {
@@ -264,15 +268,23 @@ export default function ChatBot() {
       .map(m => ({ role: m.role, content: m.content }));
 
     try {
-      const data = await api.post('/chat', { message: trimmed, conversationHistory });
+      const data = await invokeSupabaseFunction('ai-chat', {
+        messages: [
+          ...conversationHistory,
+          { role: 'user', content: trimmed },
+        ],
+      });
+
+      const assistantContent = data?.choices?.[0]?.message?.content || data?.response || 'No response.';
+
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
-        content: data.response,
-        intent: data.intent,
-        siteSources: data.siteSources || data.sources || [],
-        webSources: data.webSources || [],
-        latency: data.latency,
+        content: assistantContent,
+        intent: null,
+        siteSources: [],
+        webSources: [],
+        latency: data?.usage ? null : null,
       }]);
     } catch (err) {
       setMessages(prev => [...prev, {
@@ -337,7 +349,7 @@ export default function ChatBot() {
               {apiStatus === false && (
                 <div className="chatbot-offline-banner">
                   <strong>⚠️ AI not available.</strong>
-                  <p>Make sure <code>GROQ_API_KEY</code> is set in your <code>.env.local</code> file locally, or as an environment variable in Vercel.</p>
+                  <p>Make sure your Supabase function and GROQ API key are configured. You need <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_PUBLISHABLE_KEY</code> (or <code>SUPABASE_URL</code>/<code>SUPABASE_ANON_KEY</code>) as well as <code>GROQ_API_KEY</code>.</p>
                   <button className="chatbot-retry-btn" onClick={() => { setApiStatus(null); checkStatus(); }}>Retry</button>
                 </div>
               )}
