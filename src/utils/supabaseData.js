@@ -1769,3 +1769,82 @@ export async function updateSupabaseRequestStatus(id, status, adminNote) {
     username: profile?.username || 'Unknown',
   };
 }
+
+// ─── Episode Progress (watched tracking) ──────────────────────────────────────
+
+export async function fetchEpisodeProgress(mediaId) {
+  const supabase = requireSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('episode_progress')
+    .select('season, episode, watched_at')
+    .eq('user_id', user.id)
+    .eq('media_id', mediaId);
+  if (error) throw toFriendlyError(error, 'Failed to fetch episode progress');
+  return data || [];
+}
+
+export async function markEpisodeWatched({ mediaId, season, episode }) {
+  const supabase = requireSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+  const { error } = await supabase
+    .from('episode_progress')
+    .upsert({ user_id: user.id, media_id: mediaId, season, episode, watched_at: new Date().toISOString() },
+             { onConflict: 'user_id,media_id,season,episode' });
+  if (error) throw toFriendlyError(error, 'Failed to mark episode watched');
+}
+
+export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
+  const supabase = requireSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+  const { error } = await supabase
+    .from('episode_progress')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('media_id', mediaId)
+    .eq('season', season)
+    .eq('episode', episode);
+  if (error) throw toFriendlyError(error, 'Failed to unmark episode');
+}
+
+// ─── Watchlist Progress Update ─────────────────────────────────────────────────
+
+export async function updateWatchlistProgress({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, status, notes }) {
+  const supabase = requireSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+
+  // Auto-add to watchlist if not present
+  const { data: existing } = await supabase
+    .from('watchlist')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('media_type', mediaType)
+    .eq('media_id', mediaId)
+    .maybeSingle();
+
+  const update = { updated_at: new Date().toISOString() };
+  if (status !== undefined)         update.status = status;
+  if (currentSeason !== undefined)  update.current_season = currentSeason;
+  if (currentEpisode !== undefined) update.current_episode = currentEpisode;
+  if (currentPage !== undefined)    update.current_page = currentPage;
+  if (currentChapter !== undefined) update.current_chapter = currentChapter;
+  if (notes !== undefined)          update.notes = notes;
+  if (status === 'completed' || status === 'watched' || status === 'read') update.completed_at = new Date().toISOString();
+
+  if (existing) {
+    const { error } = await supabase.from('watchlist').update(update).eq('id', existing.id);
+    if (error) throw toFriendlyError(error, 'Failed to update watchlist progress');
+  } else {
+    const { error } = await supabase.from('watchlist').insert({
+      user_id: user.id, media_type: mediaType, media_id: mediaId,
+      status: status || (mediaType === 'book' ? 'reading' : 'watching'),
+      ...update,
+    });
+    if (error) throw toFriendlyError(error, 'Failed to add to watchlist');
+  }
+}
+
