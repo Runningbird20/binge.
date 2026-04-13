@@ -17,6 +17,7 @@
 begin;
 
 create extension if not exists pgcrypto;
+create extension if not exists pg_trgm;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -211,6 +212,7 @@ create table if not exists public.books (
   genre text,
   synopsis text,
   cover_url text,
+  item_url text,
   source_key text,
   created_at timestamptz not null default now()
 );
@@ -222,6 +224,7 @@ alter table public.books
   add column if not exists genre text,
   add column if not exists synopsis text,
   add column if not exists cover_url text,
+  add column if not exists item_url text,
   add column if not exists source_key text,
   add column if not exists created_at timestamptz not null default now();
 
@@ -403,14 +406,91 @@ alter table public.todos
   add column if not exists name text,
   add column if not exists created_at timestamptz not null default now();
 
+with ranked as (
+  select ctid, row_number() over (partition by source_key order by id) as duplicate_rank
+  from public.movies
+  where source_key is not null
+)
+delete from public.movies as movies
+using ranked
+where movies.ctid = ranked.ctid
+  and ranked.duplicate_rank > 1;
+
+with ranked as (
+  select ctid, row_number() over (partition by source_key order by id) as duplicate_rank
+  from public.tv_shows
+  where source_key is not null
+)
+delete from public.tv_shows as tv_shows
+using ranked
+where tv_shows.ctid = ranked.ctid
+  and ranked.duplicate_rank > 1;
+
+with ranked as (
+  select ctid, row_number() over (partition by source_key order by id) as duplicate_rank
+  from public.books
+  where source_key is not null
+)
+delete from public.books as books
+using ranked
+where books.ctid = ranked.ctid
+  and ranked.duplicate_rank > 1;
+
+create unique index if not exists idx_movies_source_key_unique
+  on public.movies(source_key)
+  where source_key is not null;
+
+create unique index if not exists idx_tv_shows_source_key_unique
+  on public.tv_shows(source_key)
+  where source_key is not null;
+
+create unique index if not exists idx_books_source_key_unique
+  on public.books(source_key)
+  where source_key is not null;
+
 create index if not exists idx_movies_source_key on public.movies(source_key);
+create index if not exists idx_movies_title_lower on public.movies(lower(title));
+create index if not exists idx_movies_year on public.movies(year);
+create index if not exists idx_movies_genre on public.movies(genre);
+create index if not exists idx_movies_title_trgm on public.movies using gin (title gin_trgm_ops);
+create index if not exists idx_movies_genre_trgm on public.movies using gin (genre gin_trgm_ops);
 create index if not exists idx_tv_shows_source_key on public.tv_shows(source_key);
+create index if not exists idx_tv_shows_title_lower on public.tv_shows(lower(title));
+create index if not exists idx_tv_shows_year on public.tv_shows(year);
+create index if not exists idx_tv_shows_genre on public.tv_shows(genre);
+create index if not exists idx_tv_shows_title_trgm on public.tv_shows using gin (title gin_trgm_ops);
+create index if not exists idx_tv_shows_genre_trgm on public.tv_shows using gin (genre gin_trgm_ops);
 create index if not exists idx_books_source_key on public.books(source_key);
+create index if not exists idx_books_title_lower on public.books(lower(title));
+create index if not exists idx_books_author_lower on public.books(lower(author));
+create index if not exists idx_books_year on public.books(year);
+create index if not exists idx_books_genre on public.books(genre);
+create index if not exists idx_books_title_trgm on public.books using gin (title gin_trgm_ops);
+create index if not exists idx_books_author_trgm on public.books using gin (author gin_trgm_ops);
+create index if not exists idx_books_genre_trgm on public.books using gin (genre gin_trgm_ops);
 create index if not exists idx_movie_ratings_user_id on public.movie_ratings(user_id);
 create index if not exists idx_tv_show_ratings_user_id on public.tv_show_ratings(user_id);
 create index if not exists idx_book_ratings_user_id on public.book_ratings(user_id);
 create index if not exists idx_watchlist_user_id on public.watchlist(user_id);
 create index if not exists idx_watchlist_user_media on public.watchlist(user_id, media_type, status);
+
+create or replace view public.movie_genres as
+select distinct trim(split_genre.genre_value) as genre
+from public.movies
+cross join lateral regexp_split_to_table(coalesce(public.movies.genre, ''), ',') as split_genre(genre_value)
+where trim(split_genre.genre_value) <> '';
+
+create or replace view public.tv_show_genres as
+select distinct trim(split_genre.genre_value) as genre
+from public.tv_shows
+cross join lateral regexp_split_to_table(coalesce(public.tv_shows.genre, ''), ',') as split_genre(genre_value)
+where trim(split_genre.genre_value) <> '';
+
+create or replace view public.book_genres as
+select distinct trim(split_genre.genre_value) as genre
+from public.books
+cross join lateral regexp_split_to_table(coalesce(public.books.genre, ''), ',') as split_genre(genre_value)
+where trim(split_genre.genre_value) <> '';
 
 drop trigger if exists trg_profiles_set_updated_at on public.profiles;
 create trigger trg_profiles_set_updated_at
@@ -455,6 +535,10 @@ create policy "movies_public_read"
 on public.movies
 for select
 using (true);
+
+grant select on public.movie_genres to anon, authenticated;
+grant select on public.tv_show_genres to anon, authenticated;
+grant select on public.book_genres to anon, authenticated;
 
 drop policy if exists "tv_public_read" on public.tv_shows;
 create policy "tv_public_read"

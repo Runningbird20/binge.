@@ -11,6 +11,10 @@ import {
   fetchSupabaseWatchlist,
   saveSupabaseRating,
 } from '../utils/supabaseData';
+import {
+  fetchSupabaseBookById,
+  fetchSupabaseBooksPage,
+} from '../utils/supabaseMovieCatalog';
 import { hasLegacyBackendSession } from '../utils/legacyBackend';
 import {
   buildMediaGenreFacets,
@@ -398,6 +402,7 @@ export default function Books() {
   const [libraryIds, setLibraryIds] = useState({});
   const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
+  const [selectedBookBrowseOnly, setSelectedBookBrowseOnly] = useState(false);
   const [addingBookId, setAddingBookId] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -434,19 +439,17 @@ export default function Books() {
       setLoading(true);
 
       try {
-        const params = new URLSearchParams({
-          page: String(page),
-          page_size: String(BOOKS_PAGE_SIZE),
-          sort: sortOrder,
+        const data = await fetchSupabaseBooksPage({
+          page,
+          pageSize: BOOKS_PAGE_SIZE,
+          search: debouncedSearch,
+          genre,
+          sortOrder,
         });
 
-        if (debouncedSearch) params.set('search', debouncedSearch);
-        if (genre) params.set('genre', genre);
-
-        const data = await api.get(`/media/books?${params.toString()}`);
         if (!cancelled) {
           const nextItems = Array.isArray(data?.items) ? data.items : [];
-          if (nextItems.length === 0 && page === 1) {
+          if (nextItems.length === 0 && page === 1 && !debouncedSearch && !genre) {
             throw new Error('Book catalog is empty');
           }
 
@@ -465,57 +468,75 @@ export default function Books() {
             genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
           });
           setUsingFallbackCatalog(false);
-
-          if (openId && page === 1) {
-            const match = nextItems.find((book) => book.id === openId);
-            if (match) {
-              setSelectedBook(match);
-              setDetailMessage('');
-            }
-          }
         }
       } catch {
         if (!cancelled) {
           try {
-            const fallbackItems = await loadFallbackBooks();
-            const result = filterBooksCatalog(fallbackItems, {
-              search: debouncedSearch,
-              genre,
-              sortOrder,
-              page,
-              pageSize: BOOKS_PAGE_SIZE,
+            const params = new URLSearchParams({
+              page: String(page),
+              page_size: String(BOOKS_PAGE_SIZE),
+              sort: sortOrder,
             });
+
+            if (debouncedSearch) params.set('search', debouncedSearch);
+            if (genre) params.set('genre', genre);
+
+            const data = await api.get(`/media/books?${params.toString()}`);
+            const nextItems = Array.isArray(data?.items) ? data.items : [];
+            if (nextItems.length === 0 && page === 1 && !debouncedSearch && !genre) {
+              throw new Error('Book catalog is empty');
+            }
 
             setBooks((current) => {
               if (page === 1) {
-                return result.items;
+                return nextItems;
               }
 
               const seenIds = new Set(current.map((book) => book.id));
-              const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
+              const appendedItems = nextItems.filter((book) => !seenIds.has(book.id));
               return [...current, ...appendedItems];
             });
-            setTotalBooks(result.total);
-            setTotalPages(result.totalPages);
+            setTotalBooks(Number(data?.total) || nextItems.length);
+            setTotalPages(Number(data?.totalPages) || 1);
             setFacets({
-              genres: buildMediaGenreFacets(fallbackItems),
+              genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
             });
-            setUsingFallbackCatalog(true);
-
-            if (openId && page === 1) {
-              const match = fallbackItems.find((book) => book.id === openId);
-              if (match) {
-                setSelectedBook(match);
-                setDetailMessage('');
-              }
-            }
-          } catch {
-            if (page === 1) {
-              setBooks([]);
-            }
-            setTotalBooks(0);
-            setTotalPages(1);
             setUsingFallbackCatalog(false);
+          } catch {
+            try {
+              const fallbackItems = await loadFallbackBooks();
+              const result = filterBooksCatalog(fallbackItems, {
+                search: debouncedSearch,
+                genre,
+                sortOrder,
+                page,
+                pageSize: BOOKS_PAGE_SIZE,
+              });
+
+              setBooks((current) => {
+                if (page === 1) {
+                  return result.items;
+                }
+
+                const seenIds = new Set(current.map((book) => book.id));
+                const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
+                return [...current, ...appendedItems];
+              });
+              setTotalBooks(result.total);
+              setTotalPages(result.totalPages);
+              setFacets({
+                genres: buildMediaGenreFacets(fallbackItems),
+              });
+              setUsingFallbackCatalog(true);
+            } catch {
+              if (page === 1) {
+                setBooks([]);
+                setFacets({ genres: [] });
+              }
+              setTotalBooks(0);
+              setTotalPages(1);
+              setUsingFallbackCatalog(false);
+            }
           }
         }
       } finally {
@@ -530,7 +551,57 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, sortOrder, page, openId]);
+  }, [debouncedSearch, genre, sortOrder, page]);
+
+  useEffect(() => {
+    if (!openId) return undefined;
+
+    let cancelled = false;
+
+    async function loadOpenBook() {
+      try {
+        const book = await fetchSupabaseBookById(openId);
+        if (!cancelled && book?.id) {
+          setSelectedBook(book);
+          setSelectedBookBrowseOnly(false);
+          setDetailMessage('');
+          return;
+        }
+      } catch {
+        // Fall through to the legacy API and bundled catalog below.
+      }
+
+      try {
+        const book = await api.get(`/media/books/${openId}`);
+        if (!cancelled && book?.id) {
+          setSelectedBook(book);
+          setSelectedBookBrowseOnly(false);
+          setDetailMessage('');
+          return;
+        }
+      } catch {
+        // Fall back to the bundled catalog below.
+      }
+
+      try {
+        const fallbackItems = await loadFallbackBooks();
+        const match = fallbackItems.find((book) => book.id === openId);
+        if (!cancelled && match) {
+          setSelectedBook(match);
+          setSelectedBookBrowseOnly(true);
+          setDetailMessage('');
+        }
+      } catch {
+        // Ignore missing fallback data.
+      }
+    }
+
+    loadOpenBook();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -594,13 +665,15 @@ export default function Books() {
     };
   }, [loading, page, totalPages]);
 
-  function openBookDetails(book) {
+  function openBookDetails(book, { browseOnly = false } = {}) {
     setSelectedBook(book);
+    setSelectedBookBrowseOnly(browseOnly);
     setDetailMessage('');
   }
 
   function closeBookDetails() {
     setSelectedBook(null);
+    setSelectedBookBrowseOnly(false);
     setDetailMessage('');
     setAddingBookId(null);
   }
@@ -756,7 +829,7 @@ export default function Books() {
                     key={book.id}
                     type="button"
                     className="book-shelf-card"
-                    onClick={() => openBookDetails(book)}
+                    onClick={() => openBookDetails(book, { browseOnly: usingFallbackCatalog })}
                     aria-label={`Open details for ${book.title}`}
                   >
                     <div className="book-shelf-cover-frame">
@@ -798,7 +871,7 @@ export default function Books() {
           onRate={handleRate}
           userRating={userRatings[selectedBook?.id]}
           detailMessage={detailMessage}
-          allowActions={!usingFallbackCatalog}
+          allowActions={!selectedBookBrowseOnly}
           browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}

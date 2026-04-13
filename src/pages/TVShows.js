@@ -11,6 +11,11 @@ import {
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
+  fetchSupabaseTvShowById,
+  fetchSupabaseTvShowCuratedRows,
+  fetchSupabaseTvShowsPage,
+} from '../utils/supabaseMovieCatalog';
+import {
   buildMediaGenreFacets,
   filterMediaItems,
   loadFallbackTvShows,
@@ -107,18 +112,15 @@ function BrowseView({
     }
 
     try {
-      const params = new URLSearchParams({
-        page: String(pageNum),
-        page_size: String(PAGE_SIZE),
-        sort: sortOrder,
+      const data = await fetchSupabaseTvShowsPage({
+        page: pageNum,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch,
+        genre,
+        sortOrder,
       });
-
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (genre) params.set('genre', genre);
-
-      const data = await api.get(`/media/tv-shows?${params.toString()}`);
       const nextItems = normalizeMediaItems(data);
-      if (pageNum === 1 && nextItems.length === 0) {
+      if (pageNum === 1 && nextItems.length === 0 && !debouncedSearch && !genre) {
         throw new Error('TV catalog is empty');
       }
 
@@ -131,26 +133,51 @@ function BrowseView({
       setUsingFallbackCatalog(false);
     } catch {
       try {
-        const fallbackItems = await loadFallbackTvShows();
-        const result = buildFallbackBrowseResult(fallbackItems, {
-          page: pageNum,
-          search: debouncedSearch,
-          genre,
-          sortOrder,
+        const params = new URLSearchParams({
+          page: String(pageNum),
+          page_size: String(PAGE_SIZE),
+          sort: sortOrder,
         });
 
-        setShows((current) => (pageNum === 1 ? result.items : appendUniqueItems(current, result.items)));
-        setTotal(result.total);
-        setTotalPages(result.totalPages);
-        setFacets({ genres: buildMediaGenreFacets(fallbackItems) });
-        setUsingFallbackCatalog(true);
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (genre) params.set('genre', genre);
+
+        const data = await api.get(`/media/tv-shows?${params.toString()}`);
+        const nextItems = normalizeMediaItems(data);
+        if (pageNum === 1 && nextItems.length === 0 && !debouncedSearch && !genre) {
+          throw new Error('TV catalog is empty');
+        }
+
+        setShows((current) => (pageNum === 1 ? nextItems : appendUniqueItems(current, nextItems)));
+        setTotal(Number(data?.total) || nextItems.length);
+        setTotalPages(Number(data?.totalPages) || 1);
+        setFacets({
+          genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
+        });
+        setUsingFallbackCatalog(false);
       } catch {
-        if (pageNum === 1) {
-          setShows([]);
-          setTotal(0);
-          setTotalPages(1);
-          setFacets({ genres: [] });
-          setUsingFallbackCatalog(false);
+        try {
+          const fallbackItems = await loadFallbackTvShows();
+          const result = buildFallbackBrowseResult(fallbackItems, {
+            page: pageNum,
+            search: debouncedSearch,
+            genre,
+            sortOrder,
+          });
+
+          setShows((current) => (pageNum === 1 ? result.items : appendUniqueItems(current, result.items)));
+          setTotal(result.total);
+          setTotalPages(result.totalPages);
+          setFacets({ genres: buildMediaGenreFacets(fallbackItems) });
+          setUsingFallbackCatalog(true);
+        } catch {
+          if (pageNum === 1) {
+            setShows([]);
+            setTotal(0);
+            setTotalPages(1);
+            setFacets({ genres: [] });
+            setUsingFallbackCatalog(false);
+          }
         }
       }
     } finally {
@@ -273,8 +300,7 @@ function CuratedView({ onItemClick, onSeeAll }) {
       setLoading(true);
 
       try {
-        const data = await api.get('/media/tv-shows/curated');
-        const nextRows = Array.isArray(data?.rows) ? data.rows : [];
+        const nextRows = await fetchSupabaseTvShowCuratedRows();
         if (nextRows.length === 0) {
           throw new Error('No curated rows available');
         }
@@ -285,15 +311,28 @@ function CuratedView({ onItemClick, onSeeAll }) {
         }
       } catch {
         try {
-          const fallbackItems = await loadFallbackTvShows();
+          const data = await api.get('/media/tv-shows/curated');
+          const nextRows = Array.isArray(data?.rows) ? data.rows : [];
+          if (nextRows.length === 0) {
+            throw new Error('No curated rows available');
+          }
+
           if (!cancelled) {
-            setRows(buildFallbackCuratedRows(fallbackItems));
-            setUsingFallbackRows(true);
+            setRows(nextRows);
+            setUsingFallbackRows(false);
           }
         } catch {
-          if (!cancelled) {
-            setRows([]);
-            setUsingFallbackRows(false);
+          try {
+            const fallbackItems = await loadFallbackTvShows();
+            if (!cancelled) {
+              setRows(buildFallbackCuratedRows(fallbackItems));
+              setUsingFallbackRows(true);
+            }
+          } catch {
+            if (!cancelled) {
+              setRows([]);
+              setUsingFallbackRows(false);
+            }
           }
         }
       } finally {
@@ -384,6 +423,18 @@ export default function TVShows() {
     let cancelled = false;
 
     async function loadOpenItem() {
+      try {
+        const item = await fetchSupabaseTvShowById(openId);
+        if (!cancelled && item?.id) {
+          setSelectedItem(item);
+          setSelectedItemBrowseOnly(false);
+          setDetailMessage('');
+          return;
+        }
+      } catch {
+        // Fall through to the legacy API and bundled catalog below.
+      }
+
       try {
         const item = await api.get(`/media/tv-shows/${openId}`);
         if (!cancelled && item?.id) {
