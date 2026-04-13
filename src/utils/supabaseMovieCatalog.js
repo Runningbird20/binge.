@@ -13,6 +13,7 @@ const MOVIE_COLUMNS = [
   'synopsis',
   'poster_url',
   'source_key',
+  'external_id',
 ].join(', ');
 
 const MOVIE_BROWSE_COLUMNS = [
@@ -23,6 +24,7 @@ const MOVIE_BROWSE_COLUMNS = [
   'director',
   'poster_url',
   'source_key',
+  'external_id',
 ].join(', ');
 
 const TV_SHOW_COLUMNS = [
@@ -39,6 +41,7 @@ const TV_SHOW_COLUMNS = [
   'poster_url',
   'seasons',
   'source_key',
+  'external_id',
 ].join(', ');
 
 const TV_SHOW_BROWSE_COLUMNS = [
@@ -50,6 +53,7 @@ const TV_SHOW_BROWSE_COLUMNS = [
   'poster_url',
   'seasons',
   'source_key',
+  'external_id',
 ].join(', ');
 
 const BOOK_COLUMNS = [

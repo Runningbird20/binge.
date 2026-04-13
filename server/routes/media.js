@@ -310,306 +310,265 @@ function getTopDeduped(table, where, orderBy, limit, extraParams = []) {
 
 // Movie row definitions
 function buildMovieRows() {
+  const CURRENT_YEAR = new Date().getFullYear();
+  const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
   const rows = [
+    {
+      id: 'upcoming',
+      title: '🔜 Upcoming Releases',
+      seeAll: '/movies?sort=year-desc&upcoming=1',
+      items: getTopDeduped('movies', `year > ${CURRENT_YEAR} AND poster_url IS NOT NULL`, `year ASC, RANDOM()`, 48),
+    },
     {
       id: 'trending',
       title: '🔥 Trending Now',
       seeAll: '/movies?sort=year-desc',
-      items: getTopDeduped('movies',
-        "year >= strftime('%Y', date('now', '-1 year'))",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'top_rated',
-      title: '⭐ Top Rated',
-      seeAll: '/movies?sort=year-desc&min_rating=7',
-      items: getTopDeduped('movies',
-        "poster_url IS NOT NULL AND year IS NOT NULL AND year >= 1980",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `year >= ${CURRENT_YEAR - 1} ${NO_FUTURE.replace('AND poster_url IS NOT NULL','')} AND poster_url IS NOT NULL`, 'RANDOM()', 48),
     },
     {
       id: 'new_releases',
       title: '🆕 New Releases',
-      seeAll: '/movies?sort=year-desc&year_min=2024',
-      items: getTopDeduped('movies',
-        "year >= 2024 AND poster_url IS NOT NULL",
-        'year DESC, RANDOM()', 48),
+      seeAll: '/movies?sort=year-desc',
+      items: getTopDeduped('movies', `year = ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'RANDOM()', 48),
+    },
+    {
+      id: 'top_rated',
+      title: '⭐ Top Rated',
+      seeAll: '/movies?sort=year-desc',
+      items: getTopDeduped('movies', `year IS NOT NULL ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'action',
       title: '💥 Action & Adventure',
       seeAll: '/movies?genre=Action',
-      items: getTopDeduped('movies',
-        "genre LIKE '%Action%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `genre LIKE '%Action%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'superhero',
       title: '🦸 Superhero',
       seeAll: '/movies?category=superhero',
-      items: getTopDeduped('movies',
-        "(title LIKE '%Marvel%' OR title LIKE '%Spider%' OR title LIKE '%Batman%' OR title LIKE '%Superman%' OR title LIKE '%Avengers%' OR title LIKE '%Iron Man%' OR title LIKE '%Thor%' OR title LIKE '%Captain America%' OR title LIKE '%Black Panther%' OR title LIKE '%Doctor Strange%' OR title LIKE '%Guardians%' OR title LIKE '%X-Men%' OR title LIKE '%Deadpool%' OR title LIKE '%Wonder Woman%' OR title LIKE '%Aquaman%' OR title LIKE '%Shazam%' OR genre LIKE '%Superhero%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `(title LIKE '%Marvel%' OR title LIKE '%Spider%' OR title LIKE '%Batman%' OR title LIKE '%Superman%' OR title LIKE '%Avengers%' OR title LIKE '%Iron Man%' OR title LIKE '%Thor%' OR title LIKE '%Captain America%' OR title LIKE '%Black Panther%' OR title LIKE '%Doctor Strange%' OR title LIKE '%Guardians%' OR title LIKE '%X-Men%' OR title LIKE '%Deadpool%' OR title LIKE '%Wonder Woman%' OR title LIKE '%Aquaman%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'comedy',
       title: '😂 Comedy',
       seeAll: '/movies?genre=Comedy',
-      items: getTopDeduped('movies',
-        "genre LIKE '%Comedy%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `genre LIKE '%Comedy%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'horror',
       title: '👻 Horror',
       seeAll: '/movies?genre=Horror',
-      items: getTopDeduped('movies',
-        "genre LIKE '%Horror%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `genre LIKE '%Horror%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'scifi',
       title: '🚀 Sci-Fi',
       seeAll: '/movies?genre=Science+Fiction',
-      items: getTopDeduped('movies',
-        "(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'drama',
       title: '🎭 Drama',
       seeAll: '/movies?genre=Drama',
-      items: getTopDeduped('movies',
-        "genre LIKE '%Drama%' AND poster_url IS NOT NULL AND (genre NOT LIKE '%Horror%')",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'family',
-      title: '👨‍👩‍👧 Family & Animation',
-      seeAll: '/movies?genre=Family',
-      items: getTopDeduped('movies',
-        "(genre LIKE '%Family%' OR genre LIKE '%Animation%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'romance',
-      title: '💘 Romance',
-      seeAll: '/movies?genre=Romance',
-      items: getTopDeduped('movies',
-        "genre LIKE '%Romance%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `genre LIKE '%Drama%' AND genre NOT LIKE '%Horror%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'thriller',
       title: '🔪 Thriller & Mystery',
       seeAll: '/movies?genre=Thriller',
-      items: getTopDeduped('movies',
-        "(genre LIKE '%Thriller%' OR genre LIKE '%Mystery%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `(genre LIKE '%Thriller%' OR genre LIKE '%Mystery%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
-      id: 'documentary',
-      title: '🎥 Documentary',
-      seeAll: '/movies?genre=Documentary',
-      items: getTopDeduped('movies',
-        "genre LIKE '%Documentary%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      id: 'romance',
+      title: '💘 Romance',
+      seeAll: '/movies?genre=Romance',
+      items: getTopDeduped('movies', `genre LIKE '%Romance%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
-      id: 'international',
-      title: '🌍 International',
-      seeAll: '/movies?genre=International',
-      items: getTopDeduped('movies',
-        "poster_url IS NOT NULL AND (cast_members LIKE '%김%' OR cast_members LIKE '%이%' OR title LIKE '%%' OR (year >= 2000 AND genre LIKE '%Drama%' AND director IS NOT NULL AND director NOT LIKE '%Smith%' AND director NOT LIKE '%Johnson%' AND director NOT LIKE '%Williams%'))",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'holiday',
-      title: '🎄 Holiday & Christmas',
-      seeAll: '/movies?category=holiday',
-      items: getTopDeduped('movies',
-        "(title LIKE '%Christmas%' OR title LIKE '%Holiday%' OR title LIKE '%Santa%' OR title LIKE '%Noel%' OR title LIKE '%Xmas%' OR synopsis LIKE '%Christmas%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'classics',
-      title: '🏛️ Timeless Classics',
-      seeAll: '/movies?sort=year-asc&year_max=1990',
-      items: getTopDeduped('movies',
-        "year < 1990 AND year > 1920 AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'war',
-      title: '⚔️ War & History',
-      seeAll: '/movies?genre=War',
-      items: getTopDeduped('movies',
-        "(genre LIKE '%War%' OR genre LIKE '%History%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      id: 'family',
+      title: '👨‍👩‍👧 Family & Animation',
+      seeAll: '/movies?genre=Family',
+      items: getTopDeduped('movies', `(genre LIKE '%Family%' OR genre LIKE '%Animation%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'fantasy',
       title: '🧙 Fantasy & Adventure',
       seeAll: '/movies?genre=Fantasy',
-      items: getTopDeduped('movies',
-        "(genre LIKE '%Fantasy%' OR genre LIKE '%Adventure%') AND poster_url IS NOT NULL AND genre NOT LIKE '%Horror%'",
-        'RANDOM()', 48),
+      items: getTopDeduped('movies', `(genre LIKE '%Fantasy%' OR genre LIKE '%Adventure%') AND genre NOT LIKE '%Horror%' ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'documentary',
+      title: '🎥 Documentary',
+      seeAll: '/movies?genre=Documentary',
+      items: getTopDeduped('movies', `genre LIKE '%Documentary%' ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'international',
+      title: '🌍 International',
+      seeAll: '/movies?genre=International',
+      items: getTopDeduped('movies', `poster_url IS NOT NULL AND year <= ${CURRENT_YEAR} AND year >= 2000 AND director IS NOT NULL`, 'RANDOM()', 48),
+    },
+    {
+      id: 'holiday',
+      title: '🎄 Holiday & Christmas',
+      seeAll: '/movies?category=holiday',
+      items: getTopDeduped('movies', `(title LIKE '%Christmas%' OR title LIKE '%Holiday%' OR title LIKE '%Santa%' OR title LIKE '%Noel%' OR synopsis LIKE '%Christmas%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'war',
+      title: '⚔️ War & History',
+      seeAll: '/movies?genre=War',
+      items: getTopDeduped('movies', `(genre LIKE '%War%' OR genre LIKE '%History%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'classics',
+      title: '🏛️ Timeless Classics',
+      seeAll: '/movies?sort=year-asc',
+      items: getTopDeduped('movies', `year < 1990 AND year > 1920 AND poster_url IS NOT NULL`, 'RANDOM()', 48),
+    },
+    {
+      id: 'crime',
+      title: '🕵️ Crime',
+      seeAll: '/movies?genre=Crime',
+      items: getTopDeduped('movies', `genre LIKE '%Crime%' ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'music',
+      title: '🎵 Music & Concert',
+      seeAll: '/movies?genre=Music',
+      items: getTopDeduped('movies', `genre LIKE '%Music%' ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'western',
+      title: '🤠 Western',
+      seeAll: '/movies?genre=Western',
+      items: getTopDeduped('movies', `genre LIKE '%Western%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
   ];
   return rows.filter(r => r.items.length > 0);
 }
 
 function buildTvRows() {
+  const CURRENT_YEAR = new Date().getFullYear();
+  const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
   const rows = [
+    {
+      id: 'upcoming',
+      title: '🔜 Coming Soon',
+      seeAll: '/tv-shows?sort=year-desc&upcoming=1',
+      items: getTopDeduped('tv_shows', `year > ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'year ASC, RANDOM()', 48),
+    },
     {
       id: 'trending',
       title: '🔥 Trending Now',
       seeAll: '/tv-shows?sort=year-desc',
-      items: getTopDeduped('tv_shows',
-        "year >= strftime('%Y', date('now', '-1 year')) AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `year >= ${CURRENT_YEAR - 1} ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'top_rated',
       title: '⭐ Top Rated',
       seeAll: '/tv-shows',
-      items: getTopDeduped('tv_shows',
-        "poster_url IS NOT NULL AND year IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'superhero',
-      title: '🦸 Superhero Shows',
-      seeAll: '/tv-shows?category=superhero',
-      items: getTopDeduped('tv_shows',
-        "(title LIKE '%Marvel%' OR title LIKE '%Arrow%' OR title LIKE '%Flash%' OR title LIKE '%Supergirl%' OR title LIKE '%Batman%' OR title LIKE '%Superman%' OR title LIKE '%Avengers%' OR title LIKE '%Loki%' OR title LIKE '%WandaVision%' OR title LIKE '%Hawkeye%' OR title LIKE '%Daredevil%' OR title LIKE '%Punisher%' OR genre LIKE '%Superhero%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'anime',
-      title: '⛩️ Anime',
-      seeAll: '/tv-shows?genre=Anime',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Anime%' OR genre LIKE '%Animation%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `year IS NOT NULL ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'drama',
       title: '🎭 Drama',
       seeAll: '/tv-shows?genre=Drama',
-      items: getTopDeduped('tv_shows',
-        "genre LIKE '%Drama%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `genre LIKE '%Drama%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'comedy',
       title: '😂 Comedy & Sitcoms',
       seeAll: '/tv-shows?genre=Comedy',
-      items: getTopDeduped('tv_shows',
-        "genre LIKE '%Comedy%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `genre LIKE '%Comedy%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'crime',
       title: '🔍 Crime & Mystery',
       seeAll: '/tv-shows?genre=Crime',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Crime%' OR genre LIKE '%Mystery%' OR genre LIKE '%Thriller%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Crime%' OR genre LIKE '%Mystery%' OR genre LIKE '%Thriller%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'scifi',
       title: '🚀 Sci-Fi & Fantasy',
       seeAll: '/tv-shows?genre=Sci-Fi',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%' OR genre LIKE '%Fantasy%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%' OR genre LIKE '%Fantasy%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
-      id: 'kdrama',
-      title: '🌸 K-Drama & Asian',
-      seeAll: '/tv-shows?category=kdrama',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Korean%' OR synopsis LIKE '%Korea%' OR title LIKE '%Korean%' OR cast_members LIKE '%Park%' OR cast_members LIKE '%Kim%' OR cast_members LIKE '%Lee%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      id: 'superhero',
+      title: '🦸 Superhero Shows',
+      seeAll: '/tv-shows?category=superhero',
+      items: getTopDeduped('tv_shows', `(title LIKE '%Marvel%' OR title LIKE '%Arrow%' OR title LIKE '%Flash%' OR title LIKE '%Supergirl%' OR title LIKE '%Daredevil%' OR title LIKE '%Loki%' OR title LIKE '%WandaVision%' OR title LIKE '%Hawkeye%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
-      id: 'reality',
-      title: '⭐ Reality & Competition',
-      seeAll: '/tv-shows?genre=Reality',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Reality%' OR genre LIKE '%Talk%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'kids',
-      title: '🎠 Kids & Family',
-      seeAll: '/tv-shows?genre=Kids',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Kids%' OR genre LIKE '%Family%' OR genre LIKE '%Children%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'documentary',
-      title: '📡 Documentary',
-      seeAll: '/tv-shows?genre=Documentary',
-      items: getTopDeduped('tv_shows',
-        "genre LIKE '%Documentary%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'binge',
-      title: '🍿 Binge-Worthy (4+ Seasons)',
-      seeAll: '/tv-shows?min_seasons=4',
-      items: getTopDeduped('tv_shows',
-        "seasons >= 4 AND poster_url IS NOT NULL",
-        'seasons DESC, RANDOM()', 48),
-    },
-    {
-      id: 'classics',
-      title: '📺 Classic TV',
-      seeAll: '/tv-shows?sort=year-asc',
-      items: getTopDeduped('tv_shows',
-        "year < 2000 AND year > 1950 AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
-    },
-    {
-      id: 'horror',
-      title: '👻 Horror & Supernatural',
-      seeAll: '/tv-shows?genre=Horror',
-      items: getTopDeduped('tv_shows',
-        "(genre LIKE '%Horror%' OR genre LIKE '%Supernatural%') AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      id: 'anime',
+      title: '⛩️ Anime',
+      seeAll: '/tv-shows?genre=Anime',
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Anime%' OR genre LIKE '%Animation%') ${NO_FUTURE}`, 'RANDOM()', 48),
     },
     {
       id: 'action',
       title: '💥 Action & Adventure',
       seeAll: '/tv-shows?genre=Action',
-      items: getTopDeduped('tv_shows',
-        "genre LIKE '%Action%' AND poster_url IS NOT NULL",
-        'RANDOM()', 48),
+      items: getTopDeduped('tv_shows', `genre LIKE '%Action%' ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'reality',
+      title: '⭐ Reality & Competition',
+      seeAll: '/tv-shows?genre=Reality',
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Reality%' OR genre LIKE '%Game Show%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'horror',
+      title: '👻 Horror & Supernatural',
+      seeAll: '/tv-shows?genre=Horror',
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Horror%' OR genre LIKE '%Supernatural%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'documentary',
+      title: '📡 Documentary',
+      seeAll: '/tv-shows?genre=Documentary',
+      items: getTopDeduped('tv_shows', `genre LIKE '%Documentary%' ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'kids',
+      title: '🎠 Kids & Family',
+      seeAll: '/tv-shows?genre=Kids',
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Kids%' OR genre LIKE '%Family%' OR genre LIKE '%Children%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'binge',
+      title: '🍿 Binge-Worthy (4+ Seasons)',
+      seeAll: '/tv-shows?min_seasons=4',
+      items: getTopDeduped('tv_shows', `seasons >= 4 ${NO_FUTURE}`, 'seasons DESC, RANDOM()', 48),
+    },
+    {
+      id: 'kdrama',
+      title: '🌸 K-Drama & Asian',
+      seeAll: '/tv-shows?category=kdrama',
+      items: getTopDeduped('tv_shows', `(genre LIKE '%Korean%' OR synopsis LIKE '%Korea%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'classics',
+      title: '📺 Classic TV',
+      seeAll: '/tv-shows?sort=year-asc',
+      items: getTopDeduped('tv_shows', `year < 2000 AND year > 1950 AND poster_url IS NOT NULL`, 'RANDOM()', 48),
+    },
+    {
+      id: 'medical',
+      title: '🏥 Medical Drama',
+      seeAll: '/tv-shows?category=medical',
+      items: getTopDeduped('tv_shows', `(title LIKE '%House%' OR title LIKE '%Grey%' OR title LIKE '%ER%' OR title LIKE '%Scrubs%' OR title LIKE '%Medical%' OR synopsis LIKE '%hospital%' OR synopsis LIKE '%doctor%') ${NO_FUTURE}`, 'RANDOM()', 48),
+    },
+    {
+      id: 'talk',
+      title: '🎙️ Talk & Late Night',
+      seeAll: '/tv-shows?genre=Talk',
+      items: getTopDeduped('tv_shows', `genre LIKE '%Talk%' ${NO_FUTURE}`, 'RANDOM()', 48),
     },
   ];
   return rows.filter(r => r.items.length > 0);
-}
-
-function dedupBooks(items) {
-  const seen = new Set();
-  return items.filter(b => {
-    const key = b.title?.toLowerCase().trim();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function getBooksDeduped(where, limit = 48) {
-  try {
-    const rows = db.prepare(
-      `SELECT * FROM books WHERE source_key IS NOT NULL ${where} AND cover_url IS NOT NULL ORDER BY RANDOM() LIMIT ${limit * 3}`
-    ).all();
-    return dedupBooks(rows).slice(0, limit);
-  } catch(e) { console.error('book query error:', e.message); return []; }
 }
 
 function buildBookRows() {
