@@ -1,12 +1,10 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { hasLegacyBackendSession } from '../utils/legacyBackend';
 import UserAvatar from './UserAvatar';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const canUseLegacyBackend = hasLegacyBackendSession();
 
   async function handleLogout() {
     await logout();
