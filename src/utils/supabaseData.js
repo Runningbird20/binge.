@@ -1,7 +1,6 @@
 import { isSupabaseConfigured, supabase } from './supabase';
 import {
   cacheMediaMetadata,
-  cacheMediaMetadataList,
   getCachedMediaMetadata,
 } from './mediaMetadataCache';
 
@@ -311,8 +310,6 @@ async function fetchMediaMetadataMap(mediaType, mediaIds) {
   if (error) {
     return new Map();
   }
-
-  cacheMediaMetadataList(mediaType, data || []);
 
   return new Map(
     (data || [])
