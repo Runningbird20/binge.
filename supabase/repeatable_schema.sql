@@ -36,7 +36,7 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, username, user_type, bio, avatar_url)
+  insert into public.profiles (id, email, username, is_admin, is_dev, bio, avatar_url)
   values (
     new.id,
     new.email,
@@ -45,7 +45,16 @@ begin
       split_part(new.email, '@', 1),
       'media-fan'
     ),
-    coalesce(nullif(lower(new.raw_user_meta_data ->> 'user_type'), ''), 'user'),
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'is_admin', '')::boolean,
+      lower(coalesce(new.raw_user_meta_data ->> 'user_type', '')) in ('admin', 'admins'),
+      false
+    ),
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'is_dev', '')::boolean,
+      lower(coalesce(new.raw_user_meta_data ->> 'user_type', '')) in ('coach', 'coaches', 'developer', 'developers', 'dev'),
+      false
+    ),
     coalesce(new.raw_user_meta_data ->> 'bio', ''),
     nullif(new.raw_user_meta_data ->> 'avatar_url', '')
   )
@@ -53,7 +62,8 @@ begin
   set
     email = excluded.email,
     username = coalesce(public.profiles.username, excluded.username),
-    user_type = coalesce(nullif(lower(public.profiles.user_type), ''), excluded.user_type, 'user'),
+    is_admin = coalesce(public.profiles.is_admin, excluded.is_admin, false),
+    is_dev = coalesce(public.profiles.is_dev, excluded.is_dev, false),
     bio = coalesce(public.profiles.bio, excluded.bio),
     avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url);
 
@@ -71,7 +81,8 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   username text not null,
-  user_type text not null default 'user',
+  is_admin boolean not null default false,
+  is_dev boolean not null default false,
   bio text not null default '',
   avatar_url text,
   created_at timestamptz not null default now(),
@@ -81,16 +92,31 @@ create table if not exists public.profiles (
 alter table public.profiles
   add column if not exists email text,
   add column if not exists username text,
-  add column if not exists user_type text not null default 'user',
+  add column if not exists is_admin boolean not null default false,
+  add column if not exists is_dev boolean not null default false,
   add column if not exists bio text not null default '',
   add column if not exists avatar_url text,
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
 
-update public.profiles
-set user_type = 'user'
-where user_type is null
-   or btrim(user_type) = '';
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'profiles'
+      and column_name = 'user_type'
+  ) then
+    execute $sql$
+      update public.profiles
+      set
+        is_admin = coalesce(is_admin, false) or lower(coalesce(user_type, '')) in ('admin', 'admins'),
+        is_dev = coalesce(is_dev, false) or lower(coalesce(user_type, '')) in ('coach', 'coaches', 'developer', 'developers', 'dev')
+    $sql$;
+  end if;
+end;
+$$;
 
 update public.profiles as p
 set email = u.email
@@ -111,15 +137,22 @@ where p.id = u.id
 
 update public.profiles
 set
+  is_admin = coalesce(is_admin, false),
+  is_dev = coalesce(is_dev, false),
   bio = coalesce(bio, ''),
   created_at = coalesce(created_at, now()),
   updated_at = coalesce(updated_at, now())
-where bio is null
+where is_admin is null
+   or is_dev is null
+   or bio is null
    or created_at is null
    or updated_at is null;
 
 alter table public.profiles
-  alter column user_type set default 'user',
+  alter column is_admin set default false,
+  alter column is_admin set not null,
+  alter column is_dev set default false,
+  alter column is_dev set not null,
   alter column bio set default '',
   alter column created_at set default now(),
   alter column updated_at set default now();
@@ -134,21 +167,6 @@ begin
   ) then
     alter table public.profiles
       add constraint profiles_email_key unique (email);
-  end if;
-end;
-$$;
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.profiles'::regclass
-      and conname = 'profiles_user_type_check'
-  ) then
-    alter table public.profiles
-      add constraint profiles_user_type_check
-      check (user_type in ('user', 'coach', 'admin'));
   end if;
 end;
 $$;

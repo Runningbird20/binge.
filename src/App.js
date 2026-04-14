@@ -50,7 +50,7 @@ export default function App() {
             <Route
               path="/admin/requests"
               element={
-                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
                   <Navigate to="/__ops/dev-lab#requests" replace />
                 </ProtectedRoute>
               }
@@ -65,7 +65,7 @@ export default function App() {
             <Route
               path="/__ops/dev-lab/*"
               element={
-                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
                   <DeveloperLab />
                 </ProtectedRoute>
               }
@@ -73,7 +73,7 @@ export default function App() {
             <Route
               path="/dev-lab/*"
               element={
-                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
                   <DeveloperLab />
                 </ProtectedRoute>
               }
@@ -81,7 +81,7 @@ export default function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
                   <Navigate to="/__ops/dev-lab#requests" replace />
                 </ProtectedRoute>
               }
