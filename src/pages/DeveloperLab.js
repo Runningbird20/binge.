@@ -7,7 +7,7 @@ const INTENTS = ['general', 'factual', 'thematic', 'recommendation', 'creative']
 const SECTION_TABS = [
   { id: 'workspace', label: 'Workspace', title: 'Catalog And Knowledge Intake', description: 'Import titles into Supabase, scrape supporting material, and curate the knowledge base the assistant can use.' },
   { id: 'requests', label: 'Requests', title: 'Media Request Review', description: 'Review incoming user submissions and resolve them without leaving the lab.' },
-  { id: 'prompting', label: 'Prompting', title: 'Prompt Tuning', description: 'Tune intent-specific prompt profiles and preview the Supabase ai-chat edge flow.' },
+  { id: 'prompting', label: 'Prompting', title: 'Prompt Tuning', description: 'Tune intent-specific prompt profiles and preview the Supabase dev function flow.' },
   { id: 'quality', label: 'Quality', title: 'Evaluation Checks', description: 'Save regression cases, run QA passes, and watch recent eval output.' },
 ];
 const REQUEST_FILTERS = ['pending', 'approved', 'rejected', 'all'];
@@ -637,7 +637,7 @@ export default function DeveloperLab() {
           <div className="section-header">
             <div>
               <h2>Prompt Preview</h2>
-              <p className="home-panel-copy">Run the current prompt stack against the Supabase ai-chat edge flow and inspect the generated context.</p>
+              <p className="home-panel-copy">Run the current prompt stack against the Supabase dev function flow and inspect the generated context.</p>
             </div>
           </div>
 

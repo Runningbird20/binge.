@@ -32,8 +32,8 @@ const SUPABASE_FUNCTION_KEY = (
   process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY
   || ''
 ).trim();
-const SUPABASE_AI_CHAT_URL = SUPABASE_URL
-  ? `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/ai-chat`
+const SUPABASE_DEV_URL = SUPABASE_URL
+  ? `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/dev`
   : '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.REACT_APP_GROQ_API_KEY;
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
@@ -289,12 +289,12 @@ async function callGroq({ systemPrompt, question, temperature }) {
   return data?.choices?.[0]?.message?.content || 'No response.';
 }
 
-async function callSupabaseAiChat({ systemPrompt, question, temperature }) {
-  if (!SUPABASE_AI_CHAT_URL || !SUPABASE_FUNCTION_KEY) {
-    throw new Error('Supabase ai-chat is not configured for prompt preview.');
+async function callSupabaseDevPreview({ question, forcedIntent, includeWebSearch }) {
+  if (!SUPABASE_DEV_URL || !SUPABASE_FUNCTION_KEY) {
+    throw new Error('Supabase dev function is not configured for prompt preview.');
   }
 
-  const response = await fetch(SUPABASE_AI_CHAT_URL, {
+  const response = await fetch(SUPABASE_DEV_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -302,10 +302,10 @@ async function callSupabaseAiChat({ systemPrompt, question, temperature }) {
       apikey: SUPABASE_FUNCTION_KEY,
     },
     body: JSON.stringify({
-      messages: [{ role: 'user', content: question }],
-      systemPromptOverride: systemPrompt,
-      temperature,
-      includeWebSearch: false,
+      action: 'preview',
+      question,
+      forcedIntent,
+      includeWebSearch,
     }),
     signal: AbortSignal.timeout(30000),
   });
@@ -316,23 +316,27 @@ async function callSupabaseAiChat({ systemPrompt, question, temperature }) {
     const errorMessage =
       payload?.error ||
       payload?.message ||
-      `Supabase ai-chat responded with status ${response.status}.`;
+      `Supabase dev function responded with status ${response.status}.`;
     throw new Error(errorMessage);
   }
 
-  return payload?.content || payload?.choices?.[0]?.message?.content || payload?.response || 'No response.';
+  return payload;
 }
 
-async function callPreviewModel({ systemPrompt, question, temperature }) {
-  if (SUPABASE_AI_CHAT_URL && SUPABASE_FUNCTION_KEY) {
+async function callPreviewModel({ systemPrompt, question, temperature, forcedIntent, includeWebSearch }) {
+  if (SUPABASE_DEV_URL && SUPABASE_FUNCTION_KEY) {
     try {
-      return await callSupabaseAiChat({ systemPrompt, question, temperature });
+      const preview = await callSupabaseDevPreview({ question, forcedIntent, includeWebSearch });
+      if (preview?.responseText) {
+        return preview.responseText;
+      }
+      throw new Error('Supabase dev function returned an unexpected preview payload.');
     } catch (error) {
       if (!GROQ_API_KEY) {
         throw error;
       }
 
-      console.warn('Falling back to direct Groq preview call after Supabase ai-chat failure:', error?.message || error);
+      console.warn('Falling back to direct Groq preview call after Supabase dev function failure:', error?.message || error);
     }
   }
 
@@ -392,6 +396,8 @@ async function previewQuestion({ question, forcedIntent, includeWebSearch = true
     systemPrompt,
     question: userPrompt,
     temperature: Number(promptProfile?.temperature) || 0.4,
+    forcedIntent: selectedIntent,
+    includeWebSearch,
   });
   const latencyMs = Date.now() - startTime;
 
