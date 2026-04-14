@@ -245,7 +245,53 @@ export async function getSupabaseSessionProfile() {
     return null;
   }
 
-  return resolveSupabaseProfile(data.session.user);
+  const validateCurrentUser = async () => {
+    const userResponse = await withTimeout(
+      client.auth.getUser(),
+      AUTH_REQUEST_TIMEOUT_MS,
+      'Validating the Supabase session timed out.'
+    );
+
+    if (userResponse.error) {
+      throw userResponse.error;
+    }
+
+    return userResponse.data?.user || null;
+  };
+
+  try {
+    const validatedUser = await validateCurrentUser();
+    if (!validatedUser) {
+      await client.auth.signOut().catch(() => {});
+      return null;
+    }
+
+    return resolveSupabaseProfile(validatedUser);
+  } catch (validationError) {
+    try {
+      const refreshResponse = await withTimeout(
+        client.auth.refreshSession(),
+        AUTH_REQUEST_TIMEOUT_MS,
+        'Refreshing the Supabase session timed out.'
+      );
+
+      if (refreshResponse.error || !refreshResponse.data?.session?.user) {
+        await client.auth.signOut().catch(() => {});
+        return null;
+      }
+
+      const validatedUser = await validateCurrentUser();
+      if (!validatedUser) {
+        await client.auth.signOut().catch(() => {});
+        return null;
+      }
+
+      return resolveSupabaseProfile(validatedUser);
+    } catch {
+      await client.auth.signOut().catch(() => {});
+      return null;
+    }
+  }
 }
 
 export async function signInWithSupabase({ email, password }) {
