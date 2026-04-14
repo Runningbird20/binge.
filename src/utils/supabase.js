@@ -35,6 +35,39 @@ async function getSupabaseFunctionHeaders() {
   return headers;
 }
 
+function isJwtAuthError(response, data) {
+  const message =
+    typeof data === 'string'
+      ? data
+      : data && typeof data === 'object'
+        ? [data.error, data.message, data.code].filter(Boolean).join(' ')
+        : '';
+
+  return response.status === 401 && /jwt|authorization|token/i.test(message);
+}
+
+async function retryFunctionWithRefresh(functionName, body) {
+  if (!supabase) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data?.session?.access_token) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const retryHeaders = await getSupabaseFunctionHeaders();
+  return fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
+    method: 'POST',
+    headers: retryHeaders,
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
 async function parseFunctionResponse(response) {
   const text = await response.text();
   if (!text) {
@@ -71,7 +104,18 @@ export async function invokeSupabaseFunction(functionName, body) {
     headers,
     body: JSON.stringify(body ?? {}),
   });
-  const data = await parseFunctionResponse(response);
+  let data = await parseFunctionResponse(response);
+
+  if (isJwtAuthError(response, data)) {
+    const retryResponse = await retryFunctionWithRefresh(functionName, body);
+    if (retryResponse) {
+      data = await parseFunctionResponse(retryResponse);
+      if (!retryResponse.ok) {
+        throw new Error(buildFunctionErrorMessage(retryResponse, data));
+      }
+      return data;
+    }
+  }
 
   if (!response.ok) {
     throw new Error(buildFunctionErrorMessage(response, data));
