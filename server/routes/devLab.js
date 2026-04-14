@@ -24,6 +24,17 @@ const {
 
 const router = express.Router();
 
+const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || '').trim();
+const SUPABASE_FUNCTION_KEY = (
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY
+  || ''
+).trim();
+const SUPABASE_AI_CHAT_URL = SUPABASE_URL
+  ? `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/ai-chat`
+  : '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.REACT_APP_GROQ_API_KEY;
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -278,6 +289,56 @@ async function callGroq({ systemPrompt, question, temperature }) {
   return data?.choices?.[0]?.message?.content || 'No response.';
 }
 
+async function callSupabaseAiChat({ systemPrompt, question, temperature }) {
+  if (!SUPABASE_AI_CHAT_URL || !SUPABASE_FUNCTION_KEY) {
+    throw new Error('Supabase ai-chat is not configured for prompt preview.');
+  }
+
+  const response = await fetch(SUPABASE_AI_CHAT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_FUNCTION_KEY}`,
+      apikey: SUPABASE_FUNCTION_KEY,
+    },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: question }],
+      systemPromptOverride: systemPrompt,
+      temperature,
+      includeWebSearch: false,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const errorMessage =
+      payload?.error ||
+      payload?.message ||
+      `Supabase ai-chat responded with status ${response.status}.`;
+    throw new Error(errorMessage);
+  }
+
+  return payload?.content || payload?.choices?.[0]?.message?.content || payload?.response || 'No response.';
+}
+
+async function callPreviewModel({ systemPrompt, question, temperature }) {
+  if (SUPABASE_AI_CHAT_URL && SUPABASE_FUNCTION_KEY) {
+    try {
+      return await callSupabaseAiChat({ systemPrompt, question, temperature });
+    } catch (error) {
+      if (!GROQ_API_KEY) {
+        throw error;
+      }
+
+      console.warn('Falling back to direct Groq preview call after Supabase ai-chat failure:', error?.message || error);
+    }
+  }
+
+  return callGroq({ systemPrompt, question, temperature });
+}
+
 async function loadPromptMap() {
   const profiles = await listPromptProfiles();
   return new Map(profiles.map((profile) => [profile.intent, profile]));
@@ -327,7 +388,7 @@ async function previewQuestion({ question, forcedIntent, includeWebSearch = true
   ].join('\n');
 
   const startTime = Date.now();
-  const responseText = await callGroq({
+  const responseText = await callPreviewModel({
     systemPrompt,
     question: userPrompt,
     temperature: Number(promptProfile?.temperature) || 0.4,
