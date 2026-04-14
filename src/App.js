@@ -23,6 +23,7 @@ const Ratings        = lazy(() => import('./pages/Ratings'));
 const Forum          = lazy(() => import('./pages/Forum'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
+const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
 
 function AppRouteFallback() {
   return <div className="loading-state">Loading...</div>;
@@ -55,6 +56,22 @@ export default function App() {
             <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
             <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
+            <Route
+              path="/__ops/dev-lab/*"
+              element={
+                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                  <DeveloperLab />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dev-lab/*"
+              element={
+                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                  <DeveloperLab />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/admin" element={<Navigate to="/admin/requests" replace />} />
             <Route path="*" element={
               <div className="app-layout">
