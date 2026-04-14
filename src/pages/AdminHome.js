@@ -50,7 +50,7 @@ export default function AdminHome() {
                   <p>Review user-submitted requests to add movies, TV shows, and books.</p>
                 </div>
                 <div className="devlab-list-actions">
-                  <Link to="/admin/requests" className="btn-primary">Open Requests</Link>
+                  <Link to="/__ops/dev-lab#requests" className="btn-primary">Open In Dev Lab</Link>
                 </div>
               </div>
             </div>
