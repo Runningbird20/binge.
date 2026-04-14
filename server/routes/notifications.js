@@ -12,9 +12,16 @@ async function getUser(req) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   if (!token) return null;
   try {
-    const sb = getSb(token);
-    const { data: { user } } = await sb.auth.getUser(token);
-    return user || null;
+    const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    if (!url || !key) return null;
+    const { createClient } = require('@supabase/supabase-js');
+    const sb = createClient(url, key, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: { user }, error } = await sb.auth.getUser(token);
+    if (error || !user) return null;
+    return user;
   } catch { return null; }
 }
 
