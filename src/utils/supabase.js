@@ -14,32 +14,69 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
+async function getSupabaseFunctionHeaders() {
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey: supabaseKey,
+  };
+
+  if (!supabase) {
+    return headers;
+  }
+
+  try {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data?.session?.access_token;
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+  } catch {}
+
+  return headers;
+}
+
+async function parseFunctionResponse(response) {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function buildFunctionErrorMessage(response, data) {
+  if (data && typeof data === 'object') {
+    return data.error || data.message || data.code || `Function request failed with status ${response.status}`;
+  }
+
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim();
+  }
+
+  return `Function request failed with status ${response.status}`;
+}
+
 export async function invokeSupabaseFunction(functionName, body) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_PUBLISHABLE_KEY (or SUPABASE_URL / SUPABASE_ANON_KEY).');
   }
 
-  if (functionName === 'ai-chat') {
-    const { data, error } = await supabase.functions.invoke('ai-chat', {
-      body: body,
-    });
-
-    if (error) throw error;
-    return data;
-  }
-
-  // For other functions, use the Supabase client
-  const response = await supabase.functions.invoke(functionName, {
-    body: JSON.stringify(body),
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  const headers = await getSupabaseFunctionHeaders();
+  const response = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body ?? {}),
   });
+  const data = await parseFunctionResponse(response);
 
-  if (response.error) {
-    throw new Error(response.error.message || response.error);
+  if (!response.ok) {
+    throw new Error(buildFunctionErrorMessage(response, data));
   }
 
-  return response.data ?? response;
+  return data;
 }
 
