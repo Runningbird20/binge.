@@ -17,7 +17,6 @@ const Following      = lazy(() => import('./pages/Following'));
 const Lists          = lazy(() => import('./pages/Lists'));
 const SharedList     = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
-const AdminRequests  = lazy(() => import('./pages/AdminRequests'));
 const LiveTV         = lazy(() => import('./pages/LiveTV'));
 const Ratings        = lazy(() => import('./pages/Ratings'));
 const Forum          = lazy(() => import('./pages/Forum'));
@@ -48,7 +47,14 @@ export default function App() {
             <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
             <Route path="/lists/:shareCode" element={<SharedList />} />
             <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-            <Route path="/admin/requests"   element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
+            <Route
+              path="/admin/requests"
+              element={
+                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                  <Navigate to="/__ops/dev-lab#requests" replace />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/live-tv"          element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
@@ -72,7 +78,14 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-            <Route path="/admin" element={<Navigate to="/admin/requests" replace />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedUserTypes={['coach', 'admin']}>
+                  <Navigate to="/__ops/dev-lab#requests" replace />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={
               <div className="app-layout">
                 <div className="page-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',gap:'1rem'}}>
