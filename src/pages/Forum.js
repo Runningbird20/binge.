@@ -3,7 +3,6 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
-import { normalizeUserType } from '../utils/userAccess';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const FLAIRS = ['Discussion', 'Review', 'News', 'Question', 'Fan Theory', 'Recommendation', 'Spoiler', 'Leak', 'Meme', 'Other'];
@@ -176,7 +175,7 @@ function PostCard({ post, forumSlug, onVote, userVote, user, isAdmin, onDelete }
               {post.forums.icon} {post.forums.name}
             </Link>
           )}
-          <span className="forum-post-author">u/{post.profiles?.username || 'unknown'}</span>
+          <Link to={`/profile/${post.profiles?.username || 'unknown'}`} className="forum-post-author" onClick={e => e.stopPropagation()}>u/{post.profiles?.username || 'unknown'}</Link>
           <span className="forum-post-time">{timeAgo(post.created_at)}</span>
           {post.is_pinned && <span className="forum-pinned">📌 Pinned</span>}
         </div>
@@ -471,7 +470,7 @@ function ForumHome() {
 function ForumView() {
   const { slug } = useParams();
   const { user } = useAuth();
-  const isAdmin = normalizeUserType(user?.userType) === 'admin';
+  const isAdmin = user?.isAdmin === true;
   const [forum, setForum]         = useState(null);
   const [posts, setPosts]         = useState([]);
   const [sort, setSort]           = useState('hot');
@@ -482,6 +481,7 @@ function ForumView() {
   const [showCreate, setShowCreate] = useState(false);
   const [myVotes, setMyVotes]     = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
 
   const fetchPosts = useCallback(async (pageNum, sortVal) => {
     try {
@@ -664,7 +664,7 @@ function ForumView() {
 function PostView() {
   const { slug, postId } = useParams();
   const { user } = useAuth();
-  const isAdmin = normalizeUserType(user?.userType) === 'admin';
+  const isAdmin = user?.isAdmin === true;
   const navigate = useNavigate();
 
   const [post, setPost]             = useState(null);
@@ -787,13 +787,13 @@ function PostView() {
           <div className="forum-comment-content">
             {/* Comment header */}
             <div className="forum-comment-meta">
-              <span className="forum-comment-author">
+              <Link to={`/profile/${comment.profiles?.username || 'unknown'}`} className="forum-comment-author">
                 {comment.profiles?.avatar_url && (
                   <img src={comment.profiles.avatar_url} alt="" className="forum-comment-avatar" />
                 )}
                 u/{comment.profiles?.username || 'unknown'}
                 {isOwn && <span className="forum-own-badge">OP</span>}
-              </span>
+              </Link>
               <span className="forum-comment-time">{timeAgo(comment.created_at)}</span>
               <button className="forum-collapse-btn" onClick={() => setCollapsed(c => !c)} type="button">
                 {collapsed ? '[+]' : '[−]'}
@@ -883,6 +883,7 @@ function PostView() {
     );
   }
 
+  const flairColor = FLAIR_COLORS[post?.flair] || '#555';
   const isSpoiler = post?.flair === 'Spoiler';
   const postUrl = `${window.location.origin}/forum/${slug}/post/${postId}`;
 
@@ -911,7 +912,7 @@ function PostView() {
               <div className="forum-post-detail-body">
                 <div className="forum-post-meta">
                   <Link to={`/forum/${slug}`} className="forum-community-pill">{post.forums?.icon} {post.forums?.name}</Link>
-                  <span className="forum-post-author">u/{post.profiles?.username || 'unknown'}</span>
+                  <Link to={`/profile/${post.profiles?.username || 'unknown'}`} className="forum-post-author" onClick={e => e.stopPropagation()}>u/{post.profiles?.username || 'unknown'}</Link>
                   <span className="forum-post-time">{timeAgo(post.created_at)}</span>
                   <FlairBadge flair={post.flair} />
                 </div>
