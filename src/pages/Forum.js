@@ -481,7 +481,6 @@ function ForumView() {
   const [showCreate, setShowCreate] = useState(false);
   const [myVotes, setMyVotes]     = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const navigate = useNavigate();
 
   const fetchPosts = useCallback(async (pageNum, sortVal) => {
     try {
@@ -883,7 +882,6 @@ function PostView() {
     );
   }
 
-  const flairColor = FLAIR_COLORS[post?.flair] || '#555';
   const isSpoiler = post?.flair === 'Spoiler';
   const postUrl = `${window.location.origin}/forum/${slug}/post/${postId}`;
 

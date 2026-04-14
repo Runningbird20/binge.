@@ -172,7 +172,7 @@ function RoomView({ roomId }) {
   const [message, setMessage]     = useState('');
   const [sending, setSending]     = useState(false);
   const [copied, setCopied]       = useState(false);
-  const [theaterMode, setTheaterMode] = useState(false);
+  const [theaterMode] = useState(false);
   const [showPicker, setShowPicker]   = useState(false);
   const [floatReactions, setFloatReactions] = useState([]);
   const [seasonCount, setSeasonCount]       = useState(1);
