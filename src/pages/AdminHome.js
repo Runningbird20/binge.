@@ -24,7 +24,7 @@ export default function AdminHome() {
             <div className="stat-label">Admin Role Active</div>
           </div>
           <div className="stat-card">
-            <div className="stat-number">2</div>
+            <div className="stat-number">3</div>
             <div className="stat-label">Primary Tools</div>
           </div>
           <div className="stat-card">
@@ -51,6 +51,15 @@ export default function AdminHome() {
                 </div>
                 <div className="devlab-list-actions">
                   <Link to="/admin/requests" className="btn-primary">Open Requests</Link>
+                </div>
+              </div>
+              <div className="devlab-list-item">
+                <div className="devlab-list-copy">
+                  <strong>Usage Logs &amp; Performance</strong>
+                  <p>View chatbot query logs, response times, intent breakdown, and system errors.</p>
+                </div>
+                <div className="devlab-list-actions">
+                  <Link to="/admin/analytics" className="btn-primary">Open Analytics</Link>
                 </div>
               </div>
             </div>

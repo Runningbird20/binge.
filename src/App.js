@@ -23,6 +23,7 @@ const Forum = lazy(() => import('./pages/Forum'));
 const Ratings = lazy(() => import('./pages/Ratings'));
 const DeveloperLab = lazy(() => import('./pages/DeveloperLab'));
 const AdminHome = lazy(() => import('./pages/AdminHome'));
+const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
 
 function AppRouteFallback() {
   return <div className="loading-state">Loading the app...</div>;
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="/lists/:shareCode" element={<SharedList />} />
             <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
             <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
+            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route
               path="/__ops/dev-lab"
