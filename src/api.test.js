@@ -54,3 +54,16 @@ test('throws a readable error when the backend cannot be reached', async () => {
     /unable to reach the api/i
   );
 });
+
+test('throws a readable error when a successful API request returns HTML', async () => {
+  global.fetch.mockResolvedValue(
+    mockResponse({
+      body: '<!doctype html><html><body>Not JSON</body></html>',
+      contentType: 'text/html; charset=utf-8',
+    })
+  );
+
+  await expect(api.get('/dev-lab/dashboard')).rejects.toThrow(
+    /returned html instead of json/i
+  );
+});

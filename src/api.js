@@ -28,6 +28,10 @@ function resolveBaseUrl() {
 
 const BASE = resolveBaseUrl();
 
+function looksLikeHtmlDocument(value) {
+  return /^\s*<!doctype html|^\s*<html/i.test(String(value || ''));
+}
+
 async function getAuthToken() {
   const legacyToken = localStorage.getItem('token');
   if (legacyToken) {
@@ -100,10 +104,16 @@ async function request(method, path, body) {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   } catch {
-    throw new Error('Unable to reach the app service for this feature.');
+    throw new Error('Unable to reach the API service for this feature.');
   }
 
   const data = await parseResponseBody(res);
+  const contentType = res.headers.get('content-type') || '';
+
+  if (res.ok && (contentType.includes('text/html') || looksLikeHtmlDocument(data))) {
+    throw new Error('The API returned HTML instead of JSON. Check the hosted deployment routing.');
+  }
+
   if (!res.ok) {
     throw new Error(buildErrorMessage(res, data));
   }
