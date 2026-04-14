@@ -5,7 +5,7 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-const systemPrompt = [
+const defaultSystemPrompt = [
   'You are the binge media assistant.',
   'Answer in concise natural prose.',
   'Do not use markdown formatting such as bold, bullets, or numbered lists unless the user explicitly asks for it.',
@@ -13,6 +13,21 @@ const systemPrompt = [
   'Mention titles naturally in the explanation and let the UI render the direct binge links separately.',
   'If you share multiple titles, keep the explanation short and readable and limit yourself to at most 5 titles.',
 ].join(' ');
+
+function resolveTemperature(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.min(1, parsed));
+    }
+  }
+
+  return 0.7;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -60,6 +75,16 @@ Deno.serve(async (req) => {
     }
 
     const messages = Array.isArray(body.messages) ? body.messages : null;
+    const systemPromptOverride =
+      typeof body.systemPromptOverride === 'string' && body.systemPromptOverride.trim()
+        ? body.systemPromptOverride.trim()
+        : defaultSystemPrompt;
+    const includeWebSearch = body.includeWebSearch !== false;
+    const webSearchQuery =
+      typeof body.webSearchQuery === 'string' && body.webSearchQuery.trim()
+        ? body.webSearchQuery.trim()
+        : '';
+    const temperature = resolveTemperature(body.temperature);
 
     if (!messages || messages.length === 0) {
       return new Response(
@@ -69,7 +94,7 @@ Deno.serve(async (req) => {
     }
 
     const groqMessages = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPromptOverride },
       ...messages,
     ];
 
@@ -83,7 +108,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: groqMessages,
-        temperature: 0.7,
+        temperature,
       }),
     });
 
@@ -100,8 +125,8 @@ Deno.serve(async (req) => {
     let webSources = [];
 
     // Search for sources using Tavily if available
-    if (tavilyApiKey && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1]?.content || '';
+    if (includeWebSearch && tavilyApiKey && messages.length > 0) {
+      const lastMessage = webSearchQuery || messages[messages.length - 1]?.content || '';
       try {
         const tavilyRes = await fetch('https://api.tavily.com/search', {
           method: 'POST',
@@ -136,6 +161,7 @@ Deno.serve(async (req) => {
         content,
         webSources,
         siteSources: [],
+        systemPrompt: systemPromptOverride,
         raw: groqData,
       }),
       { status: 200, headers: corsHeaders }
