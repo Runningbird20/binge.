@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireAdmin);
 
 // GET /api/admin/stats — overview metrics
 router.get('/stats', (req, res) => {

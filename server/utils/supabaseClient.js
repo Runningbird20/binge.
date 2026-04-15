@@ -1,7 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL?.trim();
-const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY)?.trim();
+const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL)?.trim();
+const SUPABASE_KEY = (
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.REACT_APP_SUPABASE_KEY
+)?.trim();
 
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
@@ -125,6 +131,7 @@ async function fetchSupabaseCatalogItems(limitEach = 100) {
 }
 
 module.exports = {
+  supabase,
   isSupabaseConfigured,
   fetchSupabaseCatalog,
   fetchSupabaseCatalogItems,
