@@ -11,6 +11,12 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const defaultRoute = user ? getDefaultRouteForUserType(user.userType) : '/';
+  const defaultRouteLabel =
+    defaultRoute === '/__ops/dev-lab'
+      ? 'Developer Lab'
+      : defaultRoute === '/admin'
+        ? 'Admin'
+        : 'Home';
 
   async function handleLogout() {
     await logout();
@@ -52,29 +58,57 @@ export default function Navbar() {
             </NavLink>
             <button className="btn-ghost navbar-logout" onClick={handleLogout}>Log out</button>
 
-            <button className="navbar-hamburger" onClick={() => setMobileOpen((isOpen) => !isOpen)} type="button" aria-label="Menu">
-              {mobileOpen ? 'X' : 'Menu'}
+            <button
+              className={`navbar-hamburger${mobileOpen ? ' is-open' : ''}`}
+              onClick={() => setMobileOpen((isOpen) => !isOpen)}
+              type="button"
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              aria-controls="navbar-mobile-menu"
+              aria-expanded={mobileOpen}
+            >
+              <span className="navbar-hamburger-box" aria-hidden="true">
+                <span className="navbar-hamburger-line" />
+                <span className="navbar-hamburger-line" />
+                <span className="navbar-hamburger-line" />
+              </span>
             </button>
           </div>
 
           {mobileOpen && (
             <div className="navbar-mobile-menu" onClick={() => setMobileOpen(false)}>
-              <div className="navbar-mobile-inner" onClick={(event) => event.stopPropagation()}>
+              <div id="navbar-mobile-menu" className="navbar-mobile-inner" onClick={(event) => event.stopPropagation()}>
+                <div className="navbar-mobile-header">
+                  <Link to={defaultRoute} className="navbar-mobile-brand" onClick={() => setMobileOpen(false)}>
+                    binge.
+                  </Link>
+                  <button
+                    className="navbar-mobile-close"
+                    type="button"
+                    aria-label="Close menu"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <span className="navbar-mobile-close-line" />
+                    <span className="navbar-mobile-close-line" />
+                  </button>
+                </div>
+                <p className="navbar-mobile-label">Navigation</p>
                 <div className="navbar-mobile-search"><GlobalSearch /></div>
-                <NavLink to={defaultRoute} className={navLink} onClick={() => setMobileOpen(false)}>Home</NavLink>
-                <NavLink to="/live-tv" className={navLink} onClick={() => setMobileOpen(false)}>Live TV</NavLink>
-                <NavLink to="/movies" className={navLink} onClick={() => setMobileOpen(false)}>Movies</NavLink>
-                <NavLink to="/tv-shows" className={navLink} onClick={() => setMobileOpen(false)}>TV Shows</NavLink>
-                <NavLink to="/books" className={navLink} onClick={() => setMobileOpen(false)}>Books</NavLink>
-                <NavLink to="/forum" className={navLink} onClick={() => setMobileOpen(false)}>Forum</NavLink>
-                <NavLink to="/watchlist" className={navLink} onClick={() => setMobileOpen(false)}>Watchlist</NavLink>
-                <NavLink to="/ratings" className={navLink} onClick={() => setMobileOpen(false)}>My Ratings</NavLink>
-                <NavLink to="/following" className={navLink} onClick={() => setMobileOpen(false)}>Following</NavLink>
-                <NavLink to="/watch-room" className={navLink} onClick={() => setMobileOpen(false)}>Watch Together</NavLink>
-                <NavLink to="/lists" className={navLink} onClick={() => setMobileOpen(false)}>Lists</NavLink>
-                <NavLink to={`/profile/${user.username}`} className={navLink} onClick={() => setMobileOpen(false)}>My Profile</NavLink>
-                <NavLink to="/account-settings" className={navLink} onClick={() => setMobileOpen(false)}>Settings</NavLink>
-                <button className="btn-ghost" onClick={handleLogout} type="button">Log out</button>
+                <div className="navbar-mobile-nav">
+                  <NavLink to={defaultRoute} className={navLink} onClick={() => setMobileOpen(false)}>{defaultRouteLabel}</NavLink>
+                  <NavLink to="/live-tv" className={navLink} onClick={() => setMobileOpen(false)}>Live TV</NavLink>
+                  <NavLink to="/movies" className={navLink} onClick={() => setMobileOpen(false)}>Movies</NavLink>
+                  <NavLink to="/tv-shows" className={navLink} onClick={() => setMobileOpen(false)}>TV Shows</NavLink>
+                  <NavLink to="/books" className={navLink} onClick={() => setMobileOpen(false)}>Books</NavLink>
+                  <NavLink to="/forum" className={navLink} onClick={() => setMobileOpen(false)}>Forum</NavLink>
+                  <NavLink to="/watchlist" className={navLink} onClick={() => setMobileOpen(false)}>Watchlist</NavLink>
+                  <NavLink to="/ratings" className={navLink} onClick={() => setMobileOpen(false)}>My Ratings</NavLink>
+                  <NavLink to="/following" className={navLink} onClick={() => setMobileOpen(false)}>Following</NavLink>
+                  <NavLink to="/watch-room" className={navLink} onClick={() => setMobileOpen(false)}>Watch Together</NavLink>
+                  <NavLink to="/lists" className={navLink} onClick={() => setMobileOpen(false)}>Lists</NavLink>
+                  <NavLink to={`/profile/${user.username}`} className={navLink} onClick={() => setMobileOpen(false)}>My Profile</NavLink>
+                  <NavLink to="/account-settings" className={navLink} onClick={() => setMobileOpen(false)}>Settings</NavLink>
+                  <button className="btn-ghost" onClick={handleLogout} type="button">Log out</button>
+                </div>
               </div>
             </div>
           )}
