@@ -619,7 +619,7 @@ export default function ChatBot() {
               {apiStatus === false && (
                 <div className="chatbot-offline-banner">
                   <strong>⚠️ AI not available.</strong>
-                  <p>Make sure your Supabase function and GROQ API key are configured. You need <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_PUBLISHABLE_KEY</code> (or <code>SUPABASE_URL</code>/<code>SUPABASE_ANON_KEY</code>) as well as <code>GROQ_API_KEY</code>.</p>
+                  <p>Make sure your Supabase function and GROQ API key are configured. You need <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_ANON_KEY</code> (or <code>SUPABASE_URL</code>/<code>SUPABASE_ANON_KEY</code>) as well as <code>GROQ_API_KEY</code>.</p>
                   <button className="chatbot-retry-btn" onClick={() => { setApiStatus(null); checkStatus(); }}>Retry</button>
                 </div>
               )}
