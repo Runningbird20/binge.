@@ -43,6 +43,7 @@ app.use('/api/requests',  require('./routes/requests'));
 app.use('/api/livetv',     require('./routes/livetv'));
 app.use('/api/forum',         require('./routes/forum'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/search',        require('./routes/search'));
 app.use('/api/watchroom',     require('./routes/watchroom'));
 app.use('/api/profile',       require('./routes/profile'));
