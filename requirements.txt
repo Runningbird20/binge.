@@ -10,7 +10,8 @@
 # - npm 9+
 #
 # Local environment
-# - The app expects REACT_APP_API_URL=http://localhost:5001 for local use.
+# - The app expects REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY for local use.
+# - REACT_APP_ENABLE_LEGACY_BACKEND should remain false unless you intentionally still run the old Express API.
 # - The repository already includes a .env file with local development values.
 #
 # Install dependencies
