@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 import MediaDetailsModal from './MediaDetailsModal';
 import { invokeSupabaseFunction, isSupabaseConfigured, supabase } from '../utils/supabase';
 import { submitSupabaseRequest } from '../utils/supabaseData';
-import MediaDetailsModal from './MediaDetailsModal';
 
 const INTENT_LABELS = {
   recommendation: '🎯 Recommendation',
