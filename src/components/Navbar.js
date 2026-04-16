@@ -24,11 +24,6 @@ export default function Navbar() {
 
       {user ? (
         <>
-          {/* Desktop search */}
-          <div className="navbar-search-wrap">
-            <GlobalSearch />
-          </div>
-
           {/* Desktop links */}
           <div className="navbar-links navbar-links--desktop">
             <NavLink to="/live-tv"   className={navLink}>Live TV</NavLink>

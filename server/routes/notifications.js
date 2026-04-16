@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
+let _sbCreateClient = null;
+function getCreateClient() {
+  if (!_sbCreateClient) {
+    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
+  }
+  return _sbCreateClient;
+}
 
 function getSb(token) {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
@@ -15,8 +22,15 @@ async function getUser(req) {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) return null;
-    const { createClient } = require('@supabase/supabase-js');
-    const sb = createClient(url, key, {
+    let _sbCreateClient = null;
+function getCreateClient() {
+  if (!_sbCreateClient) {
+    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
+  }
+  return _sbCreateClient;
+}
+    const sb = getCreateClient()(url, key, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
     const { data: { user }, error } = await sb.auth.getUser(token);

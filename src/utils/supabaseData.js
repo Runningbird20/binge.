@@ -3,7 +3,6 @@ import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
 } from './mediaMetadataCache';
-import { normalizeBooleanFlag, resolveUserType } from './userAccess';
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
@@ -71,35 +70,8 @@ function toFriendlyError(error, fallbackMessage) {
   return error.message || fallbackMessage;
 }
 
-function resolveRoleState(profileRow, authUser, overrides = {}) {
-  const authMetadata = authUser?.user_metadata || {};
-  const userType = resolveUserType({
-    userType:
-      overrides.userType ??
-      profileRow?.user_type ??
-      authMetadata.user_type,
-    isAdmin:
-      overrides.isAdmin ??
-      overrides.is_admin ??
-      profileRow?.is_admin ??
-      authMetadata.is_admin,
-    isDev:
-      overrides.isDev ??
-      overrides.is_dev ??
-      profileRow?.is_dev ??
-      authMetadata.is_dev,
-  });
-
-  return {
-    userType,
-    isAdmin: userType === 'admin',
-    isDev: userType === 'dev',
-  };
-}
-
 function buildUserProfile(authUser, profileRow) {
   const email = profileRow?.email || authUser?.email || '';
-  const roleState = resolveRoleState(profileRow, authUser);
   const fallbackUsername =
     profileRow?.username ||
     authUser?.user_metadata?.username ||
@@ -109,12 +81,10 @@ function buildUserProfile(authUser, profileRow) {
     id: authUser?.id || profileRow?.id,
     username: fallbackUsername,
     email,
-    userType: roleState.userType,
     bio: profileRow?.bio || authUser?.user_metadata?.bio || '',
     avatarUrl: profileRow?.avatar_url || authUser?.user_metadata?.avatar_url || null,
     createdAt: profileRow?.created_at || authUser?.created_at || null,
-    isAdmin: roleState.isAdmin,
-    isDev: roleState.isDev,
+    isAdmin: profileRow?.is_admin === true,
   };
 }
 
@@ -133,13 +103,9 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
 }
 
 function buildFallbackProfileRow(authUser, overrides = {}) {
-  const roleState = resolveRoleState(null, authUser, overrides);
-
   return {
     id: authUser?.id || null,
     email: overrides.email ?? authUser?.email ?? '',
-    is_admin: roleState.isAdmin,
-    is_dev: roleState.isDev,
     username:
       overrides.username ??
       authUser?.user_metadata?.username ??
@@ -205,12 +171,9 @@ async function saveProfileRow(userId, payload, hasExistingProfile) {
 
 export async function ensureSupabaseProfile(authUser, overrides = {}) {
   const profileRow = await getProfileRow(authUser.id);
-  const roleState = resolveRoleState(profileRow, authUser, overrides);
 
   const nextProfile = {
     email: overrides.email ?? profileRow?.email ?? authUser.email ?? '',
-    is_admin: roleState.isAdmin,
-    is_dev: roleState.isDev,
     username:
       overrides.username ??
       profileRow?.username ??
@@ -228,8 +191,6 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
   const profileNeedsWrite =
     !profileRow ||
     profileRow.email !== nextProfile.email ||
-    normalizeBooleanFlag(profileRow?.is_admin) !== nextProfile.is_admin ||
-    normalizeBooleanFlag(profileRow?.is_dev) !== nextProfile.is_dev ||
     profileRow.username !== nextProfile.username ||
     profileRow.bio !== nextProfile.bio ||
     (profileRow.avatar_url || null) !== (nextProfile.avatar_url || null);
@@ -272,53 +233,7 @@ export async function getSupabaseSessionProfile() {
     return null;
   }
 
-  const validateCurrentUser = async () => {
-    const userResponse = await withTimeout(
-      client.auth.getUser(),
-      AUTH_REQUEST_TIMEOUT_MS,
-      'Validating the Supabase session timed out.'
-    );
-
-    if (userResponse.error) {
-      throw userResponse.error;
-    }
-
-    return userResponse.data?.user || null;
-  };
-
-  try {
-    const validatedUser = await validateCurrentUser();
-    if (!validatedUser) {
-      await client.auth.signOut().catch(() => {});
-      return null;
-    }
-
-    return resolveSupabaseProfile(validatedUser);
-  } catch (validationError) {
-    try {
-      const refreshResponse = await withTimeout(
-        client.auth.refreshSession(),
-        AUTH_REQUEST_TIMEOUT_MS,
-        'Refreshing the Supabase session timed out.'
-      );
-
-      if (refreshResponse.error || !refreshResponse.data?.session?.user) {
-        await client.auth.signOut().catch(() => {});
-        return null;
-      }
-
-      const validatedUser = await validateCurrentUser();
-      if (!validatedUser) {
-        await client.auth.signOut().catch(() => {});
-        return null;
-      }
-
-      return resolveSupabaseProfile(validatedUser);
-    } catch {
-      await client.auth.signOut().catch(() => {});
-      return null;
-    }
-  }
+  return resolveSupabaseProfile(data.session.user);
 }
 
 export async function signInWithSupabase({ email, password }) {
@@ -351,9 +266,6 @@ export async function signUpWithSupabase({ username, email, password, bio, avata
           username,
           bio,
           avatar_url: avatarUrl || null,
-          is_admin: false,
-          is_dev: false,
-          user_type: 'user',
         },
       },
     }),

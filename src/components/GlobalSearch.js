@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 
@@ -12,13 +12,13 @@ function useDebounce(value, delay) {
 }
 
 export default function GlobalSearch() {
-  const [open, setOpen]     = useState(false);
-  const [query, setQuery]   = useState('');
+  const [open, setOpen]       = useState(false);
+  const [query, setQuery]     = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(0);
-  const inputRef = useRef(null);
-  const navigate = useNavigate();
+  const inputRef  = useRef(null);
+  const navigate  = useNavigate();
   const debounced = useDebounce(query, 280);
 
   // Keyboard shortcut: Cmd+K / Ctrl+K
@@ -45,21 +45,55 @@ export default function GlobalSearch() {
       .finally(() => setLoading(false));
   }, [debounced]);
 
-  // Flatten results for keyboard nav
+  // Flatten results — movies/tv/books get URLs that open the item on their page
   const flat = results ? [
-    ...results.movies.map(r => ({ ...r, _type: 'movie', _label: r.title, _sub: `Movie · ${r.year || ''}`, _url: '/movies' })),
-    ...results.tv.map(r => ({ ...r, _type: 'tv', _label: r.title, _sub: `TV Show · ${r.year || ''}`, _url: '/tv-shows' })),
-    ...results.books.map(r => ({ ...r, _type: 'book', _label: r.title, _sub: `Book · ${r.author || ''}`, _url: '/books' })),
-    ...results.forums.map(r => ({ ...r, _type: 'forum', _label: r.name, _sub: `Community · ${r.member_count || 0} members`, _url: `/forum/${r.slug}` })),
-    ...results.posts.map(r => ({ ...r, _type: 'post', _label: r.title, _sub: `Post in ${r.forums?.name}`, _url: `/forum/${r.forums?.slug}/post/${r.id}` })),
-    ...(results.people || []).map(r => ({ ...r, _type: 'person', _label: r.username, _sub: r.bio || 'User', _url: `/profile/${r.username}` })),
+    ...results.movies.map(r => ({
+      ...r, _type: 'movie',
+      _label: r.title,
+      _sub: `Movie · ${r.year || ''}`,
+      _url: `/movies?open=${r.id}`,
+    })),
+    ...results.tv.map(r => ({
+      ...r, _type: 'tv',
+      _label: r.title,
+      _sub: `TV Show · ${r.year || ''}`,
+      _url: `/tv-shows?open=${r.id}`,
+    })),
+    ...results.books.map(r => ({
+      ...r, _type: 'book',
+      _label: r.title,
+      _sub: `Book · ${r.author || ''}`,
+      _url: `/books?open=${r.id}`,
+    })),
+    ...results.forums.map(r => ({
+      ...r, _type: 'forum',
+      _label: r.name,
+      _sub: `Community · ${(r.member_count||0).toLocaleString()} members`,
+      _url: `/forum/${r.slug}`,
+    })),
+    ...results.posts.map(r => ({
+      ...r, _type: 'post',
+      _label: r.title,
+      _sub: `Post in ${r.forums?.name}`,
+      _url: `/forum/${r.forums?.slug}/post/${r.id}`,
+    })),
+    ...(results.people || []).map(r => ({
+      ...r, _type: 'person',
+      _label: r.username,
+      _sub: r.bio || 'User',
+      _url: `/profile/${r.username}`,
+    })),
   ] : [];
 
-  function handleSelect(item) {
-    navigate(item._url);
+  function close() {
     setOpen(false);
     setQuery('');
     setResults(null);
+  }
+
+  function handleSelect(item) {
+    navigate(item._url);
+    close();
   }
 
   function handleKeyDown(e) {
@@ -75,6 +109,7 @@ export default function GlobalSearch() {
 
   return (
     <>
+      {/* Trigger — shown in the search bar area below navbar */}
       <button
         className="global-search-trigger"
         onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
@@ -82,12 +117,12 @@ export default function GlobalSearch() {
         title="Search (⌘K)"
       >
         <span className="global-search-icon">🔍</span>
-        <span className="global-search-placeholder">Search...</span>
+        <span className="global-search-placeholder">Search movies, shows, books, communities…</span>
         <kbd className="global-search-kbd">⌘K</kbd>
       </button>
 
       {open && (
-        <div className="global-search-overlay" onClick={() => { setOpen(false); setQuery(''); }}>
+        <div className="global-search-overlay" onClick={close}>
           <div className="global-search-modal" onClick={e => e.stopPropagation()}>
             <div className="global-search-input-wrap">
               <span className="global-search-input-icon">🔍</span>
@@ -101,7 +136,9 @@ export default function GlobalSearch() {
                 autoComplete="off"
               />
               {loading && <span className="global-search-loading" />}
-              {query && <button className="global-search-clear" onClick={() => setQuery('')} type="button">✕</button>}
+              {query && (
+                <button className="global-search-clear" onClick={() => setQuery('')} type="button">✕</button>
+              )}
             </div>
 
             {!query && (
@@ -109,7 +146,7 @@ export default function GlobalSearch() {
                 <p>Search across movies, TV shows, books, communities, posts, and users</p>
                 <div className="global-search-shortcuts">
                   <span><kbd>↑↓</kbd> navigate</span>
-                  <span><kbd>↵</kbd> select</span>
+                  <span><kbd>↵</kbd> open</span>
                   <span><kbd>Esc</kbd> close</span>
                 </div>
               </div>
@@ -121,16 +158,18 @@ export default function GlobalSearch() {
 
             {flat.length > 0 && (
               <div className="global-search-results">
-                {/* Group by type */}
                 {['movie', 'tv', 'book', 'forum', 'post', 'person'].map(type => {
                   const items = flat.filter(r => r._type === type);
                   if (!items.length) return null;
-                  const sectionLabels = { movie: '🎬 Movies', tv: '📺 TV Shows', book: '📖 Books', forum: '💬 Communities', post: '📝 Posts', person: '👤 People' };
+                  const sectionLabels = {
+                    movie: '🎬 Movies', tv: '📺 TV Shows', book: '📖 Books',
+                    forum: '💬 Communities', post: '📝 Posts', person: '👤 People',
+                  };
                   return (
                     <div key={type} className="global-search-section">
                       <p className="global-search-section-label">{sectionLabels[type]}</p>
                       {items.map(item => {
-                        const idx = flat.indexOf(item);
+                        const idx   = flat.indexOf(item);
                         const poster = item.poster_url || item.cover_url;
                         return (
                           <button
