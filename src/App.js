@@ -48,12 +48,12 @@ export default function App() {
             <Route path="/forum" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/forum/:slug" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute allowedUserTypes={['user']}><AdminHome /></ProtectedRoute>} />
             <Route path="/lists" element={<ProtectedRoute><Lists /></ProtectedRoute>} />
             <Route path="/lists/:shareCode" element={<SharedList />} />
             <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-            <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
-            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
+            <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['user']}><AdminRequests /></ProtectedRoute>} />
+            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['user']}><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route
               path="/__ops/dev-lab"
