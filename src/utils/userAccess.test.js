@@ -17,6 +17,20 @@ describe('user access helpers', () => {
     }, ['dev', 'admin'])).toBe(true);
   });
 
+  test('treats raw Supabase-shaped is_dev flags as dev access', () => {
+    expect(getDefaultRouteForUserType({
+      user_type: null,
+      is_admin: false,
+      is_dev: true,
+    })).toBe('/__ops/dev-lab');
+
+    expect(canAccessUserType({
+      user_type: null,
+      is_admin: false,
+      is_dev: true,
+    }, ['dev', 'admin'])).toBe(true);
+  });
+
   test('keeps admin precedence when both role flags are present', () => {
     expect(getDefaultRouteForUserType({
       userType: 'user',
