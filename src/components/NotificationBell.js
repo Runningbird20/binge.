@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../contexts/AuthContext';
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
@@ -19,6 +20,7 @@ const TYPE_ICONS = {
 };
 
 export default function NotificationBell() {
+  const { user } = useAuth();
   const [count, setCount]           = useState(0);
   const [notifs, setNotifs]         = useState([]);
   const [open, setOpen]             = useState(false);
@@ -26,15 +28,16 @@ export default function NotificationBell() {
   const panelRef = useRef(null);
   const navigate = useNavigate();
 
-  // Poll unread count every 30s
+  // Poll unread count every 30s — only when logged in
   useEffect(() => {
+    if (!user) return;
     function fetchCount() {
       api.get('/notifications/unread-count').then(d => setCount(d.count || 0)).catch(() => {});
     }
     fetchCount();
     const interval = setInterval(fetchCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   // Close on outside click
   useEffect(() => {
