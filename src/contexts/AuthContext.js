@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
+import { clearTokenCache, setTokenCache } from '../api';
 import {
   getSupabaseSessionProfile,
   resolveSupabaseProfile,
@@ -100,10 +101,13 @@ export function AuthProvider({ children }) {
       }
 
       if (!session?.user) {
+        clearTokenCache();
         setUser(null);
         setAuthLoading(false);
         return;
       }
+      // Cache the token so api.js doesn't call getSession() on every request
+      if (session?.access_token) setTokenCache(session.access_token);
 
       try {
         const nextUser = await resolveSupabaseProfile(session.user);
