@@ -302,7 +302,7 @@ export default function DeveloperLab() {
               <p className="devlab-muted">Import directly into the live Supabase catalog from TMDB or Open Library.</p>
               <form className="devlab-form" onSubmit={handleApiImport}>
                 <div className="devlab-form-grid">
-                  <label>
+                  <label className="devlab-field">
                     <span>Provider</span>
                     <select
                       value={apiForm.provider}
@@ -319,7 +319,7 @@ export default function DeveloperLab() {
                       <option value="openlibrary">Open Library</option>
                     </select>
                   </label>
-                  <label>
+                  <label className="devlab-field">
                     <span>Media Type</span>
                     <select value={apiForm.mediaType} onChange={(event) => setApiForm((current) => ({ ...current, mediaType: event.target.value }))}>
                       {apiForm.provider === 'tmdb' ? (
@@ -332,18 +332,20 @@ export default function DeveloperLab() {
                       )}
                     </select>
                   </label>
-                  <label>
+                  <label className="devlab-field">
                     <span>Limit</span>
                     <input type="number" min="1" max="10" value={apiForm.limit} onChange={(event) => setApiForm((current) => ({ ...current, limit: event.target.value }))} />
                   </label>
                 </div>
-                <label>
+                <label className="devlab-field">
                   <span>Search Query</span>
                   <input type="text" value={apiForm.query} placeholder="e.g. Interstellar" onChange={(event) => setApiForm((current) => ({ ...current, query: event.target.value }))} />
                 </label>
-                <button className="btn-primary" type="submit" disabled={busy === 'api'}>
-                  {busy === 'api' ? 'Importing...' : 'Import Into Supabase'}
-                </button>
+                <div className="devlab-form-actions">
+                  <button className="btn-primary" type="submit" disabled={busy === 'api'}>
+                    {busy === 'api' ? 'Importing...' : 'Import Into Supabase'}
+                  </button>
+                </div>
               </form>
             </article>
 
@@ -351,16 +353,16 @@ export default function DeveloperLab() {
               <h3>URL Scraping</h3>
               <p className="devlab-muted">Pull a remote page into the knowledge base with optional tagging and media context.</p>
               <form className="devlab-form" onSubmit={handleUrlIngest}>
-                <label>
+                <label className="devlab-field">
                   <span>URL</span>
                   <input type="url" value={urlForm.url} placeholder="https://example.com/article" onChange={(event) => setUrlForm((current) => ({ ...current, url: event.target.value }))} />
                 </label>
                 <div className="devlab-form-grid devlab-form-grid--two">
-                  <label>
+                  <label className="devlab-field">
                     <span>Title Override</span>
                     <input type="text" value={urlForm.title} onChange={(event) => setUrlForm((current) => ({ ...current, title: event.target.value }))} />
                   </label>
-                  <label>
+                  <label className="devlab-field">
                     <span>Media Type</span>
                     <select value={urlForm.mediaType} onChange={(event) => setUrlForm((current) => ({ ...current, mediaType: event.target.value }))}>
                       <option value="">General</option>
@@ -370,13 +372,15 @@ export default function DeveloperLab() {
                     </select>
                   </label>
                 </div>
-                <label>
+                <label className="devlab-field">
                   <span>Tags</span>
                   <input type="text" value={urlForm.tags} placeholder="comma-separated tags" onChange={(event) => setUrlForm((current) => ({ ...current, tags: event.target.value }))} />
                 </label>
-                <button className="btn-primary" type="submit" disabled={busy === 'url'}>
-                  {busy === 'url' ? 'Scraping...' : 'Scrape Into Knowledge Base'}
-                </button>
+                <div className="devlab-form-actions">
+                  <button className="btn-primary" type="submit" disabled={busy === 'url'}>
+                    {busy === 'url' ? 'Scraping...' : 'Scrape Into Knowledge Base'}
+                  </button>
+                </div>
               </form>
             </article>
 
@@ -385,17 +389,17 @@ export default function DeveloperLab() {
               <p className="devlab-muted">Paste notes, upload small text files, and save the result straight into the knowledge collection.</p>
               <form className="devlab-form" onSubmit={handleManualIngest}>
                 <div className="devlab-form-grid devlab-form-grid--two">
-                  <label>
+                  <label className="devlab-field">
                     <span>Title</span>
                     <input type="text" value={manualForm.title} onChange={(event) => setManualForm((current) => ({ ...current, title: event.target.value }))} />
                   </label>
-                  <label>
+                  <label className="devlab-field">
                     <span>Source Label</span>
                     <input type="text" value={manualForm.sourceLabel} onChange={(event) => setManualForm((current) => ({ ...current, sourceLabel: event.target.value }))} />
                   </label>
                 </div>
                 <div className="devlab-form-grid devlab-form-grid--two">
-                  <label>
+                  <label className="devlab-field">
                     <span>Media Type</span>
                     <select value={manualForm.mediaType} onChange={(event) => setManualForm((current) => ({ ...current, mediaType: event.target.value }))}>
                       <option value="">General</option>
@@ -404,22 +408,24 @@ export default function DeveloperLab() {
                       <option value="book">Book</option>
                     </select>
                   </label>
-                  <label>
+                  <label className="devlab-field">
                     <span>Tags</span>
                     <input type="text" value={manualForm.tags} placeholder="comma-separated tags" onChange={(event) => setManualForm((current) => ({ ...current, tags: event.target.value }))} />
                   </label>
                 </div>
-                <label>
+                <label className="devlab-field devlab-field--file">
                   <span>Optional File</span>
                   <input type="file" accept=".txt,.md,.json,.csv" onChange={handleFileUpload} />
                 </label>
-                <label>
+                <label className="devlab-field">
                   <span>Content</span>
-                  <textarea rows={8} value={manualForm.content} onChange={(event) => setManualForm((current) => ({ ...current, content: event.target.value }))} />
+                  <textarea className="devlab-textarea devlab-textarea--lg" rows={8} value={manualForm.content} onChange={(event) => setManualForm((current) => ({ ...current, content: event.target.value }))} />
                 </label>
-                <button className="btn-primary" type="submit" disabled={busy === 'manual'}>
-                  {busy === 'manual' ? 'Saving...' : 'Save Knowledge Document'}
-                </button>
+                <div className="devlab-form-actions">
+                  <button className="btn-primary" type="submit" disabled={busy === 'manual'}>
+                    {busy === 'manual' ? 'Saving...' : 'Save Knowledge Document'}
+                  </button>
+                </div>
               </form>
             </article>
           </div>
@@ -455,7 +461,7 @@ export default function DeveloperLab() {
                 </div>
               ))
             ) : (
-              <div className="empty-state">
+              <div className="empty-state devlab-empty-state">
                 <p>No knowledge documents saved yet.</p>
                 <p className="empty-hint">Use the intake tools above to seed the assistant context.</p>
               </div>
@@ -490,7 +496,7 @@ export default function DeveloperLab() {
           {requestsLoading ? (
             <div className="loading-state">Loading requests...</div>
           ) : requests.length === 0 ? (
-            <div className="empty-state">
+            <div className="empty-state devlab-empty-state">
               <p>No {requestFilter !== 'all' ? requestFilter : ''} requests.</p>
               <p className="empty-hint">New user submissions will show up here automatically.</p>
             </div>
@@ -520,7 +526,7 @@ export default function DeveloperLab() {
 
                     {requestNoteFor === request.id ? (
                       <div className="devlab-request-note-row">
-                        <input className="search-input" placeholder="Optional note to the requester" value={requestAdminNote} onChange={(event) => setRequestAdminNote(event.target.value)} />
+                        <input className="search-input devlab-request-note-input" placeholder="Optional note to the requester" value={requestAdminNote} onChange={(event) => setRequestAdminNote(event.target.value)} />
                         <button className="btn-ghost btn-ghost--danger" type="button" disabled={requestActionId === request.id} onClick={() => handleUpdateRequestStatus(request.id, 'rejected')}>
                           Confirm Reject
                         </button>
@@ -590,7 +596,7 @@ export default function DeveloperLab() {
 
           {selectedPrompt ? (
             <form className="devlab-form" onSubmit={handlePromptSave}>
-              <label>
+              <label className="devlab-field">
                 <span>Intent</span>
                 <select value={selectedIntent} onChange={(event) => setSelectedIntent(event.target.value)}>
                   {promptOptions.map((intent) => (
@@ -601,34 +607,37 @@ export default function DeveloperLab() {
                 </select>
               </label>
               <div className="devlab-form-grid">
-                <label>
+                <label className="devlab-field">
                   <span>Label</span>
                   <input type="text" value={selectedPrompt.label} onChange={(event) => setPromptDrafts((current) => ({ ...current, [selectedIntent]: { ...current[selectedIntent], label: event.target.value } }))} />
                 </label>
-                <label>
+                <label className="devlab-field">
                   <span>Temperature</span>
                   <input type="number" min="0" max="1" step="0.05" value={selectedPrompt.temperature} onChange={(event) => setPromptDrafts((current) => ({ ...current, [selectedIntent]: { ...current[selectedIntent], temperature: event.target.value } }))} />
                 </label>
-                <label>
+                <label className="devlab-field">
                   <span>Max Titles</span>
                   <input type="number" min="1" max="12" value={selectedPrompt.maxTitles} onChange={(event) => setPromptDrafts((current) => ({ ...current, [selectedIntent]: { ...current[selectedIntent], maxTitles: event.target.value } }))} />
                 </label>
               </div>
-              <label>
+              <label className="devlab-field">
                 <span>Description</span>
                 <input type="text" value={selectedPrompt.description} onChange={(event) => setPromptDrafts((current) => ({ ...current, [selectedIntent]: { ...current[selectedIntent], description: event.target.value } }))} />
               </label>
-              <label>
+              <label className="devlab-field">
                 <span>System Prompt</span>
-                <textarea rows={10} value={selectedPrompt.systemPrompt} onChange={(event) => setPromptDrafts((current) => ({ ...current, [selectedIntent]: { ...current[selectedIntent], systemPrompt: event.target.value } }))} />
+                <textarea className="devlab-textarea devlab-textarea--xl" rows={10} value={selectedPrompt.systemPrompt} onChange={(event) => setPromptDrafts((current) => ({ ...current, [selectedIntent]: { ...current[selectedIntent], systemPrompt: event.target.value } }))} />
               </label>
-              <button className="btn-primary" type="submit" disabled={busy === 'prompt'}>
-                {busy === 'prompt' ? 'Saving...' : 'Save Prompt Profile'}
-              </button>
+              <div className="devlab-form-actions">
+                <button className="btn-primary" type="submit" disabled={busy === 'prompt'}>
+                  {busy === 'prompt' ? 'Saving...' : 'Save Prompt Profile'}
+                </button>
+              </div>
             </form>
           ) : (
-            <div className="empty-state">
+            <div className="empty-state devlab-empty-state">
               <p>No prompt profiles available.</p>
+              <p className="empty-hint">Add developer prompt presets to tune each intent in one place.</p>
             </div>
           )}
         </section>
@@ -643,7 +652,7 @@ export default function DeveloperLab() {
 
           <form className="devlab-form" onSubmit={handlePreview}>
             <div className="devlab-form-grid devlab-form-grid--two">
-              <label>
+              <label className="devlab-field">
                 <span>Intent</span>
                 <select value={previewForm.forcedIntent} onChange={(event) => setPreviewForm((current) => ({ ...current, forcedIntent: event.target.value }))}>
                   <option value="auto">Auto-detect</option>
@@ -659,13 +668,15 @@ export default function DeveloperLab() {
                 <span>Include web search</span>
               </label>
             </div>
-            <label>
+            <label className="devlab-field">
               <span>Question</span>
-              <textarea rows={5} value={previewForm.question} placeholder="Ask the preview assistant a question" onChange={(event) => setPreviewForm((current) => ({ ...current, question: event.target.value }))} />
+              <textarea className="devlab-textarea devlab-textarea--md" rows={5} value={previewForm.question} placeholder="Ask the preview assistant a question" onChange={(event) => setPreviewForm((current) => ({ ...current, question: event.target.value }))} />
             </label>
-            <button className="btn-primary" type="submit" disabled={busy === 'preview'}>
-              {busy === 'preview' ? 'Generating...' : 'Run Preview'}
-            </button>
+            <div className="devlab-form-actions">
+              <button className="btn-primary" type="submit" disabled={busy === 'preview'}>
+                {busy === 'preview' ? 'Generating...' : 'Run Preview'}
+              </button>
+            </div>
           </form>
 
           {preview ? (
@@ -710,16 +721,16 @@ export default function DeveloperLab() {
           </div>
 
           <form className="devlab-form" onSubmit={handleEvalSave}>
-            <label>
+            <label className="devlab-field">
               <span>Label</span>
               <input type="text" value={evalForm.label} onChange={(event) => setEvalForm((current) => ({ ...current, label: event.target.value }))} />
             </label>
-            <label>
+            <label className="devlab-field">
               <span>Question</span>
-              <textarea rows={3} value={evalForm.question} onChange={(event) => setEvalForm((current) => ({ ...current, question: event.target.value }))} />
+              <textarea className="devlab-textarea devlab-textarea--md" rows={3} value={evalForm.question} onChange={(event) => setEvalForm((current) => ({ ...current, question: event.target.value }))} />
             </label>
-            <div className="devlab-form-grid">
-              <label>
+            <div className="devlab-form-grid devlab-form-grid--quality">
+              <label className="devlab-field">
                 <span>Expected Intent</span>
                 <select value={evalForm.expectedIntent} onChange={(event) => setEvalForm((current) => ({ ...current, expectedIntent: event.target.value }))}>
                   <option value="">No intent check</option>
@@ -730,20 +741,20 @@ export default function DeveloperLab() {
                   ))}
                 </select>
               </label>
-              <label>
+              <label className="devlab-field">
                 <span>Expected Phrases</span>
-                <textarea rows={3} value={evalForm.expectedPhrases} placeholder="one phrase per line" onChange={(event) => setEvalForm((current) => ({ ...current, expectedPhrases: event.target.value }))} />
+                <textarea className="devlab-textarea devlab-textarea--sm" rows={3} value={evalForm.expectedPhrases} placeholder="one phrase per line" onChange={(event) => setEvalForm((current) => ({ ...current, expectedPhrases: event.target.value }))} />
               </label>
-              <label>
+              <label className="devlab-field">
                 <span>Forbidden Phrases</span>
-                <textarea rows={3} value={evalForm.forbiddenPhrases} placeholder="one phrase per line" onChange={(event) => setEvalForm((current) => ({ ...current, forbiddenPhrases: event.target.value }))} />
+                <textarea className="devlab-textarea devlab-textarea--sm" rows={3} value={evalForm.forbiddenPhrases} placeholder="one phrase per line" onChange={(event) => setEvalForm((current) => ({ ...current, forbiddenPhrases: event.target.value }))} />
               </label>
             </div>
-            <label>
+            <label className="devlab-field">
               <span>Notes</span>
               <input type="text" value={evalForm.notes} onChange={(event) => setEvalForm((current) => ({ ...current, notes: event.target.value }))} />
             </label>
-            <div className="devlab-button-row">
+            <div className="devlab-button-row devlab-form-actions">
               <button className="btn-primary" type="submit" disabled={busy === 'eval-save'}>
                 {busy === 'eval-save' ? 'Saving...' : 'Save Eval Case'}
               </button>
@@ -775,8 +786,9 @@ export default function DeveloperLab() {
                   </div>
                 ))
               ) : (
-                <div className="empty-state">
+                <div className="empty-state devlab-empty-state">
                   <p>No evaluation cases saved yet.</p>
+                  <p className="empty-hint">Save repeatable checks here so prompt and knowledge changes are easier to verify.</p>
                 </div>
               )}
             </div>
@@ -808,8 +820,9 @@ export default function DeveloperLab() {
                 </div>
               ))
             ) : (
-              <div className="empty-state">
+              <div className="empty-state devlab-empty-state">
                 <p>No evaluation runs yet.</p>
+                <p className="empty-hint">Run a saved case to inspect pass or fail output and selected intent.</p>
               </div>
             )}
           </div>
