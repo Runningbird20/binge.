@@ -26,6 +26,7 @@ const Ratings        = lazy(() => import('./pages/Ratings'));
 const Forum          = lazy(() => import('./pages/Forum'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
+const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
 
 function AppRouteFallback() {
   return <div className="loading-state">Loading...</div>;
@@ -50,10 +51,17 @@ export default function App() {
             <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
             <Route path="/lists/:shareCode" element={<SharedList />} />
             <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-            <Route path="/admin/requests"   element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
             <Route path="/admin/analytics"  element={<ProtectedRoute><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
             <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
+            <Route
+              path="/admin/requests"
+              element={
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
+                  <Navigate to="/__ops/dev-lab#requests" replace />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/live-tv"          element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
@@ -61,6 +69,30 @@ export default function App() {
             <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
             <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
+            <Route
+              path="/__ops/dev-lab/*"
+              element={
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
+                  <DeveloperLab />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dev-lab/*"
+              element={
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
+                  <DeveloperLab />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedUserTypes={['dev', 'admin']}>
+                  <Navigate to="/__ops/dev-lab#requests" replace />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={
               <div className="app-layout">
                 <div className="page-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',gap:'1rem'}}>
