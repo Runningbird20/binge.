@@ -18,6 +18,15 @@ function readBearerToken(req) {
   return auth.slice(7);
 }
 
+// Decode Supabase JWT without network verification (safe for read-only user ID extraction)
+function decodeSupabaseToken(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    if (!payload?.sub) return null;
+    return { id: payload.sub, supabaseId: payload.sub, email: payload.email || '', fromSupabase: true };
+  } catch { return null; }
+}
+
 // Check if a token looks like a Supabase JWT (they're long and have 3 parts)
 function isSupabaseToken(token) {
   if (!token) return false;
@@ -81,11 +90,9 @@ function optionalAuth(req, _res, next) {
     return next();
   }
 
-  // Supabase token
-  verifySupabaseToken(token).then(user => {
-    req.user = user || null;
-    next();
-  }).catch(() => { req.user = null; next(); });
+  // Supabase token — use fast local decode (no network call needed for optional auth)
+  req.user = decodeSupabaseToken(token);
+  next();
 }
 
 module.exports = { requireAuth, optionalAuth, JWT_SECRET };

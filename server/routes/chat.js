@@ -440,10 +440,13 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
 
     if (isSupabaseUser) {
       // Fetch ratings from Supabase for Supabase users
-      const { createClient } = require('@supabase/supabase-js');
       const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
       const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
-      const sb = createClient(url, key);
+      if (!url || !key) throw new Error('Supabase not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env');
+      let sbCreate;
+      try { sbCreate = require('@supabase/supabase-js').createClient; }
+      catch { throw new Error('Run npm install to install @supabase/supabase-js'); }
+      const sb = sbCreate(url, key);
 
       const [{ data: movieRatings }, { data: tvRatings }, { data: bookRatings }] = await Promise.all([
         sb.from('movie_ratings').select('media_id, acting, writing, originality, pacing, cinematography, review').eq('user_id', userId),
@@ -522,12 +525,12 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
     const historyText = history.map(r => {
       const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
       return `- "${r.title}" (${r.media_type.replace('_',' ')}) ${stars} | Genre: ${r.genre || 'unknown'} | By: ${r.creator || 'unknown'}${r.review ? ` | Review: "${r.review.slice(0,80)}"` : ''}`;
-    }).join('');
+    }).join('\n');
 
     const catalogText = unratedMedia.slice(0, 60).map(m => {
       const typeLabel = m.media_type === 'movie' ? 'Movie' : m.media_type === 'tv_show' ? 'TV Show' : 'Book';
       return `[${typeLabel} ID:${m.id}] "${m.title}" | Genre: ${m.genre || ''} | ${m.director ? 'Director: '+m.director : m.creator ? 'Creator: '+m.creator : m.author ? 'Author: '+m.author : ''} | ${(m.synopsis || m.overview || '').slice(0,120)}`;
-    }).join('');
+    }).join('\n');
 
     const systemPrompt = `You are a personalized media recommendation engine for "binge." 
 Analyze the user's rating history carefully to identify their taste patterns — which genres, directors, themes, tones, and styles they love.
