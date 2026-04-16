@@ -43,4 +43,26 @@ function optionalAuth(req, _res, next) {
   next();
 }
 
-module.exports = { requireAuth, optionalAuth, JWT_SECRET };
+function requireAdmin(req, res, next) {
+  const token = readBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const normalizedRole = String(payload.userType || payload.user_type || payload.role || '').toLowerCase();
+    const isAdmin = payload.isAdmin === true || payload.is_admin === true || normalizedRole === 'admin';
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    req.user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+module.exports = { requireAuth, optionalAuth, requireAdmin, JWT_SECRET };
