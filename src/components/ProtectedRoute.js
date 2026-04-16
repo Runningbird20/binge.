@@ -13,8 +13,8 @@ export default function ProtectedRoute({ children, allowedUserTypes = [] }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!canAccessUserType(user?.userType, allowedUserTypes)) {
-    return <Navigate to={getDefaultRouteForUserType(user?.userType)} replace />;
+  if (!canAccessUserType(user, allowedUserTypes)) {
+    return <Navigate to={getDefaultRouteForUserType(user)} replace />;
   }
 
   return children;

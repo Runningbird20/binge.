@@ -57,7 +57,7 @@ export default function App() {
             <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route
               path="/__ops/dev-lab"
-              element={<ProtectedRoute allowedUserTypes={['coach', 'admin']}><DeveloperLab /></ProtectedRoute>}
+              element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

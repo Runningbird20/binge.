@@ -61,8 +61,20 @@ export function resolveUserType({ userType, isAdmin, isDev } = {}) {
   return 'user';
 }
 
-export function getDefaultRouteForUserType(userType) {
-  const normalized = normalizeUserType(userType);
+function resolveAccessUserType(userOrType) {
+  if (userOrType && typeof userOrType === 'object') {
+    return resolveUserType({
+      userType: userOrType.userType,
+      isAdmin: userOrType.isAdmin,
+      isDev: userOrType.isDev,
+    });
+  }
+
+  return normalizeUserType(userOrType);
+}
+
+export function getDefaultRouteForUserType(userOrType) {
+  const normalized = resolveAccessUserType(userOrType);
 
   if (normalized === 'admin') {
     return '/admin';
@@ -75,11 +87,11 @@ export function getDefaultRouteForUserType(userType) {
   return '/home';
 }
 
-export function canAccessUserType(userType, allowedUserTypes = []) {
+export function canAccessUserType(userOrType, allowedUserTypes = []) {
   if (!Array.isArray(allowedUserTypes) || allowedUserTypes.length === 0) {
     return true;
   }
 
-  const normalized = normalizeUserType(userType);
+  const normalized = resolveAccessUserType(userOrType);
   return allowedUserTypes.map((value) => normalizeUserType(value)).includes(normalized);
 }

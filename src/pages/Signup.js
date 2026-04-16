@@ -102,7 +102,7 @@ export default function Signup() {
         setSuccess('Check your email to confirm your account, then come back here to log in.');
         return;
       }
-      navigate(getDefaultRouteForUserType(result.user?.userType));
+      navigate(getDefaultRouteForUserType(result.user));
     } catch (err) {
       setError(err.message);
     } finally {
