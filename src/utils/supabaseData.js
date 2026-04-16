@@ -73,21 +73,35 @@ function toFriendlyError(error, fallbackMessage) {
 
 function resolveRoleState(profileRow, authUser, overrides = {}) {
   const authMetadata = authUser?.user_metadata || {};
+  const appMetadata = authUser?.app_metadata || {};
   const userType = resolveUserType({
     userType:
       overrides.userType ??
+      overrides.user_type ??
       profileRow?.user_type ??
-      authMetadata.user_type,
+      profileRow?.userType ??
+      authMetadata.user_type ??
+      authMetadata.userType ??
+      appMetadata.user_type ??
+      appMetadata.userType,
     isAdmin:
       overrides.isAdmin ??
       overrides.is_admin ??
       profileRow?.is_admin ??
-      authMetadata.is_admin,
+      profileRow?.isAdmin ??
+      authMetadata.is_admin ??
+      authMetadata.isAdmin ??
+      appMetadata.is_admin ??
+      appMetadata.isAdmin,
     isDev:
       overrides.isDev ??
       overrides.is_dev ??
       profileRow?.is_dev ??
-      authMetadata.is_dev,
+      profileRow?.isDev ??
+      authMetadata.is_dev ??
+      authMetadata.isDev ??
+      appMetadata.is_dev ??
+      appMetadata.isDev,
   });
 
   return {
@@ -116,6 +130,10 @@ function buildUserProfile(authUser, profileRow) {
     isAdmin: roleState.isAdmin,
     isDev: roleState.isDev,
   };
+}
+
+export function buildSupabaseUserProfile(authUser, profileRow) {
+  return buildUserProfile(authUser, profileRow);
 }
 
 function withTimeout(promise, timeoutMs, timeoutMessage) {
@@ -151,6 +169,37 @@ function buildFallbackProfileRow(authUser, overrides = {}) {
       authUser?.user_metadata?.avatar_url ??
       null,
     created_at: authUser?.created_at ?? null,
+  };
+}
+
+async function getStoredSupabaseProfile(authUser, overrides = {}) {
+  const fallbackProfile = buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+
+  if (!authUser?.id) {
+    return {
+      profile: fallbackProfile,
+      hasStoredProfile: false,
+    };
+  }
+
+  try {
+    const profileRow = await withTimeout(
+      getProfileRow(authUser.id),
+      PROFILE_SYNC_TIMEOUT_MS,
+      'Reading the Supabase profile timed out.'
+    );
+
+    if (profileRow) {
+      return {
+        profile: buildUserProfile(authUser, profileRow),
+        hasStoredProfile: true,
+      };
+    }
+  } catch {}
+
+  return {
+    profile: fallbackProfile,
+    hasStoredProfile: false,
   };
 }
 
@@ -242,7 +291,12 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
 }
 
 export async function resolveSupabaseProfile(authUser, overrides = {}) {
-  const fallbackProfile = buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+  const { profile: fallbackProfile, hasStoredProfile } = await getStoredSupabaseProfile(authUser, overrides);
+
+  if (hasStoredProfile) {
+    void ensureSupabaseProfile(authUser, overrides).catch(() => {});
+    return fallbackProfile;
+  }
 
   try {
     return await withTimeout(

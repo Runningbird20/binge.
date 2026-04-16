@@ -9,12 +9,48 @@ import {
   updateSupabasePassword,
   updateSupabaseProfile,
 } from '../utils/supabaseData';
+import { normalizeUserType } from '../utils/userAccess';
 
 const AuthContext = createContext(null);
+
+function getRolePriority(userType) {
+  const normalized = normalizeUserType(userType);
+
+  if (normalized === 'admin') {
+    return 2;
+  }
+
+  if (normalized === 'dev') {
+    return 1;
+  }
+
+  return 0;
+}
+
+function mergeResolvedUser(currentUser, nextUser) {
+  if (!currentUser || !nextUser || currentUser.id !== nextUser.id) {
+    return nextUser;
+  }
+
+  if (getRolePriority(nextUser.userType) >= getRolePriority(currentUser.userType)) {
+    return nextUser;
+  }
+
+  return {
+    ...nextUser,
+    userType: currentUser.userType,
+    isAdmin: currentUser.isAdmin,
+    isDev: currentUser.isDev,
+  };
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const commitUser = useCallback((nextUser) => {
+    setUser((currentUser) => mergeResolvedUser(currentUser, nextUser));
+    return nextUser;
+  }, []);
 
   const refreshUser = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -24,9 +60,9 @@ export function AuthProvider({ children }) {
     }
 
     const nextUser = await getSupabaseSessionProfile();
-    setUser(nextUser);
+    commitUser(nextUser);
     return nextUser;
-  }, []);
+  }, [commitUser]);
 
   useEffect(() => {
     let active = true;
@@ -38,10 +74,7 @@ export function AuthProvider({ children }) {
 
     async function bootstrapAuth() {
       try {
-        const nextUser = await refreshUser();
-        if (active) {
-          setUser(nextUser);
-        }
+        await refreshUser();
       } catch {
         if (active) {
           setUser(null);
@@ -75,7 +108,7 @@ export function AuthProvider({ children }) {
       try {
         const nextUser = await resolveSupabaseProfile(session.user);
         if (active) {
-          setUser(nextUser);
+          commitUser(nextUser);
         }
       } catch {
         if (active) {
@@ -92,27 +125,27 @@ export function AuthProvider({ children }) {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, [refreshUser]);
+  }, [commitUser, refreshUser]);
 
   const signIn = useCallback(async (credentials) => {
     const nextUser = await signInWithSupabase(credentials);
-    setUser(nextUser);
+    commitUser(nextUser);
     return nextUser;
-  }, []);
+  }, [commitUser]);
 
   const signUp = useCallback(async (payload) => {
     const result = await signUpWithSupabase(payload);
     if (result.user) {
-      setUser(result.user);
+      commitUser(result.user);
     }
     return result;
-  }, []);
+  }, [commitUser]);
 
   const updateProfile = useCallback(async (payload) => {
     const nextUser = await updateSupabaseProfile(payload);
-    setUser(nextUser);
+    commitUser(nextUser);
     return nextUser;
-  }, []);
+  }, [commitUser]);
 
   const updatePassword = useCallback(async (newPassword) => {
     await updateSupabasePassword(newPassword);
