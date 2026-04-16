@@ -2,8 +2,6 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import GlobalSearch from './components/GlobalSearch';
-import { useAuth } from './contexts/AuthContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -33,22 +31,11 @@ function AppRouteFallback() {
   return <div className="loading-state">Loading...</div>;
 }
 
-function SearchBar() {
-  const { user } = useAuth();
-  if (!user) return null;
-  return (
-    <div className="global-search-bar-row">
-      <GlobalSearch />
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Suspense fallback={<AppRouteFallback />}>
-          <SearchBar />
           <Routes>
             <Route path="/"          element={<Landing />} />
             <Route path="/login"     element={<Login />} />

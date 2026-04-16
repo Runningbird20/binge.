@@ -6003,15 +6003,6 @@ body {
    NEOBINGE — Global Search
    ══════════════════════════════════════════════════════════════ */
 
-.global-search-bar-row {
-  position: sticky;
-  top: 0;
-  z-index: 90;
-  background: rgba(10,10,10,0.92);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  padding: 0.5rem 1.5rem;
-}
 .global-search-trigger {
   display: flex; align-items: center; gap: 0.65rem;
   width: 100%; max-width: 860px; margin: 0 auto;
