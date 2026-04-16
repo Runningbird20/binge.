@@ -423,15 +423,6 @@ ${formatUserHistory(userHistory)}
 
   } catch (err) {
     console.error('Chat error:', err);
-    try {
-      db.prepare(
-        'INSERT INTO chat_errors (user_id, error_type, error_message) VALUES (?, ?, ?)'
-      ).run(
-        req.user?.id ?? null,
-        err.name || 'Error',
-        (err.message || 'Unknown error').slice(0, 500)
-      );
-    } catch { /* non-fatal */ }
     if (err.name === 'TimeoutError') return res.status(504).json({ error: 'Request timed out.' });
     res.status(500).json({ error: err.message || 'Server error.' });
   }
