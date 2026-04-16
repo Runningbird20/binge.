@@ -10,7 +10,7 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const defaultRoute = user ? getDefaultRouteForUserType(user.userType) : '/';
+  const defaultRoute = user ? getDefaultRouteForUserType(user) : '/';
   const defaultRouteLabel =
     defaultRoute === '/__ops/dev-lab'
       ? 'Developer Lab'
