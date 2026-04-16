@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ForYou from '../components/ForYou';
-import SupabaseTodos from '../components/SupabaseTodos';
+import Onboarding from '../components/Onboarding';
 import { useAuth } from '../contexts/AuthContext';
 import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
@@ -130,6 +130,57 @@ function BadgeIcon({ iconKey, label, toneKey }) {
   );
 }
 
+
+function SkeletonCard() {
+  return (
+    <div className="skeleton-card">
+      <div className="skeleton-poster skeleton-pulse" />
+      <div className="skeleton-line skeleton-pulse" style={{ width: '80%', marginTop: '0.5rem' }} />
+      <div className="skeleton-line skeleton-pulse" style={{ width: '55%' }} />
+    </div>
+  );
+}
+
+function ContinueWatching({ items }) {
+  const inProgress = items.filter(
+    i => i.media_type === 'tv_show' && i.status === 'watching' && (i.current_season || i.current_episode)
+  );
+  if (!inProgress.length) return null;
+
+  return (
+    <section className="home-section">
+      <div className="section-header">
+        <h2>▶ Continue Watching</h2>
+      </div>
+      <div className="continue-watching-row">
+        {inProgress.map(item => {
+          const poster = resolvePosterUrl(item.image_url || item.poster_url);
+          const s = item.current_season || 1;
+          const e = item.current_episode || 1;
+          return (
+            <Link
+              key={item.id}
+              to={`/tv-shows?open=${item.media_id}`}
+              className="continue-card"
+            >
+              <div className="continue-card-poster">
+                {poster
+                  ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+                  : <div className="continue-card-placeholder">{MEDIA_ICONS.tv_show}</div>
+                }
+                <div className="continue-card-play">▶</div>
+                <div className="continue-card-badge">S{s} E{e}</div>
+              </div>
+              <p className="continue-card-title">{item.title}</p>
+              <p className="continue-card-sub">Season {s}, Ep {e}</p>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function WatchlistGallery({ items, loading }) {
   const scrollRef = useRef(null);
 
@@ -216,6 +267,7 @@ export default function Home() {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [selectedYear, setSelectedYear] = useState();
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const insights = buildHomeInsights(ratings, watchlistItems, selectedYear);
 
   useEffect(() => {
@@ -237,6 +289,9 @@ export default function Home() {
         setRatings(nextRatings);
         setWatchlistItems(nextWatchlist);
         setStats({ ratings: nextRatings.length, watchlist: nextWatchlist.length });
+        if (nextRatings.length === 0 && !localStorage.getItem('onboarding_done')) {
+          setShowOnboarding(true);
+        }
         setSelectedYear((currentYear) => (
           currentYear == null ? buildHomeInsights(nextRatings, nextWatchlist).selectedYear : currentYear
         ));
@@ -259,7 +314,14 @@ export default function Home() {
     };
   }, []);
 
+  function completeOnboarding() {
+    localStorage.setItem('onboarding_done', '1');
+    setShowOnboarding(false);
+  }
+
   return (
+    <>
+    {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
     <div className="app-layout">
       <Navbar />
       <main className="page-content">
@@ -439,10 +501,12 @@ export default function Home() {
 
           <ForYou />
 
+          <ContinueWatching items={watchlistItems} />
+
           <section className="home-section">
             <div className="section-header">
               <h2>Your Watchlist</h2>
-              <Link to="/watchlist" className="section-link">View all</Link>
+              <Link to={`/profile/${user.username}`} className="section-link">View all →</Link>
             </div>
             <WatchlistGallery items={watchlistItems} loading={loading} />
           </section>
@@ -518,5 +582,6 @@ export default function Home() {
         </div>
       </main>
     </div>
+    </>
   );
 }

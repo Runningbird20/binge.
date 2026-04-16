@@ -1,9 +1,40 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
+
+function SocialDropdown() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div className="nav-dropdown-wrap" ref={ref}>
+      <button
+        className={`nav-dropdown-trigger ${open ? 'active' : ''}`}
+        onClick={() => setOpen(v => !v)}
+        type="button"
+      >
+        Social <span className="nav-dropdown-caret">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="nav-dropdown-menu" onClick={() => setOpen(false)}>
+          <NavLink to="/forum"      className="nav-dropdown-item">💬 Forum</NavLink>
+          <NavLink to="/watch-room" className="nav-dropdown-item">🎬 Watch Together</NavLink>
+          <NavLink to="/following"  className="nav-dropdown-item">👥 Following</NavLink>
+          <NavLink to="/trending"   className="nav-dropdown-item">🔥 Trending</NavLink>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -24,20 +55,18 @@ export default function Navbar() {
 
       {user ? (
         <>
-          {/* Search — left of nav links */}
+          {/* Search */}
           <div className="navbar-search-wrap">
             <GlobalSearch />
           </div>
 
           {/* Desktop links */}
           <div className="navbar-links navbar-links--desktop">
-            <NavLink to="/live-tv"    className={navLink}>Live TV</NavLink>
-            <NavLink to="/movies"     className={navLink}>Movies</NavLink>
-            <NavLink to="/tv-shows"   className={navLink}>TV</NavLink>
-            <NavLink to="/books"      className={navLink}>Books</NavLink>
-            <NavLink to="/forum"      className={navLink}>Forum</NavLink>
-            <NavLink to="/watchlist"  className={navLink}>Watchlist</NavLink>
-            <NavLink to="/watch-room" className={navLink}>Watch Together</NavLink>
+            <NavLink to="/live-tv"  className={navLink}>Live TV</NavLink>
+            <NavLink to="/movies"   className={navLink}>Movies</NavLink>
+            <NavLink to="/tv-shows" className={navLink}>TV</NavLink>
+            <NavLink to="/books"    className={navLink}>Books</NavLink>
+            <SocialDropdown />
           </div>
 
           {/* Right side */}
@@ -57,8 +86,6 @@ export default function Navbar() {
               </svg>
             </NavLink>
             <button className="btn-ghost navbar-logout" onClick={handleLogout}>Log out</button>
-
-            {/* Hamburger for mobile */}
             <button className="navbar-hamburger" onClick={() => setMobileOpen(v => !v)} type="button" aria-label="Menu">
               {mobileOpen ? '✕' : '☰'}
             </button>
@@ -75,11 +102,8 @@ export default function Navbar() {
                 <NavLink to="/tv-shows"   className={navLink} onClick={() => setMobileOpen(false)}>📺 TV Shows</NavLink>
                 <NavLink to="/books"      className={navLink} onClick={() => setMobileOpen(false)}>📖 Books</NavLink>
                 <NavLink to="/forum"      className={navLink} onClick={() => setMobileOpen(false)}>💬 Forum</NavLink>
-                <NavLink to="/watchlist"  className={navLink} onClick={() => setMobileOpen(false)}>📋 Watchlist</NavLink>
-                <NavLink to="/ratings"    className={navLink} onClick={() => setMobileOpen(false)}>⭐ My Ratings</NavLink>
-                <NavLink to="/following"  className={navLink} onClick={() => setMobileOpen(false)}>👥 Following</NavLink>
                 <NavLink to="/watch-room" className={navLink} onClick={() => setMobileOpen(false)}>🎬 Watch Together</NavLink>
-                <NavLink to="/lists"      className={navLink} onClick={() => setMobileOpen(false)}>📝 Lists</NavLink>
+                <NavLink to="/following"  className={navLink} onClick={() => setMobileOpen(false)}>👥 Following</NavLink>
                 <NavLink to={`/profile/${user.username}`} className={navLink} onClick={() => setMobileOpen(false)}>👤 My Profile</NavLink>
                 <NavLink to="/account-settings" className={navLink} onClick={() => setMobileOpen(false)}>⚙️ Settings</NavLink>
                 <button className="btn-ghost" onClick={handleLogout} type="button">Log out</button>
