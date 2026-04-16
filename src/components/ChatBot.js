@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import MediaDetailsModal from './MediaDetailsModal';
 import { invokeSupabaseFunction, isSupabaseConfigured, supabase } from '../utils/supabase';
 import { submitSupabaseRequest } from '../utils/supabaseData';
 import MediaDetailsModal from './MediaDetailsModal';

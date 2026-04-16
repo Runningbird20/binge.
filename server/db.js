@@ -2,7 +2,11 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dataDir = path.join(__dirname, 'data');
+// Vercel functions can only write to /tmp, not the deployed bundle.
+const runtimeDataRoot = process.env.VERCEL === '1'
+  ? path.join('/tmp', 'project-3-data')
+  : __dirname;
+const dataDir = path.join(runtimeDataRoot, 'data');
 const repoDataDir = path.join(__dirname, '..', 'data');
 const plexMoviesDataPath = path.join(repoDataDir, 'plex_movies.json');
 const plexTvDataPath = path.join(repoDataDir, 'plex_tv.json');
