@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ForYou from '../components/ForYou';
+import SupabaseTodos from '../components/SupabaseTodos';
 import { useAuth } from '../contexts/AuthContext';
 import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
