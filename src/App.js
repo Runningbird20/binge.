@@ -17,10 +17,6 @@ const Following      = lazy(() => import('./pages/Following'));
 const Lists          = lazy(() => import('./pages/Lists'));
 const SharedList     = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
-const AdminRequests  = lazy(() => import('./pages/AdminRequests'));
-const AdminHome      = lazy(() => import('./pages/AdminHome'));
-const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
-const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const LiveTV         = lazy(() => import('./pages/LiveTV'));
 const Ratings        = lazy(() => import('./pages/Ratings'));
 const Forum          = lazy(() => import('./pages/Forum'));
@@ -51,9 +47,6 @@ export default function App() {
             <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
             <Route path="/lists/:shareCode" element={<SharedList />} />
             <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-            <Route path="/admin/analytics"  element={<ProtectedRoute><AdminAnalytics /></ProtectedRoute>} />
-            <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
-            <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
             <Route
               path="/admin/requests"
               element={
