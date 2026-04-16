@@ -7,6 +7,7 @@ import { normalizeBooleanFlag, resolveUserType } from './userAccess';
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
+const AUTH_MUTATION_TIMEOUT_MS = 15000;
 const PROFILE_SYNC_TIMEOUT_MS = 4000;
 
 const RATING_TABLES = {
@@ -148,6 +149,27 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
   return Promise.race([promise, timeoutPromise]).finally(() => {
     window.clearTimeout(timeoutId);
   });
+}
+
+function isTimeoutError(error, timeoutMessage) {
+  return error instanceof Error && error.message === timeoutMessage;
+}
+
+async function withTimeoutRetry(promiseFactory, timeoutMs, timeoutMessage, retries = 1) {
+  let attemptsRemaining = retries;
+
+  while (true) {
+    try {
+      return await withTimeout(promiseFactory(), timeoutMs, timeoutMessage);
+    } catch (error) {
+      if (!isTimeoutError(error, timeoutMessage) || attemptsRemaining <= 0) {
+        throw error;
+      }
+
+      attemptsRemaining -= 1;
+      console.warn(`[auth] ${timeoutMessage} Retrying request...`);
+    }
+  }
 }
 
 function buildFallbackProfileRow(authUser, overrides = {}) {
@@ -377,9 +399,9 @@ export async function getSupabaseSessionProfile() {
 
 export async function signInWithSupabase({ email, password }) {
   const client = requireSupabase();
-  const { data, error } = await withTimeout(
-    client.auth.signInWithPassword({ email, password }),
-    AUTH_REQUEST_TIMEOUT_MS,
+  const { data, error } = await withTimeoutRetry(
+    () => client.auth.signInWithPassword({ email, password }),
+    AUTH_MUTATION_TIMEOUT_MS,
     'Supabase sign-in timed out.'
   );
 
@@ -396,8 +418,8 @@ export async function signInWithSupabase({ email, password }) {
 
 export async function signUpWithSupabase({ username, email, password, bio, avatarUrl }) {
   const client = requireSupabase();
-  const { data, error } = await withTimeout(
-    client.auth.signUp({
+  const { data, error } = await withTimeoutRetry(
+    () => client.auth.signUp({
       email,
       password,
       options: {
@@ -411,7 +433,7 @@ export async function signUpWithSupabase({ username, email, password, bio, avata
         },
       },
     }),
-    AUTH_REQUEST_TIMEOUT_MS,
+    AUTH_MUTATION_TIMEOUT_MS,
     'Supabase sign-up timed out.'
   );
 
