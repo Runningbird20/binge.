@@ -8,8 +8,12 @@ async function callDevFunction(action, payload = {}) {
   });
 }
 
+function isLegacyBackendEnabled() {
+  return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '').trim().toLowerCase() === 'true';
+}
+
 function shouldUseSupabaseDevLab() {
-  return isSupabaseConfigured;
+  return isSupabaseConfigured && !isLegacyBackendEnabled();
 }
 
 export const devLabApi = {
