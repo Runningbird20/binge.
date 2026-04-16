@@ -426,6 +426,7 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
 
   const userId = req.user?.id || null;
   const isSupabaseUser = req.user?.fromSupabase === true;
+  console.log('[ForYou] userId:', userId, 'isSupabase:', isSupabaseUser);
 
   try {
     if (!userId) {
@@ -448,30 +449,48 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
       catch { throw new Error('Run npm install to install @supabase/supabase-js'); }
       const sb = sbCreate(url, key);
 
+      // Fetch ratings (just IDs + scores), then look up media info from Supabase separately
       const [{ data: movieRatings }, { data: tvRatings }, { data: bookRatings }] = await Promise.all([
         sb.from('movie_ratings').select('media_id, acting, writing, originality, pacing, cinematography, review').eq('user_id', userId),
         sb.from('tv_show_ratings').select('media_id, premise, originality, acting, cinematography, writing, pacing, resonance, review').eq('user_id', userId),
         sb.from('book_ratings').select('media_id, prose, plot, characters, originality, pacing, resonance, review').eq('user_id', userId),
       ]);
 
-      // Enrich with media metadata from SQLite
+      // Fetch media info from Supabase by ID (separate queries to avoid FK join issues)
+      const movieIds  = (movieRatings || []).map(r => r.media_id);
+      const tvIds     = (tvRatings    || []).map(r => r.media_id);
+      const bookIds   = (bookRatings  || []).map(r => r.media_id);
+
+      const [{ data: movieMedia }, { data: tvMedia }, { data: bookMedia }] = await Promise.all([
+        movieIds.length ? sb.from('movies').select('id, title, genre, director, synopsis, source_key').in('id', movieIds) : Promise.resolve({ data: [] }),
+        tvIds.length    ? sb.from('tv_shows').select('id, title, genre, creator, synopsis, source_key').in('id', tvIds)   : Promise.resolve({ data: [] }),
+        bookIds.length  ? sb.from('books').select('id, title, genre, author, synopsis, source_key').in('id', bookIds)    : Promise.resolve({ data: [] }),
+      ]);
+
+      const movieMap = {}; (movieMedia || []).forEach(m => { movieMap[m.id] = m; });
+      const tvMap    = {}; (tvMedia    || []).forEach(t => { tvMap[t.id]    = t; });
+      const bookMap  = {}; (bookMedia  || []).forEach(b => { bookMap[b.id]  = b; });
+
       const enrichMovie = (r) => {
-        const m = db.prepare('SELECT title, genre, director, synopsis FROM movies WHERE id = ?').get(r.media_id);
+        const m = movieMap[r.media_id];
         if (!m) return null;
         const rating = Math.round(((r.acting||0)+(r.writing||0)+(r.originality||0)+(r.pacing||0)+(r.cinematography||0))/25*5);
-        return { rating, review: r.review, media_type: 'movie', media_id: r.media_id, ...m, creator: m.director };
+        const sqliteRow = m.source_key ? db.prepare('SELECT id FROM movies WHERE source_key = ?').get(m.source_key) : null;
+        return { rating, review: r.review, media_type: 'movie', media_id: sqliteRow?.id || r.media_id, title: m.title, genre: m.genre, creator: m.director, synopsis: m.synopsis };
       };
       const enrichTV = (r) => {
-        const t = db.prepare('SELECT title, genre, creator, synopsis FROM tv_shows WHERE id = ?').get(r.media_id);
+        const t = tvMap[r.media_id];
         if (!t) return null;
         const rating = Math.round(((r.premise||0)+(r.originality||0)+(r.acting||0)+(r.cinematography||0)+(r.writing||0)+(r.pacing||0)+(r.resonance||0))/38*5);
-        return { rating, review: r.review, media_type: 'tv_show', media_id: r.media_id, ...t };
+        const sqliteRow = t.source_key ? db.prepare('SELECT id FROM tv_shows WHERE source_key = ?').get(t.source_key) : null;
+        return { rating, review: r.review, media_type: 'tv_show', media_id: sqliteRow?.id || r.media_id, title: t.title, genre: t.genre, creator: t.creator, synopsis: t.synopsis };
       };
       const enrichBook = (r) => {
-        const b = db.prepare('SELECT title, genre, author, synopsis FROM books WHERE id = ?').get(r.media_id);
+        const b = bookMap[r.media_id];
         if (!b) return null;
         const rating = Math.round(((r.prose||0)+(r.plot||0)+(r.characters||0)+(r.originality||0)+(r.pacing||0)+(r.resonance||0))/32*5);
-        return { rating, review: r.review, media_type: 'book', media_id: r.media_id, ...b, creator: b.author };
+        const sqliteRow = b.source_key ? db.prepare('SELECT id FROM books WHERE source_key = ?').get(b.source_key) : null;
+        return { rating, review: r.review, media_type: 'book', media_id: sqliteRow?.id || r.media_id, title: b.title, genre: b.genre, creator: b.author, synopsis: b.synopsis };
       };
 
       history = [
@@ -479,6 +498,7 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
         ...(tvRatings   || []).map(enrichTV).filter(Boolean),
         ...(bookRatings || []).map(enrichBook).filter(Boolean),
       ].sort((a, b) => b.rating - a.rating).slice(0, 30);
+      console.log('[ForYou] Supabase ratings fetched:', (movieRatings||[]).length, 'movies,', (tvRatings||[]).length, 'tv,', (bookRatings||[]).length, 'books. History after enrich:', history.length);
     } else {
       // Legacy SQLite ratings for legacy JWT users
       const movieHistory = db.prepare(`
