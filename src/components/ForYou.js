@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { generateSupabaseRecommendations } from '../utils/recommendations';
+import { api } from '../api';
 
 const MEDIA_ICONS = { movie: '🎬', tv_show: '📺', book: '📚' };
 const MEDIA_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
@@ -38,7 +38,7 @@ export default function ForYou() {
     setState('loading');
     setError('');
     try {
-      const result = await generateSupabaseRecommendations();
+      const result = await api.get('/chat/recommendations');
       if (result.recommendations?.length === 0) {
         setState('empty');
         setData(result);

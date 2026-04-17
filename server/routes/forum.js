@@ -2,76 +2,20 @@ const express = require('express');
 const router  = express.Router();
 
 // ── Supabase admin client ─────────────────────────────────────────────────────
-const { createClient } = require('@supabase/supabase-js');
+let _sbCreateClient = null;
+function getCreateClient() {
+  if (!_sbCreateClient) {
+    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
+  }
+  return _sbCreateClient;
+}
 
 function getSupabase() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) throw new Error('Supabase not configured');
-  return createClient(url, key);
-}
-
-function normalizeUserType(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-
-  if (normalized === 'admin' || normalized === 'admins') {
-    return 'admin';
-  }
-
-  if (
-    normalized === 'coach' ||
-    normalized === 'coaches' ||
-    normalized === 'developer' ||
-    normalized === 'developers' ||
-    normalized === 'dev'
-  ) {
-    return 'dev';
-  }
-
-  return 'user';
-}
-
-function hasExplicitFlag(value) {
-  return value !== undefined && value !== null && value !== '';
-}
-
-function normalizeBooleanFlag(value) {
-  if (typeof value === 'boolean') {
-    return value;
-  }
-
-  if (typeof value === 'number') {
-    return value !== 0;
-  }
-
-  const normalized = String(value ?? '').trim().toLowerCase();
-  return ['true', '1', 'yes', 'y', 'on'].includes(normalized);
-}
-
-function resolveUserType({ userType, isAdmin, isDev } = {}) {
-  const normalizedUserType = normalizeUserType(userType);
-  const hasExplicitAdmin = hasExplicitFlag(isAdmin);
-  const hasExplicitDev = hasExplicitFlag(isDev);
-  const resolvedIsAdmin = hasExplicitAdmin
-    ? normalizeBooleanFlag(isAdmin)
-    : normalizedUserType === 'admin';
-  const resolvedIsDev = hasExplicitDev
-    ? normalizeBooleanFlag(isDev)
-    : normalizedUserType === 'dev';
-
-  if (resolvedIsAdmin) {
-    return 'admin';
-  }
-
-  if (resolvedIsDev) {
-    return 'dev';
-  }
-
-  if (!hasExplicitAdmin && !hasExplicitDev) {
-    return normalizedUserType;
-  }
-
-  return 'user';
+  return getCreateClient()(url, key);
 }
 
 
@@ -139,8 +83,15 @@ async function getUser(req) {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) return null;
-    const { createClient } = require('@supabase/supabase-js');
-    const sb = createClient(url, key, {
+    let _sbCreateClient = null;
+function getCreateClient() {
+  if (!_sbCreateClient) {
+    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
+  }
+  return _sbCreateClient;
+}
+    const sb = getCreateClient()(url, key, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
     const { data: { user }, error } = await sb.auth.getUser(token);
@@ -519,12 +470,8 @@ async function isAdmin(user) {
   if (!user) return false;
   try {
     const sb = getSupabase();
-    const { data } = await sb.from('profiles').select('*').eq('id', user.id).single();
-    return resolveUserType({
-      userType: data?.user_type || user.user_metadata?.user_type,
-      isAdmin: data?.is_admin ?? user.user_metadata?.is_admin,
-      isDev: data?.is_dev ?? user.user_metadata?.is_dev,
-    }) === 'admin';
+    const { data } = await sb.from('profiles').select('is_admin').eq('id', user.id).single();
+    return data?.is_admin === true;
   } catch { return false; }
 }
 
