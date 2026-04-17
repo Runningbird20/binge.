@@ -89,7 +89,7 @@ async function requireViewerProfile() {
   const user = await requireAuthenticatedUser();
   const { data, error } = await client
     .from('profiles')
-    .select('id, username, is_admin, is_dev, user_type, bio, avatar_url')
+    .select('id, username, is_admin, is_dev, bio, avatar_url')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -1680,6 +1680,40 @@ async function handleWatchRoomMutation(method, pathname, body) {
   throw new Error(`Unsupported watch room route: ${pathname}`);
 }
 
+async function handleAdminMutation(pathname, _body) {
+  await requireAdminProfile();
+  const client = requireSupabaseClient();
+
+  const toggleMatch = pathname.match(/^\/admin\/users\/([^/]+)\/toggle-admin$/);
+  if (toggleMatch) {
+    const userId = toggleMatch[1];
+    const { data: profile, error: fetchError } = await client
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError || !profile) {
+      throw toSupabaseError(fetchError, 'User not found.', { resourceName: 'profiles' });
+    }
+
+    const { data, error } = await client
+      .from('profiles')
+      .update({ is_admin: !profile.is_admin })
+      .eq('id', userId)
+      .select('id, username, is_admin')
+      .single();
+
+    if (error) {
+      throw toSupabaseError(error, 'Unable to update admin status.', { resourceName: 'profiles' });
+    }
+
+    return data;
+  }
+
+  throw new Error(`Unsupported admin route: ${pathname}`);
+}
+
 async function handleAdminGet(pathname, searchParams) {
   await requireAdminProfile();
   const client = requireSupabaseClient();
@@ -1697,7 +1731,7 @@ async function handleAdminGet(pathname, searchParams) {
         'id, user_id, error_type, error_message, created_at',
         (query) => query.order('created_at', { ascending: false }),
         'chat_errors'
-      ),
+      ).catch(() => []),
     ]);
 
     const now = Date.now();
@@ -1771,15 +1805,27 @@ async function handleAdminGet(pathname, searchParams) {
       .limit(limit);
 
     if (error) {
-      throw toSupabaseError(error, 'Unable to load chat errors.', {
-        resourceName: 'chat_errors',
-      });
+      return { rows: [], total: 0 };
     }
 
     return {
       rows: data || [],
       total: count || 0,
     };
+  }
+
+  if (pathname === '/admin/users') {
+    const { data, error } = await client
+      .from('profiles')
+      .select('id, username, email, created_at, is_admin, is_public')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      throw toSupabaseError(error, 'Unable to load users.', { resourceName: 'profiles' });
+    }
+
+    return data || [];
   }
 
   throw new Error(`Unsupported admin route: ${pathname}`);
@@ -1826,11 +1872,15 @@ export async function executeSupabaseRoute(method, path, body) {
   }
 
   if (pathname.startsWith('/admin')) {
-    if (normalizedMethod !== 'GET') {
-      throw new Error(`Unsupported admin route: ${pathname}`);
+    if (normalizedMethod === 'GET') {
+      return handleAdminGet(pathname, searchParams);
     }
 
-    return handleAdminGet(pathname, searchParams);
+    if (normalizedMethod === 'PATCH') {
+      return handleAdminMutation(pathname, body);
+    }
+
+    throw new Error(`Unsupported admin route: ${pathname}`);
   }
 
   return null;
