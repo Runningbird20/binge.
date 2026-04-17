@@ -154,6 +154,7 @@ Optional only if you separately host the legacy backend:
 Notes:
 
 - `vercel.json` includes an SPA fallback so client-side routes like `/movies`, `/books`, and `/watchlist` load correctly on refresh.
+- `.vercelignore` excludes `api/` and `server/` so the default Vercel deployment stays frontend-only and does not bundle the legacy Express + SQLite backend.
 - The linked Vercel project should use Node `24.x` to match `package.json`.
 - `supabase/repeatable_schema.sql` is the rerunnable schema sync file for the current Supabase-backed frontend. Edit that file when you need additive schema updates you want to rerun in the Supabase SQL editor.
 - Legacy Express + SQLite features such as `Lists`, `Live TV`, chat-backed recommendations, and admin request workflows are not part of the Vercel frontend deployment yet. Those screens stay hidden or show the legacy notice unless you intentionally wire up that older backend elsewhere.

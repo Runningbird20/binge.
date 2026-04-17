@@ -4,10 +4,6 @@
   "outputDirectory": "build",
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/[...slug]?slug=$1"
-    },
-    {
       "handle": "filesystem"
     },
     {
