@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase';
+import { resolveUserType } from './userAccess';
 import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
@@ -77,6 +78,14 @@ function buildUserProfile(authUser, profileRow) {
     profileRow?.username ||
     authUser?.user_metadata?.username ||
     (email.includes('@') ? email.split('@')[0] : 'media-fan');
+  const userType = resolveUserType({
+    userType: profileRow?.userType ?? authUser?.user_metadata?.userType ?? authUser?.app_metadata?.userType,
+    user_type: profileRow?.user_type ?? authUser?.user_metadata?.user_type ?? authUser?.app_metadata?.user_type,
+    isAdmin: profileRow?.isAdmin ?? authUser?.user_metadata?.isAdmin ?? authUser?.app_metadata?.isAdmin,
+    is_admin: profileRow?.is_admin ?? authUser?.user_metadata?.is_admin ?? authUser?.app_metadata?.is_admin,
+    isDev: profileRow?.isDev ?? authUser?.user_metadata?.isDev ?? authUser?.app_metadata?.isDev,
+    is_dev: profileRow?.is_dev ?? authUser?.user_metadata?.is_dev ?? authUser?.app_metadata?.is_dev,
+  });
 
   return {
     id: authUser?.id || profileRow?.id,
@@ -85,7 +94,9 @@ function buildUserProfile(authUser, profileRow) {
     bio: profileRow?.bio || authUser?.user_metadata?.bio || '',
     avatarUrl: profileRow?.avatar_url || authUser?.user_metadata?.avatar_url || null,
     createdAt: profileRow?.created_at || authUser?.created_at || null,
-    isAdmin: profileRow?.is_admin === true,
+    userType,
+    isAdmin: userType === 'admin',
+    isDev: userType === 'dev',
   };
 }
 
