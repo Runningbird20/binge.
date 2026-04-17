@@ -1,10 +1,41 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
+
+function SocialDropdown() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div className="nav-dropdown-wrap" ref={ref}>
+      <button
+        className={`nav-dropdown-trigger ${open ? 'active' : ''}`}
+        onClick={() => setOpen(v => !v)}
+        type="button"
+      >
+        Social <span className="nav-dropdown-caret">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="nav-dropdown-menu" onClick={() => setOpen(false)}>
+          <NavLink to="/forum"      className="nav-dropdown-item">💬 Forum</NavLink>
+          <NavLink to="/watch-room" className="nav-dropdown-item">🎬 Watch Together</NavLink>
+          <NavLink to="/following"  className="nav-dropdown-item">👥 Following</NavLink>
+          <NavLink to="/trending"   className="nav-dropdown-item">🔥 Trending</NavLink>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -32,7 +63,7 @@ export default function Navbar() {
 
       {user ? (
         <>
-          {/* Search — left of nav links */}
+          {/* Search */}
           <div className="navbar-search-wrap">
             <GlobalSearch />
           </div>
