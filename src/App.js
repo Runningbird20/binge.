@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { useAuth } from './contexts/AuthContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -12,7 +13,6 @@ const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
 const Books          = lazy(() => import('./pages/Books'));
-const Watchlist      = lazy(() => import('./pages/Watchlist'));
 const Following      = lazy(() => import('./pages/Following'));
 const Lists          = lazy(() => import('./pages/Lists'));
 const SharedList     = lazy(() => import('./pages/SharedList'));
@@ -26,9 +26,16 @@ const Ratings        = lazy(() => import('./pages/Ratings'));
 const Forum          = lazy(() => import('./pages/Forum'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
+const Trending       = lazy(() => import('./pages/Trending'));
 
 function AppRouteFallback() {
   return <div className="loading-state">Loading...</div>;
+}
+
+function ProfileRedirect({ tab }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={`/profile/${user.username}?tab=${tab}`} replace />;
 }
 
 export default function App() {
@@ -45,7 +52,7 @@ export default function App() {
             <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
             <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
             <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
-            <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+            <Route path="/watchlist" element={<ProtectedRoute><ProfileRedirect tab="watchlist" /></ProtectedRoute>} />
             <Route path="/following" element={<ProtectedRoute><Following /></ProtectedRoute>} />
             <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
             <Route path="/lists/:shareCode" element={<SharedList />} />
@@ -57,6 +64,7 @@ export default function App() {
             <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
+            <Route path="/trending"               element={<ProtectedRoute><Trending /></ProtectedRoute>} />
             <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
             <Route path="*" element={
               <div className="app-layout">

@@ -541,4 +541,34 @@ router.get('/admin/posts', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Trending posts ───────────────────────────────────────────
+router.get('/trending', async (req, res) => {
+  try {
+    const sb = getCreateClient()(
+      process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY
+    );
+    const { data, error } = await sb
+      .from('posts')
+      .select('id, title, score, comment_count, flair, media_id, media_type, created_at, forums(name, slug, icon), profiles(username, avatar_url)')
+      .order('score', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    // Enrich with poster from SQLite if media_id present
+    const db = require('../db');
+    const enriched = (data || []).map(post => {
+      let poster_url = null;
+      if (post.media_id && post.media_type === 'movie') {
+        const row = db.prepare('SELECT poster_url FROM movies WHERE id = ?').get(post.media_id);
+        poster_url = row?.poster_url || null;
+      } else if (post.media_id && post.media_type === 'tv_show') {
+        const row = db.prepare('SELECT poster_url FROM tv_shows WHERE id = ?').get(post.media_id);
+        poster_url = row?.poster_url || null;
+      }
+      return { ...post, poster_url, author: post.profiles };
+    });
+    res.json(enriched);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
