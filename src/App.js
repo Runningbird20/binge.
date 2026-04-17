@@ -27,6 +27,7 @@ const Forum          = lazy(() => import('./pages/Forum'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
 const Trending       = lazy(() => import('./pages/Trending'));
+const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
 
 function AppRouteFallback() {
   return <div className="loading-state">Loading...</div>;
@@ -76,14 +77,13 @@ export default function App() {
                 </div>
               </div>
             } />
-            <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['user']}><AdminRequests /></ProtectedRoute>} />
-            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['user']}><AdminAnalytics /></ProtectedRoute>} />
+            <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
+            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route
               path="/__ops/dev-lab"
               element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>}
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <ChatBot />
         </Suspense>

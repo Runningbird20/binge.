@@ -521,6 +521,7 @@ export default function ChatBot() {
       .filter(m => m.id !== 'welcome')
       .map(m => ({ role: m.role, content: m.content }));
 
+    const startTime = Date.now();
     try {
       const data = await invokeSupabaseFunction('ai-chat', {
         messages: [
@@ -529,6 +530,7 @@ export default function ChatBot() {
         ],
       });
 
+      const latencyMs = Date.now() - startTime;
       const rawAssistantContent = data?.content || data?.choices?.[0]?.message?.content || data?.response || 'No response.';
       const extractedTitles = extractTitlesFromText(rawAssistantContent);
       const resolvedSiteSources = mergeSiteSources(
@@ -543,11 +545,21 @@ export default function ChatBot() {
         id: Date.now() + 1,
         role: 'assistant',
         content: assistantContent,
-        intent: null,
+        intent: data?.intent || null,
         siteSources: resolvedSiteSources,
         webSources: data?.webSources || [],
-        latency: data?.usage ? null : null,
       }]);
+
+      if (supabase && user?.id) {
+        supabase.from('chat_logs').insert({
+          user_id: user.id,
+          query: trimmed.slice(0, 500),
+          intent: data?.intent || null,
+          response_length: rawAssistantContent.length,
+          sources_count: resolvedSiteSources.length + (data?.webSources?.length || 0),
+          latency_ms: latencyMs,
+        }).then(() => {}).catch(() => {});
+      }
     } catch (err) {
       setMessages(prev => [...prev, {
         id: Date.now() + 1,

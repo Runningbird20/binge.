@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase';
+import { resolveUserType } from './userAccess';
 import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
