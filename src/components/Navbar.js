@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getDefaultRouteForUserType } from '../utils/userAccess';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
@@ -40,6 +41,7 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const dashboardRoute = getDefaultRouteForUserType(user);
 
   async function handleLogout() {
     await logout();
@@ -72,7 +74,7 @@ export default function Navbar() {
           {/* Right side */}
           <div className="navbar-right">
             <NotificationBell />
-            <NavLink to={`/profile/${user.username}`} className="navbar-avatar-link" title={user.username}>
+            <NavLink to={dashboardRoute} className="navbar-avatar-link" title="Dashboard">
               <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
             </NavLink>
             <NavLink
