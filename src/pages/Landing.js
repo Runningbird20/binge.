@@ -5,7 +5,7 @@ import { getDefaultRouteForUserType } from '../utils/userAccess';
 
 export default function Landing() {
   const { isAuthenticated, authLoading, user } = useAuth();
-  if (!authLoading && isAuthenticated) return <Navigate to={getDefaultRouteForUserType(user?.userType)} replace />;
+  if (!authLoading && isAuthenticated) return <Navigate to={getDefaultRouteForUserType(user)} replace />;
 
   return (
     <div className="App">

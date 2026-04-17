@@ -31,6 +31,12 @@ function getCoverUrl(book) {
   return rawUrl;
 }
 
+const ARCHIVE_DOWNLOAD_EXTENSIONS = {
+  pdf: ['.pdf'],
+  epub: ['.epub'],
+  txt: ['.txt', '.text'],
+};
+
 function BookCoverImage({ book, imageClassName, placeholderClassName }) {
   const [coverUrl, setCoverUrl] = useState(() => getCoverUrl(book));
 
@@ -123,34 +129,29 @@ function BookDetailsModal({
     setDownloadError('');
 
     try {
-      const url = `/api/media/book-download?identifier=${encodeURIComponent(archiveId)}&format=${format}`;
-      const token = window.localStorage.getItem('token');
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Download failed');
+      const anchor = document.createElement('a');
+      const metadataResponse = await fetch(`https://archive.org/metadata/${encodeURIComponent(archiveId)}`);
+      if (!metadataResponse.ok) {
+        throw new Error('Unable to look up the Internet Archive download files.');
       }
 
-      const disposition = res.headers.get('content-disposition') || '';
-      const filenameToken = disposition
-        .split(';')
-        .map((part) => part.trim())
-        .find((part) => part.toLowerCase().startsWith('filename='));
-      const headerFilename = filenameToken?.slice('filename='.length).replace(/^"|"$/g, '');
-      const filename = headerFilename || `${book.title.replace(/[^a-z0-9]/gi, '_')}.${format}`;
+      const metadata = await metadataResponse.json();
+      const allowedExtensions = ARCHIVE_DOWNLOAD_EXTENSIONS[format] || [];
+      const file = (metadata.files || []).find((entry) => {
+        const name = String(entry?.name || '').toLowerCase();
+        return allowedExtensions.some((extension) => name.endsWith(extension));
+      });
 
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = filename;
+      if (!file?.name) {
+        throw new Error(`No ${format.toUpperCase()} download is available for this title.`);
+      }
+
+      anchor.href = `https://archive.org/download/${encodeURIComponent(archiveId)}/${file.name.split('/').map(encodeURIComponent).join('/')}`;
+      anchor.download = file.name;
+      anchor.rel = 'noopener noreferrer';
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
-      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       setDownloadError(err.message || 'Download failed. This book may not be available.');
     } finally {

@@ -1,18 +1,142 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = (process.env.REACT_APP_SUPABASE_URL || process.env.SUPABASE_URL)?.trim();
-const supabaseKey = (
-  process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY ||
-  process.env.REACT_APP_SUPABASE_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_KEY
-)?.trim();
+const SUPABASE_URL_ENV_KEYS = [
+  'REACT_APP_SUPABASE_URL',
+  'VITE_SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'SUPABASE_URL',
+];
+
+const SUPABASE_ANON_KEY_ENV_KEYS = [
+  'REACT_APP_SUPABASE_ANON_KEY',
+  'REACT_APP_SUPABASE_PUBLISHABLE_KEY',
+  'REACT_APP_SUPABASE_KEY',
+  'VITE_SUPABASE_ANON_KEY',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_KEY',
+];
+
+function readFirstEnv(keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.trim()) {
+      return {
+        key,
+        value: value.trim(),
+      };
+    }
+  }
+
+  return {
+    key: null,
+    value: '',
+  };
+}
+
+const resolvedSupabaseUrl = readFirstEnv(SUPABASE_URL_ENV_KEYS);
+const resolvedSupabaseAnonKey = readFirstEnv(SUPABASE_ANON_KEY_ENV_KEYS);
+
+const supabaseUrl = resolvedSupabaseUrl.value;
+const supabaseKey = resolvedSupabaseAnonKey.value;
+
+export const supabaseEnv = {
+  url: supabaseUrl,
+  anonKey: supabaseKey,
+  urlKey: resolvedSupabaseUrl.key,
+  anonKeyKey: resolvedSupabaseAnonKey.key,
+};
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey)
   : null;
+
+export function getSupabaseConfigErrorMessage() {
+  return [
+    'Missing Supabase environment variables.',
+    'Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY for this Create React App project.',
+    'If you are reusing config from another stack, VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY and NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are also recognized when available.',
+  ].join(' ');
+}
+
+export function requireSupabaseClient() {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error(getSupabaseConfigErrorMessage());
+  }
+
+  return supabase;
+}
+
+function looksLikeNetworkError(message) {
+  return /failed to fetch|networkerror|network request failed|load failed|fetch failed|network issue/i.test(message);
+}
+
+function looksLikeInvalidSupabaseUrl(message) {
+  return /invalid url|failed to construct 'url'|must be a valid url|supabase url/i.test(message);
+}
+
+function looksLikeInvalidSupabaseKey(message) {
+  return /invalid api key|invalid jwt|jwt malformed|apikey|anon key|publishable key/i.test(message);
+}
+
+function looksLikeAuthSessionError(message) {
+  return /auth session missing|auth session|invalid refresh token|refresh token|jwt expired|session missing|session expired|invalid claim/i.test(message);
+}
+
+function looksLikeRlsError(message) {
+  return /row-level security|permission denied|new row violates row-level security policy|violates row-level security/i.test(message);
+}
+
+function looksLikeMissingRelationError(code, message) {
+  return code === '42P01' || /relation .* does not exist|table .* does not exist|schema cache/i.test(message);
+}
+
+export function toSupabaseError(error, fallbackMessage, options = {}) {
+  if (!error) {
+    return new Error(fallbackMessage);
+  }
+
+  const message = String(error.message || '').trim();
+  const code = String(error.code || '').trim();
+  const resourceName = options.resourceName || options.resource || 'resource';
+  const edgeFunctionName = options.edgeFunctionName || options.functionName || '';
+
+  if (!isSupabaseConfigured) {
+    return new Error(getSupabaseConfigErrorMessage());
+  }
+
+  if (looksLikeInvalidSupabaseUrl(message)) {
+    return new Error('The Supabase URL is invalid. Check REACT_APP_SUPABASE_URL.');
+  }
+
+  if (looksLikeInvalidSupabaseKey(message)) {
+    return new Error('The Supabase anon key was rejected. Check REACT_APP_SUPABASE_ANON_KEY.');
+  }
+
+  if (looksLikeAuthSessionError(message)) {
+    return new Error('Your Supabase auth session is missing or invalid. Please sign in again.');
+  }
+
+  if (looksLikeMissingRelationError(code, message)) {
+    return new Error(`Supabase is missing the required "${resourceName}" table or view. Run the latest migration and verify the schema exists.`);
+  }
+
+  if (looksLikeRlsError(message) || code === '42501') {
+    return new Error(`Supabase denied access to "${resourceName}". Check the table's RLS policies.`);
+  }
+
+  if (edgeFunctionName && /function|functions/i.test(message)) {
+    return new Error(`The Supabase Edge Function "${edgeFunctionName}" failed. Check the function deployment and logs.`);
+  }
+
+  if (looksLikeNetworkError(message) || error.name === 'TypeError') {
+    return new Error('Unable to reach Supabase. Check your Supabase URL, anon key, and network connection.');
+  }
+
+  return new Error(message || fallbackMessage);
+}
 
 async function getSupabaseFunctionHeaders() {
   const headers = {
@@ -95,15 +219,25 @@ function buildFunctionErrorMessage(response, data) {
 
 export async function invokeSupabaseFunction(functionName, body) {
   if (!isSupabaseConfigured || !supabase) {
-    throw new Error('Supabase is not configured. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_PUBLISHABLE_KEY (or SUPABASE_URL / SUPABASE_ANON_KEY).');
+    throw new Error(getSupabaseConfigErrorMessage());
   }
 
   const headers = await getSupabaseFunctionHeaders();
-  const response = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body ?? {}),
-  });
+  let response;
+
+  try {
+    response = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch (error) {
+    throw toSupabaseError(error, `Unable to reach the Supabase Edge Function "${functionName}".`, {
+      resourceName: 'edge function',
+      edgeFunctionName: functionName,
+    });
+  }
+
   let data = await parseFunctionResponse(response);
 
   if (isJwtAuthError(response, data)) {
@@ -118,7 +252,14 @@ export async function invokeSupabaseFunction(functionName, body) {
   }
 
   if (!response.ok) {
-    throw new Error(buildFunctionErrorMessage(response, data));
+    throw toSupabaseError(
+      new Error(buildFunctionErrorMessage(response, data)),
+      `The Supabase Edge Function "${functionName}" failed.`,
+      {
+        resourceName: 'edge function',
+        edgeFunctionName: functionName,
+      }
+    );
   }
 
   return data;

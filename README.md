@@ -1,6 +1,6 @@
 # Project 3
 
-This project uses a React frontend and an Express API backed by SQLite.
+This project uses a React frontend backed primarily by Supabase for auth, database access, and real-time app data.
 
 ## Setup
 
@@ -47,22 +47,21 @@ Development dependencies:
 
 ### `npm start`
 
-Starts the frontend and backend together for local development.
+Starts the frontend and the optional legacy backend together for local development.
 
 - Frontend: `http://localhost:3000`
-- API: `http://localhost:5001`
 
-Use this command when you want signup, login, watchlist, ratings, and other API-backed features to work in the browser.
+Use this command only when you intentionally still need the legacy Express routes while migrating older features.
 
 ### `npm run start:client`
 
 Starts only the React development server on `http://localhost:3000`.
 
-This is useful when you only need to work on frontend UI and do not need the API.
+This is the normal local workflow for the Supabase-backed app.
 
 ### `npm run server`
 
-Starts only the Express API on `http://localhost:5001`.
+Starts only the optional legacy Express API.
 
 ### `npm run import:books`
 
@@ -130,7 +129,8 @@ Runs the test suite.
 
 ## Notes
 
-- The frontend can call the API through `REACT_APP_API_URL` in development, and falls back to the CRA proxy when no explicit API URL is set.
+- The frontend now talks directly to Supabase for auth, forum data, watch rooms, notifications, search, and admin analytics.
+- `REACT_APP_ENABLE_LEGACY_BACKEND` should stay `false` unless you intentionally still run the old Express API.
 - `better-sqlite3` is rebuilt during local `postinstall` so the native binding matches the current machine and Node version. Vercel skips that rebuild for the frontend deployment.
 - Vercel deployments in this repo are configured as a frontend-first Create React App build. Keep `REACT_APP_ENABLE_LEGACY_BACKEND=false` in Vercel unless you separately host and migrate the old Express backend.
 - The import scripts use Node's built-in `fetch`, so no separate `node-fetch` install is needed on modern Node versions.
@@ -144,12 +144,12 @@ This repository is ready to deploy to Vercel as the Supabase-backed frontend.
 Required Vercel environment variables:
 
 - `REACT_APP_SUPABASE_URL`
-- `REACT_APP_SUPABASE_PUBLISHABLE_KEY`
+- `REACT_APP_SUPABASE_ANON_KEY`
 - `REACT_APP_ENABLE_LEGACY_BACKEND=false`
 
 Optional only if you separately host the legacy backend:
 
-- `REACT_APP_API_URL`
+- `REACT_APP_LEGACY_API_URL`
 
 Notes:
 
