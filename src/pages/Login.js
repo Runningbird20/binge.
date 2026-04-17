@@ -16,7 +16,7 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await signIn(form);
-      navigate(getDefaultRouteForUserType(user?.userType));
+      navigate(getDefaultRouteForUserType(user));
     } catch (err) {
       setError(err.message);
     } finally {
