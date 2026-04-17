@@ -64,7 +64,6 @@ function FeedItem({ item }) {
 
 export default function Following() {
   const { user } = useAuth();
-  const [followedIds, setFollowedIds] = useState([]);
   const [followingProfiles, setFollowingProfiles] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
   const [suggestedProfiles, setSuggestedProfiles] = useState([]);
@@ -93,7 +92,6 @@ export default function Following() {
         }
 
         setCurrentRatings(ratings);
-        setFollowedIds(followed);
         setSuggestedProfiles(suggestions.filter((profile) => !followed.includes(profile.id)));
 
         if (followed.length) {
@@ -160,7 +158,6 @@ export default function Following() {
       const refreshedFollowedIds = await fetchSupabaseFollowingIds();
       const refreshedProfiles = await fetchSupabaseProfilesByIds(refreshedFollowedIds);
       const refreshedFeed = await fetchSupabaseFollowFeed();
-      setFollowedIds(refreshedFollowedIds);
       setFollowingProfiles(refreshedProfiles);
       setFeedItems(refreshedFeed);
       setSuggestedProfiles((current) => current.filter((profile) => profile.id !== profileId));
@@ -180,7 +177,6 @@ export default function Following() {
       const refreshedFollowedIds = await fetchSupabaseFollowingIds();
       const refreshedProfiles = await fetchSupabaseProfilesByIds(refreshedFollowedIds);
       const refreshedFeed = await fetchSupabaseFollowFeed();
-      setFollowedIds(refreshedFollowedIds);
       setFollowingProfiles(refreshedProfiles);
       setFeedItems(refreshedFeed);
       setSuggestedProfiles((current) => [...current, ...refreshedProfiles.filter((profile) => !current.some((p) => p.id === profile.id))].slice(0, 6));

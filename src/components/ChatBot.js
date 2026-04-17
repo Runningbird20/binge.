@@ -569,7 +569,7 @@ export default function ChatBot() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages]);
+  }, [input, loading, messages, user?.id]);
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
