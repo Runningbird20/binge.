@@ -1,5 +1,4 @@
 import { isSupabaseConfigured, supabase } from './supabase';
-import { resolveUserType } from './userAccess';
 import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
@@ -70,46 +69,6 @@ function toFriendlyError(error, fallbackMessage) {
   }
 
   return error.message || fallbackMessage;
-}
-
-function resolveRoleState(profileRow, authUser, overrides = {}) {
-  const authMetadata = authUser?.user_metadata || {};
-  const appMetadata = authUser?.app_metadata || {};
-  const userType = resolveUserType({
-    userType:
-      overrides.userType ??
-      overrides.user_type ??
-      profileRow?.user_type ??
-      profileRow?.userType ??
-      authMetadata.user_type ??
-      authMetadata.userType ??
-      appMetadata.user_type ??
-      appMetadata.userType,
-    isAdmin:
-      overrides.isAdmin ??
-      overrides.is_admin ??
-      profileRow?.is_admin ??
-      profileRow?.isAdmin ??
-      authMetadata.is_admin ??
-      authMetadata.isAdmin ??
-      appMetadata.is_admin ??
-      appMetadata.isAdmin,
-    isDev:
-      overrides.isDev ??
-      overrides.is_dev ??
-      profileRow?.is_dev ??
-      profileRow?.isDev ??
-      authMetadata.is_dev ??
-      authMetadata.isDev ??
-      appMetadata.is_dev ??
-      appMetadata.isDev,
-  });
-
-  return {
-    userType,
-    isAdmin: userType === 'admin',
-    isDev: userType === 'dev',
-  };
 }
 
 function buildUserProfile(authUser, profileRow) {

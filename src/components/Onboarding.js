@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchSupabaseRatings, addSupabaseWatchlistItem } from '../utils/supabaseData';
 import { fetchSupabaseMovieCuratedRows } from '../utils/supabaseMovieCatalog';
-
-const STEPS = ['welcome', 'rate', 'done'];
 
 export default function Onboarding({ onComplete }) {
   const [step, setStep]       = useState('welcome');

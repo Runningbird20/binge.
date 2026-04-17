@@ -130,17 +130,6 @@ function BadgeIcon({ iconKey, label, toneKey }) {
   );
 }
 
-
-function SkeletonCard() {
-  return (
-    <div className="skeleton-card">
-      <div className="skeleton-poster skeleton-pulse" />
-      <div className="skeleton-line skeleton-pulse" style={{ width: '80%', marginTop: '0.5rem' }} />
-      <div className="skeleton-line skeleton-pulse" style={{ width: '55%' }} />
-    </div>
-  );
-}
-
 function ContinueWatching({ items }) {
   const inProgress = items.filter(
     i => i.media_type === 'tv_show' && i.status === 'watching' && (i.current_season || i.current_episode)
