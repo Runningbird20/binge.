@@ -1,10 +1,16 @@
 import { executeSupabaseRoute } from './utils/supabaseApi';
 
+function isLegacyBackendEnabled() {
+  return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
+    .trim()
+    .toLowerCase() === 'true';
+}
+
 function resolveLegacyBaseUrl() {
   const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
 
   if (!configuredApiUrl) {
-    return '/api';
+    return isLegacyBackendEnabled() ? '/api' : null;
   }
 
   const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
@@ -121,6 +127,12 @@ function isHtmlPayload(data) {
 }
 
 async function requestLegacyApi(method, path, body) {
+  if (!LEGACY_BASE) {
+    throw new Error(
+      'This deployment does not include the legacy backend. Set REACT_APP_LEGACY_API_URL to a separately hosted API or enable REACT_APP_ENABLE_LEGACY_BACKEND=true for a same-origin /api deployment.'
+    );
+  }
+
   const token = await getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
