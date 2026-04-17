@@ -35,3 +35,4 @@ describe('book genre helpers', () => {
     expect(matchesBookGenreFacet('Non-Fiction', 'Fiction')).toBe(false);
   });
 });
+
