@@ -1,13 +1,12 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { canAccessUserType, getDefaultRouteForUserType } from '../utils/userAccess';
 
-export default function ProtectedRoute({ children, allowedUserTypes = [] }) {
-  const { isAuthenticated, authLoading, user } = useAuth();
+export default function ProtectedRoute({ children }) {
+  const { isAuthenticated, authLoading } = useAuth();
 
-  if (authLoading) {
-    return <div className="loading-state">Loading your account...</div>;
-  }
+  // While auth is loading, render nothing (invisible) rather than
+  // a loading spinner that causes a visible flash on every navigation
+  if (authLoading) return null;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

@@ -1,13 +1,20 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../db');
-const { createClient } = require('@supabase/supabase-js');
+let _sbCreateClient = null;
+function getCreateClient() {
+  if (!_sbCreateClient) {
+    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
+  }
+  return _sbCreateClient;
+}
 
 function getSb() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key);
+  return getCreateClient()(url, key);
 }
 
 // GET /search?q=query&types=movies,tv,books,forums,people

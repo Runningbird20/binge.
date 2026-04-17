@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
+import { api } from '../api';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -109,6 +110,30 @@ function BrowseView({
     };
   }, [search]);
 
+  const fetchShowsPageFromApi = useCallback(async (pageNum) => {
+    const params = new URLSearchParams({
+      page: String(pageNum),
+      page_size: String(PAGE_SIZE),
+      sort: sortOrder,
+    });
+
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    if (genre) params.set('genre', genre);
+
+    const data = await api.get(`/media/tv-shows?${params.toString()}`);
+    const nextItems = normalizeMediaItems(data);
+
+    return {
+      items: nextItems,
+      total: Number(data?.total) || nextItems.length,
+      totalPages: Number(data?.totalPages) || 1,
+      facets: {
+        genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
+      },
+      usingFallbackCatalog: false,
+    };
+  }, [debouncedSearch, genre, sortOrder]);
+
   const fetchShowsPageFromFallback = useCallback(async (pageNum) => {
     const fallbackItems = fallbackItemsRef.current || await loadFallbackTvShows();
     fallbackItemsRef.current = fallbackItems;
@@ -157,10 +182,19 @@ function BrowseView({
         usingFallbackCatalog: false,
       };
     } catch {
-      const data = await fetchShowsPageFromFallback(1);
-      return { source: 'fallback', ...data };
+      try {
+        const data = await fetchShowsPageFromApi(1);
+        if (data.items.length === 0 && !debouncedSearch && !genre) {
+          throw new Error('TV catalog is empty');
+        }
+
+        return { source: 'api', ...data };
+      } catch {
+        const data = await fetchShowsPageFromFallback(1);
+        return { source: 'fallback', ...data };
+      }
     }
-  }, [debouncedSearch, genre, sortOrder, fetchShowsPageFromFallback]);
+  }, [debouncedSearch, genre, sortOrder, fetchShowsPageFromApi, fetchShowsPageFromFallback]);
 
   const loadRemainingShows = useCallback(async ({ source, totalCount, requestToken }) => {
     if (totalCount <= PAGE_SIZE) {
@@ -215,7 +249,9 @@ function BrowseView({
         );
 
         const batchResults = await Promise.all(pageNumbers.map((nextPageNum) => (
-          fetchShowsPageFromFallback(nextPageNum)
+          source === 'api'
+            ? fetchShowsPageFromApi(nextPageNum)
+            : fetchShowsPageFromFallback(nextPageNum)
         )));
 
         if (requestTokenRef.current !== requestToken) {
@@ -232,7 +268,7 @@ function BrowseView({
         setLoadingMore(false);
       }
     }
-  }, [debouncedSearch, genre, sortOrder, fetchShowsPageFromFallback]);
+  }, [debouncedSearch, genre, sortOrder, fetchShowsPageFromApi, fetchShowsPageFromFallback]);
 
   useEffect(() => {
     let cancelled = false;
@@ -441,15 +477,28 @@ function CuratedView({ onItemClick, onSeeAll }) {
         }
       } catch {
         try {
-          const fallbackItems = await loadFallbackTvShows();
+          const data = await api.get('/media/tv-shows/curated');
+          const nextRows = Array.isArray(data?.rows) ? data.rows : [];
+          if (nextRows.length === 0) {
+            throw new Error('No curated rows available');
+          }
+
           if (!cancelled) {
-            setRows(buildFallbackCuratedRows(fallbackItems));
-            setUsingFallbackRows(true);
+            setRows(nextRows);
+            setUsingFallbackRows(false);
           }
         } catch {
-          if (!cancelled) {
-            setRows([]);
-            setUsingFallbackRows(false);
+          try {
+            const fallbackItems = await loadFallbackTvShows();
+            if (!cancelled) {
+              setRows(buildFallbackCuratedRows(fallbackItems));
+              setUsingFallbackRows(true);
+            }
+          } catch {
+            if (!cancelled) {
+              setRows([]);
+              setUsingFallbackRows(false);
+            }
           }
         }
       } finally {
@@ -549,6 +598,18 @@ export default function TVShows() {
           return;
         }
       } catch {
+        // Fall through to the legacy API and bundled catalog below.
+      }
+
+      try {
+        const item = await api.get(`/media/tv-shows/${openId}`);
+        if (!cancelled && item?.id) {
+          setSelectedItem(item);
+          setSelectedItemBrowseOnly(false);
+          setDetailMessage('');
+          return;
+        }
+      } catch {
         // Fall back to the bundled catalog below.
       }
 
@@ -586,6 +647,15 @@ export default function TVShows() {
       if (detailedItem?.id) {
         setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
         return;
+      }
+    } catch {
+      // Fall through to the legacy API below.
+    }
+
+    try {
+      const detailedItem = await api.get(`/media/tv-shows/${item.id}`);
+      if (detailedItem?.id) {
+        setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
       }
     } catch {
       // Keep the summary item if full details are unavailable.

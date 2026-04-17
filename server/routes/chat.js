@@ -1,15 +1,10 @@
 const express = require('express');
 const db = require('../db');
 const { optionalAuth, requireAuth } = require('../middleware/auth');
-const {
-  isSupabaseConfigured,
-  fetchSupabaseCatalog,
-  fetchSupabaseCatalogItems,
-} = require('../utils/supabaseClient');
 
 const router = express.Router();
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.REACT_APP_GROQ_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
@@ -102,11 +97,7 @@ function extractTerms(query) {
     .filter(t => t.length > 2 && !stop.has(t));
 }
 
-async function searchSiteMedia(query, limit = 20) {
-  if (isSupabaseConfigured()) {
-    return await fetchSupabaseCatalog(query, limit);
-  }
-
+function searchSiteMedia(query, limit = 20) {
   const mediaTypes = detectMediaTypes(query);
   const terms = extractTerms(query);
   const sources = [];
@@ -341,7 +332,7 @@ router.post('/', optionalAuth, async (req, res) => {
 
   try {
     const intent      = detectQueryIntent(message);
-    const siteDocs    = await searchSiteMedia(message, 20);
+    const siteDocs    = searchSiteMedia(message, 20);
     const userHistory = getUserRatingHistory(userId);
 
     // Always search the web — build a good query from the user's message
@@ -434,38 +425,104 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
   if (!GROQ_API_KEY) return res.status(503).json({ error: 'GROQ_API_KEY not configured.' });
 
   const userId = req.user?.id || null;
+  const isSupabaseUser = req.user?.fromSupabase === true;
+  console.log('[ForYou] userId:', userId, 'isSupabase:', isSupabaseUser);
 
   try {
     if (!userId) {
       return res.json({
         recommendations: [],
         tasteProfile: null,
-        message: 'Personalized recommendations are available when the legacy backend session is connected. The chat assistant still works for general questions.',
+        message: 'Sign in to get personalized recommendations!',
       });
     }
 
-    // Get full rating history with more detail
-    const movieHistory = db.prepare(`
-      SELECT ROUND(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*5, 1) AS rating,
-             r.review, 'movie' AS media_type, r.media_id,
-             m.title, m.genre, m.director AS creator, m.synopsis
-      FROM movie_ratings r JOIN movies m ON r.media_id = m.id WHERE r.user_id = ?
-    `).all(userId);
-    const tvHistory = db.prepare(`
-      SELECT ROUND(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS REAL)/38*5, 1) AS rating,
-             r.review, 'tv_show' AS media_type, r.media_id,
-             t.title, t.genre, t.creator AS creator, t.synopsis
-      FROM tv_show_ratings r JOIN tv_shows t ON r.media_id = t.id WHERE r.user_id = ?
-    `).all(userId);
-    const bookHistory = db.prepare(`
-      SELECT ROUND(CAST(prose+plot+characters+originality+pacing+resonance AS REAL)/32*5, 1) AS rating,
-             r.review, 'book' AS media_type, r.media_id,
-             b.title, b.genre, b.author AS creator, b.synopsis
-      FROM book_ratings r JOIN books b ON r.media_id = b.id WHERE r.user_id = ?
-    `).all(userId);
-    const history = [...movieHistory, ...tvHistory, ...bookHistory]
-      .sort((a, b) => b.rating - a.rating)
-      .slice(0, 30);
+    let history = [];
+
+    if (isSupabaseUser) {
+      // Fetch ratings from Supabase for Supabase users
+      const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+      if (!url || !key) throw new Error('Supabase not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env');
+      let sbCreate;
+      try { sbCreate = require('@supabase/supabase-js').createClient; }
+      catch { throw new Error('Run npm install to install @supabase/supabase-js'); }
+      const sb = sbCreate(url, key);
+
+      // Fetch ratings (just IDs + scores), then look up media info from Supabase separately
+      const [{ data: movieRatings }, { data: tvRatings }, { data: bookRatings }] = await Promise.all([
+        sb.from('movie_ratings').select('media_id, acting, writing, originality, pacing, cinematography, review').eq('user_id', userId),
+        sb.from('tv_show_ratings').select('media_id, premise, originality, acting, cinematography, writing, pacing, resonance, review').eq('user_id', userId),
+        sb.from('book_ratings').select('media_id, prose, plot, characters, originality, pacing, resonance, review').eq('user_id', userId),
+      ]);
+
+      // Fetch media info from Supabase by ID (separate queries to avoid FK join issues)
+      const movieIds  = (movieRatings || []).map(r => r.media_id);
+      const tvIds     = (tvRatings    || []).map(r => r.media_id);
+      const bookIds   = (bookRatings  || []).map(r => r.media_id);
+
+      const [{ data: movieMedia }, { data: tvMedia }, { data: bookMedia }] = await Promise.all([
+        movieIds.length ? sb.from('movies').select('id, title, genre, director, synopsis, source_key').in('id', movieIds) : Promise.resolve({ data: [] }),
+        tvIds.length    ? sb.from('tv_shows').select('id, title, genre, creator, synopsis, source_key').in('id', tvIds)   : Promise.resolve({ data: [] }),
+        bookIds.length  ? sb.from('books').select('id, title, genre, author, synopsis, source_key').in('id', bookIds)    : Promise.resolve({ data: [] }),
+      ]);
+
+      const movieMap = {}; (movieMedia || []).forEach(m => { movieMap[m.id] = m; });
+      const tvMap    = {}; (tvMedia    || []).forEach(t => { tvMap[t.id]    = t; });
+      const bookMap  = {}; (bookMedia  || []).forEach(b => { bookMap[b.id]  = b; });
+
+      const enrichMovie = (r) => {
+        const m = movieMap[r.media_id];
+        if (!m) return null;
+        const rating = Math.round(((r.acting||0)+(r.writing||0)+(r.originality||0)+(r.pacing||0)+(r.cinematography||0))/25*5);
+        const sqliteRow = m.source_key ? db.prepare('SELECT id FROM movies WHERE source_key = ?').get(m.source_key) : null;
+        return { rating, review: r.review, media_type: 'movie', media_id: sqliteRow?.id || r.media_id, title: m.title, genre: m.genre, creator: m.director, synopsis: m.synopsis };
+      };
+      const enrichTV = (r) => {
+        const t = tvMap[r.media_id];
+        if (!t) return null;
+        const rating = Math.round(((r.premise||0)+(r.originality||0)+(r.acting||0)+(r.cinematography||0)+(r.writing||0)+(r.pacing||0)+(r.resonance||0))/38*5);
+        const sqliteRow = t.source_key ? db.prepare('SELECT id FROM tv_shows WHERE source_key = ?').get(t.source_key) : null;
+        return { rating, review: r.review, media_type: 'tv_show', media_id: sqliteRow?.id || r.media_id, title: t.title, genre: t.genre, creator: t.creator, synopsis: t.synopsis };
+      };
+      const enrichBook = (r) => {
+        const b = bookMap[r.media_id];
+        if (!b) return null;
+        const rating = Math.round(((r.prose||0)+(r.plot||0)+(r.characters||0)+(r.originality||0)+(r.pacing||0)+(r.resonance||0))/32*5);
+        const sqliteRow = b.source_key ? db.prepare('SELECT id FROM books WHERE source_key = ?').get(b.source_key) : null;
+        return { rating, review: r.review, media_type: 'book', media_id: sqliteRow?.id || r.media_id, title: b.title, genre: b.genre, creator: b.author, synopsis: b.synopsis };
+      };
+
+      history = [
+        ...(movieRatings || []).map(enrichMovie).filter(Boolean),
+        ...(tvRatings   || []).map(enrichTV).filter(Boolean),
+        ...(bookRatings || []).map(enrichBook).filter(Boolean),
+      ].sort((a, b) => b.rating - a.rating).slice(0, 30);
+      console.log('[ForYou] Supabase ratings fetched:', (movieRatings||[]).length, 'movies,', (tvRatings||[]).length, 'tv,', (bookRatings||[]).length, 'books. History after enrich:', history.length);
+    } else {
+      // Legacy SQLite ratings for legacy JWT users
+      const movieHistory = db.prepare(`
+        SELECT ROUND(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*5, 1) AS rating,
+               r.review, 'movie' AS media_type, r.media_id,
+               m.title, m.genre, m.director AS creator, m.synopsis
+        FROM movie_ratings r JOIN movies m ON r.media_id = m.id WHERE r.user_id = ?
+      `).all(userId);
+      const tvHistory = db.prepare(`
+        SELECT ROUND(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS REAL)/38*5, 1) AS rating,
+               r.review, 'tv_show' AS media_type, r.media_id,
+               t.title, t.genre, t.creator AS creator, t.synopsis
+        FROM tv_show_ratings r JOIN tv_shows t ON r.media_id = t.id WHERE r.user_id = ?
+      `).all(userId);
+      const bookHistory = db.prepare(`
+        SELECT ROUND(CAST(prose+plot+characters+originality+pacing+resonance AS REAL)/32*5, 1) AS rating,
+               r.review, 'book' AS media_type, r.media_id,
+               b.title, b.genre, b.author AS creator, b.synopsis
+        FROM book_ratings r JOIN books b ON r.media_id = b.id WHERE r.user_id = ?
+      `).all(userId);
+      history = [...movieHistory, ...tvHistory, ...bookHistory]
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, 30);
+    }
 
     if (history.length === 0) {
       return res.json({
@@ -476,20 +533,9 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
     }
 
     // Get all site content to recommend from
-    let allMovies;
-    let allTV;
-    let allBooks;
-
-    if (isSupabaseConfigured()) {
-      const allCatalog = await fetchSupabaseCatalogItems(200);
-      allMovies = allCatalog.filter((item) => item.media_type === 'movie');
-      allTV = allCatalog.filter((item) => item.media_type === 'tv_show');
-      allBooks = allCatalog.filter((item) => item.media_type === 'book');
-    } else {
-      allMovies = db.prepare(`SELECT id, title, year, genre, director, cast_members, synopsis, overview, source_key, poster_url, 'movie' as media_type FROM movies WHERE source_key IS NOT NULL`).all();
-      allTV    = db.prepare(`SELECT id, title, year, genre, creator, cast_members, synopsis, overview, seasons, source_key, poster_url, 'tv_show' as media_type FROM tv_shows WHERE source_key IS NOT NULL`).all();
-      allBooks = db.prepare(`SELECT id, title, year, genre, author, synopsis, source_key, cover_url, 'book' as media_type FROM books WHERE source_key IS NOT NULL LIMIT 100`).all();
-    }
+    const allMovies = db.prepare(`SELECT id, title, year, genre, director, cast_members, synopsis, overview, source_key, poster_url, 'movie' as media_type FROM movies WHERE source_key IS NOT NULL`).all();
+    const allTV    = db.prepare(`SELECT id, title, year, genre, creator, cast_members, synopsis, overview, seasons, source_key, poster_url, 'tv_show' as media_type FROM tv_shows WHERE source_key IS NOT NULL`).all();
+    const allBooks = db.prepare(`SELECT id, title, year, genre, author, synopsis, source_key, cover_url, 'book' as media_type FROM books WHERE source_key IS NOT NULL LIMIT 100`).all();
 
     // Exclude already-rated items
     const ratedIds = new Set(history.map(r => `${r.media_type}:${r.media_id}`));
@@ -499,12 +545,12 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
     const historyText = history.map(r => {
       const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
       return `- "${r.title}" (${r.media_type.replace('_',' ')}) ${stars} | Genre: ${r.genre || 'unknown'} | By: ${r.creator || 'unknown'}${r.review ? ` | Review: "${r.review.slice(0,80)}"` : ''}`;
-    }).join('');
+    }).join('\n');
 
     const catalogText = unratedMedia.slice(0, 60).map(m => {
       const typeLabel = m.media_type === 'movie' ? 'Movie' : m.media_type === 'tv_show' ? 'TV Show' : 'Book';
       return `[${typeLabel} ID:${m.id}] "${m.title}" | Genre: ${m.genre || ''} | ${m.director ? 'Director: '+m.director : m.creator ? 'Creator: '+m.creator : m.author ? 'Author: '+m.author : ''} | ${(m.synopsis || m.overview || '').slice(0,120)}`;
-    }).join('');
+    }).join('\n');
 
     const systemPrompt = `You are a personalized media recommendation engine for "binge." 
 Analyze the user's rating history carefully to identify their taste patterns — which genres, directors, themes, tones, and styles they love.
@@ -520,7 +566,7 @@ RULES:
   "tasteProfile": "2-3 sentence summary of what this user loves based on their ratings",
   "recommendations": [
     { "id": <number>, "title": "<exact title>", "media_type": "<movie|tv_show|book>", "reason": "<specific 1-2 sentence explanation>" },
-    ...5 items total
+    ...10 items total
   ]
 }`;
 
@@ -530,7 +576,7 @@ ${historyText}
 AVAILABLE CATALOG (titles NOT yet rated — only pick from these):
 ${catalogText}
 
-Analyze the user's taste and return 5 personalized recommendations from the catalog in the JSON format specified.`;
+Analyze the user's taste and return 10 personalized recommendations from the catalog in the JSON format specified.`;
 
     const response = await fetch(GROQ_API_URL, {
       method: 'POST',
@@ -545,7 +591,7 @@ Analyze the user's taste and return 5 personalized recommendations from the cata
           { role: 'user', content: userMessage },
         ],
         temperature: 0.4,
-        max_tokens: 1000,
+        max_tokens: 1800,
       }),
       signal: AbortSignal.timeout(30000),
     });

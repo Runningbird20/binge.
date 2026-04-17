@@ -32,6 +32,7 @@ export default function Navbar() {
 
       {user ? (
         <>
+          {/* Search — left of nav links */}
           <div className="navbar-search-wrap">
             <GlobalSearch />
           </div>
@@ -51,7 +52,12 @@ export default function Navbar() {
             <NavLink to={`/profile/${user.username}`} className="navbar-avatar-link" title={user.username}>
               <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
             </NavLink>
-            <NavLink to="/account-settings" className={({ isActive }) => `navbar-settings-link${isActive ? ' active' : ''}`} aria-label="Settings" title="Settings">
+            <NavLink
+              to="/account-settings"
+              className={({ isActive }) => `navbar-settings-link${isActive ? ' active' : ''}`}
+              aria-label="Settings"
+              title="Settings"
+            >
               <svg className="navbar-settings-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.13 7.13 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54a.5.5 0 0 0 .49.42h3.8a.5.5 0 0 0 .49-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z" fill="currentColor" />
               </svg>
