@@ -6,6 +6,7 @@ import {
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
+const AUTH_MUTATION_TIMEOUT_MS = 15000;
 const PROFILE_SYNC_TIMEOUT_MS = 4000;
 
 const RATING_TABLES = {
@@ -70,6 +71,46 @@ function toFriendlyError(error, fallbackMessage) {
   return error.message || fallbackMessage;
 }
 
+function resolveRoleState(profileRow, authUser, overrides = {}) {
+  const authMetadata = authUser?.user_metadata || {};
+  const appMetadata = authUser?.app_metadata || {};
+  const userType = resolveUserType({
+    userType:
+      overrides.userType ??
+      overrides.user_type ??
+      profileRow?.user_type ??
+      profileRow?.userType ??
+      authMetadata.user_type ??
+      authMetadata.userType ??
+      appMetadata.user_type ??
+      appMetadata.userType,
+    isAdmin:
+      overrides.isAdmin ??
+      overrides.is_admin ??
+      profileRow?.is_admin ??
+      profileRow?.isAdmin ??
+      authMetadata.is_admin ??
+      authMetadata.isAdmin ??
+      appMetadata.is_admin ??
+      appMetadata.isAdmin,
+    isDev:
+      overrides.isDev ??
+      overrides.is_dev ??
+      profileRow?.is_dev ??
+      profileRow?.isDev ??
+      authMetadata.is_dev ??
+      authMetadata.isDev ??
+      appMetadata.is_dev ??
+      appMetadata.isDev,
+  });
+
+  return {
+    userType,
+    isAdmin: userType === 'admin',
+    isDev: userType === 'dev',
+  };
+}
+
 function buildUserProfile(authUser, profileRow) {
   const email = profileRow?.email || authUser?.email || '';
   const fallbackUsername =
@@ -88,6 +129,10 @@ function buildUserProfile(authUser, profileRow) {
   };
 }
 
+export function buildSupabaseUserProfile(authUser, profileRow) {
+  return buildUserProfile(authUser, profileRow);
+}
+
 function withTimeout(promise, timeoutMs, timeoutMessage) {
   let timeoutId;
 
@@ -100,6 +145,27 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
   return Promise.race([promise, timeoutPromise]).finally(() => {
     window.clearTimeout(timeoutId);
   });
+}
+
+function isTimeoutError(error, timeoutMessage) {
+  return error instanceof Error && error.message === timeoutMessage;
+}
+
+async function withTimeoutRetry(promiseFactory, timeoutMs, timeoutMessage, retries = 1) {
+  let attemptsRemaining = retries;
+
+  while (true) {
+    try {
+      return await withTimeout(promiseFactory(), timeoutMs, timeoutMessage);
+    } catch (error) {
+      if (!isTimeoutError(error, timeoutMessage) || attemptsRemaining <= 0) {
+        throw error;
+      }
+
+      attemptsRemaining -= 1;
+      console.warn(`[auth] ${timeoutMessage} Retrying request...`);
+    }
+  }
 }
 
 function buildFallbackProfileRow(authUser, overrides = {}) {
@@ -117,6 +183,37 @@ function buildFallbackProfileRow(authUser, overrides = {}) {
       authUser?.user_metadata?.avatar_url ??
       null,
     created_at: authUser?.created_at ?? null,
+  };
+}
+
+async function getStoredSupabaseProfile(authUser, overrides = {}) {
+  const fallbackProfile = buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+
+  if (!authUser?.id) {
+    return {
+      profile: fallbackProfile,
+      hasStoredProfile: false,
+    };
+  }
+
+  try {
+    const profileRow = await withTimeout(
+      getProfileRow(authUser.id),
+      PROFILE_SYNC_TIMEOUT_MS,
+      'Reading the Supabase profile timed out.'
+    );
+
+    if (profileRow) {
+      return {
+        profile: buildUserProfile(authUser, profileRow),
+        hasStoredProfile: true,
+      };
+    }
+  } catch {}
+
+  return {
+    profile: fallbackProfile,
+    hasStoredProfile: false,
   };
 }
 
@@ -203,7 +300,12 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
 }
 
 export async function resolveSupabaseProfile(authUser, overrides = {}) {
-  const fallbackProfile = buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+  const { profile: fallbackProfile, hasStoredProfile } = await getStoredSupabaseProfile(authUser, overrides);
+
+  if (hasStoredProfile) {
+    void ensureSupabaseProfile(authUser, overrides).catch(() => {});
+    return fallbackProfile;
+  }
 
   try {
     return await withTimeout(
@@ -238,9 +340,9 @@ export async function getSupabaseSessionProfile() {
 
 export async function signInWithSupabase({ email, password }) {
   const client = requireSupabase();
-  const { data, error } = await withTimeout(
-    client.auth.signInWithPassword({ email, password }),
-    AUTH_REQUEST_TIMEOUT_MS,
+  const { data, error } = await withTimeoutRetry(
+    () => client.auth.signInWithPassword({ email, password }),
+    AUTH_MUTATION_TIMEOUT_MS,
     'Supabase sign-in timed out.'
   );
 
@@ -257,8 +359,8 @@ export async function signInWithSupabase({ email, password }) {
 
 export async function signUpWithSupabase({ username, email, password, bio, avatarUrl }) {
   const client = requireSupabase();
-  const { data, error } = await withTimeout(
-    client.auth.signUp({
+  const { data, error } = await withTimeoutRetry(
+    () => client.auth.signUp({
       email,
       password,
       options: {
@@ -269,7 +371,7 @@ export async function signUpWithSupabase({ username, email, password, bio, avata
         },
       },
     }),
-    AUTH_REQUEST_TIMEOUT_MS,
+    AUTH_MUTATION_TIMEOUT_MS,
     'Supabase sign-up timed out.'
   );
 

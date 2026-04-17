@@ -35,15 +35,17 @@ export function normalizeUserType(value) {
   return 'user';
 }
 
-export function resolveUserType({ userType, isAdmin, isDev } = {}) {
-  const normalizedUserType = normalizeUserType(userType);
-  const hasExplicitAdmin = hasExplicitFlag(isAdmin);
-  const hasExplicitDev = hasExplicitFlag(isDev);
+export function resolveUserType({ userType, user_type, isAdmin, is_admin, isDev, is_dev } = {}) {
+  const normalizedUserType = normalizeUserType(userType ?? user_type);
+  const explicitAdminFlag = isAdmin ?? is_admin;
+  const explicitDevFlag = isDev ?? is_dev;
+  const hasExplicitAdmin = hasExplicitFlag(explicitAdminFlag);
+  const hasExplicitDev = hasExplicitFlag(explicitDevFlag);
   const resolvedIsAdmin = hasExplicitAdmin
-    ? normalizeBooleanFlag(isAdmin)
+    ? normalizeBooleanFlag(explicitAdminFlag)
     : normalizedUserType === 'admin';
   const resolvedIsDev = hasExplicitDev
-    ? normalizeBooleanFlag(isDev)
+    ? normalizeBooleanFlag(explicitDevFlag)
     : normalizedUserType === 'dev';
 
   if (resolvedIsAdmin) {
@@ -61,8 +63,23 @@ export function resolveUserType({ userType, isAdmin, isDev } = {}) {
   return 'user';
 }
 
-export function getDefaultRouteForUserType(userType) {
-  const normalized = normalizeUserType(userType);
+function resolveAccessUserType(userOrType) {
+  if (userOrType && typeof userOrType === 'object') {
+    return resolveUserType({
+      userType: userOrType.userType,
+      user_type: userOrType.user_type,
+      isAdmin: userOrType.isAdmin,
+      is_admin: userOrType.is_admin,
+      isDev: userOrType.isDev,
+      is_dev: userOrType.is_dev,
+    });
+  }
+
+  return normalizeUserType(userOrType);
+}
+
+export function getDefaultRouteForUserType(userOrType) {
+  const normalized = resolveAccessUserType(userOrType);
 
   if (normalized === 'admin') {
     return '/admin';
@@ -75,11 +92,11 @@ export function getDefaultRouteForUserType(userType) {
   return '/home';
 }
 
-export function canAccessUserType(userType, allowedUserTypes = []) {
+export function canAccessUserType(userOrType, allowedUserTypes = []) {
   if (!Array.isArray(allowedUserTypes) || allowedUserTypes.length === 0) {
     return true;
   }
 
-  const normalized = normalizeUserType(userType);
+  const normalized = resolveAccessUserType(userOrType);
   return allowedUserTypes.map((value) => normalizeUserType(value)).includes(normalized);
 }

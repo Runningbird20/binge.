@@ -50,11 +50,8 @@ export default function App() {
             <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
             <Route path="/lists/:shareCode" element={<SharedList />} />
             <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-            <Route path="/admin/requests"   element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
-            <Route path="/admin/analytics"  element={<ProtectedRoute><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
             <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
-            <Route path="/live-tv"          element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
             <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
             <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
@@ -71,6 +68,14 @@ export default function App() {
                 </div>
               </div>
             } />
+            <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['user']}><AdminRequests /></ProtectedRoute>} />
+            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['user']}><AdminAnalytics /></ProtectedRoute>} />
+            <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
+            <Route
+              path="/__ops/dev-lab"
+              element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>}
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <ChatBot />
         </Suspense>
