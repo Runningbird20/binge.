@@ -5,9 +5,9 @@ import { fetchSupabaseAdminRequests, updateSupabaseRequestStatus } from '../util
 
 const INTENTS = ['general', 'factual', 'thematic', 'recommendation', 'creative'];
 const SECTION_TABS = [
-  { id: 'workspace', label: 'Workspace', title: 'Catalog And Knowledge Intake', description: 'Import titles into Supabase, scrape supporting material, and curate the knowledge base the assistant can use.' },
+  { id: 'workspace', label: 'Workspace', title: 'Catalog And Knowledge Intake', description: 'Import titles into the live catalog, scrape supporting material, and curate the knowledge base the assistant can use.' },
   { id: 'requests', label: 'Requests', title: 'Media Request Review', description: 'Review incoming user submissions and resolve them without leaving the lab.' },
-  { id: 'prompting', label: 'Prompting', title: 'Prompt Tuning', description: 'Tune intent-specific prompt profiles and preview the Supabase dev function flow.' },
+  { id: 'prompting', label: 'Prompting', title: 'Prompt Tuning', description: 'Tune intent-specific prompt profiles and preview the active dev-lab backend flow.' },
   { id: 'quality', label: 'Quality', title: 'Evaluation Checks', description: 'Save regression cases, run QA passes, and watch recent eval output.' },
 ];
 const REQUEST_FILTERS = ['pending', 'approved', 'rejected', 'all'];
@@ -291,7 +291,7 @@ export default function DeveloperLab() {
             <div>
               <h2>Import And Ingest</h2>
               <p className="home-panel-copy">
-                Bring titles and support material into Supabase so the assistant has clean catalog and knowledge context.
+                Bring titles and support material into the live catalog so the assistant has clean catalog and knowledge context.
               </p>
             </div>
           </div>
@@ -299,7 +299,7 @@ export default function DeveloperLab() {
           <div className="devlab-panel-grid">
             <article className="devlab-card">
               <h3>API Catalog Import</h3>
-              <p className="devlab-muted">Import directly into the live Supabase catalog from TMDB or Open Library.</p>
+              <p className="devlab-muted">Import directly into the live catalog from TMDB or Open Library.</p>
               <form className="devlab-form" onSubmit={handleApiImport}>
                 <div className="devlab-form-grid">
                   <label className="devlab-field">
@@ -343,7 +343,7 @@ export default function DeveloperLab() {
                 </label>
                 <div className="devlab-form-actions">
                   <button className="btn-primary" type="submit" disabled={busy === 'api'}>
-                    {busy === 'api' ? 'Importing...' : 'Import Into Supabase'}
+                    {busy === 'api' ? 'Importing...' : 'Import Into Catalog'}
                   </button>
                 </div>
               </form>
@@ -646,7 +646,7 @@ export default function DeveloperLab() {
           <div className="section-header">
             <div>
               <h2>Prompt Preview</h2>
-              <p className="home-panel-copy">Run the current prompt stack against the Supabase dev function flow and inspect the generated context.</p>
+              <p className="home-panel-copy">Run the current prompt stack against the active dev-lab backend and inspect the generated context.</p>
             </div>
           </div>
 
@@ -845,7 +845,7 @@ export default function DeveloperLab() {
         <div className="page-header">
           <p className="page-kicker">Operations</p>
           <h1>Developer Lab</h1>
-          <p className="page-subtitle">One hidden workspace for catalog imports, knowledge ingestion, request review, prompt tuning, and evaluation checks across the Supabase-backed assistant workflow.</p>
+          <p className="page-subtitle">One hidden workspace for catalog imports, knowledge ingestion, request review, prompt tuning, and evaluation checks across the active assistant workflow.</p>
         </div>
 
         <div className="stats-row devlab-stats-row">
