@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import MediaDetailsModal from './MediaDetailsModal';
-import { invokeSupabaseFunction, isSupabaseConfigured, supabase } from '../utils/supabase';
+import { isSupabaseConfigured, supabase } from '../utils/supabase';
+import { checkChatbotStatus, sendChatbotMessage } from '../utils/chatbotApi';
 import { submitSupabaseRequest } from '../utils/supabaseData';
 
 const INTENT_LABELS = {
@@ -454,6 +455,7 @@ export default function ChatBot() {
   const [input, setInput]               = useState('');
   const [loading, setLoading]           = useState(false);
   const [apiStatus, setApiStatus]       = useState(null);
+  const [apiError, setApiError]         = useState('');
   const [requestModal, setRequestModal] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const messagesEndRef = useRef(null);
@@ -461,10 +463,9 @@ export default function ChatBot() {
 
   const runStatusCheck = useCallback(async () => {
     try {
-      await invokeSupabaseFunction('ai-chatbot', {
-        messages: [{ role: 'system', content: 'Ping' }],
-      });
+      await checkChatbotStatus();
       setApiStatus(true);
+      setApiError('');
       if (messages.length === 0) {
         setMessages([{
           id: 'welcome',
@@ -472,8 +473,9 @@ export default function ChatBot() {
           content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it.`,
         }]);
       }
-    } catch {
+    } catch (error) {
       setApiStatus(false);
+      setApiError(String(error?.message || '').trim() || 'The AI assistant is unavailable right now.');
     }
   }, [messages.length, user?.username]);
 
@@ -484,10 +486,9 @@ export default function ChatBot() {
 
   async function checkStatus() {
     try {
-      await invokeSupabaseFunction('ai-chatbot', {
-        messages: [{ role: 'system', content: 'Ping' }],
-      });
+      await checkChatbotStatus();
       setApiStatus(true);
+      setApiError('');
       if (messages.length === 0) {
         setMessages([{
           id: 'welcome',
@@ -495,8 +496,9 @@ export default function ChatBot() {
           content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it.`,
         }]);
       }
-    } catch {
+    } catch (error) {
       setApiStatus(false);
+      setApiError(String(error?.message || '').trim() || 'The AI assistant is unavailable right now.');
     }
   }
 
@@ -523,12 +525,12 @@ export default function ChatBot() {
 
     const startTime = Date.now();
     try {
-      const data = await invokeSupabaseFunction('ai-chatbot', {
-        messages: [
-          ...conversationHistory,
-          { role: 'user', content: trimmed },
-        ],
+      const data = await sendChatbotMessage({
+        message: trimmed,
+        conversationHistory,
       });
+      setApiStatus(true);
+      setApiError('');
 
       const latencyMs = Date.now() - startTime;
       const rawAssistantContent = data?.content || data?.choices?.[0]?.message?.content || data?.response || 'No response.';
@@ -561,6 +563,7 @@ export default function ChatBot() {
         }).then(() => {}).catch(() => {});
       }
     } catch (err) {
+      setApiError(String(err?.message || '').trim() || 'Something went wrong. Please try again.');
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
@@ -575,7 +578,7 @@ export default function ChatBot() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
-  function clearChat() { setMessages([]); setApiStatus(null); }
+  function clearChat() { setMessages([]); setApiStatus(null); setApiError(''); }
 
   function handleOpenModal(item) {
     setSelectedItem(item);
@@ -631,7 +634,8 @@ export default function ChatBot() {
               {apiStatus === false && (
                 <div className="chatbot-offline-banner">
                   <strong>⚠️ AI not available.</strong>
-                  <p>Make sure your Supabase function and GROQ API key are configured. You need <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_ANON_KEY</code> (or <code>SUPABASE_URL</code>/<code>SUPABASE_ANON_KEY</code>) as well as <code>GROQ_API_KEY</code>.</p>
+                  <p>{apiError || 'The chatbot could not reach either the Supabase edge function or the /api/chat backend.'}</p>
+                  <p>Supported backends are the Supabase <code>ai-chatbot</code> function and the server <code>/api/chat</code> route.</p>
                   <button className="chatbot-retry-btn" onClick={() => { setApiStatus(null); checkStatus(); }}>Retry</button>
                 </div>
               )}
