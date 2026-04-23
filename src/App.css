@@ -101,13 +101,13 @@ body {
   gap: 2rem;
 }
 
-.nav-links a {
+.nav-links a:not(.btn-primary) {
   color: #a0a0a0;
   text-decoration: none;
   font-size: 0.9rem;
   transition: color 0.2s;
 }
-.nav-links a:hover { color: #e8e8e8; }
+.nav-links a:not(.btn-primary):hover { color: #e8e8e8; }
 
 /* ─── Authenticated Navbar ──────────────────────────────────────────────── */
 
@@ -143,7 +143,7 @@ body {
   gap: 0.25rem;
 }
 
-.navbar-links a {
+.navbar-links a:not(.btn-primary) {
   color: #a0a0a0;
   text-decoration: none;
   font-size: 0.9rem;
@@ -151,8 +151,8 @@ body {
   border-radius: 6px;
   transition: color 0.2s, background-color 0.2s;
 }
-.navbar-links a:hover { color: #e8e8e8; background-color: #1a1a1a; }
-.navbar-links a.active { color: #e8e8e8; background-color: #1e1e1e; }
+.navbar-links a:not(.btn-primary):hover { color: #e8e8e8; background-color: #1a1a1a; }
+.navbar-links a:not(.btn-primary).active { color: #e8e8e8; background-color: #1e1e1e; }
 
 .navbar-user {
   display: flex;
