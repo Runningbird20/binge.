@@ -4,33 +4,6 @@ import { loadFallbackMovies, loadFallbackTvShows } from '../catalogFallback';
 import { useAuth } from '../contexts/AuthContext';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
 
-const LOCKED_HERO_POSTERS = [
-  {
-    id: 'project-hail-mary',
-    title: 'Project Hail Mary',
-    year: 2026,
-    poster_url: 'https://image.tmdb.org/t/p/w500/yihdXomYb5kTeSivtFndMy5iDmf.jpg',
-  },
-  {
-    id: 'sofia-the-first',
-    title: 'Sofia the First',
-    year: 2013,
-    poster_url: 'https://image.tmdb.org/t/p/w500/eZHmUO1OQRpVkAOdj9VwYCCyQew.jpg',
-  },
-  {
-    id: 'criminal-minds',
-    title: 'Criminal Minds',
-    year: 2005,
-    poster_url: 'https://image.tmdb.org/t/p/w500/gigxjNnACiXAfrwoMox5WJFgc0I.jpg',
-  },
-  {
-    id: 'indiana-jones-and-the-dial-of-destiny',
-    title: 'Indiana Jones and the Dial of Destiny',
-    year: 2023,
-    poster_url: 'https://image.tmdb.org/t/p/w500/Af4bXE63pVsb2FtbW8uYIyPBadD.jpg',
-  },
-];
-
 const CAROUSEL_MIN_YEAR = 2015;
 const CAROUSEL_MAX_YEAR = 2024;
 const MAX_CAROUSEL_ITEMS = 40;
@@ -161,7 +134,7 @@ function LandingMovieCarousel({ items }) {
 
     let animationFrameId = 0;
     let previousTime = 0;
-    const pixelsPerMillisecond = 0.045;
+    const pixelsPerMillisecond = 0.035;
 
     function step(currentTime) {
       if (!viewport.isConnected) {
@@ -281,16 +254,9 @@ export default function Landing() {
             Rate, review, and discover movies, TV shows, and books. See what your friends are into.
           </p>
           <div className="hero-actions">
-            <Link to="/signup" className="btn-primary btn-large">Get Started - It&apos;s Free</Link>
-            <a href="#features" className="btn-secondary btn-large">Learn More</a>
+            <Link to="/signup" className="btn-primary btn-medium">Get Started - It&apos;s Free</Link>
           </div>
           {authLoading && <p className="hero-subtitle">Restoring your session...</p>}
-        </div>
-
-        <div className="hero-media-grid">
-          {LOCKED_HERO_POSTERS.map((movie) => (
-            <HeroPosterCard key={movie.id} movie={movie} />
-          ))}
         </div>
       </section>
 
