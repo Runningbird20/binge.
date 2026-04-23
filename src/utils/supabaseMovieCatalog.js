@@ -158,6 +158,27 @@ function normalizeSearchValue(value) {
     .trim();
 }
 
+function clampPositiveInteger(value, fallback) {
+  const nextValue = Number(value);
+
+  if (!Number.isFinite(nextValue) || nextValue <= 0) {
+    return fallback;
+  }
+
+  return Math.floor(nextValue);
+}
+
+function shuffleItems(items) {
+  const nextItems = [...items];
+
+  for (let index = nextItems.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [nextItems[index], nextItems[swapIndex]] = [nextItems[swapIndex], nextItems[index]];
+  }
+
+  return nextItems;
+}
+
 function buildIlikePattern(value) {
   const normalized = normalizeSearchValue(value)
     .split(' ')
@@ -353,6 +374,51 @@ export async function fetchSupabaseMovieById(movieId) {
   }
 
   return normalizeMovie(data);
+}
+
+export async function fetchSupabaseRandomMoviePosters({
+  count = 4,
+  sampleWindow = 32,
+} = {}) {
+  const client = requireSupabaseCatalog();
+  const desiredCount = clampPositiveInteger(count, 4);
+  const desiredSampleWindow = clampPositiveInteger(sampleWindow, 32);
+
+  const { count: totalWithPosters, error: countError } = await client
+    .from('movies')
+    .select('id', { count: 'exact', head: true })
+    .not('poster_url', 'is', null)
+    .neq('poster_url', '');
+
+  if (countError) {
+    throw countError;
+  }
+
+  const total = Number(totalWithPosters) || 0;
+  if (total === 0) {
+    return [];
+  }
+
+  const rangeSize = Math.max(desiredCount, Math.min(desiredSampleWindow, total));
+  const maxOffset = Math.max(0, total - rangeSize);
+  const offset = maxOffset > 0
+    ? Math.floor(Math.random() * (maxOffset + 1))
+    : 0;
+
+  const { data, error } = await client
+    .from('movies')
+    .select(MOVIE_BROWSE_COLUMNS)
+    .not('poster_url', 'is', null)
+    .neq('poster_url', '')
+    .order('title', { ascending: true })
+    .range(offset, offset + rangeSize - 1);
+
+  if (error) {
+    throw error;
+  }
+
+  return shuffleItems((data || []).map((movie) => normalizeMovieBrowseEntry(movie)))
+    .slice(0, desiredCount);
 }
 
 export async function fetchSupabaseMovieCuratedRows() {
