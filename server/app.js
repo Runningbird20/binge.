@@ -48,5 +48,33 @@ app.use('/api/requests', require('./routes/requests'));
 app.use('/api/livetv', require('./routes/livetv'));
 app.use('/api/forum', require('./routes/forum'));
 app.use('/api/dev-lab', require('./routes/devLab'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/search', require('./routes/search'));
+app.use('/api/watchroom', require('./routes/watchroom'));
+app.use('/api/profile', require('./routes/profile'));
+
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'API route not found.' });
+});
+
+app.use((error, _req, res, _next) => {
+  if (res.headersSent) {
+    return;
+  }
+
+  if (error?.type === 'entity.parse.failed') {
+    res.status(400).json({ error: 'Invalid JSON body.' });
+    return;
+  }
+
+  const status = Number(error?.status || error?.statusCode) || 500;
+  const message = status >= 500
+    ? (error?.message || 'Server error.')
+    : (error?.message || 'Request failed.');
+
+  console.error('API error:', error);
+  res.status(status).json({ error: message });
+});
 
 module.exports = app;
