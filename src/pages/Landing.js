@@ -1,11 +1,268 @@
-import { Navigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
+import { loadFallbackMovies, loadFallbackTvShows } from '../catalogFallback';
 import { useAuth } from '../contexts/AuthContext';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
 
+const LOCKED_HERO_POSTERS = [
+  {
+    id: 'project-hail-mary',
+    title: 'Project Hail Mary',
+    year: 2026,
+    poster_url: 'https://image.tmdb.org/t/p/w500/yihdXomYb5kTeSivtFndMy5iDmf.jpg',
+  },
+  {
+    id: 'sofia-the-first',
+    title: 'Sofia the First',
+    year: 2013,
+    poster_url: 'https://image.tmdb.org/t/p/w500/eZHmUO1OQRpVkAOdj9VwYCCyQew.jpg',
+  },
+  {
+    id: 'criminal-minds',
+    title: 'Criminal Minds',
+    year: 2005,
+    poster_url: 'https://image.tmdb.org/t/p/w500/gigxjNnACiXAfrwoMox5WJFgc0I.jpg',
+  },
+  {
+    id: 'indiana-jones-and-the-dial-of-destiny',
+    title: 'Indiana Jones and the Dial of Destiny',
+    year: 2023,
+    poster_url: 'https://image.tmdb.org/t/p/w500/Af4bXE63pVsb2FtbW8uYIyPBadD.jpg',
+  },
+];
+
+const CAROUSEL_MIN_YEAR = 2015;
+const CAROUSEL_MAX_YEAR = 2024;
+const MAX_CAROUSEL_ITEMS = 40;
+
+function resolvePosterUrl(url) {
+  return typeof url === 'string' && url.trim() ? url.trim() : null;
+}
+
+function buildCarouselCatalog(items, mediaType) {
+  return items
+    .map((item) => ({
+      id: `${mediaType}-${item.source_key || item.sourceKey || item.id || item.title}`,
+      title: item.title,
+      year: Number(item.year),
+      poster_url: item.poster_url,
+      media_type: mediaType,
+    }))
+    .filter((item) => (
+      item.title
+      && Number.isFinite(item.year)
+      && item.year >= CAROUSEL_MIN_YEAR
+      && item.year <= CAROUSEL_MAX_YEAR
+      && resolvePosterUrl(item.poster_url)
+    ));
+}
+
+function dedupeCarouselItems(items) {
+  const seen = new Set();
+
+  return items.filter((item) => {
+    const key = `${item.media_type}:${item.title}:${item.year}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function sortCarouselItems(items) {
+  return [...items].sort((left, right) => {
+    if (left.year !== right.year) {
+      return right.year - left.year;
+    }
+
+    return left.title.localeCompare(right.title);
+  });
+}
+
+function limitCarouselItems(items) {
+  return items.slice(0, MAX_CAROUSEL_ITEMS);
+}
+
+function preloadCarouselPosters(items) {
+  if (typeof window === 'undefined' || typeof window.Image !== 'function') {
+    return Promise.resolve();
+  }
+
+  return Promise.allSettled(
+    items.map((item) => new Promise((resolve) => {
+      const posterUrl = resolvePosterUrl(item.poster_url);
+      if (!posterUrl) {
+        resolve();
+        return;
+      }
+
+      const image = new window.Image();
+      image.decoding = 'async';
+      image.loading = 'eager';
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      image.src = posterUrl;
+
+      if (image.complete) {
+        resolve();
+      }
+    }))
+  ).then(() => undefined);
+}
+
+function HeroPosterCard({ movie }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const posterUrl = !imageFailed ? resolvePosterUrl(movie.poster_url) : null;
+
+  return (
+    <div className="media-card">
+      {posterUrl ? (
+        <img
+          className="media-card-poster-image"
+          src={posterUrl}
+          alt={`${movie.title} poster`}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <div className="media-card-placeholder" aria-hidden="true">
+          <span>{movie.title?.charAt(0) || 'B'}</span>
+        </div>
+      )}
+      <div className="hero-media-caption">
+        <span className="hero-media-title">{movie.title}</span>
+        {movie.year ? <span className="hero-media-year">{movie.year}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function LandingMovieCarousel({ items }) {
+  const viewportRef = useRef(null);
+  const scrollingItems = [...items, ...items];
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || items.length === 0) {
+      return undefined;
+    }
+
+    const reduceMotionQuery = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+
+    if (reduceMotionQuery?.matches) {
+      return undefined;
+    }
+
+    let animationFrameId = 0;
+    let previousTime = 0;
+    const pixelsPerMillisecond = 0.045;
+
+    function step(currentTime) {
+      if (!viewport.isConnected) {
+        return;
+      }
+
+      if (!previousTime) {
+        previousTime = currentTime;
+      }
+
+      const elapsed = currentTime - previousTime;
+      previousTime = currentTime;
+
+      const resetPoint = viewport.scrollWidth / 2;
+      viewport.scrollLeft += elapsed * pixelsPerMillisecond;
+
+      if (viewport.scrollLeft >= resetPoint) {
+        viewport.scrollLeft -= resetPoint;
+      }
+
+      animationFrameId = window.requestAnimationFrame(step);
+    }
+
+    animationFrameId = window.requestAnimationFrame(step);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [items.length]);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="landing-carousel-section" aria-label="Featured poster carousel">
+      <div className="landing-carousel-viewport" ref={viewportRef}>
+        <div className="landing-carousel-track">
+          {scrollingItems.map((movie, index) => (
+            <div
+              key={`carousel-${movie.id}-${index}`}
+              className="landing-carousel-item"
+              aria-hidden={index >= items.length ? 'true' : undefined}
+            >
+              <HeroPosterCard movie={movie} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Landing() {
   const { isAuthenticated, authLoading, user } = useAuth();
-  if (!authLoading && isAuthenticated) return <Navigate to={getDefaultRouteForUserType(user)} replace />;
+  const [carouselItems, setCarouselItems] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCarouselItems() {
+      try {
+        const [moviesResult, tvShowsResult] = await Promise.allSettled([
+          loadFallbackMovies(),
+          loadFallbackTvShows(),
+        ]);
+
+        const movies = moviesResult.status === 'fulfilled' ? moviesResult.value : [];
+        const tvShows = tvShowsResult.status === 'fulfilled' ? tvShowsResult.value : [];
+
+        const nextItems = limitCarouselItems(
+          sortCarouselItems(
+            dedupeCarouselItems([
+              ...buildCarouselCatalog(movies, 'movie'),
+              ...buildCarouselCatalog(tvShows, 'tv_show'),
+            ])
+          )
+        );
+
+        if (!cancelled) {
+          setCarouselItems(nextItems);
+        }
+
+        preloadCarouselPosters(nextItems).catch(() => {});
+      } catch {
+        if (!cancelled) {
+          setCarouselItems([]);
+        }
+      }
+    }
+
+    loadCarouselItems();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!authLoading && isAuthenticated) {
+    return <Navigate to={getDefaultRouteForUserType(user)} replace />;
+  }
 
   return (
     <div className="App">
@@ -24,89 +281,59 @@ export default function Landing() {
             Rate, review, and discover movies, TV shows, and books. See what your friends are into.
           </p>
           <div className="hero-actions">
-            <Link to="/signup" className="btn-primary btn-large">Get Started — It's Free</Link>
+            <Link to="/signup" className="btn-primary btn-large">Get Started - It&apos;s Free</Link>
             <a href="#features" className="btn-secondary btn-large">Learn More</a>
           </div>
           {authLoading && <p className="hero-subtitle">Restoring your session...</p>}
         </div>
+
         <div className="hero-media-grid">
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★★★</div>
-          </div>
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★★☆</div>
-          </div>
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★★★</div>
-          </div>
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★☆☆</div>
-          </div>
+          {LOCKED_HERO_POSTERS.map((movie) => (
+            <HeroPosterCard key={movie.id} movie={movie} />
+          ))}
         </div>
       </section>
+
+      <LandingMovieCarousel items={carouselItems} />
 
       <section className="features" id="features">
         <h2>Everything in one place</h2>
         <div className="features-grid">
           <div className="feature-card">
-            <div className="feature-icon">★</div>
-            <h3>Rate & Review</h3>
+            <div className="feature-card-header">
+              <div className="feature-icon">★</div>
+              <h3>Rate & Review</h3>
+            </div>
             <p>Give star ratings and write reviews for movies, TV shows, and books all in one place.</p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">◎</div>
-            <h3>Track Your Progress</h3>
-            <p>Keep a watchlist, mark what you've seen, and track books you're currently reading.</p>
+            <div className="feature-card-header">
+              <div className="feature-icon">◎</div>
+              <h3>Track Your Progress</h3>
+            </div>
+            <p>Keep a watchlist, mark what you&apos;ve seen, and track books you&apos;re currently reading.</p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">♦</div>
-            <h3>Discover New Titles</h3>
-            <p>Get recommendations based on your taste and see what's trending in the community.</p>
+            <div className="feature-card-header">
+              <div className="feature-icon">♦</div>
+              <h3>Discover New Titles</h3>
+            </div>
+            <p>Get recommendations based on your taste and see what&apos;s trending in the community.</p>
           </div>
           <div className="feature-card">
-            <div className="feature-icon">◈</div>
-            <h3>Follow Friends</h3>
-            <p>See your friends' ratings and reviews. Find out what they loved — and what to skip.</p>
+            <div className="feature-card-header">
+              <div className="feature-icon">◈</div>
+              <h3>Follow Friends</h3>
+            </div>
+            <p>See your friends&apos; ratings and reviews. Find out what they loved - and what to skip.</p>
           </div>
         </div>
-      </section>
-
-      <section className="categories">
-        <h2>Movies. TV. Books.</h2>
-        <p>One account covers everything you consume.</p>
-        <div className="categories-grid">
-          <div className="category-card movies">
-            <h3>Movies</h3>
-            <p>From blockbusters to arthouse</p>
+          <h3>Join thousands of people who never lose track of what they want to watch or read next.</h3>
+          <div className="cta-buttons">
+            <Link to="/signup" className="btn-primary btn-large">Create Free Account</Link>
+            <Link to="/login" className="btn-secondary btn-large">Log In</Link>
           </div>
-          <div className="category-card tv">
-            <h3>TV Shows</h3>
-            <p>Series, miniseries, and documentaries</p>
-          </div>
-          <div className="category-card books">
-            <h3>Books</h3>
-            <p>Fiction, non-fiction, and everything between</p>
-          </div>
-        </div>
       </section>
-
-      <section className="cta" id="sign-up">
-        <h2>Start tracking today.</h2>
-        <p>Join thousands of people who never lose track of what they want to watch or read next.</p>
-        <div className="cta-buttons">
-          <Link to="/signup" className="btn-primary btn-large">Create Free Account</Link>
-          <Link to="/login" className="btn-secondary btn-large">Log In</Link>
-        </div>
-      </section>
-
-      <footer className="footer">
-        <div className="footer-logo">binge.</div>
-        <p>© 2026 · All rights reserved</p>
-      </footer>
     </div>
   );
 }
