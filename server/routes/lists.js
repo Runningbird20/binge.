@@ -1,9 +1,8 @@
 const crypto = require('crypto');
 const express = require('express');
-const jwt = require('jsonwebtoken');
 
 const db = require('../db');
-const { requireAuth, JWT_SECRET } = require('../middleware/auth');
+const { optionalAuth, requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -57,19 +56,6 @@ function createShareCode(name) {
     if (!existing) {
       return candidate;
     }
-  }
-}
-
-function getOptionalUser(req) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return null;
-  }
-
-  try {
-    return jwt.verify(auth.slice(7), JWT_SECRET);
-  } catch {
-    return null;
   }
 }
 
@@ -371,8 +357,8 @@ function requireManageableList(req, res) {
   return list;
 }
 
-router.get('/shared/:shareCode', (req, res) => {
-  const viewer = getOptionalUser(req);
+router.get('/shared/:shareCode', optionalAuth, (req, res) => {
+  const viewer = req.user;
   const list = getListRecordByShareCode(req.params.shareCode, viewer?.id);
 
   if (!list || !list.permissions.canView) {

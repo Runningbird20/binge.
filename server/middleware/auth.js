@@ -1,13 +1,17 @@
 const jwt = require('jsonwebtoken');
 
-// Lazy-load supabase to avoid crashing if module isn't installed
-let _createClient = null;
+// Lazy-load supabase to avoid crashing if the package is unavailable.
+let createClientCache = null;
 function getCreateClient() {
-  if (!_createClient) {
-    try { _createClient = require('@supabase/supabase-js').createClient; }
-    catch { _createClient = null; }
+  if (!createClientCache) {
+    try {
+      createClientCache = require('@supabase/supabase-js').createClient;
+    } catch {
+      createClientCache = null;
+    }
   }
-  return _createClient;
+
+  return createClientCache;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
@@ -18,80 +22,206 @@ function readBearerToken(req) {
   return auth.slice(7);
 }
 
-// Decode Supabase JWT without network verification (safe for read-only user ID extraction)
-function decodeSupabaseToken(token) {
+function decodeJwtSection(section) {
+  if (!section) return null;
+
   try {
-    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    if (!payload?.sub) return null;
-    return { id: payload.sub, supabaseId: payload.sub, email: payload.email || '', fromSupabase: true };
-  } catch { return null; }
+    const normalized = String(section)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const padding = (4 - (normalized.length % 4)) % 4;
+    const padded = `${normalized}${'='.repeat(padding)}`;
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch {
+    return null;
+  }
 }
 
-// Check if a token looks like a Supabase JWT (they're long and have 3 parts)
-function isSupabaseToken(token) {
-  if (!token) return false;
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-    // Supabase tokens have 'iss' containing 'supabase'
-    return payload?.iss?.includes('supabase') || payload?.role === 'authenticated';
-  } catch { return false; }
+function looksLikeJwt(token) {
+  return String(token || '').split('.').length === 3;
 }
 
-// Verify a Supabase token and get the user
-async function verifySupabaseToken(token) {
+function getJwtHeader(token) {
+  return decodeJwtSection(String(token || '').split('.')[0]);
+}
+
+function getJwtPayload(token) {
+  return decodeJwtSection(String(token || '').split('.')[1]);
+}
+
+function getSupabaseConfig() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return null;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!url || !key) {
+    return null;
+  }
+
+  return { url, key };
+}
+
+// Decode a Supabase JWT without verifying it. This is only used for optional auth.
+function decodeSupabaseToken(token) {
+  const payload = getJwtPayload(token);
+  if (!payload?.sub) return null;
+
+  return {
+    id: payload.sub,
+    supabaseId: payload.sub,
+    email: payload.email || '',
+    fromSupabase: true,
+  };
+}
+
+function isSupabaseToken(token) {
+  if (!looksLikeJwt(token)) return false;
+
+  const header = getJwtHeader(token);
+  const payload = getJwtPayload(token);
+  const algorithm = String(header?.alg || '').toUpperCase();
+
+  // Legacy app tokens are HS256 by default. Supabase access tokens commonly use ES256.
+  if (algorithm && !algorithm.startsWith('HS')) {
+    return true;
+  }
+
+  return (
+    payload?.iss?.includes('supabase') ||
+    payload?.aud === 'authenticated' ||
+    ['authenticated', 'anon', 'service_role'].includes(payload?.role)
+  );
+}
+
+async function verifySupabaseToken(token) {
+  const supabaseConfig = getSupabaseConfig();
+  const createClient = getCreateClient();
+
+  if (!supabaseConfig || !createClient) {
+    return null;
+  }
+
   try {
-    const createClient = getCreateClient();
-    if (!createClient) return null;
-    const sb = createClient(url, key, {
+    const sb = createClient(supabaseConfig.url, supabaseConfig.key, {
+      auth: { persistSession: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
+
     const { data: { user }, error } = await sb.auth.getUser(token);
     if (error || !user) return null;
-    // Return in same shape as legacy JWT payload
-    return { id: user.id, supabaseId: user.id, email: user.email, fromSupabase: true };
-  } catch { return null; }
+
+    return {
+      id: user.id,
+      supabaseId: user.id,
+      email: user.email || '',
+      fromSupabase: true,
+    };
+  } catch {
+    return null;
+  }
 }
 
-// Async version of requireAuth that handles both JWT types
+async function isSupabaseAdmin(userId) {
+  const supabaseConfig = getSupabaseConfig();
+  const createClient = getCreateClient();
+
+  if (!supabaseConfig || !createClient || !userId) {
+    return false;
+  }
+
+  try {
+    const sb = createClient(supabaseConfig.url, supabaseConfig.key, {
+      auth: { persistSession: false },
+    });
+
+    const { data, error } = await sb
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+
+    if (error || !data) {
+      return false;
+    }
+
+    return data.is_admin === true;
+  } catch {
+    return false;
+  }
+}
+
+function verifySupabaseRequest(req, res, next, token) {
+  verifySupabaseToken(token)
+    .then((user) => {
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid Supabase token' });
+      }
+
+      req.user = user;
+      next();
+    })
+    .catch(() => res.status(401).json({ error: 'Auth error' }));
+}
+
+function verifySupabaseAdminRequest(req, res, next, token) {
+  verifySupabaseToken(token)
+    .then(async (user) => {
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid Supabase token' });
+      }
+
+      const admin = await isSupabaseAdmin(user.id);
+      if (!admin) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      req.user = { ...user, is_admin: true, isAdmin: true };
+      next();
+    })
+    .catch(() => res.status(401).json({ error: 'Auth error' }));
+}
+
 function requireAuth(req, res, next) {
   const token = readBearerToken(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-  // Try legacy JWT first (fast, synchronous)
-  if (!isSupabaseToken(token)) {
-    try {
-      req.user = jwt.verify(token, JWT_SECRET);
-      return next();
-    } catch {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
+  if (isSupabaseToken(token)) {
+    return verifySupabaseRequest(req, res, next, token);
   }
 
-  // Supabase token — async verification
-  verifySupabaseToken(token).then(user => {
-    if (!user) return res.status(401).json({ error: 'Invalid Supabase token' });
-    req.user = user;
-    next();
-  }).catch(() => res.status(401).json({ error: 'Auth error' }));
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    return next();
+  } catch {
+    if (looksLikeJwt(token)) {
+      return verifySupabaseRequest(req, res, next, token);
+    }
+
+    return res.status(401).json({ error: 'Invalid token' });
+  }
 }
 
 function optionalAuth(req, _res, next) {
   const token = readBearerToken(req);
-  if (!token) { req.user = null; return next(); }
-
-  if (!isSupabaseToken(token)) {
-    try { req.user = jwt.verify(token, JWT_SECRET); }
-    catch { req.user = null; }
+  if (!token) {
+    req.user = null;
     return next();
   }
 
-  // Supabase token — use fast local decode (no network call needed for optional auth)
-  req.user = decodeSupabaseToken(token);
+  if (isSupabaseToken(token)) {
+    req.user = decodeSupabaseToken(token);
+    return next();
+  }
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+  } catch {
+    req.user = looksLikeJwt(token) ? decodeSupabaseToken(token) : null;
+  }
+
   next();
 }
 
@@ -101,18 +231,26 @@ function requireAdmin(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  if (isSupabaseToken(token)) {
+    return verifySupabaseAdminRequest(req, res, next, token);
+  }
+
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const normalizedRole = String(payload.userType || payload.user_type || payload.role || '').toLowerCase();
-    const isAdmin = payload.isAdmin === true || payload.is_admin === true || normalizedRole === 'admin';
+    const admin = payload.isAdmin === true || payload.is_admin === true || normalizedRole === 'admin';
 
-    if (!isAdmin) {
+    if (!admin) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
     req.user = payload;
     next();
   } catch {
+    if (looksLikeJwt(token)) {
+      return verifySupabaseAdminRequest(req, res, next, token);
+    }
+
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
