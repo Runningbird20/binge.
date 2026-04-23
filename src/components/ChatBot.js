@@ -461,7 +461,7 @@ export default function ChatBot() {
 
   const runStatusCheck = useCallback(async () => {
     try {
-      await invokeSupabaseFunction('ai-chat', {
+      await invokeSupabaseFunction('ai-chatbot', {
         messages: [{ role: 'system', content: 'Ping' }],
       });
       setApiStatus(true);
@@ -484,7 +484,7 @@ export default function ChatBot() {
 
   async function checkStatus() {
     try {
-      await invokeSupabaseFunction('ai-chat', {
+      await invokeSupabaseFunction('ai-chatbot', {
         messages: [{ role: 'system', content: 'Ping' }],
       });
       setApiStatus(true);
@@ -523,7 +523,7 @@ export default function ChatBot() {
 
     const startTime = Date.now();
     try {
-      const data = await invokeSupabaseFunction('ai-chat', {
+      const data = await invokeSupabaseFunction('ai-chatbot', {
         messages: [
           ...conversationHistory,
           { role: 'user', content: trimmed },

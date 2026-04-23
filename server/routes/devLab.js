@@ -25,6 +25,11 @@ const {
 const router = express.Router();
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || '').trim();
+const DEV_LAB_DATABASE_URL = (
+  process.env.SUPABASE_DB_URL ||
+  process.env.DATABASE_URL ||
+  ''
+).trim();
 const SUPABASE_FUNCTION_KEY = (
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_KEY ||
@@ -42,6 +47,24 @@ const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_POSTER_BASE_URL = 'https://image.tmdb.org/t/p/w500';
+
+router.get('/status', (_req, res) => {
+  res.json({
+    ok: true,
+    backend: 'express',
+    hasDatabaseUrl: Boolean(DEV_LAB_DATABASE_URL),
+    hasGroqKey: Boolean(GROQ_API_KEY),
+    hasSupabaseDevFunction: Boolean(SUPABASE_DEV_URL && SUPABASE_FUNCTION_KEY),
+    preferredPreviewBackend:
+      DEV_LAB_DATABASE_URL && GROQ_API_KEY
+        ? 'database'
+        : SUPABASE_DEV_URL && SUPABASE_FUNCTION_KEY
+          ? 'supabase-function'
+          : GROQ_API_KEY
+            ? 'local-groq'
+            : 'unconfigured',
+  });
+});
 
 router.use(async (_req, _res, next) => {
   try {
@@ -324,6 +347,10 @@ async function callSupabaseDevPreview({ question, forcedIntent, includeWebSearch
 }
 
 async function callPreviewModel({ systemPrompt, question, temperature, forcedIntent, includeWebSearch }) {
+  if (DEV_LAB_DATABASE_URL && GROQ_API_KEY) {
+    return callGroq({ systemPrompt, question, temperature });
+  }
+
   if (SUPABASE_DEV_URL && SUPABASE_FUNCTION_KEY) {
     try {
       const preview = await callSupabaseDevPreview({ question, forcedIntent, includeWebSearch });
