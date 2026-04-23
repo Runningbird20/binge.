@@ -1,11 +1,74 @@
-import { Navigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
 
+const LOCKED_HERO_POSTERS = [
+  {
+    id: 'project-hail-mary',
+    title: 'Project Hail Mary',
+    year: 2026,
+    poster_url: 'https://image.tmdb.org/t/p/w500/yihdXomYb5kTeSivtFndMy5iDmf.jpg',
+  },
+  {
+    id: 'sofia-the-first',
+    title: 'Sofia the First',
+    year: 2013,
+    poster_url: 'https://image.tmdb.org/t/p/w500/eZHmUO1OQRpVkAOdj9VwYCCyQew.jpg',
+  },
+  {
+    id: 'criminal-minds',
+    title: 'Criminal Minds',
+    year: 2005,
+    poster_url: 'https://image.tmdb.org/t/p/w500/gigxjNnACiXAfrwoMox5WJFgc0I.jpg',
+  },
+  {
+    id: 'indiana-jones-and-the-dial-of-destiny',
+    title: 'Indiana Jones and the Dial of Destiny',
+    year: 2023,
+    poster_url: 'https://image.tmdb.org/t/p/w500/Af4bXE63pVsb2FtbW8uYIyPBadD.jpg',
+  },
+];
+
+function resolvePosterUrl(url) {
+  return typeof url === 'string' && url.trim() ? url.trim() : null;
+}
+
+function HeroPosterCard({ movie }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const posterUrl = !imageFailed ? resolvePosterUrl(movie.poster_url) : null;
+
+  return (
+    <div className="media-card">
+      {posterUrl ? (
+        <img
+          className="media-card-poster-image"
+          src={posterUrl}
+          alt={`${movie.title} poster`}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <div className="media-card-placeholder" aria-hidden="true">
+          <span>{movie.title?.charAt(0) || 'B'}</span>
+        </div>
+      )}
+      <div className="hero-media-caption">
+        <span className="hero-media-title">{movie.title}</span>
+        {movie.year ? <span className="hero-media-year">{movie.year}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function Landing() {
   const { isAuthenticated, authLoading, user } = useAuth();
-  if (!authLoading && isAuthenticated) return <Navigate to={getDefaultRouteForUserType(user)} replace />;
+
+  if (!authLoading && isAuthenticated) {
+    return <Navigate to={getDefaultRouteForUserType(user)} replace />;
+  }
 
   return (
     <div className="App">
@@ -24,28 +87,16 @@ export default function Landing() {
             Rate, review, and discover movies, TV shows, and books. See what your friends are into.
           </p>
           <div className="hero-actions">
-            <Link to="/signup" className="btn-primary btn-large">Get Started — It's Free</Link>
+            <Link to="/signup" className="btn-primary btn-large">Get Started - It&apos;s Free</Link>
             <a href="#features" className="btn-secondary btn-large">Learn More</a>
           </div>
           {authLoading && <p className="hero-subtitle">Restoring your session...</p>}
         </div>
+
         <div className="hero-media-grid">
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★★★</div>
-          </div>
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★★☆</div>
-          </div>
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★★★</div>
-          </div>
-          <div className="media-card">
-            <div className="media-card-placeholder"></div>
-            <div className="star-rating">★★★☆☆</div>
-          </div>
+          {LOCKED_HERO_POSTERS.map((movie) => (
+            <HeroPosterCard key={movie.id} movie={movie} />
+          ))}
         </div>
       </section>
 
@@ -60,17 +111,17 @@ export default function Landing() {
           <div className="feature-card">
             <div className="feature-icon">◎</div>
             <h3>Track Your Progress</h3>
-            <p>Keep a watchlist, mark what you've seen, and track books you're currently reading.</p>
+            <p>Keep a watchlist, mark what you&apos;ve seen, and track books you&apos;re currently reading.</p>
           </div>
           <div className="feature-card">
             <div className="feature-icon">♦</div>
             <h3>Discover New Titles</h3>
-            <p>Get recommendations based on your taste and see what's trending in the community.</p>
+            <p>Get recommendations based on your taste and see what&apos;s trending in the community.</p>
           </div>
           <div className="feature-card">
             <div className="feature-icon">◈</div>
             <h3>Follow Friends</h3>
-            <p>See your friends' ratings and reviews. Find out what they loved — and what to skip.</p>
+            <p>See your friends&apos; ratings and reviews. Find out what they loved - and what to skip.</p>
           </div>
         </div>
       </section>
