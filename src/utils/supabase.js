@@ -85,6 +85,10 @@ function looksLikeAuthSessionError(message) {
   return /auth session missing|auth session|invalid refresh token|refresh token|jwt expired|session missing|session expired|invalid claim/i.test(message);
 }
 
+function looksLikeMissingAuthorizationHeader(message) {
+  return /missing authorization header|authorization header/i.test(message);
+}
+
 function looksLikeRlsError(message) {
   return /row-level security|permission denied|new row violates row-level security policy|violates row-level security/i.test(message);
 }
@@ -117,6 +121,12 @@ export function toSupabaseError(error, fallbackMessage, options = {}) {
 
   if (looksLikeAuthSessionError(message)) {
     return new Error('Your Supabase auth session is missing or invalid. Please sign in again.');
+  }
+
+  if (edgeFunctionName && looksLikeMissingAuthorizationHeader(message)) {
+    return new Error(
+      `The Supabase Edge Function "${edgeFunctionName}" requires a bearer token. Disable JWT verification for that function or make sure the user has an active Supabase session.`
+    );
   }
 
   if (looksLikeMissingRelationError(code, message)) {
