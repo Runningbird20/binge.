@@ -891,12 +891,12 @@ router.get('/embed-id', async (req, res) => {
     console.warn('IMDb lookup failed:', error.message);
   }
 
-  const TMDB_KEY = process.env.TMDB_API_KEY;
-  if (TMDB_KEY) {
+  const TMDB_API_KEY = process.env.TMDB_API_KEY;
+  if (TMDB_API_KEY) {
     try {
       const mediaType = type === 'tv_show' ? 'tv' : 'movie';
       const params = new URLSearchParams({
-        api_key: TMDB_KEY,
+        api_key: TMDB_API_KEY,
         query: title,
         ...(year ? { first_air_date_year: year, year } : {}),
       });
@@ -925,13 +925,13 @@ router.get('/tmdb-id', async (req, res) => {
   const { title, year, type } = req.query;
   if (!title) return res.status(400).json({ error: 'title required' });
 
-  const TMDB_KEY = process.env.TMDB_API_KEY;
-  if (!TMDB_KEY) return res.json({ id: null });
+  const TMDB_API_KEY = process.env.TMDB_API_KEY;
+  if (!TMDB_API_KEY) return res.json({ id: null });
 
   const mediaType = type === 'tv_show' ? 'tv' : 'movie';
 
   async function searchTmdb(query, extraParams = {}) {
-    const params = new URLSearchParams({ api_key: TMDB_KEY, query, ...extraParams });
+    const params = new URLSearchParams({ api_key: TMDB_API_KEY, query, ...extraParams });
     const url = `https://api.themoviedb.org/3/search/${mediaType}?${params}`;
     const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!response.ok) return null;
@@ -978,11 +978,11 @@ router.get('/tmdb-show', async (req, res) => {
   const { tmdbId } = req.query;
   if (!tmdbId) return res.status(400).json({ error: 'tmdbId required' });
 
-  const TMDB_KEY = process.env.TMDB_API_KEY;
-  if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
+  const TMDB_API_KEY = process.env.TMDB_API_KEY;
+  if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
 
   try {
-    const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${TMDB_KEY}`;
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${TMDB_API_KEY}`;
     const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
     const data = await r.json();
@@ -1006,8 +1006,8 @@ router.get('/tmdb-season', async (req, res) => {
   const { tmdbId, season } = req.query;
   if (!tmdbId || !season) return res.status(400).json({ error: 'tmdbId and season required' });
 
-  const TMDB_KEY = process.env.TMDB_API_KEY;
-  if (!TMDB_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
+  const TMDB_API_KEY = process.env.TMDB_API_KEY;
+  if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY not set' });
 
   const cacheKey = `${tmdbId}:${season}`;
   const cached = tmdbSeasonCache.get(cacheKey);
@@ -1016,7 +1016,7 @@ router.get('/tmdb-season', async (req, res) => {
   }
 
   try {
-    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${TMDB_KEY}`;
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season}?api_key=${TMDB_API_KEY}`;
     const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return res.status(502).json({ error: 'TMDB error' });
     const data = await r.json();
