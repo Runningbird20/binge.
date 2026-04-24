@@ -62,6 +62,7 @@ CRITICAL FORMATTING RULES — you must follow these exactly:
 - NEVER add a "Sources:" section at the bottom of your response
 - Just mention source names naturally in text, e.g. "According to IMDb..." or "Collider ranks..."
 - For the binge. section, list title names only — the UI will automatically add clickable links
+- NEVER suggest a title in the "Here's what we have on binge.:" section if it already appears in the user's watchlist (any status — watching, watched, plan to watch, etc.)
 - Keep responses concise and conversational`;
 
   if (intent === 'recommendation') return `${base}
