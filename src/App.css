@@ -7445,6 +7445,97 @@ body {
 .profile-filter-count { font-size: 0.78rem; color: #444; margin-left: auto; }
 .profile-wl-year { margin: 0; font-size: 0.68rem; color: #444; }
 
+/* Own-profile editable watchlist card — hover overlay */
+.profile-wl-card--own { cursor: default; }
+.profile-wl-card--saving { opacity: 0.6; }
+
+.profile-wl-progress-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.78);
+  color: #e8c97a;
+  border: 1px solid rgba(232,201,122,0.3);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.profile-wl-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.86);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.18s;
+  pointer-events: none;
+  z-index: 2;
+}
+.profile-wl-card--own:hover .profile-wl-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+.profile-wl-overlay-open {
+  align-self: flex-end;
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.45);
+  text-decoration: none;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  transition: color 0.15s, background 0.15s;
+}
+.profile-wl-overlay-open:hover { color: #fff; background: rgba(255,255,255,0.12); }
+.profile-wl-overlay-controls { display: flex; flex-direction: column; gap: 0.35rem; }
+.profile-wl-overlay-progress { display: flex; gap: 0.3rem; }
+.profile-wl-overlay-field { flex: 1; display: flex; flex-direction: column; gap: 0.18rem; }
+.profile-wl-overlay-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.profile-wl-overlay-input {
+  width: 100%;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 4px;
+  color: #e8e8e8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.28rem 0.25rem;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.profile-wl-overlay-input::-webkit-inner-spin-button,
+.profile-wl-overlay-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.profile-wl-overlay-input:focus { outline: none; border-color: rgba(232,201,122,0.5); background: rgba(232,201,122,0.07); }
+.profile-wl-overlay-status {
+  width: 100%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid;
+  border-radius: 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+  appearance: none;
+  cursor: pointer;
+}
+.profile-wl-overlay-status:focus { outline: none; }
+
 .profile-ratings-controls { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .ratings-stats-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .ratings-stat-pill {

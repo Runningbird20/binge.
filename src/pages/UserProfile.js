@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   fetchSupabaseWatchlist,
   fetchSupabaseRatings,
+  updateWatchlistProgress,
 } from '../utils/supabaseData';
 
 function resolvePoster(url) {
@@ -19,6 +20,141 @@ const STATUS_LABELS = { watching: 'Watching', watched: 'Watched', plan_to_watch:
 const STATUS_COLORS = { watching: '#e8c97a', watched: '#4caf82', reading: '#e8c97a', read: '#4caf82', plan_to_watch: '#7ab8e8', plan_to_read: '#7ab8e8' };
 const TYPE_LABELS   = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const MEDIA_ICONS   = { movie: '🎬', tv_show: '📺', book: '📖' };
+
+const TV_STATUSES   = ['plan_to_watch', 'watching', 'watched'];
+const BOOK_STATUSES = ['plan_to_read', 'reading', 'read'];
+
+function WatchlistCard({ item, isOwn, onUpdate }) {
+  const [status, setStatus]   = useState(item.status);
+  const [season, setSeason]   = useState(item.current_season ?? '');
+  const [episode, setEpisode] = useState(item.current_episode ?? '');
+  const [chapter, setChapter] = useState(item.current_chapter ?? '');
+  const [page, setPage]       = useState(item.current_page ?? '');
+  const [saving, setSaving]   = useState(false);
+  const pendingRef  = useRef({});
+  const debounceRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
+  const mediaUrl = item.media_type === 'movie'
+    ? `/movies?open=${item.media_id}`
+    : item.media_type === 'tv_show'
+    ? `/tv-shows?open=${item.media_id}`
+    : `/books?open=${item.media_id}`;
+
+  async function save(updates) {
+    setSaving(true);
+    try {
+      await updateWatchlistProgress({ mediaType: item.media_type, mediaId: item.media_id, ...updates });
+      onUpdate?.(item.id, updates);
+    } catch {}
+    finally { setSaving(false); }
+  }
+
+  async function handleStatusChange(e) {
+    const val = e.target.value;
+    setStatus(val);
+    await save({ status: val });
+  }
+
+  function scheduleProgressSave(field, value) {
+    pendingRef.current[field] = value;
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const pending = { ...pendingRef.current };
+      pendingRef.current = {};
+      save(pending);
+    }, 750);
+  }
+
+  function handleSeasonChange(e)  { const n = parseInt(e.target.value, 10); setSeason(e.target.value);  if (!isNaN(n) && n > 0) scheduleProgressSave('currentSeason', n); }
+  function handleEpisodeChange(e) { const n = parseInt(e.target.value, 10); setEpisode(e.target.value); if (!isNaN(n) && n > 0) scheduleProgressSave('currentEpisode', n); }
+  function handleChapterChange(e) { const n = parseInt(e.target.value, 10); setChapter(e.target.value); if (!isNaN(n) && n > 0) scheduleProgressSave('currentChapter', n); }
+  function handlePageChange(e)    { const n = parseInt(e.target.value, 10); setPage(e.target.value);    if (!isNaN(n) && n > 0) scheduleProgressSave('currentPage', n); }
+
+  const poster   = resolvePoster(item.poster_url || item.image_url);
+  const color    = STATUS_COLORS[status] || '#555';
+  const statuses = item.media_type === 'book' ? BOOK_STATUSES : TV_STATUSES;
+
+  const progressBadge = item.media_type === 'tv_show' && (season !== '' || episode !== '')
+    ? `S${season || '?'} · E${episode || '?'}`
+    : item.media_type === 'book' && (chapter !== '' || page !== '')
+    ? [chapter ? `Ch ${chapter}` : null, page ? `Pg ${page}` : null].filter(Boolean).join(' · ')
+    : null;
+
+  if (!isOwn) {
+    return (
+      <Link to={mediaUrl} className="profile-wl-card">
+        <div className="profile-wl-poster">
+          {poster
+            ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+            : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>}
+          <span className="profile-wl-status" style={{ background: color + '22', color, borderColor: color + '44' }}>
+            {STATUS_LABELS[status] || status}
+          </span>
+        </div>
+        <p className="profile-wl-title">{item.title || '—'}</p>
+        {item.year && <p className="profile-wl-year">{item.year}</p>}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={`profile-wl-card profile-wl-card--own${saving ? ' profile-wl-card--saving' : ''}`}>
+      <div className="profile-wl-poster">
+        {poster
+          ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+          : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>}
+        {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
+
+        {/* Hover overlay */}
+        <div className="profile-wl-overlay">
+          <Link to={mediaUrl} className="profile-wl-overlay-open" onClick={e => e.stopPropagation()}>
+            Open →
+          </Link>
+          <div className="profile-wl-overlay-controls">
+            {item.media_type === 'tv_show' && (
+              <div className="profile-wl-overlay-progress">
+                <div className="profile-wl-overlay-field">
+                  <span className="profile-wl-overlay-label">Season</span>
+                  <input type="number" min="1" className="profile-wl-overlay-input" value={season} placeholder="—" onChange={handleSeasonChange} onClick={e => e.stopPropagation()} />
+                </div>
+                <div className="profile-wl-overlay-field">
+                  <span className="profile-wl-overlay-label">Episode</span>
+                  <input type="number" min="1" className="profile-wl-overlay-input" value={episode} placeholder="—" onChange={handleEpisodeChange} onClick={e => e.stopPropagation()} />
+                </div>
+              </div>
+            )}
+            {item.media_type === 'book' && (
+              <div className="profile-wl-overlay-progress">
+                <div className="profile-wl-overlay-field">
+                  <span className="profile-wl-overlay-label">Chapter</span>
+                  <input type="number" min="1" className="profile-wl-overlay-input" value={chapter} placeholder="—" onChange={handleChapterChange} onClick={e => e.stopPropagation()} />
+                </div>
+                <div className="profile-wl-overlay-field">
+                  <span className="profile-wl-overlay-label">Page</span>
+                  <input type="number" min="1" className="profile-wl-overlay-input" value={page} placeholder="—" onChange={handlePageChange} onClick={e => e.stopPropagation()} />
+                </div>
+              </div>
+            )}
+            <select
+              className="profile-wl-overlay-status"
+              value={status}
+              onChange={handleStatusChange}
+              disabled={saving}
+              style={{ color, borderColor: color + '55' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {statuses.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+      <p className="profile-wl-title">{item.title || '—'}</p>
+      {item.year && <p className="profile-wl-year">{item.year}</p>}
+    </div>
+  );
+}
 
 function StatCard({ value, label }) {
   return (
@@ -135,6 +271,20 @@ export default function UserProfile() {
       }
     } catch (err) { alert(err.message); }
     finally { setFollowLoading(false); }
+  }
+
+  function handleWatchlistItemUpdate(id, updates) {
+    setOwnWatchlist(prev => prev
+      ? prev.map(item => item.id === id ? {
+          ...item,
+          ...(updates.status         !== undefined ? { status: updates.status }                     : {}),
+          ...(updates.currentSeason  !== undefined ? { current_season: updates.currentSeason }      : {}),
+          ...(updates.currentEpisode !== undefined ? { current_episode: updates.currentEpisode }    : {}),
+          ...(updates.currentChapter !== undefined ? { current_chapter: updates.currentChapter }    : {}),
+          ...(updates.currentPage    !== undefined ? { current_page: updates.currentPage }          : {}),
+        } : item)
+      : prev
+    );
   }
 
   // All hooks must be called before any early returns
@@ -256,26 +406,14 @@ export default function UserProfile() {
                   </div>
                 ) : (
                   <div className="profile-watchlist-grid">
-                    {filteredWatchlist.map((item, i) => {
-                      const poster = resolvePoster(item.poster_url || item.image_url);
-                      const color  = STATUS_COLORS[item.status] || '#555';
-                      const url    = item.media_type === 'movie' ? `/movies?open=${item.media_id}` : item.media_type === 'tv_show' ? `/tv-shows?open=${item.media_id}` : `/books?open=${item.media_id}`;
-                      return (
-                        <Link key={i} to={url} className="profile-wl-card">
-                          <div className="profile-wl-poster">
-                            {poster
-                              ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-                              : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>
-                            }
-                            <span className="profile-wl-status" style={{ background: color + '22', color, borderColor: color + '44' }}>
-                              {STATUS_LABELS[item.status] || item.status}
-                            </span>
-                          </div>
-                          <p className="profile-wl-title">{item.title || '—'}</p>
-                          {item.year && <p className="profile-wl-year">{item.year}</p>}
-                        </Link>
-                      );
-                    })}
+                    {filteredWatchlist.map((item, i) => (
+                      <WatchlistCard
+                        key={item.id ?? i}
+                        item={item}
+                        isOwn={isOwn}
+                        onUpdate={handleWatchlistItemUpdate}
+                      />
+                    ))}
                   </div>
                 )}
               </>
