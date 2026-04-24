@@ -132,7 +132,7 @@ function BadgeIcon({ iconKey, label, toneKey }) {
 
 function ContinueWatching({ items }) {
   const inProgress = items.filter(
-    i => i.media_type === 'tv_show' && i.status === 'watching' && (i.current_season || i.current_episode)
+    i => i.status === 'watching' || i.status === 'reading'
   );
   if (!inProgress.length) return null;
 
@@ -144,24 +144,41 @@ function ContinueWatching({ items }) {
       <div className="continue-watching-row">
         {inProgress.map(item => {
           const poster = resolvePosterUrl(item.image_url || item.poster_url);
-          const s = item.current_season || 1;
-          const e = item.current_episode || 1;
+          const url = item.media_type === 'movie'
+            ? `/movies?open=${item.media_id}`
+            : item.media_type === 'tv_show'
+            ? `/tv-shows?open=${item.media_id}`
+            : `/books?open=${item.media_id}`;
+
+          const s  = item.current_season;
+          const e  = item.current_episode;
+          const ch = item.current_chapter;
+          const pg = item.current_page;
+
+          let badge = null;
+          let sub   = null;
+          if (item.media_type === 'tv_show' && (s || e)) {
+            badge = `S${s || 1} E${e || 1}`;
+            sub   = `Season ${s || 1}, Ep ${e || 1}`;
+          } else if (item.media_type === 'book' && (ch || pg)) {
+            badge = ch ? `Ch ${ch}` : `Pg ${pg}`;
+            sub   = [ch ? `Chapter ${ch}` : null, pg ? `Page ${pg}` : null].filter(Boolean).join(', ');
+          } else {
+            sub = item.media_type === 'book' ? 'Reading' : 'Watching';
+          }
+
           return (
-            <Link
-              key={item.id}
-              to={`/tv-shows?open=${item.media_id}`}
-              className="continue-card"
-            >
+            <Link key={item.id} to={url} className="continue-card">
               <div className="continue-card-poster">
                 {poster
                   ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-                  : <div className="continue-card-placeholder">{MEDIA_ICONS.tv_show}</div>
+                  : <div className="continue-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
                 }
                 <div className="continue-card-play">▶</div>
-                <div className="continue-card-badge">S{s} E{e}</div>
+                {badge && <div className="continue-card-badge">{badge}</div>}
               </div>
               <p className="continue-card-title">{item.title}</p>
-              <p className="continue-card-sub">Season {s}, Ep {e}</p>
+              <p className="continue-card-sub">{sub}</p>
             </Link>
           );
         })}
