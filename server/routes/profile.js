@@ -53,26 +53,80 @@ router.get('/:username', async (req, res) => {
     if (!profile.is_public) return res.json({ profile, ratings: [], watchlist: [], posts: [], isPrivate: true });
 
     // Get public data
-    const [{ data: ratings }, { data: watchlist }, { data: posts }, { count: followers }, { count: following }] = await Promise.all([
-      sb.from('movie_ratings').select('media_id, created_at').eq('user_id', profile.id).limit(6),
-      sb.from('watchlist').select('media_type, media_id, status, added_at').eq('user_id', profile.id).order('added_at', { ascending: false }).limit(12),
+    const [
+      { data: movieRatings }, { data: tvRatings }, { data: bookRatings },
+      { data: watchlist }, { data: posts },
+      { count: followers }, { count: following },
+    ] = await Promise.all([
+      sb.from('movie_ratings').select('media_id, created_at, review, acting, writing, originality, pacing, cinematography').eq('user_id', profile.id).limit(50),
+      sb.from('tv_show_ratings').select('media_id, created_at, review, premise, originality, acting, cinematography, writing, pacing, resonance').eq('user_id', profile.id).limit(50),
+      sb.from('book_ratings').select('media_id, created_at, review, prose, plot, characters, originality, pacing, resonance').eq('user_id', profile.id).limit(50),
+      sb.from('watchlist').select('id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter').eq('user_id', profile.id).order('added_at', { ascending: false }),
       sb.from('posts').select('id, title, flair, score, comment_count, created_at, forums(name, slug, icon)').eq('user_id', profile.id).eq('is_removed', false).order('created_at', { ascending: false }).limit(10),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id),
     ]);
 
-    // Enrich watchlist with titles from SQLite
-    const enrichedWatchlist = (watchlist || []).map(item => {
+    // Build Supabase media lookup maps (primary source — SQLite used as fallback)
+    const watchlistRows = watchlist || [];
+    const allRatingRows = [
+      ...(movieRatings || []).map(r => ({ ...r, _type: 'movie' })),
+      ...(tvRatings    || []).map(r => ({ ...r, _type: 'tv_show' })),
+      ...(bookRatings  || []).map(r => ({ ...r, _type: 'book' })),
+    ];
+
+    function collectIds(rows, type) {
+      return [...new Set(rows.filter(r => (r.media_type || r._type) === type).map(r => r.media_id).filter(Boolean))];
+    }
+
+    const movieIds   = [...new Set([...collectIds(watchlistRows, 'movie'),   ...collectIds(allRatingRows, 'movie')])];
+    const tvIds      = [...new Set([...collectIds(watchlistRows, 'tv_show'), ...collectIds(allRatingRows, 'tv_show')])];
+    const bookIds    = [...new Set([...collectIds(watchlistRows, 'book'),    ...collectIds(allRatingRows, 'book')])];
+
+    const [sbMovies, sbTv, sbBooks] = await Promise.all([
+      movieIds.length ? sb.from('movies').select('id, title, year, poster_url').in('id', movieIds).then(r => r.data || []) : [],
+      tvIds.length    ? sb.from('tv_shows').select('id, title, year, poster_url').in('id', tvIds).then(r => r.data || []) : [],
+      bookIds.length  ? sb.from('books').select('id, title, year, cover_url').in('id', bookIds).then(r => r.data || []) : [],
+    ]);
+
+    const movieMap = new Map(sbMovies.map(m => [m.id, { title: m.title, year: m.year, image_url: m.poster_url }]));
+    const tvMap    = new Map(sbTv.map(t    => [t.id, { title: t.title, year: t.year, image_url: t.poster_url }]));
+    const bookMap  = new Map(sbBooks.map(b => [b.id, { title: b.title, year: b.year, image_url: b.cover_url }]));
+
+    function sbMeta(mediaType, mediaId) {
+      const map = mediaType === 'movie' ? movieMap : mediaType === 'tv_show' ? tvMap : bookMap;
+      if (map.has(mediaId)) return map.get(mediaId);
+      // SQLite fallback for items only in local DB
       try {
-        let media = null;
-        if (item.media_type === 'movie') media = db.prepare('SELECT title, poster_url FROM movies WHERE id = ?').get(item.media_id);
-        else if (item.media_type === 'tv_show') media = db.prepare('SELECT title, poster_url FROM tv_shows WHERE id = ?').get(item.media_id);
-        else if (item.media_type === 'book') media = db.prepare('SELECT title, cover_url as poster_url FROM books WHERE id = ?').get(item.media_id);
-        return { ...item, title: media?.title, poster_url: media?.poster_url };
-      } catch { return item; }
+        let row = null;
+        if (mediaType === 'movie')   row = db.prepare('SELECT title, year, poster_url as image_url FROM movies WHERE id = ?').get(mediaId);
+        if (mediaType === 'tv_show') row = db.prepare('SELECT title, year, poster_url as image_url FROM tv_shows WHERE id = ?').get(mediaId);
+        if (mediaType === 'book')    row = db.prepare('SELECT title, year, cover_url  as image_url FROM books  WHERE id = ?').get(mediaId);
+        return row || null;
+      } catch { return null; }
+    }
+
+    // Enrich ratings
+    function enrichRatings(rows, mediaType) {
+      return (rows || []).map(item => {
+        const meta = sbMeta(mediaType, item.media_id);
+        return { ...item, media_type: mediaType, title: meta?.title, year: meta?.year, image_url: meta?.image_url };
+      });
+    }
+
+    const ratings = [
+      ...enrichRatings(movieRatings, 'movie'),
+      ...enrichRatings(tvRatings, 'tv_show'),
+      ...enrichRatings(bookRatings, 'book'),
+    ].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+    // Enrich watchlist (poster_url alias kept for WatchlistCard compatibility)
+    const enrichedWatchlist = watchlistRows.map(item => {
+      const meta = sbMeta(item.media_type, item.media_id);
+      return { ...item, title: meta?.title, year: meta?.year, poster_url: meta?.image_url };
     });
 
-    res.json({ profile, ratings: ratings || [], watchlist: enrichedWatchlist, posts: posts || [], followers: followers || 0, following: following || 0 });
+    res.json({ profile, ratings, watchlist: enrichedWatchlist, posts: posts || [], followers: followers || 0, following: following || 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
