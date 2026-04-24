@@ -2,6 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "build",
+  "env": {
+    "REACT_APP_SUPABASE_URL": "https://iuhbgyybstjdkdqbqbbs.supabase.co",
+    "REACT_APP_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_vvEbHza8cwLEl4Udw3LnkQ_sHo600ag",
+    "REACT_APP_ENABLE_LEGACY_BACKEND": "false",
+    "REACT_APP_DEVLAB_API_MODE": "supabase",
+    "REACT_APP_TMDB_API_KEY": "40c2588d103071c2a5e856cb523d515c"
+  },
   "routes": [
     {
       "handle": "filesystem"
