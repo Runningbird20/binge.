@@ -217,8 +217,8 @@ export default function UserProfile() {
   const [tab, setTab]             = useState(searchParams.get('tab') || 'watchlist');
 
   // Own-profile data loaded from Supabase directly
-  const [ownWatchlist, setOwnWatchlist]   = useState(null);
-  const [ownRatings, setOwnRatings]       = useState(null);
+  const [ownWatchlist, setOwnWatchlist]     = useState(null);
+  const [ownRatings, setOwnRatings]         = useState(null);
   const [ownDataLoading, setOwnDataLoading] = useState(false);
 
   // Filters
@@ -296,7 +296,6 @@ export default function UserProfile() {
   const followingCount = data?.following || 0;
   const isPrivate      = data?.isPrivate || false;
 
-  // Use richer own-profile data when available
   const displayWatchlist = isOwn && ownWatchlist != null ? ownWatchlist : publicWatchlist;
   const displayRatings   = isOwn && ownRatings   != null ? ownRatings   : publicRatings;
 
