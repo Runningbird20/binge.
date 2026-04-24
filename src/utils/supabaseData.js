@@ -538,8 +538,8 @@ async function fetchSupabaseRatingsForUsers(userIds = []) {
     })
   );
 
-  return enrichMediaRecords(grouped.flat())
-    .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
+  const enriched = await enrichMediaRecords(grouped.flat());
+  return enriched.sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
 }
 
 async function fetchSupabaseWatchlistForUsers(userIds = []) {
@@ -558,7 +558,7 @@ async function fetchSupabaseWatchlistForUsers(userIds = []) {
     throw new Error(toFriendlyError(error, 'Unable to load feed library activity.'));
   }
 
-  return enrichMediaRecords(data || []);
+  return await enrichMediaRecords(data || []);
 }
 
 export async function fetchSupabaseFollowFeed({ limit = 24 } = {}) {
