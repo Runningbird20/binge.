@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getDefaultRouteForUserType } from '../utils/userAccess';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
@@ -41,7 +40,8 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const dashboardRoute = getDefaultRouteForUserType(user);
+  const isAdmin = user?.isAdmin || user?.userType === 'admin';
+  const isDev = user?.isDev || user?.userType === 'dev';
 
   async function handleLogout() {
     await logout();
@@ -57,6 +57,22 @@ export default function Navbar() {
 
       {user ? (
         <>
+          {/* Role buttons */}
+          {(isAdmin || isDev) && (
+            <div className="navbar-role-btns">
+              {isAdmin && (
+                <NavLink to="/admin" className={({ isActive }) => `navbar-role-btn navbar-role-btn--admin${isActive ? ' active' : ''}`}>
+                  Admin
+                </NavLink>
+              )}
+              {(isAdmin || isDev) && (
+                <NavLink to="/__ops/dev-lab" className={({ isActive }) => `navbar-role-btn navbar-role-btn--dev${isActive ? ' active' : ''}`}>
+                  Dev
+                </NavLink>
+              )}
+            </div>
+          )}
+
           {/* Search */}
           <div className="navbar-search-wrap">
             <GlobalSearch />
@@ -74,7 +90,7 @@ export default function Navbar() {
           {/* Right side */}
           <div className="navbar-right">
             <NotificationBell />
-            <NavLink to={dashboardRoute} className="navbar-avatar-link" title="Dashboard">
+            <NavLink to={`/profile/${user.username}`} className="navbar-avatar-link" title="My Profile">
               <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
             </NavLink>
             <NavLink
@@ -108,6 +124,8 @@ export default function Navbar() {
                 <NavLink to="/following"  className={navLink} onClick={() => setMobileOpen(false)}>👥 Following</NavLink>
                 <NavLink to={`/profile/${user.username}`} className={navLink} onClick={() => setMobileOpen(false)}>👤 My Profile</NavLink>
                 <NavLink to="/account-settings" className={navLink} onClick={() => setMobileOpen(false)}>⚙️ Settings</NavLink>
+                {isAdmin && <NavLink to="/admin" className={navLink} onClick={() => setMobileOpen(false)}>🛡️ Admin</NavLink>}
+                {(isAdmin || isDev) && <NavLink to="/__ops/dev-lab" className={navLink} onClick={() => setMobileOpen(false)}>🔧 Dev</NavLink>}
                 <button className="btn-ghost" onClick={handleLogout} type="button">Log out</button>
               </div>
             </div>
