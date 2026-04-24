@@ -914,7 +914,7 @@ async function getDashboardSnapshot() {
       select
         (select count(*)::int from public.movies where source_key is not null) as movie_count,
         (select count(*)::int from public.tv_shows where source_key is not null) as tv_count,
-        (select count(*)::int from public.books where source_key is not null) as book_count,
+        (select count(*)::int from public.books) as book_count,
         (select count(*)::int from public.chatbot_knowledge_documents) as knowledge_count,
         (select count(*)::int from public.chatbot_eval_cases) as eval_case_count
     `),

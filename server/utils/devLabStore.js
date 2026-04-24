@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const db = require('../db');
 
 const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 
@@ -188,12 +189,13 @@ function normalizeTagList(tags) {
 async function getDashboardSnapshot() {
   await ensureDevLabSchema();
 
+  const bookCount = db.prepare('SELECT COUNT(*) as count FROM books').get()?.count || 0;
+
   const [counts, prompts, knowledge, evalCases, evalRuns] = await Promise.all([
     query(`
       select
         (select count(*)::int from public.movies where source_key is not null) as movie_count,
         (select count(*)::int from public.tv_shows where source_key is not null) as tv_count,
-        (select count(*)::int from public.books where source_key is not null) as book_count,
         (select count(*)::int from public.chatbot_knowledge_documents) as knowledge_count,
         (select count(*)::int from public.chatbot_eval_cases) as eval_case_count
     `),
@@ -204,12 +206,9 @@ async function getDashboardSnapshot() {
   ]);
 
   return {
-    counts: counts.rows[0] || {
-      movie_count: 0,
-      tv_count: 0,
-      book_count: 0,
-      knowledge_count: 0,
-      eval_case_count: 0,
+    counts: {
+      ...(counts.rows[0] || { movie_count: 0, tv_count: 0, knowledge_count: 0, eval_case_count: 0 }),
+      book_count: bookCount,
     },
     prompts,
     knowledge,
