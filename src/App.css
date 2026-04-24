@@ -7602,3 +7602,105 @@ h1 {
   white-space: nowrap;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   NEOBINGE — Following / Social
+   ══════════════════════════════════════════════════════════════ */
+
+.social-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.social-profile-card { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; }
+.social-profile-card-header { display: flex; align-items: flex-start; gap: 0.75rem; }
+.social-profile-name { font-size: 0.9rem; font-weight: 700; color: #e0e0e0; margin: 0; }
+.social-profile-bio { font-size: 0.78rem; color: #555; margin: 0; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.social-profile-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #555; }
+.social-profile-meta strong { color: #e8c97a; }
+
+.social-avatar-btn { background: none; border: none; padding: 0; cursor: pointer; border-radius: 999px; flex-shrink: 0; transition: transform 0.15s, opacity 0.15s; }
+.social-avatar-btn:hover { transform: scale(1.07); opacity: 0.85; }
+
+.social-profile-name-btn { background: none; border: none; padding: 0; cursor: pointer; font-size: 0.9rem; font-weight: 700; color: #e0e0e0; text-align: left; transition: color 0.15s; }
+.social-profile-name-btn:hover { color: #e8c97a; }
+
+.social-feed-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.social-feed-item { display: flex; flex-direction: column; gap: 0.5rem; padding: 1rem; }
+.social-feed-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.social-feed-author { display: flex; align-items: center; gap: 0.6rem; }
+.social-feed-author-name { font-size: 0.85rem; font-weight: 700; color: #d0d0d0; margin: 0; }
+.social-feed-meta { font-size: 0.72rem; color: #555; margin: 0; }
+.social-feed-action { font-size: 0.72rem; color: #555; white-space: nowrap; }
+.social-feed-body h3 { font-size: 0.95rem; color: #e0e0e0; margin: 0 0 0.2rem; }
+.social-feed-subtitle { font-size: 0.75rem; color: #555; margin: 0 0 0.4rem; }
+.social-feed-review { font-size: 0.82rem; color: #777; margin: 0; font-style: italic; }
+
+/* ══════════════════════════════════════════════════════════════
+   NEOBINGE — User Profile Modal
+   ══════════════════════════════════════════════════════════════ */
+
+.upm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1.5rem; backdrop-filter: blur(4px); }
+.upm-modal { position: relative; background: #141414; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; width: 100%; max-width: 540px; max-height: 85vh; overflow-y: auto; padding: 1.75rem; display: flex; flex-direction: column; gap: 1.5rem; box-shadow: 0 24px 64px rgba(0,0,0,0.6); }
+.upm-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: #555; font-size: 1rem; cursor: pointer; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: color 0.15s, background 0.15s; }
+.upm-close:hover { color: #e0e0e0; background: rgba(255,255,255,0.07); }
+
+.upm-header { display: flex; align-items: flex-start; gap: 1rem; }
+.upm-header-info { flex: 1; }
+.upm-username { font-size: 1.25rem; font-weight: 800; color: #fff; margin: 0 0 0.3rem; letter-spacing: -0.02em; }
+.upm-bio { font-size: 0.82rem; color: #666; margin: 0 0 0.6rem; line-height: 1.4; }
+.upm-stats { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.78rem; color: #555; }
+.upm-stats strong { color: #e0e0e0; }
+
+.upm-section { display: flex; flex-direction: column; gap: 0.75rem; }
+.upm-section-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: #555; font-weight: 700; margin: 0; }
+
+.upm-media-row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.upm-media-card { width: 90px; flex-shrink: 0; }
+.upm-media-poster { position: relative; width: 90px; height: 135px; border-radius: 8px; overflow: hidden; background: #1e1e1e; margin-bottom: 0.35rem; }
+.upm-media-poster img { width: 100%; height: 100%; object-fit: cover; }
+.upm-media-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; color: #333; }
+.upm-media-status { position: absolute; bottom: 4px; left: 4px; right: 4px; font-size: 0.58rem; font-weight: 700; padding: 0.1rem 0.3rem; border-radius: 4px; border: 1px solid; text-align: center; }
+.upm-media-title { font-size: 0.68rem; color: #888; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; line-height: 1.3; }
+
+.upm-rated-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.upm-rated-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem; background: rgba(255,255,255,0.03); border-radius: 10px; }
+.upm-rated-rank { font-size: 0.7rem; font-weight: 700; color: #e8c97a; min-width: 20px; text-align: center; }
+.upm-rated-poster { width: 36px; height: 54px; border-radius: 5px; overflow: hidden; background: #1e1e1e; flex-shrink: 0; }
+.upm-rated-poster img { width: 100%; height: 100%; object-fit: cover; }
+.upm-rated-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #333; }
+.upm-rated-info { flex: 1; min-width: 0; }
+.upm-rated-title { font-size: 0.85rem; font-weight: 600; color: #e0e0e0; margin: 0 0 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upm-rated-meta { font-size: 0.7rem; color: #555; margin: 0 0 0.15rem; }
+.upm-rated-review { font-size: 0.72rem; color: #666; margin: 0; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upm-rated-score { font-size: 1.1rem; font-weight: 800; color: #e8c97a; flex-shrink: 0; }
+.upm-rated-score span { font-size: 0.65rem; color: #555; font-weight: 400; }
+
+.upm-loading { color: #555; font-size: 0.85rem; text-align: center; padding: 1rem 0; }
+.upm-private { color: #555; font-size: 0.85rem; text-align: center; padding: 1rem 0; }
+.upm-empty { color: #555; font-size: 0.85rem; text-align: center; padding: 1rem 0; }
+
+.upm-footer { display: flex; justify-content: flex-end; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06); }
+
+/* ── Following page v2 cards ── */
+.social-profile-card-v2 { display: flex; flex-direction: column; gap: 0.7rem; padding: 1rem; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; background: rgba(255,255,255,0.025); transition: border-color 0.15s; }
+.social-profile-card-v2:hover { border-color: rgba(255,255,255,0.13); }
+.social-profile-card-info { flex: 1; min-width: 0; }
+.social-profile-name-link { font-size: 0.9rem; font-weight: 700; color: #e0e0e0; text-decoration: none; transition: color 0.15s; display: block; }
+.social-profile-name-link:hover { color: #e8c97a; }
+.social-profile-card-actions { display: flex; gap: 0.5rem; align-items: center; }
+.social-unfollow-btn { font-size: 0.78rem; padding: 0.28rem 0.7rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #666; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.social-unfollow-btn:hover:not(:disabled) { color: #e87a7a; border-color: rgba(232,122,122,0.4); }
+.social-unfollow-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Taste match bar */
+.social-taste-row { display: flex; align-items: center; gap: 0.5rem; }
+.social-taste-label { font-size: 0.7rem; color: #555; flex-shrink: 0; }
+.social-taste-track { flex: 1; height: 4px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; }
+.social-taste-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.social-taste-pct { font-size: 0.75rem; font-weight: 700; flex-shrink: 0; min-width: 2.5rem; text-align: right; }
+
+/* Feed improvements */
+.social-feed-action-badge { font-size: 0.7rem; font-weight: 600; padding: 0.18rem 0.5rem; border-radius: 99px; background: rgba(255,255,255,0.05); color: #888; white-space: nowrap; border: 1px solid rgba(255,255,255,0.07); }
+.social-feed-author { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; transition: opacity 0.15s; }
+.social-feed-author:hover { opacity: 0.8; }
+.social-feed-status-pill { font-size: 0.75rem; color: #7ab8e8; margin: 0; text-transform: capitalize; }
+
+/* Section count badge */
+.section-count-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 99px; background: rgba(232,201,122,0.15); color: #e8c97a; margin-left: 0.5rem; vertical-align: middle; }
+
