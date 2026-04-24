@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
+import UserProfileModal from '../components/UserProfileModal';
 import { useAuth } from '../contexts/AuthContext';
 import {
   calculateTasteMatch,
@@ -72,6 +73,7 @@ export default function Following() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [modalProfile, setModalProfile] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -190,6 +192,12 @@ export default function Following() {
   return (
     <div className="app-layout">
       <Navbar />
+      {modalProfile && (
+        <UserProfileModal
+          profile={modalProfile}
+          onClose={() => setModalProfile(null)}
+        />
+      )}
       <main className="page-content">
         <div className="page-header">
           <p className="page-kicker">Following</p>
@@ -224,9 +232,22 @@ export default function Following() {
                 followingProfiles.map((profile) => (
                   <article key={profile.id} className="social-profile-card surface-panel">
                     <div className="social-profile-card-header">
-                      <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
+                      <button
+                        type="button"
+                        className="social-avatar-btn"
+                        onClick={() => setModalProfile(profile)}
+                        aria-label={`View ${profile.username}'s profile`}
+                      >
+                        <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
+                      </button>
                       <div>
-                        <p className="social-profile-name">{profile.username}</p>
+                        <button
+                          type="button"
+                          className="social-profile-name-btn"
+                          onClick={() => setModalProfile(profile)}
+                        >
+                          {profile.username}
+                        </button>
                         <p className="social-profile-bio">{profile.bio || 'No bio yet.'}</p>
                       </div>
                     </div>
@@ -304,9 +325,22 @@ export default function Following() {
                 filteredSuggestions.map((profile) => (
                   <article key={profile.id} className="social-profile-card surface-panel">
                     <div className="social-profile-card-header">
-                      <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
+                      <button
+                        type="button"
+                        className="social-avatar-btn"
+                        onClick={() => setModalProfile(profile)}
+                        aria-label={`View ${profile.username}'s profile`}
+                      >
+                        <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
+                      </button>
                       <div>
-                        <p className="social-profile-name">{profile.username}</p>
+                        <button
+                          type="button"
+                          className="social-profile-name-btn"
+                          onClick={() => setModalProfile(profile)}
+                        >
+                          {profile.username}
+                        </button>
                         <p className="social-profile-bio">{profile.bio || 'No bio yet.'}</p>
                       </div>
                     </div>

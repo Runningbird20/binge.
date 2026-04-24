@@ -53,13 +53,38 @@ router.get('/:username', async (req, res) => {
     if (!profile.is_public) return res.json({ profile, ratings: [], watchlist: [], posts: [], isPrivate: true });
 
     // Get public data
-    const [{ data: ratings }, { data: watchlist }, { data: posts }, { count: followers }, { count: following }] = await Promise.all([
-      sb.from('movie_ratings').select('media_id, created_at').eq('user_id', profile.id).limit(6),
+    const [
+      { data: movieRatings }, { data: tvRatings }, { data: bookRatings },
+      { data: watchlist }, { data: posts },
+      { count: followers }, { count: following },
+    ] = await Promise.all([
+      sb.from('movie_ratings').select('media_id, created_at, review, acting, writing, originality, pacing, cinematography').eq('user_id', profile.id).limit(50),
+      sb.from('tv_show_ratings').select('media_id, created_at, review, premise, originality, acting, cinematography, writing, pacing, resonance').eq('user_id', profile.id).limit(50),
+      sb.from('book_ratings').select('media_id, created_at, review, prose, plot, characters, originality, pacing, resonance').eq('user_id', profile.id).limit(50),
       sb.from('watchlist').select('media_type, media_id, status, added_at').eq('user_id', profile.id).order('added_at', { ascending: false }).limit(12),
       sb.from('posts').select('id, title, flair, score, comment_count, created_at, forums(name, slug, icon)').eq('user_id', profile.id).eq('is_removed', false).order('created_at', { ascending: false }).limit(10),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id),
     ]);
+
+    // Enrich ratings with titles and media_type tag
+    function enrichRatings(rows, mediaType) {
+      return (rows || []).map(item => {
+        try {
+          let media = null;
+          if (mediaType === 'movie') media = db.prepare('SELECT title, year, poster_url FROM movies WHERE id = ?').get(item.media_id);
+          else if (mediaType === 'tv_show') media = db.prepare('SELECT title, year, poster_url FROM tv_shows WHERE id = ?').get(item.media_id);
+          else if (mediaType === 'book') media = db.prepare('SELECT title, year, cover_url as poster_url FROM books WHERE id = ?').get(item.media_id);
+          return { ...item, media_type: mediaType, title: media?.title, year: media?.year, image_url: media?.poster_url };
+        } catch { return { ...item, media_type: mediaType }; }
+      });
+    }
+
+    const ratings = [
+      ...enrichRatings(movieRatings, 'movie'),
+      ...enrichRatings(tvRatings, 'tv_show'),
+      ...enrichRatings(bookRatings, 'book'),
+    ].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
     // Enrich watchlist with titles from SQLite
     const enrichedWatchlist = (watchlist || []).map(item => {
@@ -72,7 +97,7 @@ router.get('/:username', async (req, res) => {
       } catch { return item; }
     });
 
-    res.json({ profile, ratings: ratings || [], watchlist: enrichedWatchlist, posts: posts || [], followers: followers || 0, following: following || 0 });
+    res.json({ profile, ratings, watchlist: enrichedWatchlist, posts: posts || [], followers: followers || 0, following: following || 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
