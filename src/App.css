@@ -7677,3 +7677,30 @@ h1 {
 
 .upm-footer { display: flex; justify-content: flex-end; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06); }
 
+/* ── Following page v2 cards ── */
+.social-profile-card-v2 { display: flex; flex-direction: column; gap: 0.7rem; padding: 1rem; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; background: rgba(255,255,255,0.025); transition: border-color 0.15s; }
+.social-profile-card-v2:hover { border-color: rgba(255,255,255,0.13); }
+.social-profile-card-info { flex: 1; min-width: 0; }
+.social-profile-name-link { font-size: 0.9rem; font-weight: 700; color: #e0e0e0; text-decoration: none; transition: color 0.15s; display: block; }
+.social-profile-name-link:hover { color: #e8c97a; }
+.social-profile-card-actions { display: flex; gap: 0.5rem; align-items: center; }
+.social-unfollow-btn { font-size: 0.78rem; padding: 0.28rem 0.7rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #666; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.social-unfollow-btn:hover:not(:disabled) { color: #e87a7a; border-color: rgba(232,122,122,0.4); }
+.social-unfollow-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Taste match bar */
+.social-taste-row { display: flex; align-items: center; gap: 0.5rem; }
+.social-taste-label { font-size: 0.7rem; color: #555; flex-shrink: 0; }
+.social-taste-track { flex: 1; height: 4px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; }
+.social-taste-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.social-taste-pct { font-size: 0.75rem; font-weight: 700; flex-shrink: 0; min-width: 2.5rem; text-align: right; }
+
+/* Feed improvements */
+.social-feed-action-badge { font-size: 0.7rem; font-weight: 600; padding: 0.18rem 0.5rem; border-radius: 99px; background: rgba(255,255,255,0.05); color: #888; white-space: nowrap; border: 1px solid rgba(255,255,255,0.07); }
+.social-feed-author { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; transition: opacity 0.15s; }
+.social-feed-author:hover { opacity: 0.8; }
+.social-feed-status-pill { font-size: 0.75rem; color: #7ab8e8; margin: 0; text-transform: capitalize; }
+
+/* Section count badge */
+.section-count-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 99px; background: rgba(232,201,122,0.15); color: #e8c97a; margin-left: 0.5rem; vertical-align: middle; }
+
