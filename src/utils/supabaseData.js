@@ -760,9 +760,10 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
 
   let query = client
     .from('watchlist')
-    .select('id, user_id, media_type, media_id, status, added_at, current_season, current_episode, current_page, updated_at')
+    .select('id, user_id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter, updated_at')
     .eq('user_id', userId)
-    .order('updated_at', { ascending: false });
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .order('added_at',   { ascending: false });
 
   if (mediaType) {
     query = query.eq('media_type', mediaType);
