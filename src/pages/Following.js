@@ -70,7 +70,7 @@ export default function Following() {
   const [currentRatings, setCurrentRatings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingProfileId, setSavingProfileId] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -92,7 +92,7 @@ export default function Following() {
         }
 
         setCurrentRatings(ratings);
-        setSuggestedProfiles(suggestions.filter((profile) => !followed.includes(profile.id)));
+        setSuggestedProfiles(suggestions.filter((profile) => profile.id !== user?.id && !followed.includes(profile.id)));
 
         if (followed.length) {
           const [profiles, feed] = await Promise.all([
@@ -150,7 +150,12 @@ export default function Following() {
   }, [feedItems]);
 
   async function handleFollow(profileId) {
-    setSaving(true);
+    if (!profileId || profileId === user?.id) {
+      setError('You cannot follow yourself.');
+      return;
+    }
+
+    setSavingProfileId(profileId);
     setError('');
 
     try {
@@ -164,13 +169,19 @@ export default function Following() {
     } catch (err) {
       setError(err?.message || 'Unable to follow that member.');
     } finally {
-      setSaving(false);
+      setSavingProfileId(null);
     }
   }
 
   async function handleUnfollow(profileId) {
-    setSaving(true);
+    if (!profileId) {
+      setError('Choose a member to unfollow.');
+      return;
+    }
+
+    setSavingProfileId(profileId);
     setError('');
+    const unfollowedProfile = followingProfiles.find((profile) => profile.id === profileId);
 
     try {
       await unfollowSupabaseUser(profileId);
@@ -179,11 +190,18 @@ export default function Following() {
       const refreshedFeed = await fetchSupabaseFollowFeed();
       setFollowingProfiles(refreshedProfiles);
       setFeedItems(refreshedFeed);
-      setSuggestedProfiles((current) => [...current, ...refreshedProfiles.filter((profile) => !current.some((p) => p.id === profile.id))].slice(0, 6));
+      if (unfollowedProfile && unfollowedProfile.id !== user?.id) {
+        setSuggestedProfiles((current) => {
+          if (current.some((profile) => profile.id === unfollowedProfile.id)) {
+            return current;
+          }
+          return [unfollowedProfile, ...current].slice(0, 6);
+        });
+      }
     } catch (err) {
       setError(err?.message || 'Unable to unfollow that member.');
     } finally {
-      setSaving(false);
+      setSavingProfileId(null);
     }
   }
 
@@ -238,9 +256,9 @@ export default function Following() {
                       className="btn-ghost"
                       type="button"
                       onClick={() => handleUnfollow(profile.id)}
-                      disabled={saving}
+                      disabled={savingProfileId === profile.id}
                     >
-                      Unfollow
+                      {savingProfileId === profile.id ? 'Saving...' : 'Unfollow'}
                     </button>
                   </article>
                 ))
@@ -314,9 +332,9 @@ export default function Following() {
                       className="btn-primary"
                       type="button"
                       onClick={() => handleFollow(profile.id)}
-                      disabled={saving}
+                      disabled={savingProfileId === profile.id}
                     >
-                      Follow
+                      {savingProfileId === profile.id ? 'Saving...' : 'Follow'}
                     </button>
                   </article>
                 ))
