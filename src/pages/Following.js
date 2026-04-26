@@ -99,7 +99,7 @@ function FollowingCard({ profile, tasteMatch, onUnfollow, onQuickView, saving })
           onClick={() => onUnfollow(profile.id)}
           disabled={saving}
         >
-          Unfollow
+          {saving ? 'Saving...' : 'Unfollow'}
         </button>
       </div>
     </article>
@@ -135,7 +135,7 @@ function SuggestionCard({ profile, onFollow, onQuickView, saving }) {
           onClick={() => onFollow(profile.id)}
           disabled={saving}
         >
-          Follow
+          {saving ? 'Saving...' : 'Follow'}
         </button>
       </div>
     </article>
@@ -312,36 +312,16 @@ export default function Following() {
             </div>
           ) : (
             <div className="social-grid">
-              {followingProfiles.length === 0 ? (
-                <div className="empty-state">
-                  <p>You are not following anyone yet.</p>
-                  <p className="empty-hint">Start by following a member below to build your personalized feed.</p>
-                </div>
-              ) : (
-                followingProfiles.map((profile) => (
-                  <article key={profile.id} className="social-profile-card surface-panel">
-                    <div className="social-profile-card-header">
-                      <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
-                      <div>
-                        <p className="social-profile-name">{profile.username}</p>
-                        <p className="social-profile-bio">{profile.bio || 'No bio yet.'}</p>
-                      </div>
-                    </div>
-                    <div className="social-profile-meta">
-                      <span>Taste match</span>
-                      <strong>{calculateTasteMatch(currentRatings, ratingByUser[profile.id] || [])}%</strong>
-                    </div>
-                    <button
-                      className="btn-ghost"
-                      type="button"
-                      onClick={() => handleUnfollow(profile.id)}
-                      disabled={savingProfileId === profile.id}
-                    >
-                      {savingProfileId === profile.id ? 'Saving...' : 'Unfollow'}
-                    </button>
-                  </article>
-                ))
-              )}
+              {followingProfiles.map((profile) => (
+                <FollowingCard
+                  key={profile.id}
+                  profile={profile}
+                  tasteMatch={calculateTasteMatch(currentRatings, ratingByUser[profile.id] || [])}
+                  onUnfollow={handleUnfollow}
+                  onQuickView={setModalProfile}
+                  saving={savingProfileId === profile.id}
+                />
+              ))}
             </div>
           )}
         </section>
@@ -399,32 +379,15 @@ export default function Following() {
             </div>
           ) : (
             <div className="social-grid">
-              {filteredSuggestions.length === 0 ? (
-                <div className="empty-state">
-                  <p>No matching members found.</p>
-                  <p className="empty-hint">Try another username or clear the search.</p>
-                </div>
-              ) : (
-                filteredSuggestions.map((profile) => (
-                  <article key={profile.id} className="social-profile-card surface-panel">
-                    <div className="social-profile-card-header">
-                      <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
-                      <div>
-                        <p className="social-profile-name">{profile.username}</p>
-                        <p className="social-profile-bio">{profile.bio || 'No bio yet.'}</p>
-                      </div>
-                    </div>
-                    <button
-                      className="btn-primary"
-                      type="button"
-                      onClick={() => handleFollow(profile.id)}
-                      disabled={savingProfileId === profile.id}
-                    >
-                      {savingProfileId === profile.id ? 'Saving...' : 'Follow'}
-                    </button>
-                  </article>
-                ))
-              )}
+              {filteredSuggestions.map((profile) => (
+                <SuggestionCard
+                  key={profile.id}
+                  profile={profile}
+                  onFollow={handleFollow}
+                  onQuickView={setModalProfile}
+                  saving={savingProfileId === profile.id}
+                />
+              ))}
             </div>
           )}
         </section>
