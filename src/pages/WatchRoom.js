@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { isSupabaseConfigured, supabase } from '../utils/supabase';
 
 // ── Constants ─────────────────────────────────────────────────
 const PROVIDERS = [
@@ -17,9 +18,9 @@ const PROVIDERS = [
 
 const REACTIONS = ['😂','🔥','😮','❤️','👏','😭','🤯','👀','💀','🎉'];
 
-const PLAYBACK_TICK_MS = 1000;
-const GUEST_SYNC_POLL_MS = 2500;
 const CHAT_POLL_MS = 3000;
+const ROOM_STATE_POLL_MS = 5000;
+const PLAYBACK_DRIFT_TOLERANCE_SECONDS = 0.75;
 
 function getMessageKey(message) {
   return message?.id || `${message?.user_id || 'anon'}-${message?.created_at || ''}-${message?.message || ''}`;
@@ -62,6 +63,49 @@ function normalizeSyncState(source = {}) {
     sync_season: source.sync_season || 1,
     sync_episode: source.sync_episode || 1,
     sync_updated_at: updatedAt,
+  };
+}
+
+function dedupeMessages(messages = []) {
+  return [...new Map((messages || []).map((message) => [getMessageKey(message), message])).values()];
+}
+
+function parsePlayerMessage(data) {
+  let payload = data;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const rawType = String(payload.type || payload.event || payload.action || '').toLowerCase();
+  const eventType = rawType.includes('pause')
+    ? 'pause'
+    : rawType.includes('seek') ? 'seek'
+    : rawType.includes('play') ? 'play'
+    : null;
+
+  if (!eventType) {
+    return null;
+  }
+
+  const currentTime = Number(
+    payload.currentTime ??
+    payload.current_time ??
+    payload.time ??
+    payload.position ??
+    payload.seconds
+  );
+
+  return {
+    type: eventType,
+    currentTime: Number.isFinite(currentTime) ? currentTime : null,
   };
 }
 
@@ -245,11 +289,35 @@ function RoomView({ roomId }) {
   const playingRef     = useRef(false);
   const syncStateRef   = useRef(syncState);
   const roomRef        = useRef(room);
+  const applyingRemoteRef = useRef(false);
+  const channelRef     = useRef(null);
 
   const isHost = user?.id === room?.host_id;
 
   useEffect(() => { syncStateRef.current = syncState; }, [syncState]);
   useEffect(() => { roomRef.current = room; }, [room]);
+
+  const postPlayerCommand = useCallback((type, currentTime) => {
+    const player = iframeRef.current;
+    if (!player) return;
+
+    if (Number.isFinite(Number(currentTime)) && 'currentTime' in player) {
+      player.currentTime = Number(currentTime);
+    }
+    if (type === 'play' && typeof player.play === 'function') {
+      player.play().catch(() => {});
+    }
+    if (type === 'pause' && typeof player.pause === 'function') {
+      player.pause();
+    }
+    if (!player.contentWindow) return;
+    player.contentWindow.postMessage({
+      source: 'watchroom',
+      roomId,
+      type,
+      currentTime,
+    }, '*');
+  }, [roomId]);
 
   const getProjectedPlaybackTime = useCallback(() => {
     const projected = normalizeSyncState({
@@ -277,13 +345,16 @@ function RoomView({ roomId }) {
   const tmdbId = room?.tmdb_id;
   const mediaType = room?.media_type || 'movie';
   const isTV = mediaType === 'tv_show';
+  const embedUrl = tmdbId
+    ? buildEmbedUrl(tmdbId, mediaType, syncState.sync_provider, syncState.sync_season, syncState.sync_episode)
+    : null;
 
   // Initial load
   useEffect(() => {
     api.get(`/watchroom/${roomId}`)
       .then(data => {
         setRoom(data.room);
-        const initialMessages = mergeUniqueMessages([], data.messages || []);
+        const initialMessages = dedupeMessages(data.messages || []);
         setMessages(initialMessages);
         lastMsgTsRef.current = getLatestMessageTimestamp(initialMessages);
         setViewers(data.viewers || []);
@@ -292,10 +363,11 @@ function RoomView({ roomId }) {
         syncStateRef.current = normalizedSync;
         localTimeRef.current = normalizedSync.sync_current_time;
         playingRef.current   = normalizedSync.sync_is_playing;
+        postPlayerCommand(normalizedSync.sync_is_playing ? 'play' : 'pause', normalizedSync.sync_current_time);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [roomId]);
+  }, [postPlayerCommand, roomId]);
 
   // Fetch season/episode counts when TV show loads
   useEffect(() => {
@@ -335,27 +407,132 @@ function RoomView({ roomId }) {
     }
 
     const normalizedSync = normalizeSyncState(sync);
+    const drift = Math.abs((localTimeRef.current || 0) - normalizedSync.sync_current_time);
+    applyingRemoteRef.current = true;
     setSyncState(normalizedSync);
     syncStateRef.current = normalizedSync;
-    localTimeRef.current = normalizedSync.sync_current_time;
+    if (drift > PLAYBACK_DRIFT_TOLERANCE_SECONDS) {
+      localTimeRef.current = normalizedSync.sync_current_time;
+      postPlayerCommand('seek', normalizedSync.sync_current_time);
+    }
     playingRef.current   = normalizedSync.sync_is_playing;
-  }, []);
+    postPlayerCommand(normalizedSync.sync_is_playing ? 'play' : 'pause', normalizedSync.sync_current_time);
+    window.setTimeout(() => {
+      applyingRemoteRef.current = false;
+    }, 250);
+  }, [postPlayerCommand]);
 
-  // Keep the visible timestamp moving locally without rebroadcasting remote updates.
+  const broadcastPlaybackEvent = useCallback(async ({ type, currentTime }) => {
+    if (!user || applyingRemoteRef.current || !['play', 'pause', 'seek'].includes(type)) {
+      return;
+    }
+
+    const nextCurrentTime = Number.isFinite(Number(currentTime))
+      ? Number(currentTime)
+      : localTimeRef.current;
+    const isPlaying = type === 'play'
+      ? true
+      : type === 'pause' ? false : syncStateRef.current.sync_is_playing;
+    const timestamp = Date.now();
+    const event = {
+      roomId,
+      type,
+      currentTime: nextCurrentTime,
+      timestamp,
+      userId: user.id,
+    };
+    const optimisticState = {
+      ...syncStateRef.current,
+      sync_is_playing: isPlaying,
+      sync_current_time: nextCurrentTime,
+      sync_updated_at: new Date(timestamp).toISOString(),
+    };
+
+    setSyncState(optimisticState);
+    syncStateRef.current = optimisticState;
+    localTimeRef.current = nextCurrentTime;
+    playingRef.current = isPlaying;
+
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'playback',
+      payload: event,
+    }).catch(() => {});
+
+    const savedState = await api.post(`/watchroom/${roomId}/sync`, {
+      is_playing: isPlaying,
+      current_time: nextCurrentTime,
+    }).catch(() => null);
+    if (savedState) {
+      applyRemoteSync(savedState);
+    }
+  }, [applyRemoteSync, roomId, user]);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (playingRef.current) {
-        const currentTime = getProjectedPlaybackTime();
-        localTimeRef.current = currentTime;
-        setSyncState(s => {
-          const nextState = { ...s, sync_current_time: currentTime };
-          syncStateRef.current = nextState;
-          return nextState;
-        });
+    if (!isSupabaseConfigured || !supabase || !roomId) return undefined;
+
+    const channel = supabase.channel(`watchroom:${roomId}`);
+    channelRef.current = channel;
+    channel
+      .on('broadcast', { event: 'playback' }, ({ payload }) => {
+        if (!payload || payload.roomId !== roomId || payload.userId === user?.id) {
+          return;
+        }
+
+        const nextState = {
+          ...syncStateRef.current,
+          sync_is_playing: payload.type === 'play'
+            ? true
+            : payload.type === 'pause' ? false : syncStateRef.current.sync_is_playing,
+          sync_current_time: Number(payload.currentTime) || 0,
+          sync_updated_at: new Date(payload.timestamp || Date.now()).toISOString(),
+        };
+        applyRemoteSync(nextState);
+      })
+      .subscribe();
+
+    return () => {
+      channelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [applyRemoteSync, roomId, user?.id]);
+
+  useEffect(() => {
+    const player = iframeRef.current;
+    if (!player || !user) return undefined;
+
+    const currentPlayerTime = () => Number(player.currentTime ?? localTimeRef.current) || 0;
+    const onPlay = () => broadcastPlaybackEvent({ type: 'play', currentTime: currentPlayerTime() });
+    const onPause = () => broadcastPlaybackEvent({ type: 'pause', currentTime: currentPlayerTime() });
+    const onSeeked = () => broadcastPlaybackEvent({ type: 'seek', currentTime: currentPlayerTime() });
+    const onMessage = (event) => {
+      if (event.source !== player.contentWindow || applyingRemoteRef.current) {
+        return;
       }
-    }, PLAYBACK_TICK_MS);
-    return () => clearInterval(interval);
-  }, [getProjectedPlaybackTime]);
+
+      const playbackEvent = parsePlayerMessage(event.data);
+      if (!playbackEvent) {
+        return;
+      }
+
+      broadcastPlaybackEvent({
+        type: playbackEvent.type,
+        currentTime: playbackEvent.currentTime ?? localTimeRef.current,
+      });
+    };
+
+    player.addEventListener('play', onPlay);
+    player.addEventListener('pause', onPause);
+    player.addEventListener('seeked', onSeeked);
+    window.addEventListener('message', onMessage);
+
+    return () => {
+      player.removeEventListener('play', onPlay);
+      player.removeEventListener('pause', onPause);
+      player.removeEventListener('seeked', onSeeked);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [broadcastPlaybackEvent, embedUrl, user]);
 
   // Poll shared room playback state. Applying remote state never writes it back.
   useEffect(() => {
@@ -371,7 +548,7 @@ function RoomView({ roomId }) {
           setRoom(r => r ? { ...r, tmdb_id: sync.tmdb_id, media_type: sync.media_type, media_title: sync.media_title, media_poster: sync.media_poster } : r);
         }
       } catch { /* ignore */ }
-    }, GUEST_SYNC_POLL_MS);
+    }, ROOM_STATE_POLL_MS);
     return () => clearInterval(interval);
   }, [applyRemoteSync, room, roomId]);
 
@@ -436,7 +613,6 @@ function RoomView({ roomId }) {
     }
   }
 
-  function handlePlayPause() { pushSync({ sync_is_playing: !syncStateRef.current.sync_is_playing }); }
   function handleProviderChange(provider) { pushSync({ sync_provider: provider }); }
   function handleSeasonChange(season) {
     fetchSeasonEps(season);
@@ -445,7 +621,6 @@ function RoomView({ roomId }) {
   function handleEpisodeChange(episode) {
     pushSync({ sync_episode: episode, sync_is_playing: false, sync_current_time: 0 });
   }
-  function handleSeek(secs) { pushSync({ sync_current_time: secs }); }
 
   // ── Chat ──
   async function handleSend(e) {
@@ -493,11 +668,8 @@ function RoomView({ roomId }) {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const embedUrl = tmdbId
-    ? buildEmbedUrl(tmdbId, mediaType, syncState.sync_provider, syncState.sync_season, syncState.sync_episode)
-    : null;
-
   const epCount = episodeCounts[syncState.sync_season];
+  const renderedMessages = dedupeMessages(messages);
 
   if (loading) return <div className="loading-state">Loading room...</div>;
   if (!room) return (
@@ -538,6 +710,10 @@ function RoomView({ roomId }) {
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
               referrerPolicy="no-referrer"
               title="Watch Together"
+              onLoad={() => {
+                const latestSync = syncStateRef.current;
+                postPlayerCommand(latestSync.sync_is_playing ? 'play' : 'pause', latestSync.sync_current_time);
+              }}
             />
             <button className="wr-fullscreen-btn" onClick={toggleFullscreen} type="button" title="Fullscreen">
               {isFullscreen ? '⊡' : '⛶'}
@@ -618,31 +794,6 @@ function RoomView({ roomId }) {
         </div>
       )}
 
-      {/* Shared playback controls */}
-      <div className="wr-host-controls">
-          <button className={`wr-play-pause-btn ${syncState.sync_is_playing ? 'playing' : ''}`} onClick={handlePlayPause} disabled={!user} type="button">
-            {syncState.sync_is_playing ? '⏸ Pause for Everyone' : '▶ Play for Everyone'}
-          </button>
-          <div className="wr-seek-group">
-            <span className="wr-seek-label">Jump to:</span>
-            <input
-              className="wr-seek-input"
-              type="number"
-              placeholder="seconds"
-              disabled={!user}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !isNaN(Number(e.target.value))) {
-                  handleSeek(Number(e.target.value));
-                  e.target.value = '';
-                }
-              }}
-            />
-            <span className="wr-time-display">{formatTime(syncState.sync_current_time)}</span>
-          </div>
-          {!user && <span className="wr-guest-desc">Log in to control playback</span>}
-
-      </div>
-
       {/* Reaction bar */}
       <div className="wr-reaction-bar">
         {REACTIONS.map(emoji => (
@@ -700,8 +851,8 @@ function RoomView({ roomId }) {
 
       {/* Messages */}
       <div className="wr-messages">
-        {messages.length === 0 && <p className="wr-no-msgs">No messages yet — say something!</p>}
-        {messages.map((msg, i) => {
+        {renderedMessages.length === 0 && <p className="wr-no-msgs">No messages yet — say something!</p>}
+        {renderedMessages.map((msg, i) => {
           const isMe = user?.id === msg.user_id;
           const isReaction = msg.message?.startsWith('reacted ');
           if (isReaction) {

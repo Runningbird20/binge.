@@ -7156,22 +7156,6 @@ body {
 .wr-ep-loading { font-size: 0.7rem; color: #333; font-style: italic; padding: 0.2rem 0; }
 .wr-guest-notice { font-size: 0.68rem; color: #2a2a2a; font-style: italic; margin: 0; padding-left: 0.25rem; }
 
-/* Host playback controls */
-.wr-host-controls { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); flex-wrap: wrap; }
-.wr-play-pause-btn { font-size: 0.85rem; font-weight: 800; padding: 0.45rem 1.1rem; border-radius: 8px; border: none; cursor: pointer; transition: all 0.15s; background: rgba(232,201,122,0.12); color: #e8c97a; border: 1px solid rgba(232,201,122,0.25); white-space: nowrap; }
-.wr-play-pause-btn:hover { background: rgba(232,201,122,0.2); }
-.wr-play-pause-btn.playing { background: rgba(76,175,130,0.12); color: #4caf82; border-color: rgba(76,175,130,0.3); }
-.wr-seek-group { display: flex; align-items: center; gap: 0.45rem; flex: 1; }
-.wr-seek-label { font-size: 0.68rem; color: #3a3a3a; white-space: nowrap; }
-.wr-seek-input { width: 90px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #ccc; font-size: 0.75rem; padding: 0.28rem 0.55rem; }
-.wr-seek-input:focus { outline: none; border-color: rgba(232,201,122,0.3); }
-.wr-time-display { font-size: 0.78rem; color: #666; font-family: monospace; white-space: nowrap; }
-
-/* Guest bar */
-.wr-guest-bar { display: flex; align-items: center; gap: 0.85rem; padding: 0.55rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); flex-wrap: wrap; }
-.wr-guest-status-text { font-size: 0.8rem; font-family: monospace; color: #e8c97a; font-weight: 700; }
-.wr-guest-desc { font-size: 0.68rem; color: #3a3a3a; }
-
 /* Reaction bar */
 .wr-reaction-bar { display: flex; gap: 0.3rem; flex-wrap: wrap; padding: 0.55rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1); }
 .wr-reaction-btn { font-size: 1.15rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 7px; padding: 0.25rem 0.45rem; cursor: pointer; transition: all 0.12s; line-height: 1; }
