@@ -17,6 +17,54 @@ const PROVIDERS = [
 
 const REACTIONS = ['😂','🔥','😮','❤️','👏','😭','🤯','👀','💀','🎉'];
 
+const HOST_SYNC_PUSH_MS = 5000;
+const GUEST_SYNC_POLL_MS = 2500;
+const CHAT_POLL_MS = 3000;
+
+function getMessageKey(message) {
+  return message?.id || `${message?.user_id || 'anon'}-${message?.created_at || ''}-${message?.message || ''}`;
+}
+
+function mergeUniqueMessages(current, incoming) {
+  const merged = [...current];
+  const seen = new Set(current.map(getMessageKey));
+
+  (incoming || []).forEach((message) => {
+    const key = getMessageKey(message);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(message);
+    }
+  });
+
+  return merged.sort((left, right) => new Date(left.created_at || 0) - new Date(right.created_at || 0));
+}
+
+function getLatestMessageTimestamp(messages) {
+  return (messages || []).reduce((latest, message) => {
+    const createdAt = new Date(message.created_at || 0).getTime();
+    return Number.isFinite(createdAt) ? Math.max(latest, createdAt) : latest;
+  }, 0);
+}
+
+function normalizeSyncState(source = {}) {
+  const updatedAt = source.sync_updated_at || new Date().toISOString();
+  const baseTime = Number(source.sync_current_time) || 0;
+  const updatedAtMs = new Date(updatedAt).getTime();
+  const elapsed = source.sync_is_playing && Number.isFinite(updatedAtMs)
+    ? Math.max(0, (Date.now() - updatedAtMs) / 1000)
+    : 0;
+
+  return {
+    sync_is_playing: Boolean(source.sync_is_playing),
+    sync_current_time: baseTime + elapsed,
+    sync_provider: source.sync_provider || 'vidsrc-embed-ru',
+    sync_season: source.sync_season || 1,
+    sync_episode: source.sync_episode || 1,
+    sync_updated_at: updatedAt,
+  };
+}
+
 function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
   if (!tmdbId) return null;
   const isTV = mediaType === 'tv_show';
@@ -185,17 +233,31 @@ function RoomView({ roomId }) {
   const [syncState, setSyncState] = useState({
     sync_is_playing: false, sync_current_time: 0,
     sync_provider: 'vidsrc-embed-ru', sync_season: 1, sync_episode: 1,
+    sync_updated_at: null,
   });
 
   const messagesEndRef  = useRef(null);
   const playerWrapRef   = useRef(null);
   const iframeRef       = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const lastMsgTsRef   = useRef(Date.now());
+  const lastMsgTsRef   = useRef(0);
   const localTimeRef   = useRef(0);
   const playingRef     = useRef(false);
+  const syncStateRef   = useRef(syncState);
+  const roomRef        = useRef(room);
 
   const isHost = user?.id === room?.host_id;
+
+  useEffect(() => { syncStateRef.current = syncState; }, [syncState]);
+  useEffect(() => { roomRef.current = room; }, [room]);
+
+  const getProjectedHostTime = useCallback(() => {
+    const projected = normalizeSyncState({
+      ...syncStateRef.current,
+      sync_current_time: localTimeRef.current,
+    });
+    return projected.sync_current_time;
+  }, []);
 
   // Fullscreen
   useEffect(() => {
@@ -221,18 +283,15 @@ function RoomView({ roomId }) {
     api.get(`/watchroom/${roomId}`)
       .then(data => {
         setRoom(data.room);
-        setMessages(data.messages || []);
+        const initialMessages = mergeUniqueMessages([], data.messages || []);
+        setMessages(initialMessages);
+        lastMsgTsRef.current = getLatestMessageTimestamp(initialMessages);
         setViewers(data.viewers || []);
-        const s = data.room;
-        setSyncState({
-          sync_is_playing:   s.sync_is_playing   || false,
-          sync_current_time: s.sync_current_time || 0,
-          sync_provider:     s.sync_provider     || 'vidsrc-embed-ru',
-          sync_season:       s.sync_season       || 1,
-          sync_episode:      s.sync_episode      || 1,
-        });
-        localTimeRef.current = s.sync_current_time || 0;
-        playingRef.current   = s.sync_is_playing   || false;
+        const normalizedSync = normalizeSyncState(data.room);
+        setSyncState(normalizedSync);
+        syncStateRef.current = normalizedSync;
+        localTimeRef.current = normalizedSync.sync_current_time;
+        playingRef.current   = normalizedSync.sync_is_playing;
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -273,17 +332,23 @@ function RoomView({ roomId }) {
     if (!isHost) return;
     const interval = setInterval(() => {
       if (playingRef.current) {
-        localTimeRef.current += 5;
-        setSyncState(s => ({ ...s, sync_current_time: localTimeRef.current }));
+        const currentTime = getProjectedHostTime();
+        localTimeRef.current = currentTime;
+        const syncUpdatedAt = new Date().toISOString();
+        setSyncState(s => {
+          const nextState = { ...s, sync_current_time: currentTime, sync_updated_at: syncUpdatedAt };
+          syncStateRef.current = nextState;
+          return nextState;
+        });
         // Push to server every 5s
         api.post(`/watchroom/${roomId}/sync`, {
           is_playing: true,
-          current_time: localTimeRef.current,
+          current_time: currentTime,
         }).catch(() => {});
       }
-    }, 5000);
+    }, HOST_SYNC_PUSH_MS);
     return () => clearInterval(interval);
-  }, [isHost, roomId]);
+  }, [getProjectedHostTime, isHost, roomId]);
 
   // Guest: poll sync state every 3s
   useEffect(() => {
@@ -291,22 +356,19 @@ function RoomView({ roomId }) {
     const interval = setInterval(async () => {
       try {
         const sync = await api.get(`/watchroom/${roomId}/sync`);
-        setSyncState({
-          sync_is_playing:   sync.sync_is_playing   || false,
-          sync_current_time: sync.sync_current_time || 0,
-          sync_provider:     sync.sync_provider     || 'vidsrc-embed-ru',
-          sync_season:       sync.sync_season       || 1,
-          sync_episode:      sync.sync_episode      || 1,
-        });
-        localTimeRef.current = sync.sync_current_time || 0;
-        playingRef.current   = sync.sync_is_playing   || false;
+        const normalizedSync = normalizeSyncState(sync);
+        setSyncState(normalizedSync);
+        syncStateRef.current = normalizedSync;
+        localTimeRef.current = normalizedSync.sync_current_time;
+        playingRef.current   = normalizedSync.sync_is_playing;
 
         // Update room media if changed
-        if (sync.tmdb_id !== room?.tmdb_id || sync.media_type !== room?.media_type) {
+        const currentRoom = roomRef.current;
+        if (sync.tmdb_id !== currentRoom?.tmdb_id || sync.media_type !== currentRoom?.media_type) {
           setRoom(r => r ? { ...r, tmdb_id: sync.tmdb_id, media_type: sync.media_type, media_title: sync.media_title, media_poster: sync.media_poster } : r);
         }
       } catch { /* ignore */ }
-    }, 3000);
+    }, GUEST_SYNC_POLL_MS);
     return () => clearInterval(interval);
   }, [isHost, room, roomId]);
 
@@ -318,13 +380,16 @@ function RoomView({ roomId }) {
           api.get(`/watchroom/${roomId}/messages/since/${lastMsgTsRef.current}`),
           api.get(`/watchroom/${roomId}/viewers`),
         ]);
-        if (newMsgs.length > 0) {
-          setMessages(prev => [...prev, ...newMsgs]);
-          lastMsgTsRef.current = Date.now();
+        if ((newMsgs || []).length > 0) {
+          setMessages(prev => {
+            const merged = mergeUniqueMessages(prev, newMsgs);
+            lastMsgTsRef.current = getLatestMessageTimestamp(merged);
+            return merged;
+          });
         }
         setViewers(newViewers || []);
       } catch { /* ignore */ }
-    }, 3000);
+    }, CHAT_POLL_MS);
     return () => clearInterval(interval);
   }, [roomId]);
 
@@ -343,10 +408,19 @@ function RoomView({ roomId }) {
 
   // ── Host controls ──
   async function pushSync(patch) {
-    const newState = { ...syncState, ...patch };
+    if (!isHost) return;
+    const currentTime = 'sync_current_time' in patch ? patch.sync_current_time : getProjectedHostTime();
+    const syncUpdatedAt = new Date().toISOString();
+    const newState = {
+      ...syncStateRef.current,
+      ...patch,
+      sync_current_time: currentTime,
+      sync_updated_at: syncUpdatedAt,
+    };
     setSyncState(newState);
+    syncStateRef.current = newState;
     if ('sync_is_playing' in patch) playingRef.current = patch.sync_is_playing;
-    if ('sync_current_time' in patch) localTimeRef.current = patch.sync_current_time;
+    localTimeRef.current = currentTime;
     await api.post(`/watchroom/${roomId}/sync`, {
       is_playing:   newState.sync_is_playing,
       current_time: newState.sync_current_time,
@@ -356,7 +430,7 @@ function RoomView({ roomId }) {
     }).catch(() => {});
   }
 
-  function handlePlayPause() { pushSync({ sync_is_playing: !syncState.sync_is_playing }); }
+  function handlePlayPause() { pushSync({ sync_is_playing: !syncStateRef.current.sync_is_playing }); }
   function handleProviderChange(provider) { pushSync({ sync_provider: provider }); }
   function handleSeasonChange(season) {
     fetchSeasonEps(season);
@@ -374,10 +448,15 @@ function RoomView({ roomId }) {
     setSending(true);
     try {
       const msg = await api.post(`/watchroom/${roomId}/message`, { message });
-      setMessages(prev => [...prev, msg]);
+      setMessages(prev => {
+        const merged = mergeUniqueMessages(prev, [msg]);
+        lastMsgTsRef.current = getLatestMessageTimestamp(merged);
+        return merged;
+      });
       setMessage('');
-      lastMsgTsRef.current = Date.now();
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('Unable to send room message:', err);
+    }
     finally { setSending(false); }
   }
 

@@ -1680,6 +1680,115 @@ async function handleWatchRoomMutation(method, pathname, body) {
   throw new Error(`Unsupported watch room route: ${pathname}`);
 }
 
+async function handleProfileFollowGet(pathname) {
+  const client = requireSupabaseClient();
+  const followStatusMatch = pathname.match(/^\/profile\/([^/]+)\/follow-status$/);
+  if (!followStatusMatch) {
+    return null;
+  }
+
+  const user = await getAuthenticatedUserOrNull();
+  if (!user) {
+    return { following: false };
+  }
+
+  const username = decodeURIComponent(followStatusMatch[1]);
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('id')
+    .ilike('username', username)
+    .maybeSingle();
+
+  if (profileError) {
+    throw toSupabaseError(profileError, 'Unable to load that profile.', {
+      resourceName: 'profiles',
+    });
+  }
+
+  if (!profile || profile.id === user.id) {
+    return { following: false };
+  }
+
+  const { data, error } = await client
+    .from('follows')
+    .select('follower_id')
+    .eq('follower_id', user.id)
+    .eq('following_id', profile.id)
+    .maybeSingle();
+
+  if (error) {
+    throw toSupabaseError(error, 'Unable to load follow status.', {
+      resourceName: 'follows',
+    });
+  }
+
+  return { following: Boolean(data) };
+}
+
+async function handleProfileFollowMutation(method, pathname) {
+  const client = requireSupabaseClient();
+  const followMatch = pathname.match(/^\/profile\/([^/]+)\/follow$/);
+  if (!followMatch) {
+    return null;
+  }
+
+  const user = await requireAuthenticatedUser();
+  const username = decodeURIComponent(followMatch[1]);
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('id, username')
+    .ilike('username', username)
+    .maybeSingle();
+
+  if (profileError) {
+    throw toSupabaseError(profileError, 'Unable to load that profile.', {
+      resourceName: 'profiles',
+    });
+  }
+
+  if (!profile) {
+    throw new Error('User not found.');
+  }
+
+  if (profile.id === user.id) {
+    throw new Error('You cannot follow yourself.');
+  }
+
+  if (method === 'POST') {
+    const { error } = await client
+      .from('follows')
+      .upsert(
+        { follower_id: user.id, following_id: profile.id },
+        { onConflict: 'follower_id,following_id' }
+      );
+
+    if (error) {
+      throw toSupabaseError(error, 'Unable to follow that member.', {
+        resourceName: 'follows',
+      });
+    }
+
+    return { success: true, following: true };
+  }
+
+  if (method === 'DELETE') {
+    const { error } = await client
+      .from('follows')
+      .delete()
+      .match({ follower_id: user.id, following_id: profile.id });
+
+    if (error) {
+      throw toSupabaseError(error, 'Unable to unfollow that member.', {
+        resourceName: 'follows',
+      });
+    }
+
+    return { success: true, following: false };
+  }
+
+  throw new Error(`Unsupported profile follow route: ${pathname}`);
+}
+
 async function handleAdminMutation(pathname, _body) {
   await requireAdminProfile();
   const client = requireSupabaseClient();
@@ -1869,6 +1978,22 @@ export async function executeSupabaseRoute(method, path, body) {
     }
 
     return handleWatchRoomMutation(normalizedMethod, pathname, body);
+  }
+
+  if (pathname.startsWith('/profile')) {
+    if (normalizedMethod === 'GET') {
+      const result = await handleProfileFollowGet(pathname);
+      if (result !== null) {
+        return result;
+      }
+    }
+
+    if (normalizedMethod === 'POST' || normalizedMethod === 'DELETE') {
+      const result = await handleProfileFollowMutation(normalizedMethod, pathname);
+      if (result !== null) {
+        return result;
+      }
+    }
   }
 
   if (pathname.startsWith('/admin')) {
