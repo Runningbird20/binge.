@@ -71,11 +71,19 @@ export function requireSupabaseClient() {
 
 let sessionRequestPromise = null;
 let userRequestPromise = null;
+let refreshRequestPromise = null;
+let authOperationQueue = Promise.resolve();
+
+function runSerializedAuthOperation(operation) {
+  const run = authOperationQueue.catch(() => {}).then(operation);
+  authOperationQueue = run.catch(() => {});
+  return run;
+}
 
 export async function getSupabaseSession() {
   const client = requireSupabaseClient();
   if (!sessionRequestPromise) {
-    sessionRequestPromise = client.auth.getSession().finally(() => {
+    sessionRequestPromise = runSerializedAuthOperation(() => client.auth.getSession()).finally(() => {
       sessionRequestPromise = null;
     });
   }
@@ -86,12 +94,23 @@ export async function getSupabaseSession() {
 export async function getSupabaseUser() {
   const client = requireSupabaseClient();
   if (!userRequestPromise) {
-    userRequestPromise = client.auth.getUser().finally(() => {
+    userRequestPromise = runSerializedAuthOperation(() => client.auth.getUser()).finally(() => {
       userRequestPromise = null;
     });
   }
 
   return userRequestPromise;
+}
+
+export async function refreshSupabaseSession() {
+  const client = requireSupabaseClient();
+  if (!refreshRequestPromise) {
+    refreshRequestPromise = runSerializedAuthOperation(() => client.auth.refreshSession()).finally(() => {
+      refreshRequestPromise = null;
+    });
+  }
+
+  return refreshRequestPromise;
 }
 
 function looksLikeNetworkError(message) {
@@ -211,7 +230,7 @@ async function retryFunctionWithRefresh(functionName, body) {
   }
 
   try {
-    const { data, error } = await supabase.auth.refreshSession();
+    const { data, error } = await refreshSupabaseSession();
     if (error || !data?.session?.access_token) {
       return null;
     }
