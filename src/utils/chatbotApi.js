@@ -1,4 +1,4 @@
-import { invokeSupabaseFunction, isSupabaseConfigured, supabase } from './supabase';
+import { getSupabaseSession, invokeSupabaseFunction, isSupabaseConfigured } from './supabase';
 
 const VALID_BACKEND_MODES = new Set(['auto', 'server', 'supabase']);
 const CHATBOT_FUNCTION_NAME = String(process.env.REACT_APP_CHATBOT_FUNCTION_NAME || 'ai-chatbot').trim() || 'ai-chatbot';
@@ -91,13 +91,13 @@ async function getServerAuthToken() {
     }
   } catch {}
 
-  if (!supabase) {
+  if (!isSupabaseConfigured) {
     return null;
   }
 
   try {
     const result = await Promise.race([
-      supabase.auth.getSession(),
+      getSupabaseSession(),
       new Promise((resolve) => {
         window.setTimeout(() => resolve({ data: null }), 3000);
       }),

@@ -28,13 +28,13 @@ let tokenFetchPromise = null;
 
 async function fetchSupabaseToken() {
   try {
-    const { supabase } = await import('./utils/supabase');
-    if (!supabase) {
+    const { isSupabaseConfigured, getSupabaseSession } = await import('./utils/supabase');
+    if (!isSupabaseConfigured) {
       return null;
     }
 
     const result = await Promise.race([
-      supabase.auth.getSession(),
+      getSupabaseSession(),
       new Promise((resolve) => {
         window.setTimeout(() => resolve({ data: null }), 3000);
       }),

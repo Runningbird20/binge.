@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from './supabase';
+import { getSupabaseSession, getSupabaseUser, isSupabaseConfigured, supabase } from './supabase';
 import { resolveUserType } from './userAccess';
 import {
   cacheMediaMetadata,
@@ -189,9 +189,8 @@ async function getStoredSupabaseProfile(authUser, overrides = {}) {
 }
 
 async function getAuthenticatedUser() {
-  const client = requireSupabase();
   const { data, error } = await withTimeout(
-    client.auth.getUser(),
+    getSupabaseUser(),
     AUTH_REQUEST_TIMEOUT_MS,
     'Reading the current Supabase user timed out.'
   );
@@ -291,9 +290,8 @@ export async function resolveSupabaseProfile(authUser, overrides = {}) {
 }
 
 export async function getSupabaseSessionProfile() {
-  const client = requireSupabase();
   const { data, error } = await withTimeout(
-    client.auth.getSession(),
+    getSupabaseSession(),
     AUTH_REQUEST_TIMEOUT_MS,
     'Restoring the Supabase session timed out.'
   );
@@ -1225,8 +1223,7 @@ async function buildSupabaseListPayload(client, list, currentUserId, collaborato
 }
 
 async function getOptionalSupabaseUserId() {
-  const client = requireSupabase();
-  const { data, error } = await client.auth.getSession();
+  const { data, error } = await getSupabaseSession();
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to read Supabase session.'));
   }
@@ -1865,7 +1862,7 @@ export async function updateSupabaseRequestStatus(id, status, adminNote) {
 
 export async function fetchEpisodeProgress(mediaId) {
   const supabase = requireSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getSupabaseUser();
   if (!user) return [];
   const { data, error } = await supabase
     .from('episode_progress')
@@ -1878,7 +1875,7 @@ export async function fetchEpisodeProgress(mediaId) {
 
 export async function markEpisodeWatched({ mediaId, season, episode }) {
   const supabase = requireSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
   const { error } = await supabase
     .from('episode_progress')
@@ -1889,7 +1886,7 @@ export async function markEpisodeWatched({ mediaId, season, episode }) {
 
 export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
   const supabase = requireSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
   const { error } = await supabase
     .from('episode_progress')
@@ -1905,7 +1902,7 @@ export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
 
 export async function updateWatchlistProgress({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, status, notes }) {
   const supabase = requireSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
 
   // Auto-add to watchlist if not present

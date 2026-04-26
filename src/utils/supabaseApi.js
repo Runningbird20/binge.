@@ -1,5 +1,6 @@
 import {
   invokeSupabaseFunction,
+  getSupabaseUser,
   isSupabaseConfigured,
   requireSupabaseClient,
   toSupabaseError,
@@ -55,8 +56,7 @@ function buildProfileMap(profiles = []) {
 }
 
 async function requireAuthenticatedUser() {
-  const client = requireSupabaseClient();
-  const { data, error } = await client.auth.getUser();
+  const { data, error } = await getSupabaseUser();
 
   if (error) {
     throw toSupabaseError(error, 'Unable to read your Supabase auth session.', {
@@ -72,8 +72,7 @@ async function requireAuthenticatedUser() {
 }
 
 async function getAuthenticatedUserOrNull() {
-  const client = requireSupabaseClient();
-  const { data, error } = await client.auth.getUser();
+  const { data, error } = await getSupabaseUser();
 
   if (error) {
     throw toSupabaseError(error, 'Unable to read your Supabase auth session.', {
