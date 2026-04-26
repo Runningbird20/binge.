@@ -3769,6 +3769,24 @@ body {
   gap: 1rem;
   width: max-content;
   align-items: flex-start;
+  animation: landingCarouselScroll 55s linear infinite;
+  will-change: transform;
+}
+
+.landing-carousel-viewport:hover .landing-carousel-track {
+  animation-play-state: paused;
+}
+
+@keyframes landingCarouselScroll {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(calc(-50% - 0.5rem), 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-carousel-track {
+    animation: none;
+    transform: none;
+  }
 }
 
 .landing-carousel-item {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { loadFallbackMovies, loadFallbackTvShows } from '../catalogFallback';
 import { useAuth } from '../contexts/AuthContext';
@@ -115,55 +115,7 @@ function HeroPosterCard({ movie }) {
 }
 
 function LandingMovieCarousel({ items }) {
-  const viewportRef = useRef(null);
   const scrollingItems = [...items, ...items];
-
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || items.length === 0) {
-      return undefined;
-    }
-
-    const reduceMotionQuery = typeof window.matchMedia === 'function'
-      ? window.matchMedia('(prefers-reduced-motion: reduce)')
-      : null;
-
-    if (reduceMotionQuery?.matches) {
-      return undefined;
-    }
-
-    let animationFrameId = 0;
-    let previousTime = 0;
-    const pixelsPerMillisecond = 0.035;
-
-    function step(currentTime) {
-      if (!viewport.isConnected) {
-        return;
-      }
-
-      if (!previousTime) {
-        previousTime = currentTime;
-      }
-
-      const elapsed = currentTime - previousTime;
-      previousTime = currentTime;
-
-      const resetPoint = viewport.scrollWidth / 2;
-      viewport.scrollLeft += elapsed * pixelsPerMillisecond;
-
-      if (viewport.scrollLeft >= resetPoint) {
-        viewport.scrollLeft -= resetPoint;
-      }
-
-      animationFrameId = window.requestAnimationFrame(step);
-    }
-
-    animationFrameId = window.requestAnimationFrame(step);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [items.length]);
 
   if (items.length === 0) {
     return null;
@@ -171,7 +123,7 @@ function LandingMovieCarousel({ items }) {
 
   return (
     <section className="landing-carousel-section" aria-label="Featured poster carousel">
-      <div className="landing-carousel-viewport" ref={viewportRef}>
+      <div className="landing-carousel-viewport">
         <div className="landing-carousel-track">
           {scrollingItems.map((movie, index) => (
             <div
