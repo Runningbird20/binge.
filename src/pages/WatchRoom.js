@@ -117,7 +117,7 @@ function parsePlayerMessage(data) {
   };
 }
 
-function buildEmbedUrl(tmdbId, mediaType, provider, season, episode, isPlaying = true, currentTime = 0) {
+function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
   if (!tmdbId) return null;
   const isTV = mediaType === 'tv_show';
   const id = { kind: 'tmdb', value: String(tmdbId) };
@@ -148,10 +148,7 @@ function buildEmbedUrl(tmdbId, mediaType, provider, season, episode, isPlaying =
     case 'vidlink':
       {
         const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidlink.pro');
-        url.searchParams.set('autoplay', isPlaying ? 'true' : 'false');
-        if (Number(currentTime) > PLAYBACK_DRIFT_TOLERANCE_SECONDS) {
-          url.searchParams.set('startAt', String(Math.floor(Number(currentTime))));
-        }
+        url.searchParams.set('autoplay', 'true');
         return url.toString();
       }
     case 'superembed':
@@ -304,6 +301,7 @@ function RoomView({ roomId }) {
   const roomRef        = useRef(room);
   const applyingRemoteRef = useRef(false);
   const channelRef     = useRef(null);
+  const lastLoadedEmbedRef = useRef('');
 
   const isHost = user?.id === room?.host_id;
 
@@ -359,15 +357,7 @@ function RoomView({ roomId }) {
   const mediaType = room?.media_type || 'movie';
   const isTV = mediaType === 'tv_show';
   const embedUrl = tmdbId
-    ? buildEmbedUrl(
-        tmdbId,
-        mediaType,
-        syncState.sync_provider,
-        syncState.sync_season,
-        syncState.sync_episode,
-        syncState.sync_is_playing,
-        syncState.sync_current_time
-      )
+    ? buildEmbedUrl(tmdbId, mediaType, syncState.sync_provider, syncState.sync_season, syncState.sync_episode)
     : null;
 
   // Initial load
@@ -732,6 +722,8 @@ function RoomView({ roomId }) {
               referrerPolicy="no-referrer"
               title="Watch Together"
               onLoad={() => {
+                if (lastLoadedEmbedRef.current === embedUrl) return;
+                lastLoadedEmbedRef.current = embedUrl;
                 const latestSync = syncStateRef.current;
                 postPlayerCommand(latestSync.sync_is_playing ? 'play' : 'pause', latestSync.sync_current_time);
               }}
