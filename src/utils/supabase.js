@@ -69,6 +69,31 @@ export function requireSupabaseClient() {
   return supabase;
 }
 
+let sessionRequestPromise = null;
+let userRequestPromise = null;
+
+export async function getSupabaseSession() {
+  const client = requireSupabaseClient();
+  if (!sessionRequestPromise) {
+    sessionRequestPromise = client.auth.getSession().finally(() => {
+      sessionRequestPromise = null;
+    });
+  }
+
+  return sessionRequestPromise;
+}
+
+export async function getSupabaseUser() {
+  const client = requireSupabaseClient();
+  if (!userRequestPromise) {
+    userRequestPromise = client.auth.getUser().finally(() => {
+      userRequestPromise = null;
+    });
+  }
+
+  return userRequestPromise;
+}
+
 function looksLikeNetworkError(message) {
   return /failed to fetch|networkerror|network request failed|load failed|fetch failed|network issue/i.test(message);
 }
@@ -159,7 +184,7 @@ async function getSupabaseFunctionHeaders() {
   }
 
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await getSupabaseSession();
     const accessToken = data?.session?.access_token;
     if (accessToken) {
       headers.Authorization = `Bearer ${accessToken}`;
