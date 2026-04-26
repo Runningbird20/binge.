@@ -17,7 +17,7 @@ const PROVIDERS = [
 
 const REACTIONS = ['😂','🔥','😮','❤️','👏','😭','🤯','👀','💀','🎉'];
 
-const HOST_SYNC_PUSH_MS = 5000;
+const PLAYBACK_TICK_MS = 1000;
 const GUEST_SYNC_POLL_MS = 2500;
 const CHAT_POLL_MS = 3000;
 
@@ -229,7 +229,7 @@ function RoomView({ roomId }) {
   const [transferTarget, setTransferTarget] = useState('');
   const [showTransfer, setShowTransfer]     = useState(false);
 
-  // Local sync state (mirrors server, host is authoritative)
+  // Local sync state mirrors the latest room-wide playback state.
   const [syncState, setSyncState] = useState({
     sync_is_playing: false, sync_current_time: 0,
     sync_provider: 'vidsrc-embed-ru', sync_season: 1, sync_episode: 1,
@@ -251,7 +251,7 @@ function RoomView({ roomId }) {
   useEffect(() => { syncStateRef.current = syncState; }, [syncState]);
   useEffect(() => { roomRef.current = room; }, [room]);
 
-  const getProjectedHostTime = useCallback(() => {
+  const getProjectedPlaybackTime = useCallback(() => {
     const projected = normalizeSyncState({
       ...syncStateRef.current,
       sync_current_time: localTimeRef.current,
@@ -327,40 +327,43 @@ function RoomView({ roomId }) {
     } catch { /* ignore */ }
   }, [tmdbId, isTV, episodeCounts]);
 
-  // Host: advance local time + periodic sync push
+  const applyRemoteSync = useCallback((sync) => {
+    const currentUpdatedAt = new Date(syncStateRef.current?.sync_updated_at || 0).getTime();
+    const incomingUpdatedAt = new Date(sync?.sync_updated_at || 0).getTime();
+    if (Number.isFinite(currentUpdatedAt) && Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt < currentUpdatedAt) {
+      return;
+    }
+
+    const normalizedSync = normalizeSyncState(sync);
+    setSyncState(normalizedSync);
+    syncStateRef.current = normalizedSync;
+    localTimeRef.current = normalizedSync.sync_current_time;
+    playingRef.current   = normalizedSync.sync_is_playing;
+  }, []);
+
+  // Keep the visible timestamp moving locally without rebroadcasting remote updates.
   useEffect(() => {
-    if (!isHost) return;
     const interval = setInterval(() => {
       if (playingRef.current) {
-        const currentTime = getProjectedHostTime();
+        const currentTime = getProjectedPlaybackTime();
         localTimeRef.current = currentTime;
-        const syncUpdatedAt = new Date().toISOString();
         setSyncState(s => {
-          const nextState = { ...s, sync_current_time: currentTime, sync_updated_at: syncUpdatedAt };
+          const nextState = { ...s, sync_current_time: currentTime };
           syncStateRef.current = nextState;
           return nextState;
         });
-        // Push to server every 5s
-        api.post(`/watchroom/${roomId}/sync`, {
-          is_playing: true,
-          current_time: currentTime,
-        }).catch(() => {});
       }
-    }, HOST_SYNC_PUSH_MS);
+    }, PLAYBACK_TICK_MS);
     return () => clearInterval(interval);
-  }, [getProjectedHostTime, isHost, roomId]);
+  }, [getProjectedPlaybackTime]);
 
-  // Guest: poll sync state every 3s
+  // Poll shared room playback state. Applying remote state never writes it back.
   useEffect(() => {
-    if (isHost || !room) return;
+    if (!room) return;
     const interval = setInterval(async () => {
       try {
         const sync = await api.get(`/watchroom/${roomId}/sync`);
-        const normalizedSync = normalizeSyncState(sync);
-        setSyncState(normalizedSync);
-        syncStateRef.current = normalizedSync;
-        localTimeRef.current = normalizedSync.sync_current_time;
-        playingRef.current   = normalizedSync.sync_is_playing;
+        applyRemoteSync(sync);
 
         // Update room media if changed
         const currentRoom = roomRef.current;
@@ -370,7 +373,7 @@ function RoomView({ roomId }) {
       } catch { /* ignore */ }
     }, GUEST_SYNC_POLL_MS);
     return () => clearInterval(interval);
-  }, [isHost, room, roomId]);
+  }, [applyRemoteSync, room, roomId]);
 
   // Poll chat + viewers every 3s
   useEffect(() => {
@@ -406,10 +409,10 @@ function RoomView({ roomId }) {
   // Scroll chat to bottom
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // ── Host controls ──
+  // ── Shared playback controls ──
   async function pushSync(patch) {
-    if (!isHost) return;
-    const currentTime = 'sync_current_time' in patch ? patch.sync_current_time : getProjectedHostTime();
+    if (!user) return;
+    const currentTime = 'sync_current_time' in patch ? patch.sync_current_time : getProjectedPlaybackTime();
     const syncUpdatedAt = new Date().toISOString();
     const newState = {
       ...syncStateRef.current,
@@ -421,13 +424,16 @@ function RoomView({ roomId }) {
     syncStateRef.current = newState;
     if ('sync_is_playing' in patch) playingRef.current = patch.sync_is_playing;
     localTimeRef.current = currentTime;
-    await api.post(`/watchroom/${roomId}/sync`, {
+    const savedState = await api.post(`/watchroom/${roomId}/sync`, {
       is_playing:   newState.sync_is_playing,
       current_time: newState.sync_current_time,
       provider:     newState.sync_provider,
       season:       newState.sync_season,
       episode:      newState.sync_episode,
     }).catch(() => {});
+    if (savedState) {
+      applyRemoteSync(savedState);
+    }
   }
 
   function handlePlayPause() { pushSync({ sync_is_playing: !syncStateRef.current.sync_is_playing }); }
@@ -612,10 +618,9 @@ function RoomView({ roomId }) {
         </div>
       )}
 
-      {/* Host playback controls */}
-      {isHost && (
-        <div className="wr-host-controls">
-          <button className={`wr-play-pause-btn ${syncState.sync_is_playing ? 'playing' : ''}`} onClick={handlePlayPause} type="button">
+      {/* Shared playback controls */}
+      <div className="wr-host-controls">
+          <button className={`wr-play-pause-btn ${syncState.sync_is_playing ? 'playing' : ''}`} onClick={handlePlayPause} disabled={!user} type="button">
             {syncState.sync_is_playing ? '⏸ Pause for Everyone' : '▶ Play for Everyone'}
           </button>
           <div className="wr-seek-group">
@@ -624,6 +629,7 @@ function RoomView({ roomId }) {
               className="wr-seek-input"
               type="number"
               placeholder="seconds"
+              disabled={!user}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !isNaN(Number(e.target.value))) {
                   handleSeek(Number(e.target.value));
@@ -633,19 +639,9 @@ function RoomView({ roomId }) {
             />
             <span className="wr-time-display">{formatTime(syncState.sync_current_time)}</span>
           </div>
+          {!user && <span className="wr-guest-desc">Log in to control playback</span>}
 
-        </div>
-      )}
-
-      {!isHost && (
-        <div className="wr-guest-bar">
-          <span className="wr-guest-status-text">
-            {syncState.sync_is_playing ? '▶ Playing' : '⏸ Paused'} · {formatTime(syncState.sync_current_time)}
-          </span>
-          <span className="wr-guest-desc">The host controls playback for everyone</span>
-
-        </div>
-      )}
+      </div>
 
       {/* Reaction bar */}
       <div className="wr-reaction-bar">
@@ -844,7 +840,7 @@ export default function WatchRoom() {
         <div className="wr-home">
           <div className="wr-hero">
             <h1>🎬 Watch Together</h1>
-            <p>Create a room, pick any movie or TV show, and watch in sync with friends. The host controls play, pause, episode, and server — everyone stays locked in.</p>
+            <p>Create a room, pick any movie or TV show, and watch in sync with friends. Anyone in the room can play, pause, and jump the shared timestamp.</p>
           </div>
 
           <div className="wr-home-actions">
@@ -869,7 +865,7 @@ export default function WatchRoom() {
           <div className="wr-features">
             <div className="wr-feature"><span>🎬</span><div><strong>Any movie or show</strong><p>Search and pick anything from the catalog</p></div></div>
             <div className="wr-feature"><span>📡</span><div><strong>7 stream servers</strong><p>Switch server if one doesn't load</p></div></div>
-            <div className="wr-feature"><span>🔄</span><div><strong>True sync</strong><p>Host controls play/pause/episode for everyone</p></div></div>
+            <div className="wr-feature"><span>🔄</span><div><strong>True sync</strong><p>Everyone shares play, pause, and timestamp control</p></div></div>
             <div className="wr-feature"><span>📺</span><div><strong>TV show support</strong><p>Pick any season and episode together</p></div></div>
             <div className="wr-feature"><span>💬</span><div><strong>Live chat</strong><p>React and talk as you watch</p></div></div>
             <div className="wr-feature"><span>😂</span><div><strong>Reactions</strong><p>Send floating emoji reactions</p></div></div>

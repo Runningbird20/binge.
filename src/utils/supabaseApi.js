@@ -466,6 +466,28 @@ async function requireRoomHost(roomId) {
   return user;
 }
 
+async function requireRoomParticipant(roomId) {
+  const client = requireSupabaseClient();
+  const user = await requireAuthenticatedUser();
+  const { data, error } = await client
+    .from('watch_rooms')
+    .select('id, host_id, is_active')
+    .eq('id', roomId)
+    .maybeSingle();
+
+  if (error) {
+    throw toSupabaseError(error, 'Unable to load the watch room.', {
+      resourceName: 'watch_rooms',
+    });
+  }
+
+  if (!data || data.is_active === false) {
+    throw new Error('Room not found or has ended.');
+  }
+
+  return { user, room: data };
+}
+
 async function fetchTmdbSeason(searchParams) {
   const tmdbId = searchParams.get('tmdbId');
   const season = searchParams.get('season');
@@ -1505,15 +1527,17 @@ async function handleWatchRoomMutation(method, pathname, body) {
   const syncMatch = pathname.match(/^\/watchroom\/([^/]+)\/sync$/);
   if (method === 'POST' && syncMatch) {
     const roomId = decodeURIComponent(syncMatch[1]);
-    await requireRoomHost(roomId);
+    const { user, room } = await requireRoomParticipant(roomId);
     const update = {
       sync_is_playing: body?.is_playing,
       sync_current_time: body?.current_time,
-      sync_provider: body?.provider,
-      sync_season: body?.season,
-      sync_episode: body?.episode,
       sync_updated_at: new Date().toISOString(),
     };
+    if (room.host_id === user.id) {
+      update.sync_provider = body?.provider;
+      update.sync_season = body?.season;
+      update.sync_episode = body?.episode;
+    }
 
     Object.keys(update).forEach((key) => update[key] === undefined && delete update[key]);
     const { data, error } = await client
