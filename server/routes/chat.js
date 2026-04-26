@@ -37,38 +37,45 @@ function detectQueryIntent(query) {
 function buildSystemPrompt(intent) {
   const base = `You are the media assistant for "binge." — a fun platform for tracking movies, TV shows, and books.
 
-You have access to two sources of information that will be provided to you:
+You have access to four sources of information that will be provided to you:
 1. WEB SEARCH RESULTS — real information retrieved from the internet
 2. BINGE. SITE DATABASE — the actual titles currently available on the binge. platform
+3. USER'S RATING HISTORY — what the user has already rated and their scores
+4. USER'S WATCHLIST & ACTIVITY — what they are currently watching/reading, their plan-to-watch list, and forum posts they have written
 
-YOUR RESPONSE STRUCTURE (always follow this for general/list questions):
-1. Answer the question using the web search results (e.g. "According to Collider, the best drama TV shows are...")
-2. Then say "Here's what we have on binge.:" and list which of those (or related) titles are in the site database — just the title names, no links
+Use the user's personal data to give tailored, personal answers. For example:
+- If they ask "what should I watch next?" use their watchlist and ratings to make specific suggestions
+- If they ask "what am I watching?" or "what's on my watchlist?" answer directly from their data
+- If they ask about a title they've rated, mention their rating naturally
+- Reference their in-progress items ("you're currently on S2E4 of...") when relevant
+
+YOUR RESPONSE STRUCTURE — follow this for EVERY response, no exceptions:
+1. Answer the question using the web search results
+2. ALWAYS end with a "Here's what we have on binge.:" section — pick 3–5 titles from the BINGE. SITE DATABASE that are most relevant to the question or the themes/genres discussed. For thematic or factual questions (e.g. "what themes does Dune explore?"), suggest titles with similar themes, style, or genre. For recommendation questions, suggest direct matches. Just list the title names — no links, no URLs.
 
 CRITICAL FORMATTING RULES — you must follow these exactly:
 - NEVER include URLs, hyperlinks, or markdown links like [text](url) anywhere in your response text
 - NEVER write out any web addresses or links — not even as plain text like https://...
 - NEVER add a "Sources:" section at the bottom of your response
 - Just mention source names naturally in text, e.g. "According to IMDb..." or "Collider ranks..."
-- For binge. titles, just list the title names — the UI will automatically add clickable links
-- Keep responses concise and conversational — no need to list every single title, pick the best ones`;
+- For the binge. section, list title names only — the UI will automatically add clickable links
+- Keep responses concise and conversational`;
 
   if (intent === 'recommendation') return `${base}
 
 RECOMMENDATION MODE: The user wants suggestions tailored to their taste.
 Use web search to understand what makes great titles in this genre/style.
-Recommend ONLY titles from the SITE DATABASE. If a great match isn't on the site, mention it as "not on binge. yet — you could request it!"
-List title names only — no links or URLs.`;
+In the "Here's what we have on binge.:" section, recommend ONLY titles from the SITE DATABASE that best match the user's taste. If a great match isn't on the site, mention it as "not on binge. yet — you could request it!"`;
 
   if (intent === 'thematic') return `${base}
 
 ANALYSIS MODE: Use web search results for rich context, themes, critical analysis.
-Be specific and enthusiastic. Mention source names naturally but never include URLs.`;
+Be specific and enthusiastic. In the "Here's what we have on binge.:" section, suggest titles from the SITE DATABASE that share the themes, tone, or ideas you just discussed.`;
 
   if (intent === 'factual') return `${base}
 
 FACTUAL MODE: Answer directly using web search results. Be concise and accurate.
-Mention the source name naturally (e.g. "According to IMDb...") but never include URLs.`;
+Still end with "Here's what we have on binge.:" — pick titles from the SITE DATABASE related to what was asked (same franchise, genre, director, era, or topic).`;
 
   return base;
 }
@@ -200,6 +207,138 @@ function getUserRatingHistory(userId) {
     .slice(0, 20);
 }
 
+function getUserWatchlistSQLite(userId) {
+  if (!userId) return [];
+  return db.prepare(`
+    SELECT w.status, w.media_type, w.added_at,
+           COALESCE(m.title, t.title, b.title) AS title,
+           COALESCE(m.genre, t.genre, b.genre) AS genre
+    FROM watchlist w
+    LEFT JOIN movies m ON w.media_type = 'movie' AND w.media_id = m.id
+    LEFT JOIN tv_shows t ON w.media_type = 'tv_show' AND w.media_id = t.id
+    LEFT JOIN books b ON w.media_type = 'book' AND w.media_id = b.id
+    WHERE w.user_id = ?
+    ORDER BY w.added_at DESC
+    LIMIT 50
+  `).all(userId);
+}
+
+async function getUserFullContextSupabase(userId) {
+  const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) return {};
+
+  let sbCreate;
+  try { sbCreate = require('@supabase/supabase-js').createClient; } catch { return {}; }
+  const sb = sbCreate(url, key);
+
+  const [
+    { data: profile },
+    { data: watchlistRaw },
+    { data: posts },
+    { data: movieRatings },
+    { data: tvRatings },
+    { data: bookRatings },
+  ] = await Promise.all([
+    sb.from('profiles').select('username, bio').eq('id', userId).maybeSingle(),
+    sb.from('watchlist').select('media_type, media_id, status, current_season, current_episode, current_chapter, current_page, updated_at, added_at').eq('user_id', userId).order('updated_at', { ascending: false, nullsFirst: false }).limit(60),
+    sb.from('posts').select('title, body, tags, score, created_at, forums(name)').eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+    sb.from('movie_ratings').select('media_id, acting, writing, originality, pacing, cinematography, review').eq('user_id', userId),
+    sb.from('tv_show_ratings').select('media_id, premise, originality, acting, cinematography, writing, pacing, resonance, review').eq('user_id', userId),
+    sb.from('book_ratings').select('media_id, prose, plot, characters, originality, pacing, resonance, review').eq('user_id', userId),
+  ]);
+
+  // Enrich watchlist with media titles from SQLite
+  const watchlist = (watchlistRaw || []).map(w => {
+    let title = null;
+    try {
+      if (w.media_type === 'movie') {
+        const row = db.prepare('SELECT title, genre FROM movies WHERE id = ?').get(w.media_id);
+        title = row?.title || null;
+        w.genre = row?.genre || null;
+      } else if (w.media_type === 'tv_show') {
+        const row = db.prepare('SELECT title, genre FROM tv_shows WHERE id = ?').get(w.media_id);
+        title = row?.title || null;
+        w.genre = row?.genre || null;
+      } else if (w.media_type === 'book') {
+        const row = db.prepare('SELECT title, genre FROM books WHERE id = ?').get(w.media_id);
+        title = row?.title || null;
+        w.genre = row?.genre || null;
+      }
+    } catch { /* non-fatal */ }
+    return { ...w, title };
+  }).filter(w => w.title);
+
+  // Enrich ratings with media titles
+  const movieIds = (movieRatings || []).map(r => r.media_id);
+  const tvIds = (tvRatings || []).map(r => r.media_id);
+  const bookIds = (bookRatings || []).map(r => r.media_id);
+
+  const [{ data: movieMedia }, { data: tvMedia }, { data: bookMedia }] = await Promise.all([
+    movieIds.length ? sb.from('movies').select('id, title, genre, director').in('id', movieIds) : Promise.resolve({ data: [] }),
+    tvIds.length ? sb.from('tv_shows').select('id, title, genre, creator').in('id', tvIds) : Promise.resolve({ data: [] }),
+    bookIds.length ? sb.from('books').select('id, title, genre, author').in('id', bookIds) : Promise.resolve({ data: [] }),
+  ]);
+
+  const movieMap = {}; (movieMedia || []).forEach(m => { movieMap[m.id] = m; });
+  const tvMap    = {}; (tvMedia    || []).forEach(t => { tvMap[t.id]    = t; });
+  const bookMap  = {}; (bookMedia  || []).forEach(b => { bookMap[b.id]  = b; });
+
+  const ratings = [
+    ...(movieRatings || []).map(r => {
+      const m = movieMap[r.media_id]; if (!m) return null;
+      const score = Math.round(((r.acting||0)+(r.writing||0)+(r.originality||0)+(r.pacing||0)+(r.cinematography||0))/25*5);
+      return { rating: score, review: r.review, media_type: 'movie', title: m.title, genre: m.genre, creator: m.director };
+    }).filter(Boolean),
+    ...(tvRatings || []).map(r => {
+      const t = tvMap[r.media_id]; if (!t) return null;
+      const score = Math.round(((r.premise||0)+(r.originality||0)+(r.acting||0)+(r.cinematography||0)+(r.writing||0)+(r.pacing||0)+(r.resonance||0))/38*5);
+      return { rating: score, review: r.review, media_type: 'tv_show', title: t.title, genre: t.genre, creator: t.creator };
+    }).filter(Boolean),
+    ...(bookRatings || []).map(r => {
+      const b = bookMap[r.media_id]; if (!b) return null;
+      const score = Math.round(((r.prose||0)+(r.plot||0)+(r.characters||0)+(r.originality||0)+(r.pacing||0)+(r.resonance||0))/32*5);
+      return { rating: score, review: r.review, media_type: 'book', title: b.title, genre: b.genre, creator: b.author };
+    }).filter(Boolean),
+  ].sort((a, b) => b.rating - a.rating).slice(0, 20);
+
+  return { profile, watchlist, posts: posts || [], ratings };
+}
+
+function formatWatchlistContext(watchlist) {
+  if (!watchlist.length) return 'No watchlist items yet.';
+  const byStatus = {};
+  for (const w of watchlist) {
+    const s = w.status || 'plan_to_watch';
+    if (!byStatus[s]) byStatus[s] = [];
+    byStatus[s].push(w);
+  }
+  const lines = [];
+  const statusLabel = { watching: 'Currently Watching/Reading', reading: 'Currently Reading', watched: 'Completed', read: 'Completed', plan_to_watch: 'Plan to Watch/Read', plan_to_read: 'Plan to Read' };
+  for (const [status, items] of Object.entries(byStatus)) {
+    lines.push(`${statusLabel[status] || status}:`);
+    for (const w of items.slice(0, 15)) {
+      let progress = '';
+      if (w.current_season) progress += ` [S${w.current_season}`;
+      if (w.current_episode) progress += `E${w.current_episode}`;
+      if (w.current_season) progress += ']';
+      if (w.current_chapter) progress += ` [Ch.${w.current_chapter}]`;
+      if (w.current_page) progress += ` [p.${w.current_page}]`;
+      lines.push(`  - "${w.title}" (${(w.media_type||'').replace('_',' ')})${progress}${w.genre ? ' | '+w.genre : ''}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function formatPostsContext(posts) {
+  if (!posts.length) return 'No forum posts yet.';
+  return posts.map(p => {
+    const forum = p.forums?.name || 'a forum';
+    const tags = (p.tags || []).join(', ');
+    return `- Posted in ${forum}: "${p.title}"${tags ? ` [tags: ${tags}]` : ''}`;
+  }).join('\n');
+}
+
 function formatSiteContext(docs) {
   if (!docs.length) return 'No titles currently in the binge. database.';
   return docs.map((doc, i) => {
@@ -328,16 +467,34 @@ router.post('/', optionalAuth, async (req, res) => {
   if (!GROQ_API_KEY)    return res.status(503).json({ error: 'GROQ_API_KEY is not configured.' });
 
   const userId = req.user?.id || null;
+  const isSupabaseUser = req.user?.fromSupabase === true;
   const startTime = Date.now();
 
   try {
-    const intent      = detectQueryIntent(message);
-    const siteDocs    = searchSiteMedia(message, 20);
-    const userHistory = getUserRatingHistory(userId);
+    const intent   = detectQueryIntent(message);
+    const siteDocs = searchSiteMedia(message, 40);
 
-    // Always search the web — build a good query from the user's message
+    // Fetch full user context in parallel with web search
     const searchQuery = message.length > 80 ? message.slice(0, 80) : message;
-    const { results: webResults, searchUrl } = await performWebSearch(searchQuery);
+    const [{ results: webResults }, userCtx] = await Promise.all([
+      performWebSearch(searchQuery),
+      isSupabaseUser && userId
+        ? getUserFullContextSupabase(userId).catch(() => ({}))
+        : Promise.resolve({}),
+    ]);
+
+    // For legacy SQLite users, fall back to SQLite sources
+    const userHistory = isSupabaseUser
+      ? (userCtx.ratings || [])
+      : getUserRatingHistory(userId);
+
+    const userWatchlist = isSupabaseUser
+      ? (userCtx.watchlist || [])
+      : getUserWatchlistSQLite(userId);
+
+    const userPosts = userCtx.posts || [];
+    const userBio   = userCtx.profile?.bio || null;
+    const username  = userCtx.profile?.username || null;
 
     // Format web results for the model
     const webContext = webResults.length
@@ -346,15 +503,29 @@ router.post('/', optionalAuth, async (req, res) => {
         ).join('\n\n')
       : 'No web results found.';
 
+    const userSection = userId ? `
+=== ABOUT THIS USER ===
+${username ? `Username: ${username}` : ''}
+${userBio ? `Bio: ${userBio}` : ''}
+
+=== USER'S RATING HISTORY ===
+${formatUserHistory(userHistory)}
+
+=== USER'S WATCHLIST ===
+${formatWatchlistContext(userWatchlist)}
+
+=== USER'S FORUM ACTIVITY ===
+${formatPostsContext(userPosts)}` : `
+=== USER'S RATING HISTORY ===
+No user signed in.`;
+
     // Build full context for the model
     const contextBlock = `=== WEB SEARCH RESULTS (for: "${searchQuery}") ===
 ${webContext}
 
 === BINGE. SITE DATABASE (titles on the platform) ===
 ${formatSiteContext(siteDocs)}
-
-=== USER'S RATING HISTORY ===
-${formatUserHistory(userHistory)}
+${userSection}
 === END CONTEXT ===`;
 
     const messages = [
