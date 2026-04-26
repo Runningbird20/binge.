@@ -7,11 +7,11 @@ import { isSupabaseConfigured, supabase } from '../utils/supabase';
 
 // ── Constants ─────────────────────────────────────────────────
 const PROVIDERS = [
+  { id: 'vidlink',         label: 'VidLink'           },
   { id: 'vidsrc-embed-ru', label: 'Vidsrc'           },
   { id: 'vidsrc2',         label: 'Vidsrc 2'         },
   { id: '2embed',          label: '2Embed ★ anime'   },
   { id: 'autoembed',       label: 'AutoEmbed ★ anime' },
-  { id: 'vidlink',         label: 'VidLink'           },
   { id: 'superembed',      label: 'SuperEmbed'        },
   { id: 'vsrc-su',         label: 'Vidsrc 3'          },
 ];
@@ -59,7 +59,7 @@ function normalizeSyncState(source = {}) {
   return {
     sync_is_playing: Boolean(source.sync_is_playing),
     sync_current_time: baseTime + elapsed,
-    sync_provider: source.sync_provider || 'vidsrc-embed-ru',
+    sync_provider: source.sync_provider || 'vidlink',
     sync_season: source.sync_season || 1,
     sync_episode: source.sync_episode || 1,
     sync_updated_at: updatedAt,
@@ -84,7 +84,13 @@ function parsePlayerMessage(data) {
     return null;
   }
 
-  const rawType = String(payload.type || payload.event || payload.action || '').toLowerCase();
+  const rawType = String(
+    payload.data?.event ||
+    payload.event ||
+    payload.action ||
+    payload.type ||
+    ''
+  ).toLowerCase();
   const eventType = rawType.includes('pause')
     ? 'pause'
     : rawType.includes('seek') ? 'seek'
@@ -98,6 +104,8 @@ function parsePlayerMessage(data) {
   const currentTime = Number(
     payload.currentTime ??
     payload.current_time ??
+    payload.data?.currentTime ??
+    payload.data?.current_time ??
     payload.time ??
     payload.position ??
     payload.seconds
@@ -109,7 +117,7 @@ function parsePlayerMessage(data) {
   };
 }
 
-function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
+function buildEmbedUrl(tmdbId, mediaType, provider, season, episode, isPlaying = true, currentTime = 0) {
   if (!tmdbId) return null;
   const isTV = mediaType === 'tv_show';
   const id = { kind: 'tmdb', value: String(tmdbId) };
@@ -138,9 +146,14 @@ function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
         ? `https://autoembed.co/tv/tmdb/${id.value}-${season}-${episode}`
         : `https://autoembed.co/movie/tmdb/${id.value}`;
     case 'vidlink':
-      return isTV
-        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true`
-        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+      {
+        const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidlink.pro');
+        url.searchParams.set('autoplay', isPlaying ? 'true' : 'false');
+        if (Number(currentTime) > PLAYBACK_DRIFT_TOLERANCE_SECONDS) {
+          url.searchParams.set('startAt', String(Math.floor(Number(currentTime))));
+        }
+        return url.toString();
+      }
     case 'superembed':
       return isTV
         ? `https://multiembed.mov/?video_id=${id.value}&tmdb=1&s=${season}&e=${episode}`
@@ -276,7 +289,7 @@ function RoomView({ roomId }) {
   // Local sync state mirrors the latest room-wide playback state.
   const [syncState, setSyncState] = useState({
     sync_is_playing: false, sync_current_time: 0,
-    sync_provider: 'vidsrc-embed-ru', sync_season: 1, sync_episode: 1,
+    sync_provider: 'vidlink', sync_season: 1, sync_episode: 1,
     sync_updated_at: null,
   });
 
@@ -346,7 +359,15 @@ function RoomView({ roomId }) {
   const mediaType = room?.media_type || 'movie';
   const isTV = mediaType === 'tv_show';
   const embedUrl = tmdbId
-    ? buildEmbedUrl(tmdbId, mediaType, syncState.sync_provider, syncState.sync_season, syncState.sync_episode)
+    ? buildEmbedUrl(
+        tmdbId,
+        mediaType,
+        syncState.sync_provider,
+        syncState.sync_season,
+        syncState.sync_episode,
+        syncState.sync_is_playing,
+        syncState.sync_current_time
+      )
     : null;
 
   // Initial load
