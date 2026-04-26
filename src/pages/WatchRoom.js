@@ -306,6 +306,7 @@ function RoomView({ roomId }) {
   const lastLoadedEmbedRef = useRef('');
   const playbackLeaderRef = useRef(null);
   const lastCorrectionSentRef = useRef(0);
+  const playerReadyRef = useRef(false);
 
   const isHost = user?.id === room?.host_id;
 
@@ -316,6 +317,9 @@ function RoomView({ roomId }) {
     const player = iframeRef.current;
     if (!player) return;
     if (player.tagName === 'IFRAME' && lastLoadedEmbedRef.current !== player.src) {
+      return;
+    }
+    if (player.tagName === 'IFRAME' && !playerReadyRef.current) {
       return;
     }
 
@@ -420,7 +424,7 @@ function RoomView({ roomId }) {
   const applyRemoteSync = useCallback((sync) => {
     const currentUpdatedAt = new Date(syncStateRef.current?.sync_updated_at || 0).getTime();
     const incomingUpdatedAt = new Date(sync?.sync_updated_at || 0).getTime();
-    if (Number.isFinite(currentUpdatedAt) && Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt < currentUpdatedAt) {
+    if (Number.isFinite(currentUpdatedAt) && Number.isFinite(incomingUpdatedAt) && incomingUpdatedAt <= currentUpdatedAt) {
       return;
     }
 
@@ -531,7 +535,7 @@ function RoomView({ roomId }) {
 
   useEffect(() => {
     const player = iframeRef.current;
-    if (!player || !user) return undefined;
+    if (!player) return undefined;
 
     const currentPlayerTime = () => Number(player.currentTime ?? localTimeRef.current) || 0;
     const onPlay = () => broadcastPlaybackEvent({ type: 'play', currentTime: currentPlayerTime() });
@@ -547,10 +551,13 @@ function RoomView({ roomId }) {
         return;
       }
 
-      broadcastPlaybackEvent({
-        type: playbackEvent.type,
-        currentTime: playbackEvent.currentTime ?? localTimeRef.current,
-      });
+      playerReadyRef.current = true;
+      if (user) {
+        broadcastPlaybackEvent({
+          type: playbackEvent.type,
+          currentTime: playbackEvent.currentTime ?? localTimeRef.current,
+        });
+      }
     };
 
     player.addEventListener('play', onPlay);
@@ -743,6 +750,7 @@ function RoomView({ roomId }) {
               referrerPolicy="no-referrer"
               title="Watch Together"
               onLoad={() => {
+                playerReadyRef.current = false;
                 lastLoadedEmbedRef.current = iframeRef.current?.src || embedUrl;
               }}
             />
