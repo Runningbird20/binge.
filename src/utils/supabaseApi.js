@@ -367,7 +367,7 @@ async function createRoomWithRetry(payload, attempts = 5) {
         media_type: payload.media_type || 'movie',
         media_id: payload.media_id || null,
         tmdb_id: payload.tmdb_id || null,
-        sync_provider: 'vidsrc-embed-ru',
+        sync_provider: 'vidlink',
         sync_season: 1,
         sync_episode: 1,
         sync_is_playing: false,
@@ -1570,7 +1570,7 @@ async function handleWatchRoomMutation(method, pathname, body) {
         sync_is_playing: false,
         sync_season: 1,
         sync_episode: 1,
-        sync_provider: 'vidsrc-embed-ru',
+        sync_provider: 'vidlink',
       })
       .eq('id', roomId)
       .select('*')
