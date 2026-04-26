@@ -21,6 +21,7 @@ const REACTIONS = ['😂','🔥','😮','❤️','👏','😭','🤯','👀','�
 const CHAT_POLL_MS = 3000;
 const ROOM_STATE_POLL_MS = 5000;
 const PLAYBACK_DRIFT_TOLERANCE_SECONDS = 0.75;
+const PLAYBACK_CORRECTION_MS = 2000;
 
 function getMessageKey(message) {
   return message?.id || `${message?.user_id || 'anon'}-${message?.created_at || ''}-${message?.message || ''}`;
@@ -94,6 +95,7 @@ function parsePlayerMessage(data) {
   const eventType = rawType.includes('pause')
     ? 'pause'
     : rawType.includes('seek') ? 'seek'
+    : rawType.includes('timeupdate') ? 'timeupdate'
     : rawType.includes('play') ? 'play'
     : null;
 
@@ -302,6 +304,8 @@ function RoomView({ roomId }) {
   const applyingRemoteRef = useRef(false);
   const channelRef     = useRef(null);
   const lastLoadedEmbedRef = useRef('');
+  const playbackLeaderRef = useRef(null);
+  const lastCorrectionSentRef = useRef(0);
 
   const isHost = user?.id === room?.host_id;
 
@@ -434,8 +438,17 @@ function RoomView({ roomId }) {
   }, [postPlayerCommand]);
 
   const broadcastPlaybackEvent = useCallback(async ({ type, currentTime }) => {
-    if (!user || applyingRemoteRef.current || !['play', 'pause', 'seek'].includes(type)) {
+    if (!user || applyingRemoteRef.current || !['play', 'pause', 'seek', 'timeupdate'].includes(type)) {
       return;
+    }
+    if (type === 'timeupdate') {
+      const now = Date.now();
+      if (playbackLeaderRef.current !== user.id || now - lastCorrectionSentRef.current < PLAYBACK_CORRECTION_MS) {
+        return;
+      }
+      lastCorrectionSentRef.current = now;
+    } else {
+      playbackLeaderRef.current = user.id;
     }
 
     const nextCurrentTime = Number.isFinite(Number(currentTime))
@@ -470,6 +483,10 @@ function RoomView({ roomId }) {
       payload: event,
     }).catch(() => {});
 
+    if (type === 'timeupdate') {
+      return;
+    }
+
     const savedState = await api.post(`/watchroom/${roomId}/sync`, {
       is_playing: isPlaying,
       current_time: nextCurrentTime,
@@ -490,6 +507,7 @@ function RoomView({ roomId }) {
           return;
         }
 
+        playbackLeaderRef.current = payload.userId || playbackLeaderRef.current;
         const nextState = {
           ...syncStateRef.current,
           sync_is_playing: payload.type === 'play'
