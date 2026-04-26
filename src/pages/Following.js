@@ -150,7 +150,7 @@ export default function Following() {
   const [currentRatings, setCurrentRatings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingProfileId, setSavingProfileId] = useState(null);
   const [error, setError] = useState('');
   const [modalProfile, setModalProfile] = useState(null);
 
@@ -171,7 +171,7 @@ export default function Following() {
         if (!active) return;
 
         setCurrentRatings(ratings);
-        setSuggestedProfiles(suggestions.filter((p) => !followed.includes(p.id)));
+        setSuggestedProfiles(suggestions.filter((profile) => profile.id !== user?.id && !followed.includes(profile.id)));
 
         if (followed.length) {
           const [profiles, feed] = await Promise.all([
@@ -213,7 +213,12 @@ export default function Following() {
   [feedItems]);
 
   async function handleFollow(profileId) {
-    setSaving(true);
+    if (!profileId || profileId === user?.id) {
+      setError('You cannot follow yourself.');
+      return;
+    }
+
+    setSavingProfileId(profileId);
     setError('');
     try {
       await followSupabaseUser(profileId);
@@ -228,33 +233,39 @@ export default function Following() {
     } catch (err) {
       setError(err?.message || 'Unable to follow that member.');
     } finally {
-      setSaving(false);
+      setSavingProfileId(null);
     }
   }
 
   async function handleUnfollow(profileId) {
-    setSaving(true);
+    if (!profileId) {
+      setError('Choose a member to unfollow.');
+      return;
+    }
+
+    setSavingProfileId(profileId);
     setError('');
+    const unfollowedProfile = followingProfiles.find((profile) => profile.id === profileId);
+
     try {
       await unfollowSupabaseUser(profileId);
-      const ids = await fetchSupabaseFollowingIds();
-      const [profiles, feed] = await Promise.all([
-        fetchSupabaseProfilesByIds(ids),
-        fetchSupabaseFollowFeed(),
-      ]);
-      // put unfollowed person back into suggestions
-      const unfollowed = followingProfiles.find((p) => p.id === profileId);
-      setFollowingProfiles(profiles);
-      setFeedItems(feed);
-      if (unfollowed) {
-        setSuggestedProfiles((cur) =>
-          cur.some((p) => p.id === unfollowed.id) ? cur : [unfollowed, ...cur]
-        );
+      const refreshedFollowedIds = await fetchSupabaseFollowingIds();
+      const refreshedProfiles = await fetchSupabaseProfilesByIds(refreshedFollowedIds);
+      const refreshedFeed = await fetchSupabaseFollowFeed();
+      setFollowingProfiles(refreshedProfiles);
+      setFeedItems(refreshedFeed);
+      if (unfollowedProfile && unfollowedProfile.id !== user?.id) {
+        setSuggestedProfiles((current) => {
+          if (current.some((profile) => profile.id === unfollowedProfile.id)) {
+            return current;
+          }
+          return [unfollowedProfile, ...current].slice(0, 6);
+        });
       }
     } catch (err) {
       setError(err?.message || 'Unable to unfollow that member.');
     } finally {
-      setSaving(false);
+      setSavingProfileId(null);
     }
   }
 
@@ -301,16 +312,36 @@ export default function Following() {
             </div>
           ) : (
             <div className="social-grid">
-              {followingProfiles.map((profile) => (
-                <FollowingCard
-                  key={profile.id}
-                  profile={profile}
-                  tasteMatch={calculateTasteMatch(currentRatings, ratingByUser[profile.id] || [])}
-                  onUnfollow={handleUnfollow}
-                  onQuickView={setModalProfile}
-                  saving={saving}
-                />
-              ))}
+              {followingProfiles.length === 0 ? (
+                <div className="empty-state">
+                  <p>You are not following anyone yet.</p>
+                  <p className="empty-hint">Start by following a member below to build your personalized feed.</p>
+                </div>
+              ) : (
+                followingProfiles.map((profile) => (
+                  <article key={profile.id} className="social-profile-card surface-panel">
+                    <div className="social-profile-card-header">
+                      <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
+                      <div>
+                        <p className="social-profile-name">{profile.username}</p>
+                        <p className="social-profile-bio">{profile.bio || 'No bio yet.'}</p>
+                      </div>
+                    </div>
+                    <div className="social-profile-meta">
+                      <span>Taste match</span>
+                      <strong>{calculateTasteMatch(currentRatings, ratingByUser[profile.id] || [])}%</strong>
+                    </div>
+                    <button
+                      className="btn-ghost"
+                      type="button"
+                      onClick={() => handleUnfollow(profile.id)}
+                      disabled={savingProfileId === profile.id}
+                    >
+                      {savingProfileId === profile.id ? 'Saving...' : 'Unfollow'}
+                    </button>
+                  </article>
+                ))
+              )}
             </div>
           )}
         </section>
@@ -368,15 +399,32 @@ export default function Following() {
             </div>
           ) : (
             <div className="social-grid">
-              {filteredSuggestions.map((profile) => (
-                <SuggestionCard
-                  key={profile.id}
-                  profile={profile}
-                  onFollow={handleFollow}
-                  onQuickView={setModalProfile}
-                  saving={saving}
-                />
-              ))}
+              {filteredSuggestions.length === 0 ? (
+                <div className="empty-state">
+                  <p>No matching members found.</p>
+                  <p className="empty-hint">Try another username or clear the search.</p>
+                </div>
+              ) : (
+                filteredSuggestions.map((profile) => (
+                  <article key={profile.id} className="social-profile-card surface-panel">
+                    <div className="social-profile-card-header">
+                      <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="md" />
+                      <div>
+                        <p className="social-profile-name">{profile.username}</p>
+                        <p className="social-profile-bio">{profile.bio || 'No bio yet.'}</p>
+                      </div>
+                    </div>
+                    <button
+                      className="btn-primary"
+                      type="button"
+                      onClick={() => handleFollow(profile.id)}
+                      disabled={savingProfileId === profile.id}
+                    >
+                      {savingProfileId === profile.id ? 'Saving...' : 'Follow'}
+                    </button>
+                  </article>
+                ))
+              )}
             </div>
           )}
         </section>

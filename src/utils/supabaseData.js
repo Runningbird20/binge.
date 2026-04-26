@@ -484,9 +484,18 @@ export async function fetchSupabaseFollowingIds() {
 export async function followSupabaseUser(profileId) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
+  if (!profileId) {
+    throw new Error('Choose a member to follow.');
+  }
+  if (profileId === authUser.id) {
+    throw new Error('You cannot follow yourself.');
+  }
   const { error } = await client
     .from('follows')
-    .insert({ follower_id: authUser.id, following_id: profileId });
+    .upsert(
+      { follower_id: authUser.id, following_id: profileId },
+      { onConflict: 'follower_id,following_id' }
+    );
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to follow that member.'));
@@ -539,7 +548,9 @@ async function fetchSupabaseRatingsForUsers(userIds = []) {
   );
 
   const enriched = await enrichMediaRecords(grouped.flat());
-  return enriched.sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
+  const safeEnriched = Array.isArray(enriched) ? enriched : [];
+  return safeEnriched
+    .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
 }
 
 async function fetchSupabaseWatchlistForUsers(userIds = []) {
@@ -558,7 +569,8 @@ async function fetchSupabaseWatchlistForUsers(userIds = []) {
     throw new Error(toFriendlyError(error, 'Unable to load feed library activity.'));
   }
 
-  return await enrichMediaRecords(data || []);
+  const enriched = await enrichMediaRecords(data || []);
+  return Array.isArray(enriched) ? enriched : [];
 }
 
 export async function fetchSupabaseFollowFeed({ limit = 24 } = {}) {
@@ -698,6 +710,10 @@ async function fetchMediaMetadataMap(mediaType, mediaIds) {
 }
 
 async function enrichMediaRecords(records = []) {
+  if (!Array.isArray(records)) {
+    return [];
+  }
+
   const pendingIdsByType = {
     movie: new Set(),
     tv_show: new Set(),
