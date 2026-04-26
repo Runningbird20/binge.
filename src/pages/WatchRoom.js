@@ -150,7 +150,7 @@ function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
     case 'vidlink':
       {
         const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidlink.pro');
-        url.searchParams.set('autoplay', 'true');
+        url.searchParams.set('autoplay', 'false');
         return url.toString();
       }
     case 'superembed':
@@ -315,6 +315,9 @@ function RoomView({ roomId }) {
   const postPlayerCommand = useCallback((type, currentTime) => {
     const player = iframeRef.current;
     if (!player) return;
+    if (player.tagName === 'IFRAME' && lastLoadedEmbedRef.current !== player.src) {
+      return;
+    }
 
     if (Number.isFinite(Number(currentTime)) && 'currentTime' in player) {
       player.currentTime = Number(currentTime);
@@ -740,10 +743,7 @@ function RoomView({ roomId }) {
               referrerPolicy="no-referrer"
               title="Watch Together"
               onLoad={() => {
-                if (lastLoadedEmbedRef.current === embedUrl) return;
-                lastLoadedEmbedRef.current = embedUrl;
-                const latestSync = syncStateRef.current;
-                postPlayerCommand(latestSync.sync_is_playing ? 'play' : 'pause', latestSync.sync_current_time);
+                lastLoadedEmbedRef.current = iframeRef.current?.src || embedUrl;
               }}
             />
             <button className="wr-fullscreen-btn" onClick={toggleFullscreen} type="button" title="Fullscreen">
