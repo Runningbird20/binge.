@@ -78,6 +78,22 @@ describe('devLabApi', () => {
     expect(mockInvokeSupabaseFunction).toHaveBeenCalledWith('dev', { action: 'dashboard' });
   });
 
+  test('falls back to Supabase when legacy backend mode is enabled but /api/dev-lab is down', async () => {
+    process.env.REACT_APP_ENABLE_LEGACY_BACKEND = 'true';
+    const expected = { counts: {} };
+    global.fetch.mockRejectedValue(new Error('network down'));
+    mockInvokeSupabaseFunction.mockResolvedValue(expected);
+
+    const { devLabApi } = require('./devLabApi');
+    await expect(devLabApi.getDashboard()).resolves.toBe(expected);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/dev-lab/status',
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(mockInvokeSupabaseFunction).toHaveBeenCalledWith('dev', { action: 'dashboard' });
+  });
+
   test('supports forcing the DB-backed dev-lab API with a dedicated backend URL', async () => {
     process.env.REACT_APP_DEVLAB_API_MODE = 'server';
     process.env.REACT_APP_DEVLAB_API_URL = 'https://ops.example.com';
