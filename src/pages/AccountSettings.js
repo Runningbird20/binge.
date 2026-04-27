@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 
 const MIN_PASSWORD_LENGTH = 6;
 
 export default function AccountSettings() {
-  const { user, updateProfile, updatePassword } = useAuth();
+  const { user, updateProfile, updatePassword, logout } = useAuth();
+  const navigate = useNavigate();
   const [profileForm, setProfileForm] = useState({
     username: user?.username || '',
     email: user?.email || '',
@@ -68,6 +70,11 @@ export default function AccountSettings() {
     } finally {
       setProfileLoading(false);
     }
+  }
+
+  async function handleLogout() {
+    await logout();
+    navigate('/');
   }
 
   async function handlePasswordSubmit(e) {
@@ -194,6 +201,15 @@ export default function AccountSettings() {
                 {passwordLoading ? 'Updating...' : 'Update password'}
               </button>
             </form>
+          </section>
+          <section className="settings-card">
+            <div className="settings-card-header">
+              <h2>Sign out</h2>
+              <p>You will be returned to the landing page.</p>
+            </div>
+            <button type="button" className="btn-danger" onClick={handleLogout}>
+              Log out
+            </button>
           </section>
         </div>
       </main>
