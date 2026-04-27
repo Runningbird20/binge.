@@ -811,6 +811,70 @@ Analyze the user's taste and return 10 personalized recommendations from the cat
   }
 });
 
+router.post('/moderate', optionalAuth, async (req, res) => {
+  if (!GROQ_API_KEY) return res.json({ allowed: true });
+  const { text, kind = 'post' } = req.body;
+  if (!text?.trim()) return res.json({ allowed: true });
+
+  try {
+    const response = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a content moderator for a media discussion forum about movies, TV shows, and books. Respond with ONLY valid JSON — no markdown, no explanation.
+
+BLOCK content that contains:
+- Hate speech, racial/ethnic/religious/gender slurs or discrimination
+- Explicit sexual content or graphic violence
+- Threats, targeted harassment, or doxxing of real individuals
+- Illegal activity (drug sales, CSAM, terrorism, fraud)
+- Spam, phishing links, or URLs with malicious intent
+- Dangerous health/safety misinformation
+
+ALLOW content that is:
+- Opinions, reviews, or discussion about movies, TV shows, or books (even very negative)
+- Light or moderate profanity in casual discussion
+- Spoiler discussions, fan theories, and debate
+- Criticism of public figures regarding their public work
+- Heated disagreement that is not targeted personal harassment
+
+Respond with exactly this JSON: {"allowed":true,"reason":""} or {"allowed":false,"reason":"brief reason"}`,
+          },
+          {
+            role: 'user',
+            content: `Moderate this forum ${kind}:\n\n${text.slice(0, 2000)}`,
+          },
+        ],
+        temperature: 0,
+        max_tokens: 80,
+        response_format: { type: 'json_object' },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) return res.json({ allowed: true });
+
+    const data = await response.json();
+    const raw = data.choices?.[0]?.message?.content || '{"allowed":true}';
+    let result;
+    try { result = JSON.parse(raw); } catch { return res.json({ allowed: true }); }
+
+    return res.json({
+      allowed: result.allowed !== false,
+      reason: typeof result.reason === 'string' ? result.reason : '',
+    });
+  } catch {
+    return res.json({ allowed: true });
+  }
+});
+
 router.get('/logs', requireAuth, (req, res) => {
   try {
     res.json(db.prepare(`
