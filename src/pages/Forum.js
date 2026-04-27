@@ -227,9 +227,13 @@ function CreatePostModal({ forumSlug, onClose, onCreated }) {
   const [preview, setPreview] = useState(false);
   const titleRef = useRef(null);
 
-  // Focus title on open, Escape to close
+  // Focus title on open
   useEffect(() => {
     titleRef.current?.focus();
+  }, []); // eslint-disable-line
+
+  // Escape to close, Ctrl+Enter to post
+  useEffect(() => {
     function handleKey(e) {
       if (e.key === 'Escape') onClose();
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit();

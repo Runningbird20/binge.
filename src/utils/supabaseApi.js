@@ -1,5 +1,5 @@
 import {
-  invokeSupabaseFunction,
+  getSupabaseSession,
   getSupabaseUser,
   isSupabaseConfigured,
   requireSupabaseClient,
@@ -224,36 +224,47 @@ async function refreshPostCommentCount(postId) {
   return nextCount;
 }
 
+async function getModerationAuthToken() {
+  try {
+    const legacyToken = window?.localStorage?.getItem('token');
+    if (legacyToken) return legacyToken;
+  } catch {}
+  try {
+    const { data } = await getSupabaseSession();
+    return data?.session?.access_token || null;
+  } catch {}
+  return null;
+}
+
 async function maybeModerateForumContent(text, kind) {
-  if (!isSupabaseConfigured) {
-    return { allowed: true };
-  }
+  const apiBase = (
+    process.env.REACT_APP_API_URL ||
+    process.env.REACT_APP_LEGACY_API_URL ||
+    ''
+  ).replace(/\/+$/, '');
 
   try {
-    const result = await invokeSupabaseFunction('forum-moderate', {
-      text,
-      kind,
+    const token = await getModerationAuthToken();
+    const response = await fetch(`${apiBase}/api/chat/moderate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text, kind }),
+      signal: AbortSignal.timeout(12000),
     });
 
-    if (result && typeof result === 'object') {
-      return {
-        allowed: result.allowed !== false,
-        reason: result.reason || '',
-      };
-    }
-  } catch (error) {
-    const message = String(error?.message || '');
-    if (/edge function|not found|404|missing/i.test(message)) {
-      return { allowed: true };
-    }
+    if (!response.ok) return { allowed: true };
 
-    throw toSupabaseError(error, 'The forum moderation Edge Function failed.', {
-      resourceName: 'edge function',
-      edgeFunctionName: 'forum-moderate',
-    });
+    const result = await response.json();
+    return {
+      allowed: result.allowed !== false,
+      reason: typeof result.reason === 'string' ? result.reason : '',
+    };
+  } catch {
+    return { allowed: true };
   }
-
-  return { allowed: true };
 }
 
 async function fetchAllRows(tableName, selectColumns, configureQuery, resourceName = tableName) {
