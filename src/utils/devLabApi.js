@@ -129,12 +129,22 @@ async function requestServer(method, path, body) {
 }
 
 async function canUseServerBackend() {
-  if (DEV_LAB_BACKEND_MODE === 'server' || isLegacyBackendEnabled()) {
+  if (DEV_LAB_BACKEND_MODE === 'server') {
     return true;
   }
 
   if (DEV_LAB_BACKEND_MODE === 'supabase') {
     return false;
+  }
+
+  if (isLegacyBackendEnabled()) {
+    if (!serverAvailabilityPromise) {
+      serverAvailabilityPromise = requestServer('GET', DEV_LAB_STATUS_PATH)
+        .then((payload) => payload?.ok === true)
+        .catch(() => false);
+    }
+
+    return serverAvailabilityPromise;
   }
 
   if (!serverAvailabilityPromise) {
@@ -147,8 +157,18 @@ async function canUseServerBackend() {
 }
 
 async function requestDevLab({ method, path, body, action, payload = {} }) {
+  const serverForced = DEV_LAB_BACKEND_MODE === 'server';
+
   if (await canUseServerBackend()) {
-    return requestServer(method, path, body);
+    try {
+      return await requestServer(method, path, body);
+    } catch (error) {
+      if (serverForced || !isSupabaseConfigured) {
+        throw error;
+      }
+
+      return callDevFunction(action, payload);
+    }
   }
 
   if (isSupabaseConfigured) {
