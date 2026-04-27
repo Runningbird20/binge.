@@ -1,9 +1,10 @@
 import { Pool } from 'https://deno.land/x/postgres@v0.19.3/mod.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, PUT, OPTIONS',
   'Content-Type': 'application/json',
 };
 
@@ -60,6 +61,12 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_POSTER_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
+const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') || '').trim();
+const SUPABASE_SERVICE_ROLE_KEY = (
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+  Deno.env.get('SUPABASE_SERVICE_KEY') ||
+  ''
+).trim();
 const GROQ_API_KEY = (
   Deno.env.get('GROQ_API_KEY') ||
   Deno.env.get('REACT_APP_GROQ_API_KEY') ||
@@ -75,6 +82,12 @@ const DATABASE_URL = resolveDatabaseUrl(
 );
 
 const pool = DATABASE_URL ? new Pool(DATABASE_URL, 3, true) : null;
+const supabaseAdmin =
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : null;
 let schemaReadyPromise: Promise<void> | null = null;
 
 type JsonValue =
@@ -107,6 +120,98 @@ function jsonResponse(status: number, body: JsonValue) {
     status,
     headers: corsHeaders,
   });
+}
+
+function isMissingRestTable(error: unknown) {
+  const code = (error as { code?: string } | null)?.code;
+  const message = String((error as { message?: string } | null)?.message || '');
+  return code === '42P01' || message.toLowerCase().includes('does not exist');
+}
+
+function devSchemaError() {
+  return new Error(
+    'Developer Lab tables are missing. Run the dev-lab schema SQL or set SUPABASE_DB_URL so this function can create the prompt, knowledge, and evaluation tables.'
+  );
+}
+
+function requireStorage() {
+  if (!pool && !supabaseAdmin) {
+    throw new Error(
+      'Dev lab storage is unavailable. Set SUPABASE_SERVICE_ROLE_KEY for Supabase REST access or SUPABASE_DB_URL for direct Postgres access.'
+    );
+  }
+}
+
+function mapPromptProfile(row: Record<string, unknown>) {
+  return {
+    intent: row.intent,
+    label: row.label,
+    description: row.description,
+    systemPrompt: row.system_prompt ?? row.systemPrompt,
+    temperature: row.temperature,
+    maxTitles: row.max_titles ?? row.maxTitles,
+    updatedAt: row.updated_at ?? row.updatedAt ?? null,
+  };
+}
+
+function mapKnowledgeDocument(row: Record<string, unknown>) {
+  const content = String(row.content || '');
+  return {
+    id: row.id,
+    title: row.title,
+    sourceType: row.source_type ?? row.sourceType,
+    mediaType: row.media_type ?? row.mediaType,
+    sourceUrl: row.source_url ?? row.sourceUrl,
+    sourceLabel: row.source_label ?? row.sourceLabel,
+    tags: row.tags || [],
+    excerpt: row.excerpt || content.slice(0, 480),
+    summary: row.summary,
+    metadata: row.metadata || {},
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  };
+}
+
+function mapEvalCase(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    label: row.label,
+    question: row.question,
+    expectedIntent: row.expected_intent ?? row.expectedIntent,
+    expectedPhrases: row.expected_phrases ?? row.expectedPhrases ?? [],
+    forbiddenPhrases: row.forbidden_phrases ?? row.forbiddenPhrases ?? [],
+    notes: row.notes,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  };
+}
+
+function mapEvalRun(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    caseId: row.case_id ?? row.caseId,
+    label: row.label,
+    question: row.question,
+    selectedIntent: row.selected_intent ?? row.selectedIntent,
+    intentMatch: row.intent_match ?? row.intentMatch,
+    passed: row.passed,
+    expectedHits: row.expected_hits ?? row.expectedHits ?? [],
+    missingExpected: row.missing_expected ?? row.missingExpected ?? [],
+    forbiddenHits: row.forbidden_hits ?? row.forbiddenHits ?? [],
+    responseText: row.response_text ?? row.responseText,
+    systemPrompt: row.system_prompt ?? row.systemPrompt,
+    latencyMs: row.latency_ms ?? row.latencyMs,
+    createdAt: row.created_at ?? row.createdAt,
+  };
+}
+
+function mapImportedRecord(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    title: row.title,
+    year: row.year,
+    sourceKey: row.source_key ?? row.sourceKey,
+  };
 }
 
 async function readRequestBody(req: Request) {
@@ -521,11 +626,30 @@ async function ensureDevLabSchema() {
 }
 
 async function listPromptProfiles() {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return DEFAULT_PROMPT_PROFILES.map((profile) => ({
       ...profile,
       updatedAt: null,
     }));
+  }
+
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_prompt_profiles')
+      .select('intent, label, description, system_prompt, temperature, max_titles, updated_at')
+      .order('intent', { ascending: true });
+
+    if (error) {
+      if (isMissingRestTable(error)) {
+        return DEFAULT_PROMPT_PROFILES.map((profile) => ({ ...profile, updatedAt: null }));
+      }
+      throw new Error(error.message);
+    }
+
+    const profiles = (data || []).map((row) => mapPromptProfile(row));
+    return profiles.length
+      ? profiles
+      : DEFAULT_PROMPT_PROFILES.map((profile) => ({ ...profile, updatedAt: null }));
   }
 
   await ensureDevLabSchema();
@@ -546,6 +670,32 @@ async function listPromptProfiles() {
 }
 
 async function upsertPromptProfile(profile: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_prompt_profiles')
+      .upsert(
+        {
+          intent: String(profile.intent || '').trim(),
+          label: String(profile.label || '').trim(),
+          description: String(profile.description || '').trim() || null,
+          system_prompt: String(profile.systemPrompt || '').trim(),
+          temperature: Number(profile.temperature) || 0.4,
+          max_titles: Math.max(1, Math.min(12, Number(profile.maxTitles) || 5)),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'intent' }
+      )
+      .select('intent, label, description, system_prompt, temperature, max_titles, updated_at')
+      .single();
+
+    if (error) {
+      if (isMissingRestTable(error)) throw devSchemaError();
+      throw new Error(error.message);
+    }
+
+    return mapPromptProfile(data);
+  }
+
   await ensureDevLabSchema();
 
   const rows = await queryRows(
@@ -591,8 +741,23 @@ async function upsertPromptProfile(profile: Record<string, unknown>) {
 }
 
 async function listKnowledgeDocuments(limit = 20) {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return [];
+  }
+
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_knowledge_documents')
+      .select('id, title, source_type, media_type, source_url, source_label, tags, content, summary, metadata, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(Math.max(1, Math.min(100, Number(limit) || 20)));
+
+    if (error) {
+      if (isMissingRestTable(error)) return [];
+      throw new Error(error.message);
+    }
+
+    return (data || []).map((row) => mapKnowledgeDocument(row));
   }
 
   await ensureDevLabSchema();
@@ -620,6 +785,32 @@ async function listKnowledgeDocuments(limit = 20) {
 }
 
 async function createKnowledgeDocument(document: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_knowledge_documents')
+      .insert({
+        title: String(document.title || '').trim(),
+        source_type: String(document.sourceType || '').trim(),
+        media_type: String(document.mediaType || '').trim() || null,
+        source_url: String(document.sourceUrl || '').trim() || null,
+        source_label: String(document.sourceLabel || '').trim() || null,
+        tags: normalizeTagList(document.tags),
+        content: String(document.content || '').trim(),
+        summary: String(document.summary || '').trim() || null,
+        metadata: document.metadata || {},
+        updated_at: new Date().toISOString(),
+      })
+      .select('id, title, source_type, media_type, source_url, source_label, tags, content, summary, metadata, created_at, updated_at')
+      .single();
+
+    if (error) {
+      if (isMissingRestTable(error)) throw devSchemaError();
+      throw new Error(error.message);
+    }
+
+    return mapKnowledgeDocument(data);
+  }
+
   await ensureDevLabSchema();
 
   const rows = await queryRows(
@@ -668,16 +859,27 @@ async function createKnowledgeDocument(document: Record<string, unknown>) {
 }
 
 async function deleteKnowledgeDocument(id: unknown) {
+  if (!pool && supabaseAdmin) {
+    const { error } = await supabaseAdmin
+      .from('chatbot_knowledge_documents')
+      .delete()
+      .eq('id', String(id || ''));
+
+    if (error) {
+      if (isMissingRestTable(error)) throw devSchemaError();
+      throw new Error(error.message);
+    }
+    return;
+  }
+
   await ensureDevLabSchema();
   await execute('delete from public.chatbot_knowledge_documents where id = $1', [String(id || '')]);
 }
 
 async function searchKnowledgeDocuments(search: unknown, limit = 4) {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return [];
   }
-
-  await ensureDevLabSchema();
 
   const terms = String(search || '')
     .toLowerCase()
@@ -689,6 +891,30 @@ async function searchKnowledgeDocuments(search: unknown, limit = 4) {
   if (!terms.length) {
     return [];
   }
+
+  if (!pool && supabaseAdmin) {
+    const clauses = terms
+      .map((term) => `title.ilike.%${term}%,content.ilike.%${term}%,summary.ilike.%${term}%`)
+      .join(',');
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_knowledge_documents')
+      .select('id, title, source_type, media_type, source_url, source_label, tags, content, summary, metadata, created_at, updated_at')
+      .or(clauses)
+      .order('updated_at', { ascending: false })
+      .limit(Math.max(1, Math.min(12, Number(limit) || 4)));
+
+    if (error) {
+      if (isMissingRestTable(error)) return [];
+      throw new Error(error.message);
+    }
+
+    return (data || []).map((row) => ({
+      ...mapKnowledgeDocument(row),
+      excerpt: String(row.content || '').slice(0, 900),
+    }));
+  }
+
+  await ensureDevLabSchema();
 
   const args: unknown[] = [];
   const clauses = terms.map((term) => {
@@ -728,8 +954,23 @@ async function searchKnowledgeDocuments(search: unknown, limit = 4) {
 }
 
 async function listEvalCases(limit = 30) {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return [];
+  }
+
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_eval_cases')
+      .select('id, label, question, expected_intent, expected_phrases, forbidden_phrases, notes, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(Math.max(1, Math.min(100, Number(limit) || 30)));
+
+    if (error) {
+      if (isMissingRestTable(error)) return [];
+      throw new Error(error.message);
+    }
+
+    return (data || []).map((row) => mapEvalCase(row));
   }
 
   await ensureDevLabSchema();
@@ -754,6 +995,29 @@ async function listEvalCases(limit = 30) {
 }
 
 async function createEvalCase(testCase: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_eval_cases')
+      .insert({
+        label: String(testCase.label || '').trim(),
+        question: String(testCase.question || '').trim(),
+        expected_intent: String(testCase.expectedIntent || '').trim() || null,
+        expected_phrases: normalizeTagList(testCase.expectedPhrases),
+        forbidden_phrases: normalizeTagList(testCase.forbiddenPhrases),
+        notes: String(testCase.notes || '').trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .select('id, label, question, expected_intent, expected_phrases, forbidden_phrases, notes, created_at, updated_at')
+      .single();
+
+    if (error) {
+      if (isMissingRestTable(error)) throw devSchemaError();
+      throw new Error(error.message);
+    }
+
+    return mapEvalCase(data);
+  }
+
   await ensureDevLabSchema();
 
   const rows = await queryRows(
@@ -793,11 +1057,52 @@ async function createEvalCase(testCase: Record<string, unknown>) {
 }
 
 async function deleteEvalCase(id: unknown) {
+  if (!pool && supabaseAdmin) {
+    const { error } = await supabaseAdmin
+      .from('chatbot_eval_cases')
+      .delete()
+      .eq('id', Number(id));
+
+    if (error) {
+      if (isMissingRestTable(error)) throw devSchemaError();
+      throw new Error(error.message);
+    }
+    return;
+  }
+
   await ensureDevLabSchema();
   await execute('delete from public.chatbot_eval_cases where id = $1', [Number(id)]);
 }
 
 async function createEvalRun(run: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_eval_runs')
+      .insert({
+        case_id: run.caseId ? Number(run.caseId) : null,
+        label: String(run.label || '').trim() || null,
+        question: String(run.question || '').trim(),
+        selected_intent: String(run.selectedIntent || '').trim() || null,
+        intent_match: Boolean(run.intentMatch),
+        passed: Boolean(run.passed),
+        expected_hits: normalizeTagList(run.expectedHits),
+        missing_expected: normalizeTagList(run.missingExpected),
+        forbidden_hits: normalizeTagList(run.forbiddenHits),
+        response_text: String(run.responseText || '').trim(),
+        system_prompt: String(run.systemPrompt || '').trim() || null,
+        latency_ms: Number(run.latencyMs) || null,
+      })
+      .select('id, case_id, label, question, selected_intent, intent_match, passed, expected_hits, missing_expected, forbidden_hits, response_text, system_prompt, latency_ms, created_at')
+      .single();
+
+    if (error) {
+      if (isMissingRestTable(error)) throw devSchemaError();
+      throw new Error(error.message);
+    }
+
+    return mapEvalRun(data);
+  }
+
   await ensureDevLabSchema();
 
   const rows = await queryRows(
@@ -853,8 +1158,23 @@ async function createEvalRun(run: Record<string, unknown>) {
 }
 
 async function listEvalRuns(limit = 20) {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return [];
+  }
+
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('chatbot_eval_runs')
+      .select('id, case_id, label, question, selected_intent, intent_match, passed, expected_hits, missing_expected, forbidden_hits, response_text, system_prompt, latency_ms, created_at')
+      .order('created_at', { ascending: false })
+      .limit(Math.max(1, Math.min(100, Number(limit) || 20)));
+
+    if (error) {
+      if (isMissingRestTable(error)) return [];
+      throw new Error(error.message);
+    }
+
+    return (data || []).map((row) => mapEvalRun(row));
   }
 
   await ensureDevLabSchema();
@@ -884,7 +1204,7 @@ async function listEvalRuns(limit = 20) {
 }
 
 async function getDashboardSnapshot() {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return {
       counts: {
         movie_count: 0,
@@ -898,6 +1218,54 @@ async function getDashboardSnapshot() {
       evalCases: [],
       evalRuns: [],
       degraded: true,
+    };
+  }
+
+  if (!pool && supabaseAdmin) {
+    const countTable = async (table: string, filterSourceKey = false) => {
+      let request = supabaseAdmin
+        .from(table)
+        .select('id', { count: 'exact', head: true });
+
+      if (filterSourceKey) {
+        request = request.not('source_key', 'is', null).neq('source_key', '');
+      }
+
+      const { count, error } = await request;
+      if (error) {
+        if (isMissingRestTable(error)) return 0;
+        throw new Error(error.message);
+      }
+      return count || 0;
+    };
+
+    const [movieCount, tvCount, bookCount, knowledgeCount, evalCaseCount, prompts, knowledge, evalCases, evalRuns] =
+      await Promise.all([
+        countTable('movies', true),
+        countTable('tv_shows', true),
+        countTable('books'),
+        countTable('chatbot_knowledge_documents'),
+        countTable('chatbot_eval_cases'),
+        listPromptProfiles(),
+        listKnowledgeDocuments(),
+        listEvalCases(),
+        listEvalRuns(),
+      ]);
+
+    return {
+      counts: {
+        movie_count: movieCount,
+        tv_count: tvCount,
+        book_count: bookCount,
+        knowledge_count: knowledgeCount,
+        eval_case_count: evalCaseCount,
+      },
+      prompts,
+      knowledge,
+      evalCases,
+      evalRuns,
+      degraded: false,
+      storage: 'supabase-rest',
     };
   }
 
@@ -948,11 +1316,37 @@ async function queryCatalogTable(options: {
   terms: string[];
   limit: number;
 }) {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return [];
   }
 
   const { table, mediaType, fields, selectSql, terms, limit } = options;
+
+  if (!pool && supabaseAdmin) {
+    let request = supabaseAdmin
+      .from(table)
+      .select(selectSql)
+      .not('source_key', 'is', null)
+      .neq('source_key', '')
+      .limit(limit);
+
+    if (terms.length && fields.length) {
+      const clauses = terms
+        .slice(0, 4)
+        .flatMap((term) => fields.map((field) => `${field}.ilike.%${term}%`))
+        .join(',');
+      request = request.or(clauses);
+    }
+
+    const { data, error } = await request;
+    if (error) {
+      if (isMissingRestTable(error)) return [];
+      throw new Error(error.message);
+    }
+
+    return (data || []).map((row) => ({ ...row, media_type: mediaType }));
+  }
+
   const args: unknown[] = [];
   let text = `
     select ${selectSql}
@@ -980,7 +1374,7 @@ async function queryCatalogTable(options: {
 }
 
 async function fetchCatalog(queryText: unknown, limit = 20) {
-  if (!pool) {
+  if (!pool && !supabaseAdmin) {
     return [];
   }
 
@@ -1300,6 +1694,17 @@ function formatTmdbTv(detail: Record<string, unknown>) {
 }
 
 async function upsertMovie(record: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('movies')
+      .upsert(record, { onConflict: 'source_key' })
+      .select('id, title, year, source_key')
+      .single();
+
+    if (error) throw new Error(error.message);
+    return mapImportedRecord(data);
+  }
+
   const rows = await queryRows(
     `
       insert into public.movies (
@@ -1349,6 +1754,17 @@ async function upsertMovie(record: Record<string, unknown>) {
 }
 
 async function upsertTvShow(record: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('tv_shows')
+      .upsert(record, { onConflict: 'source_key' })
+      .select('id, title, year, source_key')
+      .single();
+
+    if (error) throw new Error(error.message);
+    return mapImportedRecord(data);
+  }
+
   const rows = await queryRows(
     `
       insert into public.tv_shows (
@@ -1401,6 +1817,17 @@ async function upsertTvShow(record: Record<string, unknown>) {
 }
 
 async function upsertBook(record: Record<string, unknown>) {
+  if (!pool && supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('books')
+      .upsert(record, { onConflict: 'source_key' })
+      .select('id, title, year, source_key')
+      .single();
+
+    if (error) throw new Error(error.message);
+    return mapImportedRecord(data);
+  }
+
   const rows = await queryRows(
     `
       insert into public.books (
@@ -1469,7 +1896,7 @@ async function fetchOpenLibraryDescription(key: unknown) {
 }
 
 async function importCatalogFromApi(payload: Record<string, unknown>) {
-  requireDatabase();
+  requireStorage();
 
   const provider = String(payload.provider || '').trim().toLowerCase();
   const mediaType = String(payload.mediaType || '').trim();
@@ -1578,7 +2005,7 @@ async function importCatalogFromApi(payload: Record<string, unknown>) {
 }
 
 async function runEvaluations(payload: Record<string, unknown>) {
-  requireDatabase();
+  requireStorage();
 
   const requestedIds = Array.isArray(payload.caseIds)
     ? payload.caseIds.map((id) => Number(id)).filter(Number.isFinite)
@@ -1829,8 +2256,10 @@ Deno.serve(async (req) => {
       ok: true,
       message: 'dev function is live',
       hasDatabaseUrl: Boolean(DATABASE_URL),
+      hasSupabaseRest: Boolean(supabaseAdmin),
       hasGroqKey: Boolean(GROQ_API_KEY),
       hasTavilyKey: Boolean(TAVILY_API_KEY),
+      storage: pool ? 'postgres' : supabaseAdmin ? 'supabase-rest' : 'unconfigured',
     });
   }
 

@@ -793,4 +793,133 @@ on public.todos
 for select
 using (true);
 
+create table if not exists public.chatbot_knowledge_documents (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  source_type text not null,
+  media_type text,
+  source_url text,
+  source_label text,
+  tags text[] not null default '{}',
+  content text not null,
+  summary text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_chatbot_knowledge_documents_title
+  on public.chatbot_knowledge_documents (lower(title));
+
+create index if not exists idx_chatbot_knowledge_documents_source_type
+  on public.chatbot_knowledge_documents (source_type);
+
+create index if not exists idx_chatbot_knowledge_documents_tags
+  on public.chatbot_knowledge_documents using gin (tags);
+
+drop trigger if exists set_chatbot_knowledge_documents_updated_at on public.chatbot_knowledge_documents;
+create trigger set_chatbot_knowledge_documents_updated_at
+before update on public.chatbot_knowledge_documents
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.chatbot_prompt_profiles (
+  intent text primary key,
+  label text not null,
+  description text,
+  system_prompt text not null,
+  temperature numeric not null default 0.4,
+  max_titles integer not null default 5,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.chatbot_eval_cases (
+  id bigserial primary key,
+  label text not null,
+  question text not null,
+  expected_intent text,
+  expected_phrases text[] not null default '{}',
+  forbidden_phrases text[] not null default '{}',
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists set_chatbot_eval_cases_updated_at on public.chatbot_eval_cases;
+create trigger set_chatbot_eval_cases_updated_at
+before update on public.chatbot_eval_cases
+for each row
+execute function public.set_updated_at();
+
+create table if not exists public.chatbot_eval_runs (
+  id bigserial primary key,
+  case_id bigint references public.chatbot_eval_cases(id) on delete set null,
+  label text,
+  question text not null,
+  selected_intent text,
+  intent_match boolean not null default false,
+  passed boolean not null default false,
+  expected_hits text[] not null default '{}',
+  missing_expected text[] not null default '{}',
+  forbidden_hits text[] not null default '{}',
+  response_text text,
+  system_prompt text,
+  latency_ms integer,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_chatbot_eval_runs_created_at
+  on public.chatbot_eval_runs (created_at desc);
+
+insert into public.chatbot_prompt_profiles (
+  intent,
+  label,
+  description,
+  system_prompt,
+  temperature,
+  max_titles
+)
+values
+  (
+    'general',
+    'General',
+    'Balanced everyday assistant behavior for broad questions.',
+    'Answer in a warm, natural voice. Prefer short paragraphs, stay grounded in the provided catalog and knowledge base, and do not use markdown bullets unless the user asks for a list.',
+    0.45,
+    5
+  ),
+  (
+    'factual',
+    'Factual Lookup',
+    'Direct answers for cast, release, runtime, and title lookups.',
+    'Answer directly and accurately. Lead with the answer, keep the wording compact, and only mention supporting context that helps the user verify the fact.',
+    0.2,
+    3
+  ),
+  (
+    'thematic',
+    'Explanation',
+    'Interpretive answers about themes, comparisons, and analysis.',
+    'Explain ideas clearly and conversationally. Focus on meaning, themes, and comparisons, and connect the answer back to the user question instead of sounding academic.',
+    0.4,
+    4
+  ),
+  (
+    'recommendation',
+    'Recommendation',
+    'Recommendation mode for shortlist-style answers.',
+    'Recommend only the strongest matches. Keep the answer human and specific, mention why each suggestion fits, and avoid dumping a long catalog.',
+    0.55,
+    5
+  ),
+  (
+    'creative',
+    'Creative',
+    'Creative responses such as pitches, rewrites, and alternate versions.',
+    'Be imaginative while still respecting the supplied context. Use an engaging voice, but keep the output readable and avoid heavy markdown formatting.',
+    0.75,
+    4
+  )
+on conflict (intent) do nothing;
+
 commit;
