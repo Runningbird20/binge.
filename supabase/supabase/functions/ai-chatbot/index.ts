@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY') || Deno.env.get('REACT_APP_GROQ_API_KEY');
 const TAVILY_API_KEY = Deno.env.get('TAVILY_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -10,6 +10,7 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 // ─── Intent detection ──────────────────────────────────────────────────────────
@@ -350,14 +351,39 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: CORS_HEADERS });
   }
 
-  if (!GROQ_API_KEY) {
-    return new Response(JSON.stringify({ error: 'GROQ_API_KEY is not configured.' }), {
-      status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed.' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
   try {
     const body = await req.json();
+    const rawMessages = Array.isArray(body.messages) ? body.messages : [];
+    const isStatusPing =
+      rawMessages.length === 1 &&
+      rawMessages[0]?.role === 'system' &&
+      String(rawMessages[0]?.content || '').trim().toLowerCase() === 'ping';
+
+    if (isStatusPing) {
+      if (!GROQ_API_KEY) {
+        return new Response(JSON.stringify({ ok: false, error: 'GROQ_API_KEY is not configured.' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true, models: [GROQ_MODEL] }), {
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      });
+    }
+
+    if (!GROQ_API_KEY) {
+      return new Response(JSON.stringify({ error: 'GROQ_API_KEY is not configured.' }), {
+        status: 503, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      });
+    }
 
     // Support both Supabase format { messages: [...] } and server format { message, conversationHistory }
     let userMessage: string;
@@ -460,7 +486,7 @@ ${userSection}
       .map((r: Record<string, string>) => ({ type: 'web', title: r.title, snippet: r.snippet, url: r.url, source: r.source }));
 
     return new Response(
-      JSON.stringify({ response: aiResponse, intent, siteSources, webSources, searchQuery }),
+      JSON.stringify({ ok: true, content: aiResponse, response: aiResponse, intent, siteSources, webSources, searchQuery }),
       { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
     );
 
