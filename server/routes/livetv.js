@@ -52,6 +52,7 @@ async function fetchPlutoChannels() {
         summary: ch.summary || ch.description || '',
         nowPlaying: ch.timelines?.[0]?.title?.name || null,
         embedUrl: `https://pluto.tv/en/live-tv/${ch.slug}`,
+        streamUrl: ch.stitched?.urls?.[0]?.url || null,
         source: 'pluto',
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
