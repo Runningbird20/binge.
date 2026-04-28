@@ -4,6 +4,7 @@ import {
   requireSupabaseClient,
   toSupabaseError,
 } from './supabase';
+import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './supabaseData';
 import { resolveUserType } from './userAccess';
 
 const SEARCH_LIMIT = 8;
@@ -1758,6 +1759,86 @@ async function handleProfileFollowGet(pathname) {
   return { following: Boolean(data) };
 }
 
+async function handleProfileGet(pathname) {
+  const profileMatch = pathname.match(/^\/profile\/([^/]+)$/);
+  if (!profileMatch) {
+    return null;
+  }
+
+  const client = requireSupabaseClient();
+  const username = decodeURIComponent(profileMatch[1]);
+  const viewer = await getAuthenticatedUserOrNull();
+
+  const { data: profile, error: profileError } = await client
+    .from('profiles')
+    .select('id, username, email, bio, avatar_url, created_at, is_public')
+    .ilike('username', username)
+    .maybeSingle();
+
+  if (profileError) {
+    throw toSupabaseError(profileError, 'Unable to load that profile.', {
+      resourceName: 'profiles',
+    });
+  }
+
+  if (!profile) {
+    throw new Error('User not found.');
+  }
+
+  const isOwnProfile = viewer?.id === profile.id;
+  const isPrivate = profile.is_public === false;
+
+  const [{ count: followers }, { count: following }] = await Promise.all([
+    client
+      .from('follows')
+      .select('follower_id', { count: 'exact', head: true })
+      .eq('following_id', profile.id),
+    client
+      .from('follows')
+      .select('following_id', { count: 'exact', head: true })
+      .eq('follower_id', profile.id),
+  ]);
+
+  if (isPrivate && !isOwnProfile) {
+    return {
+      profile,
+      ratings: [],
+      watchlist: [],
+      posts: [],
+      followers: followers || 0,
+      following: following || 0,
+      isPrivate: true,
+    };
+  }
+
+  const [ratings, watchlist, postsResult] = await Promise.all([
+    fetchSupabaseRatings({ userId: profile.id }).catch(() => []),
+    fetchSupabaseWatchlist({ userId: profile.id }).catch(() => []),
+    client
+      .from('posts')
+      .select('id, title, body, tags, score, created_at, forums(name, slug)')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ]);
+
+  if (postsResult.error) {
+    throw toSupabaseError(postsResult.error, 'Unable to load forum posts.', {
+      resourceName: 'posts',
+    });
+  }
+
+  return {
+    profile,
+    ratings,
+    watchlist,
+    posts: postsResult.data || [],
+    followers: followers || 0,
+    following: following || 0,
+    isPrivate: false,
+  };
+}
+
 async function handleProfileFollowMutation(method, pathname) {
   const client = requireSupabaseClient();
   const followMatch = pathname.match(/^\/profile\/([^/]+)\/follow$/);
@@ -2018,6 +2099,11 @@ export async function executeSupabaseRoute(method, path, body) {
       const result = await handleProfileFollowGet(pathname);
       if (result !== null) {
         return result;
+      }
+
+      const profileResult = await handleProfileGet(pathname);
+      if (profileResult !== null) {
+        return profileResult;
       }
     }
 
