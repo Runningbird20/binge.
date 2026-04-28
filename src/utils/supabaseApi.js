@@ -1,7 +1,6 @@
 import {
   getSupabaseSession,
   getSupabaseUser,
-  isSupabaseConfigured,
   requireSupabaseClient,
   toSupabaseError,
 } from './supabase';
