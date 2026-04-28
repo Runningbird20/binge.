@@ -5,6 +5,7 @@ import {
   toSupabaseError,
 } from './supabase';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './supabaseData';
+import { generateSupabaseRecommendations } from './recommendations';
 import { resolveUserType } from './userAccess';
 
 const SEARCH_LIMIT = 8;
@@ -2057,6 +2058,14 @@ async function handleAdminGet(pathname, searchParams) {
 export async function executeSupabaseRoute(method, path, body) {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const { pathname, searchParams } = parseApiPath(path);
+
+  if (pathname === '/chat/recommendations') {
+    if (normalizedMethod !== 'GET') {
+      throw new Error(`Unsupported chat route: ${pathname}`);
+    }
+
+    return generateSupabaseRecommendations();
+  }
 
   if (pathname === '/search') {
     return handleSearch(searchParams);
