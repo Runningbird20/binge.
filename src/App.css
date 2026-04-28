@@ -921,8 +921,10 @@ body {
   min-width: 100px;
 }
 .yir-stat-num { font-size: 1.8rem; font-weight: 800; color: #e8c97a; line-height: 1; }
+.yir-stat-label-row { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; }
 .yir-stat-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: #555; font-weight: 600; }
 .yir-stat-sub { font-size: 1rem; margin-top: 0.2rem; }
+.yir-stat-sub--inline { margin-top: 0; font-size: 0.9rem; line-height: 1; }
 
 .yir-card {
   background: rgba(255,255,255,0.025);
@@ -982,6 +984,34 @@ body {
 }
 .yir-badge-name { font-size: 0.8rem; font-weight: 600; color: #ccc; }
 .yir-badge-tier { font-size: 0.65rem; color: #888; }
+.yir-badge.badge-card-tier-bronze {
+  background: rgba(179, 122, 67, 0.14);
+  border-color: rgba(179, 122, 67, 0.34);
+  box-shadow: 0 8px 22px rgba(179, 122, 67, 0.08);
+}
+.yir-badge.badge-card-tier-bronze .yir-badge-name { color: #deb58e; }
+.yir-badge.badge-card-tier-bronze .yir-badge-tier { color: #c99869; }
+.yir-badge.badge-card-tier-silver {
+  background: rgba(172, 182, 193, 0.14);
+  border-color: rgba(172, 182, 193, 0.34);
+  box-shadow: 0 8px 22px rgba(172, 182, 193, 0.08);
+}
+.yir-badge.badge-card-tier-silver .yir-badge-name { color: #e0e7ee; }
+.yir-badge.badge-card-tier-silver .yir-badge-tier { color: #bac5cf; }
+.yir-badge.badge-card-tier-gold {
+  background: rgba(232, 201, 122, 0.15);
+  border-color: rgba(232, 201, 122, 0.38);
+  box-shadow: 0 8px 22px rgba(232, 201, 122, 0.1);
+}
+.yir-badge.badge-card-tier-gold .yir-badge-name { color: #f1dfb0; }
+.yir-badge.badge-card-tier-gold .yir-badge-tier { color: #e8c97a; }
+.yir-badge.badge-card-tier-platinum {
+  background: rgba(108, 210, 214, 0.14);
+  border-color: rgba(108, 210, 214, 0.36);
+  box-shadow: 0 8px 22px rgba(108, 210, 214, 0.1);
+}
+.yir-badge.badge-card-tier-platinum .yir-badge-name { color: #c8f5f6; }
+.yir-badge.badge-card-tier-platinum .yir-badge-tier { color: #8de6e8; }
 
 .home-recap-stat-grid {
   display: grid;
