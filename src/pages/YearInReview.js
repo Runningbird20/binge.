@@ -14,12 +14,15 @@ function resolvePoster(url) {
 const TYPE_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const TYPE_ICONS  = { movie: '🎬', tv_show: '📺', book: '📖' };
 
-function StatBig({ value, label, sub }) {
+function StatBig({ value, label, sub, inlineSub = false }) {
   return (
     <div className="yir-stat">
       <span className="yir-stat-num">{value}</span>
-      <span className="yir-stat-label">{label}</span>
-      {sub && <span className="yir-stat-sub">{sub}</span>}
+      <span className="yir-stat-label-row">
+        <span className="yir-stat-label">{label}</span>
+        {sub && inlineSub && <span className="yir-stat-sub yir-stat-sub--inline">{sub}</span>}
+      </span>
+      {sub && !inlineSub && <span className="yir-stat-sub">{sub}</span>}
     </div>
   );
 }
@@ -113,11 +116,11 @@ export default function YearInReview() {
             {/* ── Big numbers ──────────────────────────────────── */}
             <div className="yir-stats-row">
               <StatBig value={recap.totalLogged} label="Titles Logged" />
-              <StatBig value={recap.countsByType.movie} label="Movies" sub={TYPE_ICONS.movie} />
-              <StatBig value={recap.countsByType.tv_show} label="TV Shows" sub={TYPE_ICONS.tv_show} />
-              <StatBig value={recap.countsByType.book} label="Books" sub={TYPE_ICONS.book} />
+              <StatBig value={recap.countsByType.movie} label="Movies" sub={TYPE_ICONS.movie} inlineSub />
+              <StatBig value={recap.countsByType.tv_show} label="TV Shows" sub={TYPE_ICONS.tv_show} inlineSub />
+              <StatBig value={recap.countsByType.book} label="Books" sub={TYPE_ICONS.book} inlineSub />
               <StatBig value={recap.activeMonths} label="Active Months" />
-              {recap.busiestMonth && <StatBig value={recap.busiestMonth.label} label="Busiest Month" sub={`${recap.busiestMonth.count} titles`} />}
+              {recap.busiestMonth && <StatBig value={recap.busiestMonth.label} label="Busiest Month" />}
             </div>
 
             {/* ── Monthly chart ─────────────────────────────────── */}
