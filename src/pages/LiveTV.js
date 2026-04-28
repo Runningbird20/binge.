@@ -185,16 +185,34 @@ export default function LiveTV() {
               </div>
 
               <div className="livetv-frame-wrap">
-                <iframe
-                  key={selectedChannel.id}
-                  ref={iframeRef}
-                  src={selectedChannel.embedUrl}
-                  className="livetv-frame"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                  referrerPolicy="no-referrer"
-                  title={`Watch ${selectedChannel.name} live`}
-                />
+                {selectedChannel.ytEmbedId ? (
+                  <iframe
+                    key={selectedChannel.ytEmbedId}
+                    ref={iframeRef}
+                    src={`https://www.youtube.com/embed/${selectedChannel.ytEmbedId}?autoplay=1&mute=0`}
+                    className="livetv-frame"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                    title={`Watch ${selectedChannel.name} live`}
+                  />
+                ) : (
+                  <div className="livetv-external-card">
+                    <div className="livetv-external-icon">📡</div>
+                    <p className="livetv-external-name">{selectedChannel.name}</p>
+                    <p className="livetv-external-note">
+                      This channel streams on {selectedChannel.source === 'pluto' ? 'Pluto TV' : 'its own website'} and
+                      cannot be embedded here.
+                    </p>
+                    <a
+                      href={selectedChannel.embedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="livetv-external-btn"
+                    >
+                      Watch Live ↗
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div className="livetv-footer">

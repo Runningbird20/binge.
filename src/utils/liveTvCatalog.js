@@ -1,16 +1,19 @@
+// embedUrl is used for the "Watch Live" external link.
+// These sites set X-Frame-Options: SAMEORIGIN and cannot be iframed from external domains.
+// ytEmbedId: YouTube live-stream video ID for channels that publish one — these CAN be iframed.
 const FALLBACK_CHANNELS = [
-  { id: 'cbs-news-24-7', name: 'CBS News 24/7', category: 'News', thumbnail: null, nowPlaying: null, embedUrl: 'https://www.cbsnews.com/embed/live/' },
-  { id: 'al-jazeera', name: 'Al Jazeera English', category: 'News', thumbnail: null, nowPlaying: null, embedUrl: 'https://www.aljazeera.com/live/' },
-  { id: 'dw-news', name: 'DW News', category: 'News', thumbnail: null, nowPlaying: null, embedUrl: 'https://www.dw.com/en/media-center/live-tv/s-100825' },
-  { id: 'nasa-tv', name: 'NASA TV', category: 'Documentary', thumbnail: null, nowPlaying: null, embedUrl: 'https://www.nasa.gov/wp-content/plugins/nasatv/components/single.html' },
-  { id: 'pluto-action', name: 'Action Movies', category: 'Movies', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/action-movies-pluto-tv' },
-  { id: 'pluto-comedy', name: 'Comedy Central', category: 'Comedy', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/comedy-central-pluto-tv' },
-  { id: 'pluto-drama', name: 'Drama Queens', category: 'Drama', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/drama-queens' },
-  { id: 'pluto-thriller', name: 'Thrillers', category: 'Movies', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/thrillers-pluto-tv' },
-  { id: 'pluto-horror', name: 'Horror 24/7', category: 'Horror', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/horror-24-7' },
-  { id: 'pluto-anime', name: 'Anime All Day', category: 'Anime', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/anime-all-day' },
-  { id: 'pluto-sports', name: 'Sports Illustrated TV', category: 'Sports', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/sports-illustrated-tv' },
-  { id: 'pluto-kids', name: 'Kids Zone', category: 'Kids', thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/kid-zone' },
+  { id: 'cbs-news-24-7',  name: 'CBS News 24/7',        category: 'News',        thumbnail: null, nowPlaying: null, embedUrl: 'https://www.cbsnews.com/live/',                            ytEmbedId: 'eNlHqgd6Zs8' },
+  { id: 'al-jazeera',    name: 'Al Jazeera English',    category: 'News',        thumbnail: null, nowPlaying: null, embedUrl: 'https://www.aljazeera.com/live/',                          ytEmbedId: 'h3MuIUncRLU' },
+  { id: 'dw-news',       name: 'DW News',               category: 'News',        thumbnail: null, nowPlaying: null, embedUrl: 'https://www.dw.com/en/media-center/live-tv/s-100825',      ytEmbedId: 'KJ0IWqg_mlA' },
+  { id: 'nasa-tv',       name: 'NASA TV',               category: 'Documentary', thumbnail: null, nowPlaying: null, embedUrl: 'https://www.nasa.gov/live/',                               ytEmbedId: '21X5lGlDOfg' },
+  { id: 'pluto-action',  name: 'Action Movies',         category: 'Movies',      thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/action-movies-pluto-tv',       ytEmbedId: null },
+  { id: 'pluto-comedy',  name: 'Comedy Central',        category: 'Comedy',      thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/comedy-central-pluto-tv',      ytEmbedId: null },
+  { id: 'pluto-drama',   name: 'Drama Queens',          category: 'Drama',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/drama-queens',                ytEmbedId: null },
+  { id: 'pluto-thriller',name: 'Thrillers',             category: 'Movies',      thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/thrillers-pluto-tv',           ytEmbedId: null },
+  { id: 'pluto-horror',  name: 'Horror 24/7',           category: 'Horror',      thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/horror-24-7',                 ytEmbedId: null },
+  { id: 'pluto-anime',   name: 'Anime All Day',         category: 'Anime',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/anime-all-day',               ytEmbedId: null },
+  { id: 'pluto-sports',  name: 'Sports Illustrated TV', category: 'Sports',      thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/sports-illustrated-tv',        ytEmbedId: null },
+  { id: 'pluto-kids',    name: 'Kids Zone',             category: 'Kids',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/kid-zone',                    ytEmbedId: null },
 ];
 
 function mapPlutoChannel(channel) {
@@ -24,6 +27,7 @@ function mapPlutoChannel(channel) {
     summary: channel.summary || channel.description || '',
     nowPlaying: channel.timelines?.[0]?.title?.name || null,
     embedUrl: `https://pluto.tv/en/live-tv/${channel.slug}`,
+    ytEmbedId: null,
     source: 'pluto',
   };
 }
