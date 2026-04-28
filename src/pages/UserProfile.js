@@ -165,6 +165,68 @@ function StatCard({ value, label }) {
   );
 }
 
+function ProfileStatsCard({ watchlist, ratings, joinDate }) {
+  const stats = useMemo(() => {
+    const completed = watchlist.filter(i => i.status === 'watched' || i.status === 'read').length;
+    const inProgress = watchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
+
+    const scores = ratings.map(r => computeNormalizedScore(r.media_type, r)).filter(s => s != null);
+    const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : null;
+
+    const genreCounts = {};
+    ratings.forEach(r => {
+      (r.genre || '').split(',').forEach(g => {
+        const t = g.trim();
+        if (t) genreCounts[t] = (genreCounts[t] || 0) + 1;
+      });
+    });
+    const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    const byType = { movie: 0, tv_show: 0, book: 0 };
+    watchlist.forEach(i => { if (byType[i.media_type] !== undefined) byType[i.media_type]++; });
+
+    const joined = joinDate ? new Date(joinDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null;
+
+    return { completed, inProgress, avg, topGenre, byType, joined, totalRatings: ratings.length };
+  }, [watchlist, ratings, joinDate]);
+
+  if (!watchlist.length && !ratings.length) return null;
+
+  return (
+    <div className="profile-stats-card">
+      <div className="psc-grid">
+        <div className="psc-cell">
+          <span className="psc-num">{stats.completed}</span>
+          <span className="psc-label">Completed</span>
+        </div>
+        {stats.inProgress > 0 && (
+          <div className="psc-cell">
+            <span className="psc-num">{stats.inProgress}</span>
+            <span className="psc-label">In Progress</span>
+          </div>
+        )}
+        <div className="psc-cell">
+          <span className="psc-num">{stats.totalRatings}</span>
+          <span className="psc-label">Ratings</span>
+        </div>
+        {stats.avg && (
+          <div className="psc-cell">
+            <span className="psc-num">{stats.avg}</span>
+            <span className="psc-label">Avg Score</span>
+          </div>
+        )}
+      </div>
+      <div className="psc-pills">
+        {stats.byType.movie > 0   && <span className="psc-pill">🎬 {stats.byType.movie} movies</span>}
+        {stats.byType.tv_show > 0 && <span className="psc-pill">📺 {stats.byType.tv_show} shows</span>}
+        {stats.byType.book > 0    && <span className="psc-pill">📖 {stats.byType.book} books</span>}
+        {stats.topGenre           && <span className="psc-pill">🎭 {stats.topGenre}</span>}
+        {stats.joined             && <span className="psc-pill psc-pill--muted">Joined {stats.joined}</span>}
+      </div>
+    </div>
+  );
+}
+
 function RatingStats({ ratings }) {
   const stats = useMemo(() => {
     if (!ratings.length) return null;
@@ -360,6 +422,14 @@ export default function UserProfile() {
             {isOwn && <Link to="/account-settings" className="btn-ghost">Edit Profile</Link>}
           </div>
         </div>
+
+        {!isPrivate || isOwn ? (
+          <ProfileStatsCard
+            watchlist={displayWatchlist}
+            ratings={displayRatings}
+            joinDate={profile.created_at}
+          />
+        ) : null}
 
         {isPrivate && !isOwn ? (
           <div className="profile-private"><p>🔒 This profile is private.</p></div>
