@@ -27,6 +27,7 @@ function mapPlutoChannel(channel) {
     summary: channel.summary || channel.description || '',
     nowPlaying: channel.timelines?.[0]?.title?.name || null,
     embedUrl: `https://pluto.tv/en/live-tv/${channel.slug}`,
+    streamUrl: channel.stitched?.urls?.[0]?.url || null,
     ytEmbedId: null,
     source: 'pluto',
   };

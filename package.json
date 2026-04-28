@@ -17,6 +17,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
+    "hls.js": "^1.6.16",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "playwright": "^1.59.1",
