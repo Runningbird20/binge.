@@ -21,15 +21,24 @@ export default function GlobalSearch() {
   const navigate  = useNavigate();
   const debounced = useDebounce(query, 280);
 
-  // Keyboard shortcut: Cmd+K / Ctrl+K
+  // Keyboard shortcuts: Cmd+K / Ctrl+K, or bare S key when no input is focused
   useEffect(() => {
     function handleKey(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setOpen(v => !v);
         if (!open) setTimeout(() => inputRef.current?.focus(), 50);
+        return;
       }
-      if (e.key === 'Escape') { setOpen(false); setQuery(''); }
+      if (e.key === 'Escape') { setOpen(false); setQuery(''); return; }
+      if ((e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const tag = document.activeElement?.tagName?.toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea' && tag !== 'select' && document.activeElement?.contentEditable !== 'true') {
+          e.preventDefault();
+          setOpen(true);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }
+      }
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);

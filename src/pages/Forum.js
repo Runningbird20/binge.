@@ -40,7 +40,21 @@ function copyToClipboard(text) {
   });
 }
 
-// Simple markdown renderer — bold, italic, code, links, blockquotes
+// ── Inline spoiler span ───────────────────────────────────────────────────────
+function SpoilerSpan({ children }) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <span
+      className={`forum-inline-spoiler${revealed ? ' revealed' : ''}`}
+      onClick={() => setRevealed(true)}
+      title={revealed ? '' : 'Click to reveal spoiler'}
+    >
+      {children}
+    </span>
+  );
+}
+
+// Simple markdown renderer — bold, italic, code, links, blockquotes, inline spoilers
 function renderMarkdown(text) {
   if (!text) return null;
   const lines = text.split('\n');
@@ -65,12 +79,14 @@ function renderMarkdown(text) {
 }
 
 function inlineMarkdown(text) {
-  // Split on markdown tokens
-  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))/g);
+  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\)|\[spoiler\].*?\[\/spoiler\])/gs);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
     if (part.startsWith('*') && part.endsWith('*'))   return <em key={i}>{part.slice(1, -1)}</em>;
     if (part.startsWith('`') && part.endsWith('`'))   return <code key={i} className="forum-inline-code">{part.slice(1, -1)}</code>;
+    if (part.startsWith('[spoiler]') && part.endsWith('[/spoiler]')) {
+      return <SpoilerSpan key={i}>{part.slice(9, -10)}</SpoilerSpan>;
+    }
     const linkMatch = part.match(/^\[(.*?)\]\((.*?)\)$/);
     if (linkMatch) return <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" className="forum-link">{linkMatch[1]}</a>;
     return part;
@@ -96,12 +112,18 @@ function VoteButtons({ score, onVote, userVote, vertical = false, disabled = fal
   );
 }
 
-function FlairBadge({ flair, size = 'sm' }) {
+function FlairBadge({ flair, size = 'sm', onClick, isActive }) {
   if (!flair) return null;
   const color = FLAIR_COLORS[flair] || '#555';
   return (
-    <span className={`forum-flair forum-flair--${size}`}
-      style={{ background: color + '22', color, border: `1px solid ${color}44` }}>
+    <span
+      className={`forum-flair forum-flair--${size}${onClick ? ' forum-flair--clickable' : ''}${isActive ? ' forum-flair--active' : ''}`}
+      style={{ background: color + (isActive ? '44' : '22'), color, border: `1px solid ${color}${isActive ? '99' : '44'}` }}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? e => e.key === 'Enter' && onClick() : undefined}
+    >
       {flair}
     </span>
   );
@@ -485,6 +507,7 @@ function ForumView() {
   const [showCreate, setShowCreate] = useState(false);
   const [myVotes, setMyVotes]     = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [flairFilter, setFlairFilter] = useState('');
 
   const fetchPosts = useCallback(async (pageNum, sortVal) => {
     try {
@@ -532,9 +555,9 @@ function ForumView() {
     } catch (err) { alert(err.message); }
   }
 
-  const filteredPosts = searchQuery
-    ? posts.filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()) || p.tags?.some(t => t.includes(searchQuery.toLowerCase())))
-    : posts;
+  const filteredPosts = posts
+    .filter(p => !searchQuery || p.title.toLowerCase().includes(searchQuery.toLowerCase()) || p.tags?.some(t => t.includes(searchQuery.toLowerCase())))
+    .filter(p => !flairFilter || p.flair === flairFilter);
 
   if (!forum && !loading) return (
     <div className="app-layout"><Navbar />
@@ -578,7 +601,15 @@ function ForumView() {
                   <button key={s.value} className={`forum-sort-btn ${sort === s.value ? 'active' : ''}`} onClick={() => setSort(s.value)} type="button">{s.label}</button>
                 ))}
               </div>
-              <input className="forum-search-input" placeholder="🔍 Search posts..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+              <div className="forum-controls-right">
+                {flairFilter && (
+                  <div className="forum-flair-filter-active">
+                    <FlairBadge flair={flairFilter} size="sm" />
+                    <button className="forum-flair-clear" onClick={() => setFlairFilter('')} type="button" title="Clear filter">✕</button>
+                  </div>
+                )}
+                <input className="forum-search-input" placeholder="🔍 Search posts..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+              </div>
             </div>
 
             {loading ? <div className="loading-state">Loading posts...</div>
@@ -641,10 +672,21 @@ function ForumView() {
                 )}
 
                 <div className="forum-sidebar-card">
-                  <h3 className="forum-sidebar-heading">🏷️ Flairs</h3>
+                  <h3 className="forum-sidebar-heading">🏷️ Filter by Flair</h3>
                   <div className="forum-flair-list">
-                    {FLAIRS.map(f => <FlairBadge key={f} flair={f} size="md" />)}
+                    {FLAIRS.map(f => (
+                      <FlairBadge
+                        key={f} flair={f} size="md"
+                        onClick={() => setFlairFilter(v => v === f ? '' : f)}
+                        isActive={flairFilter === f}
+                      />
+                    ))}
                   </div>
+                  {flairFilter && (
+                    <button className="forum-flair-clear-all" onClick={() => setFlairFilter('')} type="button">
+                      Clear filter
+                    </button>
+                  )}
                 </div>
               </>
             )}
