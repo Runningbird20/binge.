@@ -28,6 +28,7 @@ const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
 const Trending       = lazy(() => import('./pages/Trending'));
 const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
+const YearInReview   = lazy(() => import('./pages/YearInReview'));
 
 function AppRouteFallback() {
   return <div className="loading-state">Loading...</div>;
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
             <Route path="/trending"               element={<ProtectedRoute><Trending /></ProtectedRoute>} />
+            <Route path="/year-in-review"         element={<ProtectedRoute><YearInReview /></ProtectedRoute>} />
             <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
             <Route path="*" element={
               <div className="app-layout">

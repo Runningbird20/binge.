@@ -164,6 +164,7 @@ function BrowseView({
         sortOrder,
         includeCount: true,
         includeFacets: true,
+        includeUpcoming: sortOrder === 'year-asc',
       });
       const nextItems = normalizeMediaItems(data);
       if (nextItems.length === 0 && !debouncedSearch && !genre) {
@@ -225,6 +226,7 @@ function BrowseView({
               sortOrder,
               includeCount: false,
               includeFacets: false,
+              includeUpcoming: sortOrder === 'year-asc',
             })
           )));
 

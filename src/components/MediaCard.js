@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
+import { fetchSupabaseLists, addSupabaseListItem } from '../utils/supabaseData';
 
 function resolvePosterUrl(url) {
   if (!url) return null;
@@ -19,6 +21,100 @@ function resolvePosterUrl(url) {
   }
 
   return url;
+}
+
+function ListQuickAdd({ mediaType, mediaId, itemTitle }) {
+  const [open, setOpen] = useState(false);
+  const [lists, setLists] = useState(null);
+  const [selectedId, setSelectedId] = useState('');
+  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  async function handleOpen(e) {
+    e.stopPropagation();
+    setOpen(o => !o);
+    setStatus('');
+    if (lists === null) {
+      try {
+        const data = await fetchSupabaseLists();
+        const editable = Array.isArray(data) ? data.filter(l => l?.permissions?.canEdit) : [];
+        setLists(editable);
+        setSelectedId(editable[0] ? String(editable[0].id) : '');
+      } catch {
+        setLists([]);
+      }
+    }
+  }
+
+  async function handleAdd(e) {
+    e.stopPropagation();
+    if (!selectedId) return;
+    setSaving(true);
+    setStatus('');
+    try {
+      await addSupabaseListItem(selectedId, { mediaType, mediaId });
+      const name = lists?.find(l => String(l.id) === selectedId)?.name;
+      setStatus(`Added to ${name || 'list'}`);
+      setTimeout(() => { setOpen(false); setStatus(''); }, 1200);
+    } catch (err) {
+      setStatus(err.message || 'Error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mc-list-add-wrap" ref={panelRef}>
+      <button
+        type="button"
+        className="btn-ghost btn-sm"
+        onClick={handleOpen}
+        title="Add to list"
+      >
+        + List
+      </button>
+      {open && (
+        <div className="mc-list-panel" onClick={e => e.stopPropagation()}>
+          {lists === null ? (
+            <span className="mc-list-status">Loading…</span>
+          ) : lists.length === 0 ? (
+            <span className="mc-list-status">No editable lists</span>
+          ) : (
+            <>
+              <select
+                className="mc-list-select"
+                value={selectedId}
+                onChange={e => setSelectedId(e.target.value)}
+              >
+                {lists.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                onClick={handleAdd}
+                disabled={saving}
+              >
+                {saving ? '…' : 'Add'}
+              </button>
+            </>
+          )}
+          {status && <span className="mc-list-status">{status}</span>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function MediaCard({
@@ -118,6 +214,11 @@ export default function MediaCard({
               Save
             </button>
           )}
+          <ListQuickAdd
+            mediaType={mediaType}
+            mediaId={item.id}
+            itemTitle={item.title}
+          />
         </div>
       </div>
     </div>

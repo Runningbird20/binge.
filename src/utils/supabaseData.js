@@ -1143,6 +1143,25 @@ async function loadListItems(client, listId, currentUserId) {
     }
   });
 
+  // Fetch user's watchlist status for items in this list
+  let watchlistStatusMap = {};
+  if (currentUserId && items.length) {
+    const byType = items.reduce((acc, it) => {
+      if (!acc[it.media_type]) acc[it.media_type] = [];
+      acc[it.media_type].push(it.media_id);
+      return acc;
+    }, {});
+    const wlQueries = Object.entries(byType).map(([mt, ids]) =>
+      client.from('watchlist').select('media_type,media_id,status').eq('user_id', currentUserId).eq('media_type', mt).in('media_id', ids)
+    );
+    const wlResults = await Promise.all(wlQueries);
+    wlResults.forEach(({ data }) => {
+      (data || []).forEach(row => {
+        watchlistStatusMap[`${row.media_type}:${row.media_id}`] = row.status;
+      });
+    });
+  }
+
   return items
     .map((item) => {
       const metadata = metadataByType[item.media_type]?.[item.media_id] || null;
@@ -1154,6 +1173,7 @@ async function loadListItems(client, listId, currentUserId) {
         upvotes: Number(votes.upvotes) || 0,
         downvotes: Number(votes.downvotes) || 0,
         my_vote: Number(votes.my_vote) || 0,
+        my_watchlist_status: watchlistStatusMap[`${item.media_type}:${item.media_id}`] || null,
       };
     })
     .filter((item) => Boolean(item.title));
@@ -1353,6 +1373,51 @@ export async function fetchSupabaseLists() {
       canVote: true,
       role: list.user_id === currentUserId ? 'owner' : 'collaborator',
     },
+  }));
+}
+
+export async function fetchSupabasePublicLists({ limit = 40, search = '' } = {}) {
+  const client = requireSupabase();
+  let query = client
+    .from('media_lists')
+    .select('id,name,share_code,is_public,created_at,updated_at,user_id')
+    .eq('is_public', true)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (search.trim()) {
+    query = query.ilike('name', `%${search.trim()}%`);
+  }
+
+  const { data: lists, error } = await query;
+  if (error) throw new Error(toFriendlyError(error, 'Unable to load public lists.'));
+
+  const listRows = lists || [];
+  if (!listRows.length) return [];
+
+  const listIds = listRows.map(l => l.id);
+  const ownerIds = [...new Set(listRows.map(l => l.user_id))];
+
+  const [{ data: itemRows }, { data: ownerProfiles }] = await Promise.all([
+    client.from('media_list_items').select('list_id').in('list_id', listIds),
+    client.from('profiles').select('id,username').in('id', ownerIds),
+  ]);
+
+  const itemCounts = (itemRows || []).reduce((acc, r) => {
+    acc[r.list_id] = (acc[r.list_id] || 0) + 1;
+    return acc;
+  }, {});
+  const ownerMap = Object.fromEntries((ownerProfiles || []).map(p => [p.id, p.username]));
+
+  return listRows.map(list => ({
+    id: list.id,
+    name: list.name,
+    share_code: list.share_code,
+    is_public: true,
+    created_at: list.created_at,
+    updated_at: list.updated_at,
+    owner_username: ownerMap[list.user_id] || 'Unknown',
+    item_count: Number(itemCounts[list.id] || 0),
   }));
 }
 
@@ -1934,5 +1999,37 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
     });
     if (error) throw toFriendlyError(error, 'Failed to add to watchlist');
   }
+}
+
+export async function fetchListComments(listId) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('list_comments')
+    .select('id,body,created_at,user_id,profiles(username,avatar_url)')
+    .eq('list_id', listId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(toFriendlyError(error, 'Unable to load comments.'));
+  return (data || []).map(c => ({
+    id: c.id,
+    body: c.body,
+    created_at: c.created_at,
+    user_id: c.user_id,
+    author: c.profiles || { username: 'Unknown', avatar_url: null },
+  }));
+}
+
+export async function addListComment(listId, body) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const clean = String(body || '').trim().slice(0, 1000);
+  if (!clean) throw new Error('Comment cannot be empty.');
+  const { error } = await client.from('list_comments').insert({ list_id: listId, user_id: authUser.id, body: clean });
+  if (error) throw new Error(toFriendlyError(error, 'Unable to post comment.'));
+}
+
+export async function deleteListComment(commentId) {
+  const client = requireSupabase();
+  const { error } = await client.from('list_comments').delete().eq('id', commentId);
+  if (error) throw new Error(toFriendlyError(error, 'Unable to delete comment.'));
 }
 
