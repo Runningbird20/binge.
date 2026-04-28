@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { computeNormalizedScore } from '../components/RatingArtifact';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
-import { buildHomeInsights, MONTH_LABELS } from '../homeInsights';
+import { buildHomeInsights } from '../homeInsights';
 
 function resolvePoster(url) {
   if (!url) return null;
