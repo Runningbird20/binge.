@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import ThemedSelect from './ThemedSelect';
 import {
   fetchSupabaseLists,
   addSupabaseListItem,
@@ -95,18 +96,13 @@ const data = await fetchSupabaseLists();
         </p>
       ) : (
         <div className="list-save-row">
-          <select
+          <ThemedSelect
             className="filter-input list-save-select"
             aria-label="Save to list"
             value={selectedListId}
+            options={lists.map((list) => ({ value: list.id, label: list.name }))}
             onChange={(event) => setSelectedListId(event.target.value)}
-          >
-            {lists.map((list) => (
-              <option key={list.id} value={list.id}>
-                {list.name}
-              </option>
-            ))}
-          </select>
+          />
           <button
             type="button"
             className="btn-secondary"

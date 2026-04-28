@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Navbar from '../components/Navbar';
+import ThemedSelect from '../components/ThemedSelect';
 import { devLabApi } from '../utils/devLabApi';
 import { fetchSupabaseAdminRequests, updateSupabaseRequestStatus } from '../utils/supabaseData';
 
@@ -304,8 +305,13 @@ export default function DeveloperLab() {
                 <div className="devlab-form-grid">
                   <label className="devlab-field">
                     <span>Provider</span>
-                    <select
+                    <ThemedSelect
+                      label="Provider"
                       value={apiForm.provider}
+                      options={[
+                        { value: 'tmdb', label: 'TMDB' },
+                        { value: 'openlibrary', label: 'Open Library' },
+                      ]}
                       onChange={(event) => {
                         const provider = event.target.value;
                         setApiForm((current) => ({
@@ -314,23 +320,21 @@ export default function DeveloperLab() {
                           mediaType: provider === 'openlibrary' ? 'book' : current.mediaType === 'book' ? 'movie' : current.mediaType,
                         }));
                       }}
-                    >
-                      <option value="tmdb">TMDB</option>
-                      <option value="openlibrary">Open Library</option>
-                    </select>
+                    />
                   </label>
                   <label className="devlab-field">
                     <span>Media Type</span>
-                    <select value={apiForm.mediaType} onChange={(event) => setApiForm((current) => ({ ...current, mediaType: event.target.value }))}>
-                      {apiForm.provider === 'tmdb' ? (
-                        <>
-                          <option value="movie">Movie</option>
-                          <option value="tv_show">TV Show</option>
-                        </>
-                      ) : (
-                        <option value="book">Book</option>
-                      )}
-                    </select>
+                    <ThemedSelect
+                      label="Media Type"
+                      value={apiForm.mediaType}
+                      options={apiForm.provider === 'tmdb'
+                        ? [
+                            { value: 'movie', label: 'Movie' },
+                            { value: 'tv_show', label: 'TV Show' },
+                          ]
+                        : [{ value: 'book', label: 'Book' }]}
+                      onChange={(event) => setApiForm((current) => ({ ...current, mediaType: event.target.value }))}
+                    />
                   </label>
                   <label className="devlab-field">
                     <span>Limit</span>
@@ -364,12 +368,17 @@ export default function DeveloperLab() {
                   </label>
                   <label className="devlab-field">
                     <span>Media Type</span>
-                    <select value={urlForm.mediaType} onChange={(event) => setUrlForm((current) => ({ ...current, mediaType: event.target.value }))}>
-                      <option value="">General</option>
-                      <option value="movie">Movie</option>
-                      <option value="tv_show">TV Show</option>
-                      <option value="book">Book</option>
-                    </select>
+                    <ThemedSelect
+                      label="Media Type"
+                      value={urlForm.mediaType}
+                      options={[
+                        { value: '', label: 'General' },
+                        { value: 'movie', label: 'Movie' },
+                        { value: 'tv_show', label: 'TV Show' },
+                        { value: 'book', label: 'Book' },
+                      ]}
+                      onChange={(event) => setUrlForm((current) => ({ ...current, mediaType: event.target.value }))}
+                    />
                   </label>
                 </div>
                 <label className="devlab-field">
@@ -401,12 +410,17 @@ export default function DeveloperLab() {
                 <div className="devlab-form-grid devlab-form-grid--two">
                   <label className="devlab-field">
                     <span>Media Type</span>
-                    <select value={manualForm.mediaType} onChange={(event) => setManualForm((current) => ({ ...current, mediaType: event.target.value }))}>
-                      <option value="">General</option>
-                      <option value="movie">Movie</option>
-                      <option value="tv_show">TV Show</option>
-                      <option value="book">Book</option>
-                    </select>
+                    <ThemedSelect
+                      label="Media Type"
+                      value={manualForm.mediaType}
+                      options={[
+                        { value: '', label: 'General' },
+                        { value: 'movie', label: 'Movie' },
+                        { value: 'tv_show', label: 'TV Show' },
+                        { value: 'book', label: 'Book' },
+                      ]}
+                      onChange={(event) => setManualForm((current) => ({ ...current, mediaType: event.target.value }))}
+                    />
                   </label>
                   <label className="devlab-field">
                     <span>Tags</span>
@@ -598,13 +612,12 @@ export default function DeveloperLab() {
             <form className="devlab-form" onSubmit={handlePromptSave}>
               <label className="devlab-field">
                 <span>Intent</span>
-                <select value={selectedIntent} onChange={(event) => setSelectedIntent(event.target.value)}>
-                  {promptOptions.map((intent) => (
-                    <option key={intent} value={intent}>
-                      {intent}
-                    </option>
-                  ))}
-                </select>
+                <ThemedSelect
+                  label="Intent"
+                  value={selectedIntent}
+                  options={promptOptions.map((intent) => ({ value: intent, label: intent }))}
+                  onChange={(event) => setSelectedIntent(event.target.value)}
+                />
               </label>
               <div className="devlab-form-grid">
                 <label className="devlab-field">
@@ -654,14 +667,15 @@ export default function DeveloperLab() {
             <div className="devlab-form-grid devlab-form-grid--two">
               <label className="devlab-field">
                 <span>Intent</span>
-                <select value={previewForm.forcedIntent} onChange={(event) => setPreviewForm((current) => ({ ...current, forcedIntent: event.target.value }))}>
-                  <option value="auto">Auto-detect</option>
-                  {INTENTS.map((intent) => (
-                    <option key={intent} value={intent}>
-                      {intent}
-                    </option>
-                  ))}
-                </select>
+                <ThemedSelect
+                  label="Intent"
+                  value={previewForm.forcedIntent}
+                  options={[
+                    { value: 'auto', label: 'Auto-detect' },
+                    ...INTENTS.map((intent) => ({ value: intent, label: intent })),
+                  ]}
+                  onChange={(event) => setPreviewForm((current) => ({ ...current, forcedIntent: event.target.value }))}
+                />
               </label>
               <label className="devlab-inline-checkbox">
                 <input type="checkbox" checked={previewForm.includeWebSearch} onChange={(event) => setPreviewForm((current) => ({ ...current, includeWebSearch: event.target.checked }))} />
@@ -732,14 +746,15 @@ export default function DeveloperLab() {
             <div className="devlab-form-grid devlab-form-grid--quality">
               <label className="devlab-field">
                 <span>Expected Intent</span>
-                <select value={evalForm.expectedIntent} onChange={(event) => setEvalForm((current) => ({ ...current, expectedIntent: event.target.value }))}>
-                  <option value="">No intent check</option>
-                  {INTENTS.map((intent) => (
-                    <option key={intent} value={intent}>
-                      {intent}
-                    </option>
-                  ))}
-                </select>
+                <ThemedSelect
+                  label="Expected Intent"
+                  value={evalForm.expectedIntent}
+                  options={[
+                    { value: '', label: 'No intent check' },
+                    ...INTENTS.map((intent) => ({ value: intent, label: intent })),
+                  ]}
+                  onChange={(event) => setEvalForm((current) => ({ ...current, expectedIntent: event.target.value }))}
+                />
               </label>
               <label className="devlab-field">
                 <span>Expected Phrases</span>

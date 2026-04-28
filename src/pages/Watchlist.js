@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import ThemedSelect from '../components/ThemedSelect';
 import {
   fetchSupabaseWatchlist,
   removeSupabaseWatchlistItem,
@@ -161,16 +162,17 @@ export default function Watchlist() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <select
+            <ThemedSelect
               className="filter-input"
               aria-label="Filter by type"
               value={mediaTypeFilter}
+              options={[
+                { value: '', label: 'All Types' },
+                { value: 'movie', label: 'Movies' },
+                { value: 'tv_show', label: 'TV Shows' },
+              ]}
               onChange={(event) => setMediaTypeFilter(event.target.value)}
-            >
-              <option value="">All Types</option>
-              <option value="movie">Movies</option>
-              <option value="tv_show">TV Shows</option>
-            </select>
+            />
             {hasClientFilters && (
               <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
                 Clear
@@ -226,17 +228,16 @@ export default function Watchlist() {
                   </div>
 
                   <div className="watchlist-item-actions">
-                    <select
+                    <ThemedSelect
                       className="status-select"
                       value={item.status}
+                      aria-label={`Status for ${item.title}`}
+                      options={getStatusOptions(item.media_type).map((status) => ({
+                        value: status,
+                        label: STATUS_LABELS[status],
+                      }))}
                       onChange={(event) => handleStatusChange(item, event.target.value)}
-                    >
-                      {getStatusOptions(item.media_type).map((status) => (
-                        <option key={status} value={status}>
-                          {STATUS_LABELS[status]}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <button
                       className="btn-ghost btn-sm watchlist-remove-button"
                       onClick={() => handleRemove(item)}

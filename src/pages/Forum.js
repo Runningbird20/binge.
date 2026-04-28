@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -163,15 +164,21 @@ function ReportButton({ postId, commentId }) {
       <button className="forum-report-btn" onClick={() => setShowForm(v => !v)} type="button">⚑ Report</button>
       {showForm && (
         <div className="forum-report-form">
-          <select className="forum-select forum-select--sm" value={reason} onChange={e => setReason(e.target.value)}>
-            <option value="">Select reason...</option>
-            <option value="spam">Spam</option>
-            <option value="harassment">Harassment</option>
-            <option value="hate">Hate speech</option>
-            <option value="misinformation">Misinformation</option>
-            <option value="illegal">Illegal content</option>
-            <option value="other">Other</option>
-          </select>
+          <ThemedSelect
+            className="forum-select forum-select--sm"
+            aria-label="Report reason"
+            value={reason}
+            options={[
+              { value: '', label: 'Select reason...' },
+              { value: 'spam', label: 'Spam' },
+              { value: 'harassment', label: 'Harassment' },
+              { value: 'hate', label: 'Hate speech' },
+              { value: 'misinformation', label: 'Misinformation' },
+              { value: 'illegal', label: 'Illegal content' },
+              { value: 'other', label: 'Other' },
+            ]}
+            onChange={e => setReason(e.target.value)}
+          />
           <button className="forum-action-btn forum-action-btn--report" onClick={handleReport} type="button" disabled={!reason}>Submit</button>
           <button className="forum-action-btn" onClick={() => setShowForm(false)} type="button">Cancel</button>
         </div>
@@ -325,10 +332,16 @@ function CreatePostModal({ forumSlug, onClose, onCreated }) {
         )}
 
         <div className="forum-modal-row">
-          <select className="forum-select" value={flair} onChange={e => setFlair(e.target.value)}>
-            <option value="">No flair</option>
-            {FLAIRS.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
+          <ThemedSelect
+            className="forum-select"
+            aria-label="Post flair"
+            value={flair}
+            options={[
+              { value: '', label: 'No flair' },
+              ...FLAIRS.map(f => ({ value: f, label: f })),
+            ]}
+            onChange={e => setFlair(e.target.value)}
+          />
           <input className="forum-input" placeholder="Tags: anime, comedy, 2024..." value={tags} onChange={e => setTags(e.target.value)} style={{ marginBottom: 0 }} />
         </div>
 
