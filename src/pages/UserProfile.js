@@ -317,6 +317,7 @@ export default function UserProfile() {
   const navigate = useNavigate();
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [searchParams] = useSearchParams();
@@ -340,13 +341,18 @@ export default function UserProfile() {
 
   useEffect(() => {
     setLoading(true);
+    setError('');
     Promise.all([
       api.get(`/profile/${username}`),
       api.get(`/profile/${username}/follow-status`).catch(() => ({ following: false })),
     ]).then(([profileData, followStatus]) => {
       setData(profileData);
       setFollowing(followStatus.following);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch((err) => {
+      setData(null);
+      setFollowing(false);
+      setError(err?.message || 'Unable to load this profile from Supabase.');
+    }).finally(() => setLoading(false));
   }, [username]);
 
   // For own profile, load full watchlist + ratings from Supabase
@@ -429,6 +435,7 @@ export default function UserProfile() {
 
   // Early returns after all hooks
   if (loading) return <div className="app-layout"><Navbar /><main className="page-content"><div className="loading-state">Loading profile...</div></main></div>;
+  if (error) return <div className="app-layout"><Navbar /><main className="page-content"><div className="empty-state">{error}</div></main></div>;
   if (!profile) return <div className="app-layout"><Navbar /><main className="page-content"><div className="empty-state">User not found.</div></main></div>;
 
   const tabs = [

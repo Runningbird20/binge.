@@ -1889,18 +1889,7 @@ async function handleProfileFollowGet(pathname) {
     return { following: false };
   }
 
-  const username = decodeURIComponent(followStatusMatch[1]);
-  const { data: profile, error: profileError } = await client
-    .from('profiles')
-    .select('id')
-    .ilike('username', username)
-    .maybeSingle();
-
-  if (profileError) {
-    throw toSupabaseError(profileError, 'Unable to load that profile.', {
-      resourceName: 'profiles',
-    });
-  }
+  const profile = await loadProfileByRouteParam(client, followStatusMatch[1], user);
 
   if (!profile || profile.id === user.id) {
     return { following: false };
@@ -1922,6 +1911,33 @@ async function handleProfileFollowGet(pathname) {
   return { following: Boolean(data) };
 }
 
+async function loadProfileByRouteParam(client, rawUsername, viewer = null) {
+  const username = decodeURIComponent(rawUsername || '').trim();
+  let query = client
+    .from('profiles')
+    .select('id, username, email, bio, avatar_url, created_at')
+    .limit(1);
+
+  if (username.toLowerCase() === 'me') {
+    if (!viewer?.id) {
+      return null;
+    }
+    query = query.eq('id', viewer.id);
+  } else {
+    query = query.ilike('username', username);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw toSupabaseError(error, 'Unable to load that profile.', {
+      resourceName: 'profiles',
+    });
+  }
+
+  return data || null;
+}
+
 async function handleProfileGet(pathname) {
   const profileMatch = pathname.match(/^\/profile\/([^/]+)$/);
   if (!profileMatch) {
@@ -1929,27 +1945,15 @@ async function handleProfileGet(pathname) {
   }
 
   const client = requireSupabaseClient();
-  const username = decodeURIComponent(profileMatch[1]);
   const viewer = await getAuthenticatedUserOrNull();
-
-  const { data: profile, error: profileError } = await client
-    .from('profiles')
-    .select('id, username, email, bio, avatar_url, created_at, is_public')
-    .ilike('username', username)
-    .maybeSingle();
-
-  if (profileError) {
-    throw toSupabaseError(profileError, 'Unable to load that profile.', {
-      resourceName: 'profiles',
-    });
-  }
+  const profile = await loadProfileByRouteParam(client, profileMatch[1], viewer);
 
   if (!profile) {
     throw new Error('User not found.');
   }
 
   const isOwnProfile = viewer?.id === profile.id;
-  const isPrivate = profile.is_public === false;
+  const isPrivate = false;
 
   const [{ count: followers }, { count: following }] = await Promise.all([
     client
@@ -1985,17 +1989,13 @@ async function handleProfileGet(pathname) {
       .limit(20),
   ]);
 
-  if (postsResult.error) {
-    throw toSupabaseError(postsResult.error, 'Unable to load forum posts.', {
-      resourceName: 'posts',
-    });
-  }
+  const posts = postsResult.error ? [] : postsResult.data || [];
 
   return {
     profile,
     ratings,
     watchlist,
-    posts: postsResult.data || [],
+    posts,
     followers: followers || 0,
     following: following || 0,
     isPrivate: false,
@@ -2010,18 +2010,7 @@ async function handleProfileFollowMutation(method, pathname) {
   }
 
   const user = await requireAuthenticatedUser();
-  const username = decodeURIComponent(followMatch[1]);
-  const { data: profile, error: profileError } = await client
-    .from('profiles')
-    .select('id, username')
-    .ilike('username', username)
-    .maybeSingle();
-
-  if (profileError) {
-    throw toSupabaseError(profileError, 'Unable to load that profile.', {
-      resourceName: 'profiles',
-    });
-  }
+  const profile = await loadProfileByRouteParam(client, followMatch[1], user);
 
   if (!profile) {
     throw new Error('User not found.');
@@ -2203,7 +2192,7 @@ async function handleAdminGet(pathname, searchParams) {
   if (pathname === '/admin/users') {
     const { data, error } = await client
       .from('profiles')
-      .select('id, username, email, created_at, is_admin, is_public')
+      .select('id, username, email, created_at, is_admin')
       .order('created_at', { ascending: false })
       .limit(200);
 
