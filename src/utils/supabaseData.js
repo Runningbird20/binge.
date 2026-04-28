@@ -410,6 +410,33 @@ export async function updateSupabaseProfile({ username, email, bio, avatarUrl })
   });
 }
 
+export async function uploadSupabaseAvatar(file) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+
+  if (!file) throw new Error('No file provided.');
+  if (!file.type.startsWith('image/')) throw new Error('File must be an image (JPEG, PNG, WebP, etc.).');
+  if (file.size > 5 * 1024 * 1024) throw new Error('Image must be under 5 MB.');
+
+  const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `${authUser.id}/avatar.${ext}`;
+
+  const { error: uploadError } = await client.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, contentType: file.type });
+
+  if (uploadError) {
+    if (uploadError.message?.includes('Bucket not found')) {
+      throw new Error('Avatar storage is not configured. Ask an admin to create the "avatars" bucket in Supabase Storage.');
+    }
+    throw new Error(uploadError.message || 'Upload failed.');
+  }
+
+  const { data } = client.storage.from('avatars').getPublicUrl(path);
+  // Cache-bust so the browser shows the new image immediately
+  return `${data.publicUrl}?t=${Date.now()}`;
+}
+
 export async function updateSupabasePassword(newPassword) {
   const client = requireSupabase();
   const { error } = await client.auth.updateUser({ password: newPassword });
