@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase';
+import { api } from '../api';
 
 const MOVIE_COLUMNS = [
   'id',
@@ -90,6 +91,33 @@ const CURATED_TV_GENRE_PREFERENCES = [
   'Animation',
   'Family',
 ];
+
+const THIS_YEAR = new Date().getFullYear();
+
+// Client-side cache for popular titles so we only call the API once per session
+const _popularCache = {};
+
+async function fetchPopularTitles(type) {
+  if (_popularCache[type]) return _popularCache[type];
+  try {
+    const data = await api.get(`/media/popular-titles?type=${type}`);
+    const titles = Array.isArray(data?.titles) ? data.titles : [];
+    _popularCache[type] = titles;
+    return titles;
+  } catch {
+    return [];
+  }
+}
+
+// Build a Supabase OR filter string from a list of titles using ILIKE
+function buildPopularOrFilter(titles) {
+  if (!titles.length) return null;
+  // Use word-boundary-style matching: wrap each title in %...% to handle slight variations
+  return titles
+    .slice(0, 40) // Supabase OR has a practical limit
+    .map(t => `title.ilike.%${t.replace(/%/g, '')}%`)
+    .join(',');
+}
 
 function requireSupabaseCatalog() {
   if (!isSupabaseConfigured || !supabase) {
@@ -300,6 +328,7 @@ export async function fetchSupabaseMovieCatalogSegment({
   sortOrder = 'title-asc',
   includeCount = true,
   includeFacets = true,
+  includeUpcoming = false,
 } = {}) {
   const client = requireSupabaseCatalog();
 
@@ -308,6 +337,10 @@ export async function fetchSupabaseMovieCatalogSegment({
     .select(MOVIE_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
 
   moviesQuery = applyTitleGenreFilters(moviesQuery, { search, genre });
+  // Hide future releases from browse unless explicitly requested (e.g. upcoming sort)
+  if (!includeUpcoming) {
+    moviesQuery = moviesQuery.lte('year', THIS_YEAR);
+  }
   moviesQuery = applyBrowseSort(moviesQuery, sortOrder);
 
   const tasks = [
@@ -423,15 +456,32 @@ export async function fetchSupabaseRandomMoviePosters({
 
 export async function fetchSupabaseMovieCuratedRows() {
   const client = requireSupabaseCatalog();
-  const genres = await fetchSupabaseMovieGenres();
+  const [genres, popularTitles] = await Promise.all([
+    fetchSupabaseMovieGenres(),
+    fetchPopularTitles('movie'),
+  ]);
   const curatedGenres = pickCuratedGenres(genres, CURATED_MOVIE_GENRE_PREFERENCES);
+  const popularFilter = buildPopularOrFilter(popularTitles);
 
-  const [featuredResult, ...genreResults] = await Promise.all([
+  // Featured row: popular known titles if available, otherwise recent
+  let featuredQuery = client
+    .from('movies')
+    .select(MOVIE_COLUMNS)
+    .not('poster_url', 'is', null)
+    .lte('year', THIS_YEAR);
+  if (popularFilter) {
+    featuredQuery = featuredQuery.or(popularFilter);
+  }
+  featuredQuery = featuredQuery.order('title', { ascending: true }).limit(24);
+
+  const [featuredResult, upcomingResult, ...genreResults] = await Promise.all([
+    featuredQuery,
     client
       .from('movies')
       .select(MOVIE_COLUMNS)
       .not('poster_url', 'is', null)
-      .order('year', { ascending: false, nullsFirst: false })
+      .gt('year', THIS_YEAR)
+      .order('year', { ascending: true, nullsFirst: false })
       .order('title', { ascending: true })
       .limit(12),
     ...curatedGenres.map((genre) => client
@@ -439,28 +489,25 @@ export async function fetchSupabaseMovieCuratedRows() {
       .select(MOVIE_COLUMNS)
       .ilike('genre', `%${genre}%`)
       .not('poster_url', 'is', null)
+      .lte('year', THIS_YEAR)
       .order('year', { ascending: false, nullsFirst: false })
       .order('title', { ascending: true })
       .limit(12)),
   ]);
 
-  if (featuredResult.error) {
-    throw featuredResult.error;
-  }
+  if (featuredResult.error) throw featuredResult.error;
 
   const rows = [
     {
       id: 'featured',
       title: 'Featured Picks',
       seeAll: '/movies?sort=year-desc',
-      items: (featuredResult.data || []).map((movie) => normalizeMovie(movie)),
+      items: shuffleItems((featuredResult.data || []).map((movie) => normalizeMovie(movie))),
     },
   ];
 
   genreResults.forEach((result, index) => {
-    if (result.error) {
-      throw result.error;
-    }
+    if (result.error) throw result.error;
 
     const genre = curatedGenres[index];
     const items = (result.data || []).map((movie) => normalizeMovie(movie));
@@ -474,6 +521,17 @@ export async function fetchSupabaseMovieCuratedRows() {
       });
     }
   });
+
+  // Upcoming releases — always last
+  const upcomingItems = (upcomingResult.data || []).map((movie) => normalizeMovie(movie));
+  if (upcomingItems.length > 0) {
+    rows.push({
+      id: 'upcoming',
+      title: 'Upcoming Releases',
+      seeAll: '/movies?sort=year-asc',
+      items: upcomingItems,
+    });
+  }
 
   return rows.filter((row) => row.items.length > 0);
 }
@@ -516,6 +574,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
   sortOrder = 'title-asc',
   includeCount = true,
   includeFacets = true,
+  includeUpcoming = false,
 } = {}) {
   const client = requireSupabaseCatalog();
 
@@ -524,6 +583,9 @@ export async function fetchSupabaseTvShowCatalogSegment({
     .select(TV_SHOW_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
 
   showsQuery = applyTitleGenreFilters(showsQuery, { search, genre });
+  if (!includeUpcoming) {
+    showsQuery = showsQuery.lte('year', THIS_YEAR);
+  }
   showsQuery = applyBrowseSort(showsQuery, sortOrder);
 
   const tasks = [
@@ -564,15 +626,31 @@ export async function fetchSupabaseTvShowById(showId) {
 
 export async function fetchSupabaseTvShowCuratedRows() {
   const client = requireSupabaseCatalog();
-  const genres = await fetchSupabaseTvShowGenres();
+  const [genres, popularTitles] = await Promise.all([
+    fetchSupabaseTvShowGenres(),
+    fetchPopularTitles('tv'),
+  ]);
   const curatedGenres = pickCuratedGenres(genres, CURATED_TV_GENRE_PREFERENCES);
+  const popularFilter = buildPopularOrFilter(popularTitles);
 
-  const [featuredResult, ...genreResults] = await Promise.all([
+  let featuredQuery = client
+    .from('tv_shows')
+    .select(TV_SHOW_COLUMNS)
+    .not('poster_url', 'is', null)
+    .lte('year', THIS_YEAR);
+  if (popularFilter) {
+    featuredQuery = featuredQuery.or(popularFilter);
+  }
+  featuredQuery = featuredQuery.order('title', { ascending: true }).limit(24);
+
+  const [featuredResult, upcomingResult, ...genreResults] = await Promise.all([
+    featuredQuery,
     client
       .from('tv_shows')
       .select(TV_SHOW_COLUMNS)
       .not('poster_url', 'is', null)
-      .order('year', { ascending: false, nullsFirst: false })
+      .gt('year', THIS_YEAR)
+      .order('year', { ascending: true, nullsFirst: false })
       .order('title', { ascending: true })
       .limit(12),
     ...curatedGenres.map((genre) => client
@@ -580,28 +658,25 @@ export async function fetchSupabaseTvShowCuratedRows() {
       .select(TV_SHOW_COLUMNS)
       .ilike('genre', `%${normalizeSearchValue(genre)}%`)
       .not('poster_url', 'is', null)
+      .lte('year', THIS_YEAR)
       .order('year', { ascending: false, nullsFirst: false })
       .order('title', { ascending: true })
       .limit(12)),
   ]);
 
-  if (featuredResult.error) {
-    throw featuredResult.error;
-  }
+  if (featuredResult.error) throw featuredResult.error;
 
   const rows = [
     {
       id: 'featured',
       title: 'Featured Series',
       seeAll: '/tv-shows?sort=year-desc',
-      items: (featuredResult.data || []).map((show) => normalizeTvShow(show)),
+      items: shuffleItems((featuredResult.data || []).map((show) => normalizeTvShow(show))),
     },
   ];
 
   genreResults.forEach((result, index) => {
-    if (result.error) {
-      throw result.error;
-    }
+    if (result.error) throw result.error;
 
     const genre = curatedGenres[index];
     const items = (result.data || []).map((show) => normalizeTvShow(show));
@@ -615,6 +690,17 @@ export async function fetchSupabaseTvShowCuratedRows() {
       });
     }
   });
+
+  // Upcoming — always last
+  const upcomingItems = (upcomingResult.data || []).map((show) => normalizeTvShow(show));
+  if (upcomingItems.length > 0) {
+    rows.push({
+      id: 'upcoming',
+      title: 'Upcoming Releases',
+      seeAll: '/tv-shows?sort=year-asc',
+      items: upcomingItems,
+    });
+  }
 
   return rows.filter((row) => row.items.length > 0);
 }

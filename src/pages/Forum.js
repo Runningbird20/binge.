@@ -979,6 +979,18 @@ function PostView() {
                 <div className="forum-post-detail-actions">
                   <ShareButton url={postUrl} title={post.title} />
                   {user && !isAdmin && <ReportButton postId={post.id} />}
+                  {isAdmin && (
+                    <button
+                      className={`forum-action-btn${post.is_pinned ? ' forum-action-btn--active' : ''}`}
+                      onClick={async () => {
+                        const updated = await api.patch(`/forum/admin/post/${post.id}/pin`, { pinned: !post.is_pinned }).catch(() => null);
+                        if (updated) setPost(p => ({ ...p, is_pinned: !p.is_pinned }));
+                      }}
+                      type="button"
+                    >
+                      {post.is_pinned ? '📌 Unpin' : '📌 Pin'}
+                    </button>
+                  )}
                   {(isAdmin || user?.id === post.user_id) && (
                     <button className="forum-action-btn forum-action-btn--delete" onClick={handleDeletePost} type="button">
                       {isAdmin ? '🛡️ Admin Remove' : '🗑️ Delete Post'}

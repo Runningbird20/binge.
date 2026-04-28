@@ -811,10 +811,31 @@ Analyze the user's taste and return 10 personalized recommendations from the cat
   }
 });
 
+// Hard-blocked patterns — caught regardless of whether Groq is available
+const HARD_BLOCK_PATTERNS = [
+  /\b(csam|child\s*porn|cp\s+links?)\b/i,
+  /\b(buy\s+(?:meth|heroin|fentanyl|cocaine)|drug\s*dealer)\b/i,
+  /\bkill\s+(?:yourself|urself|ur\s*self)\b/i,
+  /\bi\s+will\s+(?:kill|murder|rape)\s+you\b/i,
+  /\b(?:n+i+g+[aer]+r?s?|f+a+g+o+t+s?)\b/i,
+];
+
+function hardBlockCheck(text) {
+  for (const pattern of HARD_BLOCK_PATTERNS) {
+    if (pattern.test(text)) return 'Content violates community guidelines.';
+  }
+  return null;
+}
+
 router.post('/moderate', optionalAuth, async (req, res) => {
-  if (!GROQ_API_KEY) return res.json({ allowed: true });
   const { text, kind = 'post' } = req.body;
   if (!text?.trim()) return res.json({ allowed: true });
+
+  // Always run the keyword pre-filter, even without Groq
+  const hardBlock = hardBlockCheck(text);
+  if (hardBlock) return res.json({ allowed: false, reason: hardBlock });
+
+  if (!GROQ_API_KEY) return res.json({ allowed: true });
 
   try {
     const response = await fetch(GROQ_API_URL, {

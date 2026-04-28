@@ -276,6 +276,8 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const insights = buildHomeInsights(ratings, watchlistItems, selectedYear);
 
+  const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -295,7 +297,7 @@ export default function Home() {
         setRatings(nextRatings);
         setWatchlistItems(nextWatchlist);
         setStats({ ratings: nextRatings.length, watchlist: nextWatchlist.length });
-        if (nextRatings.length === 0 && !localStorage.getItem('onboarding_done')) {
+        if (nextRatings.length === 0 && !localStorage.getItem(onboardingKey)) {
           setShowOnboarding(true);
         }
         setSelectedYear((currentYear) => (
@@ -306,6 +308,10 @@ export default function Home() {
         setRatings([]);
         setWatchlistItems([]);
         setStats({ ratings: 0, watchlist: 0 });
+        // Still show onboarding for fresh accounts even if the data fetch failed
+        if (!localStorage.getItem(onboardingKey)) {
+          setShowOnboarding(true);
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -318,10 +324,10 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onboardingKey]);
 
   function completeOnboarding() {
-    localStorage.setItem('onboarding_done', '1');
+    localStorage.setItem(onboardingKey, '1');
     setShowOnboarding(false);
   }
 
@@ -369,6 +375,7 @@ export default function Home() {
                   See how your movies, shows, and books add up over the year.
                 </p>
               </div>
+              <Link to="/year-in-review" className="section-link">Full report →</Link>
               <label className="home-year-filter">
                 <span>Year</span>
                 <select
