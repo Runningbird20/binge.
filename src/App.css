@@ -3133,17 +3133,35 @@ body {
 .watchlist-meta {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   font-size: 0.8rem;
   color: #7f7f7f;
 }
 
+.watchlist-status-label {
+  color: #9a9a9a;
+}
+
 .type-badge {
-  background-color: #1e1e1e;
-  border-radius: 4px;
-  padding: 0.1rem 0.4rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
   font-size: 0.75rem;
-  color: #888;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.type-badge--movie {
+  background: rgba(232,201,122,0.14);
+  border-color: rgba(232,201,122,0.28);
+  color: #e8c97a;
+}
+
+.type-badge--tv_show {
+  background: rgba(160,125,232,0.14);
+  border-color: rgba(160,125,232,0.28);
+  color: #a07de8;
 }
 
 .status-select {

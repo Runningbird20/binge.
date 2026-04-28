@@ -215,11 +215,13 @@ export default function Watchlist() {
                   <div className="watchlist-info">
                     <div className="watchlist-title-row">
                       <div className="watchlist-title">{item.title}</div>
-                      <span className="type-badge">{TYPE_LABELS[item.media_type]}</span>
                     </div>
                     <div className="watchlist-meta">
                       {item.year && <span>{item.year}</span>}
-                      <span>{STATUS_LABELS[item.status] || item.status}</span>
+                      <span className="watchlist-status-label">{STATUS_LABELS[item.status] || item.status}</span>
+                      <span className={`type-badge type-badge--${item.media_type}`}>
+                        {TYPE_LABELS[item.media_type]}
+                      </span>
                     </div>
                   </div>
 
