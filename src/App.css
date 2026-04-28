@@ -8544,3 +8544,99 @@ h1 {
 /* Section count badge */
 .section-count-badge { display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.45rem; border-radius: 99px; background: rgba(232,201,122,0.15); color: #e8c97a; margin-left: 0.5rem; vertical-align: middle; }
 
+/* Shared dropdown styling */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  font-family: inherit;
+  background-color: #141414;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #e8c97a 50%),
+    linear-gradient(135deg, #e8c97a 50%, transparent 50%),
+    linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0.08));
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%,
+    calc(100% - 2.1rem) 50%;
+  background-size: 5px 5px, 5px 5px, 1px 1.55rem;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #e8e8e8;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s, color 0.2s;
+}
+
+select:not([multiple]) {
+  padding-right: 2.45rem;
+}
+
+select:hover:not(:disabled) {
+  background-color: #181818;
+  border-color: rgba(232,201,122,0.34);
+}
+
+select:focus,
+select:focus-visible {
+  outline: none;
+  border-color: rgba(232,201,122,0.65);
+  box-shadow: 0 0 0 3px rgba(232,201,122,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+select option {
+  background: #111;
+  color: #e8e8e8;
+}
+
+select.filter-input,
+.books-filter-select,
+.status-select,
+.admin-select,
+.forum-select,
+.req-field select,
+.devlab-page select,
+.profile-wl-overlay-status {
+  background-color: #141414;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #e8c97a 50%),
+    linear-gradient(135deg, #e8c97a 50%, transparent 50%),
+    linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0.08));
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%,
+    calc(100% - 2.1rem) 50%;
+  background-size: 5px 5px, 5px 5px, 1px 1.55rem;
+  background-repeat: no-repeat;
+  border-color: rgba(255,255,255,0.12);
+  color: #e8e8e8;
+}
+
+select.filter-input,
+.books-filter-select,
+.status-select,
+.admin-select,
+.forum-select,
+.req-field select,
+.devlab-page select {
+  padding-right: 2.45rem;
+}
+
+.forum-select--sm {
+  padding-right: 2rem;
+}
+
+.profile-wl-overlay-status {
+  padding-right: 1.75rem;
+  text-align: left;
+}
+
+.profile-wl-overlay-status:focus {
+  border-color: rgba(232,201,122,0.65) !important;
+  box-shadow: 0 0 0 3px rgba(232,201,122,0.12);
+}
+
