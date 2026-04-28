@@ -189,6 +189,9 @@ function ContinueWatching({ items }) {
 
 function WatchlistGallery({ items, loading }) {
   const scrollRef = useRef(null);
+  const watchableItems = items.filter((item) => (
+    item.media_type === 'movie' || item.media_type === 'tv_show'
+  ));
 
   function scroll(direction) {
     if (scrollRef.current) {
@@ -207,18 +210,22 @@ function WatchlistGallery({ items, loading }) {
     return <div className="loading-state" style={{ padding: '2rem' }}>Loading...</div>;
   }
 
-  if (items.length === 0) {
+  if (watchableItems.length === 0) {
     return (
       <div className="empty-state">
-        <p>Your watchlist is empty.</p>
-        <p className="empty-hint">Browse movies, TV shows, and books to add items.</p>
+        <p>Your movie and TV watchlist is empty.</p>
+        <p className="empty-hint">Add movies or TV shows to keep your next picks ready.</p>
+        <div className="cta-buttons" style={{ marginTop: '1rem' }}>
+          <Link to="/movies" className="btn-secondary">Browse movies</Link>
+          <Link to="/tv-shows" className="btn-secondary">Browse TV shows</Link>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="wl-gallery-wrap">
-      {items.length > 4 && (
+      {watchableItems.length > 4 && (
         <button
           className="wl-gallery-arrow wl-gallery-arrow--left"
           onClick={() => scroll(-1)}
@@ -228,7 +235,7 @@ function WatchlistGallery({ items, loading }) {
         </button>
       )}
       <div className="wl-gallery-scroll" ref={scrollRef}>
-        {items.map((item) => (
+        {watchableItems.map((item) => (
           <Link key={item.id} to={getSiteUrl(item)} className="wl-gallery-card">
             <div className="wl-gallery-poster">
               {item.image_url || item.poster_url ? (
@@ -253,7 +260,7 @@ function WatchlistGallery({ items, loading }) {
           </Link>
         ))}
       </div>
-      {items.length > 4 && (
+      {watchableItems.length > 4 && (
         <button
           className="wl-gallery-arrow wl-gallery-arrow--right"
           onClick={() => scroll(1)}
@@ -519,7 +526,7 @@ export default function Home() {
           <section className="home-section">
             <div className="section-header">
               <h2>Your Watchlist</h2>
-              <Link to={`/profile/${user.username}`} className="section-link">View all →</Link>
+              <Link to="/watchlist" className="section-link">View all →</Link>
             </div>
             <WatchlistGallery items={watchlistItems} loading={loading} />
           </section>
