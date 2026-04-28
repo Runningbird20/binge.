@@ -53,18 +53,25 @@ function toFriendlyError(error, fallbackMessage) {
     return fallbackMessage;
   }
 
+  const msg = (error.message || '').toLowerCase();
+
+  // Supabase email rate limit (free tier: 3 emails/hour)
+  if (msg.includes('email rate limit') || msg.includes('rate limit exceeded') || error.status === 429) {
+    return 'Too many sign-up attempts. Please wait a few minutes and try again, or contact the site admin to set up a custom email provider.';
+  }
+
   if (error.code === '23505') {
-    const message = `${error.message || ''} ${error.details || ''}`.toLowerCase();
-    if (message.includes('username')) {
+    const detail = `${error.message || ''} ${error.details || ''}`.toLowerCase();
+    if (detail.includes('username')) {
       return 'Username is already in use.';
     }
-    if (message.includes('email')) {
+    if (detail.includes('email')) {
       return 'Email is already in use.';
     }
-    if (message.includes('watchlist')) {
+    if (detail.includes('watchlist')) {
       return 'Already in watchlist.';
     }
-    if (message.includes('media_id')) {
+    if (detail.includes('media_id')) {
       return 'You already saved that entry.';
     }
   }
