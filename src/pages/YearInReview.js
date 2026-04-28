@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
+import { computeNormalizedScore } from '../components/RatingArtifact';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
 import { buildHomeInsights, MONTH_LABELS } from '../homeInsights';
 

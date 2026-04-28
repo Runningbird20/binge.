@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
+import { uploadSupabaseAvatar } from '../utils/supabaseData';
 
 const MIN_PASSWORD_LENGTH = 6;
 
 export default function AccountSettings() {
   const { user, updateProfile, updatePassword, logout } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+
   const [profileForm, setProfileForm] = useState({
     username: user?.username || '',
     email: user?.email || '',
@@ -22,6 +26,13 @@ export default function AccountSettings() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [profileLoading, setProfileLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Avatar state
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const [avatarSuccess, setAvatarSuccess] = useState('');
 
   useEffect(() => {
     setProfileForm({
@@ -69,6 +80,76 @@ export default function AccountSettings() {
       setProfileError(err.message);
     } finally {
       setProfileLoading(false);
+    }
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarError('');
+    setAvatarSuccess('');
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Please choose an image file (JPEG, PNG, WebP, etc.).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError('Image must be under 5 MB.');
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  }
+
+  function handleCancelAvatar() {
+    setAvatarFile(null);
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarPreview(null);
+    setAvatarError('');
+    setAvatarSuccess('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleAvatarUpload() {
+    if (!avatarFile) return;
+    setAvatarLoading(true);
+    setAvatarError('');
+    setAvatarSuccess('');
+    try {
+      const publicUrl = await uploadSupabaseAvatar(avatarFile);
+      await updateProfile({
+        username: user?.username || '',
+        email: user?.email || '',
+        bio: user?.bio || '',
+        avatarUrl: publicUrl,
+      });
+      setAvatarSuccess('Profile picture updated.');
+      setAvatarFile(null);
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+      setAvatarPreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err) {
+      setAvatarError(err.message);
+    } finally {
+      setAvatarLoading(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    setAvatarLoading(true);
+    setAvatarError('');
+    setAvatarSuccess('');
+    try {
+      await updateProfile({
+        username: user?.username || '',
+        email: user?.email || '',
+        bio: user?.bio || '',
+        avatarUrl: null,
+      });
+      setAvatarSuccess('Profile picture removed.');
+    } catch (err) {
+      setAvatarError(err.message);
+    } finally {
+      setAvatarLoading(false);
     }
   }
 
@@ -125,6 +206,76 @@ export default function AccountSettings() {
         </div>
 
         <div className="settings-grid">
+          {/* ── Profile picture ── */}
+          <section className="settings-card settings-card--avatar">
+            <div className="settings-card-header">
+              <h2>Profile picture</h2>
+              <p>Upload a photo to personalize your profile.</p>
+            </div>
+
+            {avatarError && <div className="auth-error">{avatarError}</div>}
+            {avatarSuccess && <div className="settings-success">{avatarSuccess}</div>}
+
+            <div className="avatar-upload-row">
+              <div className="avatar-upload-preview">
+                <UserAvatar
+                  avatarUrl={avatarPreview || user?.avatarUrl}
+                  name={user?.username}
+                  size="xl"
+                />
+                {avatarPreview && <span className="avatar-preview-badge">Preview</span>}
+              </div>
+
+              <div className="avatar-upload-controls">
+                <label className="avatar-file-label">
+                  {avatarPreview ? 'Choose different image' : 'Choose image'}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleFileChange}
+                    className="avatar-file-input"
+                  />
+                </label>
+
+                {avatarPreview && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      onClick={handleAvatarUpload}
+                      disabled={avatarLoading}
+                    >
+                      {avatarLoading ? 'Uploading...' : 'Save photo'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      onClick={handleCancelAvatar}
+                      disabled={avatarLoading}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+
+                {!avatarPreview && user?.avatarUrl && (
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm avatar-remove-btn"
+                    onClick={handleRemoveAvatar}
+                    disabled={avatarLoading}
+                  >
+                    {avatarLoading ? 'Removing...' : 'Remove photo'}
+                  </button>
+                )}
+
+                <p className="avatar-upload-hint">JPEG, PNG, or WebP · max 5 MB</p>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Profile details ── */}
           <section className="settings-card">
             <div className="settings-card-header">
               <h2>Profile details</h2>
