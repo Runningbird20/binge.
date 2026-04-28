@@ -8903,6 +8903,7 @@ h1 {
 select {
   -webkit-appearance: none;
   appearance: none;
+  color-scheme: dark;
   font-family: inherit;
   background-color: #141414;
   background-image:
@@ -8916,7 +8917,7 @@ select {
   background-size: 5px 5px, 5px 5px, 1px 1.55rem;
   background-repeat: no-repeat;
   border: 1px solid rgba(255,255,255,0.12);
-  color: #e8e8e8;
+  color: #f3f0e8;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
   transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s, color 0.2s;
@@ -8944,8 +8945,28 @@ select:disabled {
 }
 
 select option {
-  background: #111;
-  color: #e8e8e8;
+  background-color: #111;
+  color: #f3f0e8;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+select option:checked,
+select option:hover,
+select option:focus {
+  background-color: #e8c97a;
+  color: #111;
+}
+
+select option:disabled {
+  background-color: #111;
+  color: #6e6e6e;
+}
+
+select optgroup {
+  background-color: #0f0f0f;
+  color: #e8c97a;
+  font-weight: 800;
 }
 
 select.filter-input,
@@ -8968,7 +8989,7 @@ select.filter-input,
   background-size: 5px 5px, 5px 5px, 1px 1.55rem;
   background-repeat: no-repeat;
   border-color: rgba(255,255,255,0.12);
-  color: #e8e8e8;
+  color: #f3f0e8;
 }
 
 select.filter-input,

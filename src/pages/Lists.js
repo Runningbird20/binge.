@@ -40,7 +40,6 @@ function getShareUrl(shareCode) {
 }
 
 function WatchedToggle({ item, onToggle }) {
-  const isWatched = item.my_watchlist_status === 'watched' || item.my_watchlist_status === 'read';
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(item.my_watchlist_status);
 
