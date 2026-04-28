@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import {
   fetchSupabaseLists,
@@ -108,10 +108,10 @@ export default function Lists() {
   const [statusMessage, setStatusMessage]   = useState('');
   const [statusKind, setStatusKind]         = useState('info'); // 'info' | 'error'
 
-  function flash(msg, kind = 'info') {
+  const flash = useCallback((msg, kind = 'info') => {
     setStatusMessage(msg);
     setStatusKind(kind);
-  }
+  }, []);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -119,7 +119,7 @@ export default function Lists() {
     return () => clearTimeout(t);
   }, [statusMessage]);
 
-  async function loadLists(preferredListId) {
+  const loadLists = useCallback(async (preferredListId) => {
     setListsLoading(true);
     try {
       const nextLists = await fetchSupabaseLists();
@@ -139,9 +139,9 @@ export default function Lists() {
     } finally {
       setListsLoading(false);
     }
-  }
+  }, [flash]);
 
-  async function loadSelectedList(listId, { silent = false } = {}) {
+  const loadSelectedList = useCallback(async (listId, { silent = false } = {}) => {
     if (!listId) { setSelectedList(null); return; }
     if (!silent) setDetailLoading(true);
     try {
@@ -155,9 +155,9 @@ export default function Lists() {
     } finally {
       if (!silent) setDetailLoading(false);
     }
-  }
+  }, [flash]);
 
-  useEffect(() => { loadLists(); }, []);
+  useEffect(() => { loadLists(); }, [loadLists]);
 
   useEffect(() => {
     if (!selectedListId) { setSelectedList(null); return undefined; }
@@ -168,7 +168,7 @@ export default function Lists() {
       if (!cancelled) loadSelectedList(selectedListId, { silent: true });
     }, 8000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [selectedListId]);
+  }, [loadSelectedList, selectedListId]);
 
   async function handleCreateList(e) {
     e.preventDefault();
