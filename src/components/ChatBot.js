@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import MediaDetailsModal from './MediaDetailsModal';
+import ThemedSelect from './ThemedSelect';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
 import { checkChatbotStatus, sendChatbotMessage } from '../utils/chatbotApi';
 import { submitSupabaseRequest } from '../utils/supabaseData';
@@ -110,11 +111,16 @@ function RequestModal({ prefill, onClose }) {
               <div className="req-field-row">
                 <div className="req-field">
                   <label>Type</label>
-                  <select value={mediaType} onChange={e => setMediaType(e.target.value)}>
-                    <option value="movie">🎬 Movie</option>
-                    <option value="tv_show">📺 TV Show</option>
-                    <option value="book">📚 Book</option>
-                  </select>
+                  <ThemedSelect
+                    label="Type"
+                    value={mediaType}
+                    options={[
+                      { value: 'movie', label: 'Movie' },
+                      { value: 'tv_show', label: 'TV Show' },
+                      { value: 'book', label: 'Book' },
+                    ]}
+                    onChange={e => setMediaType(e.target.value)}
+                  />
                 </div>
                 <div className="req-field">
                   <label>Year <span className="req-optional">(optional)</span></label>

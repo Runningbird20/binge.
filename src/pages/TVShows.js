@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import MediaCard from '../components/MediaCard';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
+import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 import {
   addSupabaseWatchlistItem,
@@ -375,26 +376,28 @@ function BrowseView({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <select
+        <ThemedSelect
           className="filter-input"
+          aria-label="TV genre"
           value={genre}
+          options={[
+            { value: '', label: 'All Genres' },
+            ...facets.genres.map((option) => ({ value: option, label: option })),
+          ]}
           onChange={(event) => setGenre(event.target.value)}
-        >
-          <option value="">All Genres</option>
-          {facets.genres.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-        <select
+        />
+        <ThemedSelect
           className="filter-input"
+          aria-label="TV sort order"
           value={sortOrder}
+          options={[
+            { value: 'title-asc', label: 'Title A-Z' },
+            { value: 'title-desc', label: 'Title Z-A' },
+            { value: 'year-desc', label: 'Newest First' },
+            { value: 'year-asc', label: 'Oldest First' },
+          ]}
           onChange={(event) => setSortOrder(event.target.value)}
-        >
-          <option value="title-asc">Title A-Z</option>
-          <option value="title-desc">Title Z-A</option>
-          <option value="year-desc">Newest First</option>
-          <option value="year-asc">Oldest First</option>
-        </select>
+        />
         {(search || genre || sortOrder !== 'title-asc') && (
           <button
             type="button"

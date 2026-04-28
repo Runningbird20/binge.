@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import ListSaveControls from '../components/ListSaveControls';
 import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
+import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 import {
   addSupabaseWatchlistItem,
@@ -766,29 +767,27 @@ export default function Books() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <select
+            <ThemedSelect
               className="filter-input"
               aria-label="Genre"
               value={genre}
+              options={[
+                { value: '', label: 'All Genres' },
+                ...facets.genres.map((option) => ({ value: option, label: option })),
+              ]}
               onChange={(event) => setGenre(event.target.value)}
-            >
-              <option value="">All Genres</option>
-              {facets.genres.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <select
+            />
+            <ThemedSelect
               className="filter-input"
               aria-label="Sort by"
               value={sortOrder}
+              options={[
+                { value: 'title-asc', label: 'Title A-Z' },
+                { value: 'year-desc', label: 'Newest First' },
+                { value: 'year-asc', label: 'Oldest First' },
+              ]}
               onChange={(event) => setSortOrder(event.target.value)}
-            >
-              <option value="title-asc">Title A-Z</option>
-              <option value="year-desc">Newest First</option>
-              <option value="year-asc">Oldest First</option>
-            </select>
+            />
             {hasActiveFilters && (
               <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
                 Clear

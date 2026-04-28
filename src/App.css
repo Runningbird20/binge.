@@ -9123,15 +9123,229 @@ select.filter-input,
   box-shadow: 0 0 0 3px rgba(232,201,122,0.12);
 }
 
+.themed-select {
+  position: relative;
+  width: 160px;
+  min-width: 0;
+  color: #f3f0e8;
+}
+
+.themed-select.filter-input,
+.themed-select.admin-select,
+.themed-select.status-select,
+.themed-select.forum-select,
+.themed-select.list-save-select,
+.themed-select.mc-list-select {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.themed-select-control {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 2.4rem 0.65rem 1rem;
+  border: 1px solid rgba(232,201,122,0.28);
+  border-radius: 12px;
+  background: #101010;
+  color: #f3f0e8;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 20px rgba(0,0,0,0.16);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.themed-select-control:hover:not(:disabled),
+.themed-select--open .themed-select-control {
+  background: #151515;
+  border-color: rgba(232,201,122,0.62);
+}
+
+.themed-select-control:focus-visible,
+.themed-select--open .themed-select-control {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(232,201,122,0.16), 0 14px 30px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.themed-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.themed-select-chevron {
+  position: absolute;
+  right: 0.95rem;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #e8c97a;
+  transition: transform 0.18s;
+}
+
+.themed-select--open .themed-select-chevron {
+  transform: rotate(180deg);
+}
+
+.themed-select-menu {
+  position: absolute;
+  z-index: 1200;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.45rem;
+  border: 1px solid rgba(232,201,122,0.24);
+  border-radius: 12px;
+  background: #101010;
+  box-shadow: 0 18px 42px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+
+.themed-select-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.themed-select-menu::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.04);
+  border-radius: 999px;
+}
+
+.themed-select-menu::-webkit-scrollbar-thumb {
+  background: rgba(232,201,122,0.42);
+  border-radius: 999px;
+}
+
+.themed-select-option {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.58rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #e9e4d8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.themed-select-option:hover,
+.themed-select-option.active {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.08);
+  color: #fff6dc;
+}
+
+.themed-select-option.selected {
+  background: rgba(232,201,122,0.16);
+  border-color: rgba(232,201,122,0.3);
+  color: #f1dfb0;
+}
+
+.themed-select-option:disabled {
+  color: #666;
+  cursor: not-allowed;
+}
+
+.themed-select-option-icon {
+  width: 1.2rem;
+  text-align: center;
+}
+
+.themed-select--disabled {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.themed-select-label {
+  position: absolute;
+  top: -0.38rem;
+  left: 0.82rem;
+  z-index: 1;
+  padding: 0 0.42rem;
+  background: #111;
+  color: #e8c97a;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.themed-select.admin-select,
+.themed-select.forum-select--sm,
+.themed-select.status-select,
+.themed-select.profile-wl-overlay-status {
+  width: auto;
+  min-width: 140px;
+}
+
+.themed-select.admin-select .themed-select-control,
+.themed-select.forum-select--sm .themed-select-control,
+.themed-select.status-select .themed-select-control,
+.themed-select.profile-wl-overlay-status .themed-select-control {
+  min-height: 36px;
+  border-radius: 10px;
+  padding-top: 0.42rem;
+  padding-bottom: 0.42rem;
+  font-size: 0.82rem;
+}
+
+.themed-select.profile-wl-overlay-status {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.themed-select.profile-wl-overlay-status .themed-select-control {
+  min-height: 30px;
+  padding: 0.26rem 1.45rem 0.26rem 0.45rem;
+  border-color: currentColor;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.themed-select.profile-wl-overlay-status .themed-select-chevron {
+  right: 0.5rem;
+  border-left-width: 4px;
+  border-right-width: 4px;
+  border-top-width: 5px;
+}
+
+.themed-select.list-save-select,
+.themed-select.mc-list-select {
+  width: 100%;
+}
+
 .devlab-field:has(> select),
-.req-field:has(> select) {
+.req-field:has(> select),
+.devlab-field:has(> .themed-select),
+.req-field:has(> .themed-select) {
   position: relative;
   padding-top: 0.45rem;
   gap: 0;
 }
 
 .devlab-field:has(> select) > span,
-.req-field:has(> select) > label {
+.req-field:has(> select) > label,
+.devlab-field:has(> .themed-select) > span,
+.req-field:has(> .themed-select) > label {
   position: absolute;
   top: 0;
   left: 0.82rem;
@@ -9146,16 +9360,32 @@ select.filter-input,
 }
 
 .devlab-card .devlab-field:has(> select) > span,
-.req-modal .req-field:has(> select) > label {
+.req-modal .req-field:has(> select) > label,
+.devlab-card .devlab-field:has(> .themed-select) > span,
+.req-modal .req-field:has(> .themed-select) > label {
   background: #111;
 }
 
 .devlab-field:has(> select) > select,
-.req-field:has(> select) > select {
+.req-field:has(> select) > select,
+.devlab-field:has(> .themed-select) > .themed-select,
+.req-field:has(> .themed-select) > .themed-select {
+  width: 100%;
+}
+
+.devlab-field:has(> select) > select,
+.req-field:has(> select) > select,
+.devlab-field:has(> .themed-select) .themed-select-control,
+.req-field:has(> .themed-select) .themed-select-control {
   min-height: 56px;
   padding-top: 1.05rem;
   padding-bottom: 0.7rem;
   font-size: 1rem;
+}
+
+.devlab-field:has(> .themed-select) .themed-select-label,
+.req-field:has(> .themed-select) .themed-select-label {
+  display: none;
 }
 
 .filter-bar select,

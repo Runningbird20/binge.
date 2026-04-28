@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Navbar from '../components/Navbar';
+import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 
 const INTENT_LABELS = {
@@ -272,18 +273,13 @@ export default function AdminAnalytics() {
                   </button>
                 ))}
               </div>
-              <select
+              <ThemedSelect
+                className="admin-select"
+                aria-label="Filter analytics date range"
                 value={daysFilter}
+                options={DAY_FILTERS.map(d => ({ value: d.value, label: d.label }))}
                 onChange={e => { setDaysFilter(Number(e.target.value)); setLogsPage(1); }}
-                style={{
-                  background: '#141414', border: '1px solid #2a2a2a', color: '#ccc',
-                  borderRadius: 8, padding: '0.4rem 0.7rem', fontSize: '0.85rem', cursor: 'pointer',
-                }}
-              >
-                {DAY_FILTERS.map(d => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
-                ))}
-              </select>
+              />
             </div>
 
             {logsError && <div className="auth-error" style={{ marginBottom: '1rem' }}>{logsError}</div>}

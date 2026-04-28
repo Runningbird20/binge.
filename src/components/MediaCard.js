@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
+import ThemedSelect from './ThemedSelect';
 import { fetchSupabaseLists, addSupabaseListItem } from '../utils/supabaseData';
 
 function resolvePosterUrl(url) {
@@ -91,15 +92,13 @@ function ListQuickAdd({ mediaType, mediaId, itemTitle }) {
             <span className="mc-list-status">No editable lists</span>
           ) : (
             <>
-              <select
+              <ThemedSelect
                 className="mc-list-select"
                 value={selectedId}
+                aria-label="Choose list"
+                options={lists.map(l => ({ value: l.id, label: l.name }))}
                 onChange={e => setSelectedId(e.target.value)}
-              >
-                {lists.map(l => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
+              />
               <button
                 type="button"
                 className="btn-primary btn-sm"

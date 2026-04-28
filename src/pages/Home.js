@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import ThemedSelect from '../components/ThemedSelect';
 import UserAvatar from '../components/UserAvatar';
 import ForYou from '../components/ForYou';
 import Onboarding from '../components/Onboarding';
@@ -385,18 +386,13 @@ export default function Home() {
               <Link to="/year-in-review" className="section-link">Full report →</Link>
               <label className="home-year-filter">
                 <span>Year</span>
-                <select
+                <ThemedSelect
                   className="filter-input"
                   aria-label="Choose recap year"
                   value={insights.selectedYear}
+                  options={insights.availableYears.map((year) => ({ value: year, label: year }))}
                   onChange={(event) => setSelectedYear(Number(event.target.value))}
-                >
-                  {insights.availableYears.map((year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
             </div>
 

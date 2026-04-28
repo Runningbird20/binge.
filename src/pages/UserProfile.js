@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
+import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -137,16 +138,16 @@ function WatchlistCard({ item, isOwn, onUpdate }) {
                 </div>
               </div>
             )}
-            <select
+            <ThemedSelect
               className="profile-wl-overlay-status"
               value={status}
+              aria-label="Watchlist status"
+              options={statuses.map(s => ({ value: s, label: STATUS_LABELS[s] }))}
               onChange={handleStatusChange}
               disabled={saving}
               style={{ color, borderColor: color + '55' }}
               onClick={e => e.stopPropagation()}
-            >
-              {statuses.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-            </select>
+            />
           </div>
         </div>
       </div>
@@ -504,21 +505,33 @@ export default function UserProfile() {
               <>
                 {/* Filters */}
                 <div className="profile-wl-filters">
-                  <select className="admin-select" value={wlFilter} onChange={e => setWlFilter(e.target.value)}>
-                    <option value="">All Statuses</option>
-                    <option value="watching">Watching</option>
-                    <option value="plan_to_watch">Plan to Watch</option>
-                    <option value="watched">Watched</option>
-                    <option value="reading">Reading</option>
-                    <option value="plan_to_read">Plan to Read</option>
-                    <option value="read">Read</option>
-                  </select>
-                  <select className="admin-select" value={wlTypeFilter} onChange={e => setWlTypeFilter(e.target.value)}>
-                    <option value="">All Types</option>
-                    <option value="movie">Movies</option>
-                    <option value="tv_show">TV Shows</option>
-                    <option value="book">Books</option>
-                  </select>
+                  <ThemedSelect
+                    className="admin-select"
+                    aria-label="Filter watchlist by status"
+                    value={wlFilter}
+                    options={[
+                      { value: '', label: 'All Statuses' },
+                      { value: 'watching', label: 'Watching' },
+                      { value: 'plan_to_watch', label: 'Plan to Watch' },
+                      { value: 'watched', label: 'Watched' },
+                      { value: 'reading', label: 'Reading' },
+                      { value: 'plan_to_read', label: 'Plan to Read' },
+                      { value: 'read', label: 'Read' },
+                    ]}
+                    onChange={e => setWlFilter(e.target.value)}
+                  />
+                  <ThemedSelect
+                    className="admin-select"
+                    aria-label="Filter watchlist by type"
+                    value={wlTypeFilter}
+                    options={[
+                      { value: '', label: 'All Types' },
+                      { value: 'movie', label: 'Movies' },
+                      { value: 'tv_show', label: 'TV Shows' },
+                      { value: 'book', label: 'Books' },
+                    ]}
+                    onChange={e => setWlTypeFilter(e.target.value)}
+                  />
                   <span className="profile-filter-count">{filteredWatchlist.length} items</span>
                 </div>
 
@@ -562,12 +575,18 @@ export default function UserProfile() {
                       </button>
                     ))}
                   </div>
-                  <select className="admin-select" value={ratingsSort} onChange={e => setRatingsSort(e.target.value)}>
-                    <option value="score-desc">Highest Score</option>
-                    <option value="score-asc">Lowest Score</option>
-                    <option value="recent">Most Recent</option>
-                    <option value="title">A–Z</option>
-                  </select>
+                  <ThemedSelect
+                    className="admin-select"
+                    aria-label="Sort ratings"
+                    value={ratingsSort}
+                    options={[
+                      { value: 'score-desc', label: 'Highest Score' },
+                      { value: 'score-asc', label: 'Lowest Score' },
+                      { value: 'recent', label: 'Most Recent' },
+                      { value: 'title', label: 'A-Z' },
+                    ]}
+                    onChange={e => setRatingsSort(e.target.value)}
+                  />
                 </div>
 
                 {(ownDataLoading && isOwn) ? (
