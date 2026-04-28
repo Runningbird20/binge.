@@ -9,19 +9,19 @@ export const RATING_CATEGORIES = {
   tv_show: [
     { key: 'premise',       label: 'Premise',      max: 5 },
     { key: 'originality',   label: 'Originality',  max: 5 },
-    { key: 'acting',        label: 'Acting',       max: 6 },
+    { key: 'acting',        label: 'Acting',       max: 5 },
     { key: 'cinematography',label: 'Cinema.',      max: 5 },
-    { key: 'writing',       label: 'Writing',      max: 6 },
+    { key: 'writing',       label: 'Writing',      max: 5 },
     { key: 'pacing',        label: 'Pacing',       max: 5 },
-    { key: 'resonance',     label: 'Resonance',    max: 6 },
+    { key: 'resonance',     label: 'Resonance',    max: 5 },
   ],
   book: [
     { key: 'prose',         label: 'Prose',        max: 5 },
     { key: 'plot',          label: 'Plot',         max: 5 },
-    { key: 'characters',    label: 'Characters',   max: 6 },
+    { key: 'characters',    label: 'Characters',   max: 5 },
     { key: 'originality',   label: 'Originality',  max: 5 },
     { key: 'pacing',        label: 'Pacing',       max: 5 },
-    { key: 'resonance',     label: 'Resonance',    max: 6 },
+    { key: 'resonance',     label: 'Resonance',    max: 5 },
   ],
 };
 
@@ -37,7 +37,7 @@ export function computeNormalizedScore(mediaType, scores) {
   const total = cats.reduce((sum, cat) => sum + (scores[cat.key] || 0), 0);
   const max   = cats.reduce((sum, cat) => sum + cat.max, 0);
   if (!total) return null;
-  return Math.round((total / max) * 100) / 10; // 0–10 with one decimal
+  return Math.round((total / max) * 100) / 10; // 0-10 with one decimal
 }
 
 export default function RatingArtifact({ mediaType, scores, size = 280 }) {

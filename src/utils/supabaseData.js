@@ -517,7 +517,7 @@ export async function unfollowSupabaseUser(profileId) {
   return true;
 }
 
-async function fetchSupabaseRatingsForUsers(userIds = []) {
+export async function fetchSupabaseRatingsForUsers(userIds = []) {
   if (!userIds.length) {
     return [];
   }

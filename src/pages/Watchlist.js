@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import {
   fetchSupabaseWatchlist,
@@ -7,13 +8,10 @@ import {
 } from '../utils/supabaseData';
 
 const TABS = [
-  { label: 'All', value: '', types: ['movie', 'tv_show', 'book'] },
+  { label: 'All', value: '', types: ['movie', 'tv_show'] },
   { label: 'Plan to Watch', value: 'plan_to_watch', types: ['movie', 'tv_show'] },
   { label: 'Watching', value: 'watching', types: ['tv_show'] },
   { label: 'Watched', value: 'watched', types: ['movie', 'tv_show'] },
-  { label: 'Plan to Read', value: 'plan_to_read', types: ['book'] },
-  { label: 'Reading', value: 'reading', types: ['book'] },
-  { label: 'Read', value: 'read', types: ['book'] },
 ];
 
 const STATUS_LABELS = {
@@ -46,7 +44,10 @@ export default function Watchlist() {
       try {
         const data = await fetchSupabaseWatchlist({ status: activeTab });
         if (!cancelled) {
-          setItems(Array.isArray(data) ? data : []);
+          const watchableItems = Array.isArray(data)
+            ? data.filter((item) => item.media_type === 'movie' || item.media_type === 'tv_show')
+            : [];
+          setItems(watchableItems);
         }
       } catch {
         if (!cancelled) {
@@ -96,7 +97,6 @@ export default function Watchlist() {
   }
 
   function getStatusOptions(mediaType) {
-    if (mediaType === 'book') return ['plan_to_read', 'reading', 'read'];
     if (mediaType === 'tv_show') return ['plan_to_watch', 'watching', 'watched'];
     return ['plan_to_watch', 'watched'];
   }
@@ -123,7 +123,7 @@ export default function Watchlist() {
           <p className="page-kicker">Track</p>
           <h1>My Library</h1>
           <p className="page-subtitle">
-            Search saved titles, update your progress, and keep movies, shows, and books in one tidy place.
+            Search saved movies and shows, update your progress, and keep your next watch in one tidy place.
           </p>
         </div>
 
@@ -132,7 +132,7 @@ export default function Watchlist() {
             <div>
               <h2>Filter Your Saved Titles</h2>
               <p className="surface-panel-copy">
-                Narrow the library by status, media type, or title without losing your place.
+                Narrow your watchlist by status, media type, or title without losing your place.
               </p>
             </div>
             <p className="surface-panel-meta">
@@ -170,7 +170,6 @@ export default function Watchlist() {
               <option value="">All Types</option>
               <option value="movie">Movies</option>
               <option value="tv_show">TV Shows</option>
-              <option value="book">Books</option>
             </select>
             {hasClientFilters && (
               <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
@@ -185,10 +184,14 @@ export default function Watchlist() {
             <div className="loading-state">Loading...</div>
           ) : items.length === 0 ? (
             <div className="empty-state">
-              <p>Nothing here yet.</p>
+              <p>No movies or TV shows in your watchlist yet.</p>
               <p className="empty-hint">
-                Browse movies, TV shows, and books to add them to your library.
+                Add movies and TV shows from the catalog so your full watchlist is ready here.
               </p>
+              <div className="cta-buttons" style={{ marginTop: '1rem' }}>
+                <Link to="/movies" className="btn-secondary">Browse movies</Link>
+                <Link to="/tv-shows" className="btn-secondary">Browse TV shows</Link>
+              </div>
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="empty-state">
@@ -212,11 +215,13 @@ export default function Watchlist() {
                   <div className="watchlist-info">
                     <div className="watchlist-title-row">
                       <div className="watchlist-title">{item.title}</div>
-                      <span className="type-badge">{TYPE_LABELS[item.media_type]}</span>
                     </div>
                     <div className="watchlist-meta">
                       {item.year && <span>{item.year}</span>}
-                      <span>{STATUS_LABELS[item.status] || item.status}</span>
+                      <span className="watchlist-status-label">{STATUS_LABELS[item.status] || item.status}</span>
+                      <span className={`type-badge type-badge--${item.media_type}`}>
+                        {TYPE_LABELS[item.media_type]}
+                      </span>
                     </div>
                   </div>
 
