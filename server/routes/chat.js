@@ -710,44 +710,107 @@ router.get('/recommendations', optionalAuth, async (req, res) => {
 
     // Exclude already-rated items
     const ratedIds = new Set(history.map(r => `${r.media_type}:${r.media_id}`));
-    const unratedMedia = [...allMovies, ...allTV, ...allBooks]
-      .filter(m => !ratedIds.has(`${m.media_type}:${m.id}`));
+    const unratedMovies = allMovies.filter(m => !ratedIds.has(`movie:${m.id}`));
+    const unratedTV     = allTV.filter(m => !ratedIds.has(`tv_show:${m.id}`));
+    const unratedBooks  = allBooks.filter(m => !ratedIds.has(`book:${m.id}`));
+    const unratedMedia  = [...unratedMovies, ...unratedTV, ...unratedBooks];
 
-    const historyText = history.map(r => {
+    function shuffleArr(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // Build liked-genre set from highly-rated history for smarter catalog selection
+    const likedGenres = new Set();
+    const dislikedGenres = new Set();
+    history.forEach(r => {
+      const genres = (r.genre || '').split(',').map(g => g.trim().toLowerCase()).filter(Boolean);
+      if (r.rating >= 4) genres.forEach(g => likedGenres.add(g));
+      else if (r.rating <= 2) genres.forEach(g => dislikedGenres.add(g));
+    });
+
+    function genreScore(item) {
+      const genres = (item.genre || '').split(',').map(g => g.trim().toLowerCase()).filter(Boolean);
+      const liked = genres.filter(g => likedGenres.has(g)).length;
+      const disliked = genres.filter(g => dislikedGenres.has(g) && !likedGenres.has(g)).length;
+      return liked * 2 - disliked;
+    }
+
+    // Smart sample: genre-matched items first (60%), discovery tail (40%)
+    function smartSample(arr, n) {
+      if (!likedGenres.size) return shuffleArr(arr).slice(0, n);
+      const scored = arr.map(m => ({ m, s: genreScore(m) })).sort((a, b) => b.s - a.s);
+      const matchN = Math.ceil(n * 0.65);
+      const matched = scored.filter(x => x.s > 0).slice(0, matchN).map(x => x.m);
+      const discovery = shuffleArr(scored.filter(x => x.s <= 0).map(x => x.m)).slice(0, n - matched.length);
+      return shuffleArr([...matched, ...discovery]).slice(0, n);
+    }
+
+    const catalogSample = [
+      ...smartSample(unratedMovies, 25),
+      ...smartSample(unratedTV, 25),
+      ...smartSample(unratedBooks, 10),
+    ];
+
+    // Format history: show ratings clearly, group by type for readability
+    const liked  = history.filter(r => r.rating >= 4);
+    const mid    = history.filter(r => r.rating === 3);
+    const disliked = history.filter(r => r.rating <= 2);
+
+    function fmtEntry(r) {
       const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
-      return `- "${r.title}" (${r.media_type.replace('_',' ')}) ${stars} | Genre: ${r.genre || 'unknown'} | By: ${r.creator || 'unknown'}${r.review ? ` | Review: "${r.review.slice(0,80)}"` : ''}`;
+      const type = r.media_type === 'tv_show' ? 'TV' : r.media_type === 'book' ? 'Book' : 'Movie';
+      return `  • "${r.title}" [${type}] ${stars} — ${r.genre || '?'}${r.review ? ` | "${r.review.slice(0, 60)}"` : ''}`;
+    }
+
+    const historyText = [
+      liked.length    ? `LOVED (4-5★):\n${liked.map(fmtEntry).join('\n')}`       : '',
+      mid.length      ? `OKAY (3★):\n${mid.map(fmtEntry).join('\n')}`            : '',
+      disliked.length ? `DISLIKED (1-2★):\n${disliked.map(fmtEntry).join('\n')}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const catalogText = catalogSample.map(m => {
+      const type = m.media_type === 'movie' ? 'Movie' : m.media_type === 'tv_show' ? 'TV' : 'Book';
+      const creator = m.director || m.creator || m.author || '';
+      return `[${type} ID:${m.id}] "${m.title}" (${m.year || '?'}) | ${m.genre || ''} | ${creator ? 'by ' + creator + ' | ' : ''}${(m.synopsis || m.overview || '').slice(0, 100)}`;
     }).join('\n');
 
-    const catalogText = unratedMedia.slice(0, 60).map(m => {
-      const typeLabel = m.media_type === 'movie' ? 'Movie' : m.media_type === 'tv_show' ? 'TV Show' : 'Book';
-      return `[${typeLabel} ID:${m.id}] "${m.title}" | Genre: ${m.genre || ''} | ${m.director ? 'Director: '+m.director : m.creator ? 'Creator: '+m.creator : m.author ? 'Author: '+m.author : ''} | ${(m.synopsis || m.overview || '').slice(0,120)}`;
-    }).join('\n');
+    const systemPrompt = `You are an expert media curator for "binge," a social tracking app. Your job is to generate deeply personalized recommendations.
 
-    const systemPrompt = `You are a personalized media recommendation engine for "binge." 
-Analyze the user's rating history carefully to identify their taste patterns — which genres, directors, themes, tones, and styles they love.
-Then pick the 5 best matches from the available catalog.
+Study the user's rating history to understand:
+- Which genres, themes, and tones they consistently love vs dislike
+- Their preferred storytelling styles (slow-burn vs action-packed, dark vs light, etc.)
+- Directors, creators, or cast members they respond to
 
-RULES:
-- Only recommend titles from the AVAILABLE CATALOG provided
-- For each recommendation give: the exact title, the media type, and a specific 1-2 sentence explanation referencing something they've actually rated
-- Be specific — e.g. "Since you gave Breaking Bad 5 stars, you'll love Severance's intense workplace tension"
-- Do NOT include any URLs or links
-- Respond in this exact JSON format, nothing else:
+Then select 10 titles from the catalog that genuinely fit their taste.
+
+REQUIREMENTS:
+- ONLY recommend titles from the AVAILABLE CATALOG — never invent titles
+- Include at least 4 movies AND at least 4 TV shows
+- Vary the genres — don't give 10 thrillers if they also loved comedies
+- Each reason must reference something specific they actually rated (name the title)
+- Reasons should be 1-2 sentences, conversational and specific — not generic praise
+- If the user disliked a genre, avoid it unless another signal overrides it
+
+Respond ONLY with this JSON (no markdown, no extra text):
 {
-  "tasteProfile": "2-3 sentence summary of what this user loves based on their ratings",
+  "tasteProfile": "3 sentences: what genres/tones they love, what they avoid, and one insight about their taste",
   "recommendations": [
-    { "id": <number>, "title": "<exact title>", "media_type": "<movie|tv_show|book>", "reason": "<specific 1-2 sentence explanation>" },
-    ...10 items total
+    { "id": <integer>, "title": "<exact title from catalog>", "media_type": "<movie|tv_show|book>", "reason": "<specific 1-2 sentence reason referencing their history>" }
   ]
 }`;
 
-    const userMessage = `USER'S RATING HISTORY (what they've already seen/read):
+    const userMessage = `RATING HISTORY:
 ${historyText}
 
-AVAILABLE CATALOG (titles NOT yet rated — only pick from these):
+AVAILABLE CATALOG (pick only from these):
 ${catalogText}
 
-Analyze the user's taste and return 10 personalized recommendations from the catalog in the JSON format specified.`;
+Return exactly 10 recommendations as JSON. At least 4 movies, at least 4 TV shows. Vary genres.`;
 
     const response = await fetch(GROQ_API_URL, {
       method: 'POST',
@@ -762,7 +825,7 @@ Analyze the user's taste and return 10 personalized recommendations from the cat
           { role: 'user', content: userMessage },
         ],
         temperature: 0.4,
-        max_tokens: 1800,
+        max_tokens: 2800,
       }),
       signal: AbortSignal.timeout(30000),
     });
@@ -772,13 +835,19 @@ Analyze the user's taste and return 10 personalized recommendations from the cat
     const data = await response.json();
     const raw = data.choices?.[0]?.message?.content || '{}';
 
-    // Parse JSON from model response
+    // Parse JSON from model response — try multiple strategies for resilience
     let parsed;
     try {
-      const cleaned = raw.replace(/```json|```/g, '').trim();
+      // Strip markdown code fences, then try direct parse
+      let cleaned = raw.replace(/```json\s*|```\s*/g, '').trim();
+      // Extract the outermost JSON object if there's surrounding text
+      const objMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (objMatch) cleaned = objMatch[0];
+      // Fix common LLM JSON mistakes: trailing commas before } or ]
+      cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
       parsed = JSON.parse(cleaned);
     } catch {
-      return res.status(500).json({ error: 'Failed to parse recommendation response' });
+      return res.status(500).json({ error: 'Failed to parse recommendation response. Please try again.' });
     }
 
     // Enrich recommendations with full media data and site URLs

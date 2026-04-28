@@ -72,24 +72,28 @@ const BOOK_COLUMNS = [
 const DESCRIPTION_FALLBACK = 'No description available yet.';
 const CURATED_MOVIE_GENRE_PREFERENCES = [
   'Action',
-  'Comedy',
   'Drama',
+  'Comedy',
   'Science Fiction',
   'Thriller',
+  'Crime',
   'Animation',
-  'Family',
   'Horror',
+  'Romance',
+  'Adventure',
 ];
 
 const CURATED_TV_GENRE_PREFERENCES = [
   'Drama',
+  'Crime',
   'Action & Adventure',
   'Comedy',
-  'Crime',
   'Sci-Fi & Fantasy',
   'Mystery',
   'Animation',
+  'Reality',
   'Family',
+  'Documentary',
 ];
 
 const THIS_YEAR = new Date().getFullYear();
@@ -266,7 +270,7 @@ function applyBrowseSort(query, sortOrder = 'title-asc') {
   return query.order('title', { ascending: true });
 }
 
-function pickCuratedGenres(allGenres, preferredGenres) {
+function pickCuratedGenres(allGenres, preferredGenres, max = 6) {
   const selected = [];
 
   for (const preferredGenre of preferredGenres) {
@@ -274,7 +278,7 @@ function pickCuratedGenres(allGenres, preferredGenres) {
       selected.push(preferredGenre);
     }
 
-    if (selected.length >= 4) {
+    if (selected.length >= max) {
       return selected;
     }
   }
@@ -284,7 +288,7 @@ function pickCuratedGenres(allGenres, preferredGenres) {
       selected.push(genre);
     }
 
-    if (selected.length >= 4) {
+    if (selected.length >= max) {
       return selected;
     }
   }
@@ -490,9 +494,8 @@ export async function fetchSupabaseMovieCuratedRows() {
       .ilike('genre', `%${genre}%`)
       .not('poster_url', 'is', null)
       .lte('year', THIS_YEAR)
-      .order('year', { ascending: false, nullsFirst: false })
       .order('title', { ascending: true })
-      .limit(12)),
+      .limit(30)),
   ]);
 
   if (featuredResult.error) throw featuredResult.error;
@@ -510,7 +513,7 @@ export async function fetchSupabaseMovieCuratedRows() {
     if (result.error) throw result.error;
 
     const genre = curatedGenres[index];
-    const items = (result.data || []).map((movie) => normalizeMovie(movie));
+    const items = shuffleItems((result.data || []).map((movie) => normalizeMovie(movie)));
 
     if (genre && items.length > 0) {
       rows.push({
@@ -659,9 +662,8 @@ export async function fetchSupabaseTvShowCuratedRows() {
       .ilike('genre', `%${normalizeSearchValue(genre)}%`)
       .not('poster_url', 'is', null)
       .lte('year', THIS_YEAR)
-      .order('year', { ascending: false, nullsFirst: false })
       .order('title', { ascending: true })
-      .limit(12)),
+      .limit(30)),
   ]);
 
   if (featuredResult.error) throw featuredResult.error;
@@ -679,7 +681,7 @@ export async function fetchSupabaseTvShowCuratedRows() {
     if (result.error) throw result.error;
 
     const genre = curatedGenres[index];
-    const items = (result.data || []).map((show) => normalizeTvShow(show));
+    const items = shuffleItems((result.data || []).map((show) => normalizeTvShow(show)));
 
     if (genre && items.length > 0) {
       rows.push({
