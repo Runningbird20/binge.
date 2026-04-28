@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import { useAuth } from '../contexts/AuthContext';
 import {
   fetchSupabaseLists,
   fetchSupabaseList,
@@ -11,6 +13,11 @@ import {
   voteSupabaseListItem,
   moveSupabaseListItem,
   removeSupabaseListItem,
+  fetchSupabasePublicLists,
+  updateWatchlistProgress,
+  fetchListComments,
+  addListComment,
+  deleteListComment,
 } from '../utils/supabaseData';
 
 function getTypeLabel(mediaType) {
@@ -30,6 +37,38 @@ function getImageUrl(item) {
 function getShareUrl(shareCode) {
   if (typeof window === 'undefined') return `/lists/${shareCode}`;
   return `${window.location.origin}/lists/${shareCode}`;
+}
+
+function WatchedToggle({ item, onToggle }) {
+  const isWatched = item.my_watchlist_status === 'watched' || item.my_watchlist_status === 'read';
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState(item.my_watchlist_status);
+
+  async function handleClick() {
+    setSaving(true);
+    const newStatus = (status === 'watched' || status === 'read')
+      ? (item.media_type === 'book' ? 'reading' : 'watching')
+      : (item.media_type === 'book' ? 'read' : 'watched');
+    try {
+      await updateWatchlistProgress({ mediaType: item.media_type, mediaId: item.media_id, status: newStatus });
+      setStatus(newStatus);
+      onToggle?.(item, newStatus);
+    } catch {}
+    finally { setSaving(false); }
+  }
+
+  const done = status === 'watched' || status === 'read';
+  return (
+    <button
+      type="button"
+      className={`ll-watched-btn${done ? ' done' : ''}`}
+      onClick={handleClick}
+      disabled={saving}
+      title={done ? 'Mark as unwatched' : 'Mark as watched'}
+    >
+      {saving ? '…' : done ? '✓' : '○'}
+    </button>
+  );
 }
 
 function ListItemCard({ item, index, onVote, onMove, onRemove, canEdit, isBusy, isFirst, isLast }) {
@@ -56,6 +95,8 @@ function ListItemCard({ item, index, onVote, onMove, onRemove, canEdit, isBusy, 
           {[item.creator_name, item.year, item.genre].filter(Boolean).join(' · ')}
         </p>
       </div>
+
+      <WatchedToggle item={item} />
 
       <div className="ll-item-votes">
         <button
@@ -91,7 +132,84 @@ function ListItemCard({ item, index, onVote, onMove, onRemove, canEdit, isBusy, 
   );
 }
 
+function formatAgo(ts) {
+  const d = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (d < 60) return 'just now';
+  if (d < 3600) return `${Math.round(d/60)}m ago`;
+  if (d < 86400) return `${Math.round(d/3600)}h ago`;
+  return `${Math.round(d/86400)}d ago`;
+}
+
+function ListComments({ listId }) {
+  const { user } = useAuth();
+  const [comments, setComments] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  useEffect(() => {
+    if (!listId) return;
+    fetchListComments(listId).then(setComments).catch(() => {});
+  }, [listId]);
+
+  async function handlePost(e) {
+    e.preventDefault();
+    if (!draft.trim()) return;
+    setPosting(true);
+    try {
+      await addListComment(listId, draft);
+      setDraft('');
+      const updated = await fetchListComments(listId);
+      setComments(updated);
+    } catch {}
+    finally { setPosting(false); }
+  }
+
+  async function handleDelete(id) {
+    try {
+      await deleteListComment(id);
+      setComments(c => c.filter(x => x.id !== id));
+    } catch {}
+  }
+
+  return (
+    <div className="ll-comments">
+      <h4 className="ll-comments-heading">Comments</h4>
+      {comments.length === 0 && <p className="ll-comments-empty">No comments yet.</p>}
+      <div className="ll-comments-list">
+        {comments.map(c => (
+          <div key={c.id} className="ll-comment">
+            <div className="ll-comment-header">
+              <Link to={`/profile/${c.author.username}`} className="ll-comment-author">{c.author.username}</Link>
+              <span className="ll-comment-time">{formatAgo(c.created_at)}</span>
+              {user?.id === c.user_id && (
+                <button type="button" className="ll-comment-delete" onClick={() => handleDelete(c.id)} title="Delete">✕</button>
+              )}
+            </div>
+            <p className="ll-comment-body">{c.body}</p>
+          </div>
+        ))}
+      </div>
+      {user && (
+        <form className="ll-comment-form" onSubmit={handlePost}>
+          <input
+            className="ll-input"
+            type="text"
+            placeholder="Add a comment…"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            maxLength={1000}
+          />
+          <button type="submit" className="btn-primary btn-sm" disabled={posting || !draft.trim()}>
+            {posting ? '…' : 'Post'}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function Lists() {
+  const [mode, setMode]                     = useState('mine'); // 'mine' | 'discover'
   const [lists, setLists]                   = useState([]);
   const [selectedListId, setSelectedListId] = useState(null);
   const [selectedList, setSelectedList]     = useState(null);
@@ -107,6 +225,11 @@ export default function Lists() {
   const [editingSettings, setEditingSettings] = useState(false);
   const [statusMessage, setStatusMessage]   = useState('');
   const [statusKind, setStatusKind]         = useState('info'); // 'info' | 'error'
+
+  // Discover mode
+  const [publicLists, setPublicLists]       = useState([]);
+  const [publicLoading, setPublicLoading]   = useState(false);
+  const [discoverSearch, setDiscoverSearch] = useState('');
 
   const flash = useCallback((msg, kind = 'info') => {
     setStatusMessage(msg);
@@ -158,6 +281,20 @@ export default function Lists() {
   }, [flash]);
 
   useEffect(() => { loadLists(); }, [loadLists]);
+
+  useEffect(() => {
+    if (mode !== 'discover') return;
+    let cancelled = false;
+    setPublicLoading(true);
+    fetchSupabasePublicLists({ search: discoverSearch }).then(data => {
+      if (!cancelled) setPublicLists(data);
+    }).catch(() => {
+      if (!cancelled) setPublicLists([]);
+    }).finally(() => {
+      if (!cancelled) setPublicLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [mode, discoverSearch]);
 
   useEffect(() => {
     if (!selectedListId) { setSelectedList(null); return undefined; }
@@ -292,6 +429,44 @@ export default function Lists() {
             Build shared watchlists, invite friends by username, and let vibe votes surface the group's top pick.
           </p>
         </div>
+
+        <div className="ll-mode-toggle">
+          <button type="button" className={`ll-mode-btn${mode === 'mine' ? ' active' : ''}`} onClick={() => setMode('mine')}>
+            My Lists
+          </button>
+          <button type="button" className={`ll-mode-btn${mode === 'discover' ? ' active' : ''}`} onClick={() => setMode('discover')}>
+            Discover
+          </button>
+        </div>
+
+        {mode === 'discover' ? (
+          <div className="ll-discover">
+            <div className="ll-discover-search">
+              <input
+                type="text"
+                className="ll-input"
+                placeholder="Search public lists…"
+                value={discoverSearch}
+                onChange={e => setDiscoverSearch(e.target.value)}
+              />
+            </div>
+            {publicLoading ? (
+              <div className="ll-empty"><p>Loading…</p></div>
+            ) : publicLists.length === 0 ? (
+              <div className="ll-empty"><p>No public lists found.</p></div>
+            ) : (
+              <div className="ll-discover-grid">
+                {publicLists.map(list => (
+                  <Link key={list.id} to={`/lists/${list.share_code}`} className="ll-discover-card">
+                    <h3 className="ll-discover-name">{list.name}</h3>
+                    <p className="ll-discover-meta">by {list.owner_username}</p>
+                    <p className="ll-discover-count">{list.item_count} item{list.item_count !== 1 ? 's' : ''}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
 
         <div className="ll-shell">
           {/* ── Sidebar ─────────────────────────────────────────── */}
@@ -531,10 +706,13 @@ export default function Lists() {
                     </div>
                   )}
                 </div>
+
+                <ListComments listId={selectedList.id} />
               </>
             )}
           </div>
         </div>
+        )}
       </main>
     </div>
   );

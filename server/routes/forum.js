@@ -486,6 +486,19 @@ async function isForumMod(user, forumId) {
 }
 
 // Admin: delete a post (and all its comments)
+router.patch('/admin/post/:id/pin', async (req, res) => {
+  const user = await requireUser(req, res); if (!user) return;
+  const admin = await isAdmin(user);
+  if (!admin) return res.status(403).json({ error: 'Admin access required' });
+  const pinned = req.body.pinned === true;
+  try {
+    const sb = getSupabase();
+    const { data, error } = await sb.from('posts').update({ is_pinned: pinned }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.delete('/admin/post/:id', async (req, res) => {
   const user = await requireUser(req, res); if (!user) return;
   const admin = await isAdmin(user);

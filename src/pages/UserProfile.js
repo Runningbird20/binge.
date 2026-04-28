@@ -227,6 +227,50 @@ function ProfileStatsCard({ watchlist, ratings, joinDate }) {
   );
 }
 
+function CurrentlyWatchingStrip({ items }) {
+  const active = useMemo(
+    () => items.filter(i => i.status === 'watching' || i.status === 'reading'),
+    [items]
+  );
+  if (!active.length) return null;
+
+  return (
+    <div className="cw-strip">
+      <h3 className="cw-heading">
+        {active.some(i => i.status === 'reading') && active.some(i => i.status === 'watching')
+          ? 'Currently Watching & Reading'
+          : active[0].status === 'reading'
+          ? 'Currently Reading'
+          : 'Currently Watching'}
+      </h3>
+      <div className="cw-row">
+        {active.map((item, i) => {
+          const poster = resolvePoster(item.poster_url || item.image_url);
+          const progress = item.media_type === 'tv_show' && (item.current_season || item.current_episode)
+            ? `S${item.current_season || '?'} · E${item.current_episode || '?'}`
+            : item.media_type === 'book' && (item.current_chapter || item.current_page)
+            ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
+            : null;
+          const href = item.media_type === 'movie' ? `/movies?open=${item.media_id}`
+            : item.media_type === 'tv_show' ? `/tv-shows?open=${item.media_id}`
+            : `/books?open=${item.media_id}`;
+          return (
+            <Link key={item.id ?? i} to={href} className="cw-card" title={item.title}>
+              <div className="cw-poster">
+                {poster
+                  ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+                  : <div className="cw-placeholder">{MEDIA_ICONS[item.media_type]}</div>}
+                {progress && <span className="cw-progress">{progress}</span>}
+              </div>
+              <p className="cw-title">{item.title}</p>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RatingStats({ ratings }) {
   const stats = useMemo(() => {
     if (!ratings.length) return null;
@@ -438,6 +482,8 @@ export default function UserProfile() {
           <div className="profile-private"><p>🔒 This profile is private.</p></div>
         ) : (
           <>
+            <CurrentlyWatchingStrip items={displayWatchlist} />
+
             <div className="profile-tabs">
               {tabs.map(t => (
                 <button key={t.id} className={`profile-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)} type="button">
