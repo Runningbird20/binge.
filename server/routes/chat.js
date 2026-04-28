@@ -9,6 +9,8 @@ const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
+if (!GROQ_API_KEY) console.warn('[chat] GROQ_API_KEY is not set — AI features (moderation, recommendations, chatbot) will be disabled.');
+
 // ─── Intent detection ─────────────────────────────────────────────────────────
 
 function detectQueryIntent(query) {
@@ -904,7 +906,7 @@ router.post('/moderate', optionalAuth, async (req, res) => {
   const hardBlock = hardBlockCheck(text);
   if (hardBlock) return res.json({ allowed: false, reason: hardBlock });
 
-  if (!GROQ_API_KEY) return res.json({ allowed: true });
+  if (!GROQ_API_KEY) { console.warn('[chat/moderate] GROQ_API_KEY not set — AI moderation skipped'); return res.json({ allowed: true }); }
 
   try {
     const response = await fetch(GROQ_API_URL, {
