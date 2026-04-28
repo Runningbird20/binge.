@@ -11,6 +11,7 @@ import {
   fetchSupabaseProfiles,
   fetchSupabaseProfilesByIds,
   fetchSupabaseRatings,
+  fetchSupabaseRatingsForUsers,
   followSupabaseUser,
   unfollowSupabaseUser,
 } from '../utils/supabaseData';
@@ -148,6 +149,7 @@ export default function Following() {
   const [feedItems, setFeedItems] = useState([]);
   const [suggestedProfiles, setSuggestedProfiles] = useState([]);
   const [currentRatings, setCurrentRatings] = useState([]);
+  const [followedRatings, setFollowedRatings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingProfileId, setSavingProfileId] = useState(null);
@@ -174,16 +176,19 @@ export default function Following() {
         setSuggestedProfiles(suggestions.filter((profile) => profile.id !== user?.id && !followed.includes(profile.id)));
 
         if (followed.length) {
-          const [profiles, feed] = await Promise.all([
+          const [profiles, feed, followedRatingRows] = await Promise.all([
             fetchSupabaseProfilesByIds(followed),
             fetchSupabaseFollowFeed(),
+            fetchSupabaseRatingsForUsers(followed),
           ]);
           if (!active) return;
           setFollowingProfiles(profiles);
           setFeedItems(feed);
+          setFollowedRatings(followedRatingRows);
         } else {
           setFollowingProfiles([]);
           setFeedItems([]);
+          setFollowedRatings([]);
         }
       } catch (err) {
         if (active) setError(err?.message || 'Unable to load your social feed.');
@@ -203,14 +208,25 @@ export default function Following() {
       : suggestedProfiles;
   }, [searchQuery, suggestedProfiles]);
 
-  const ratingByUser = useMemo(() =>
-    feedItems.reduce((acc, item) => {
-      if (item.type !== 'rating') return acc;
-      acc[item.userId] = acc[item.userId] || [];
-      acc[item.userId].push(item);
+  const currentMovieRatings = useMemo(
+    () => currentRatings.filter((rating) => rating.media_type === 'movie'),
+    [currentRatings]
+  );
+
+  const movieRatingByUser = useMemo(() =>
+    followedRatings.reduce((acc, rating) => {
+      if (rating.media_type !== 'movie') return acc;
+      acc[rating.user_id] = acc[rating.user_id] || [];
+      acc[rating.user_id].push(rating);
       return acc;
     }, {}),
-  [feedItems]);
+  [followedRatings]);
+
+  const latestFeedItems = useMemo(() => (
+    [...feedItems]
+      .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
+      .slice(0, 5)
+  ), [feedItems]);
 
   async function handleFollow(profileId) {
     if (!profileId || profileId === user?.id) {
@@ -223,12 +239,14 @@ export default function Following() {
     try {
       await followSupabaseUser(profileId);
       const ids = await fetchSupabaseFollowingIds();
-      const [profiles, feed] = await Promise.all([
+      const [profiles, feed, followedRatingRows] = await Promise.all([
         fetchSupabaseProfilesByIds(ids),
         fetchSupabaseFollowFeed(),
+        fetchSupabaseRatingsForUsers(ids),
       ]);
       setFollowingProfiles(profiles);
       setFeedItems(feed);
+      setFollowedRatings(followedRatingRows);
       setSuggestedProfiles((cur) => cur.filter((p) => p.id !== profileId));
     } catch (err) {
       setError(err?.message || 'Unable to follow that member.');
@@ -250,10 +268,14 @@ export default function Following() {
     try {
       await unfollowSupabaseUser(profileId);
       const refreshedFollowedIds = await fetchSupabaseFollowingIds();
-      const refreshedProfiles = await fetchSupabaseProfilesByIds(refreshedFollowedIds);
-      const refreshedFeed = await fetchSupabaseFollowFeed();
+      const [refreshedProfiles, refreshedFeed, refreshedRatings] = await Promise.all([
+        fetchSupabaseProfilesByIds(refreshedFollowedIds),
+        fetchSupabaseFollowFeed(),
+        fetchSupabaseRatingsForUsers(refreshedFollowedIds),
+      ]);
       setFollowingProfiles(refreshedProfiles);
       setFeedItems(refreshedFeed);
+      setFollowedRatings(refreshedRatings);
       if (unfollowedProfile && unfollowedProfile.id !== user?.id) {
         setSuggestedProfiles((current) => {
           if (current.some((profile) => profile.id === unfollowedProfile.id)) {
@@ -316,7 +338,7 @@ export default function Following() {
                 <FollowingCard
                   key={profile.id}
                   profile={profile}
-                  tasteMatch={calculateTasteMatch(currentRatings, ratingByUser[profile.id] || [])}
+                  tasteMatch={calculateTasteMatch(currentMovieRatings, movieRatingByUser[profile.id] || [])}
                   onUnfollow={handleUnfollow}
                   onQuickView={setModalProfile}
                   saving={savingProfileId === profile.id}
@@ -344,7 +366,7 @@ export default function Following() {
             </div>
           ) : (
             <div className="social-feed-list">
-              {feedItems.map((item) => (
+              {latestFeedItems.map((item) => (
                 <FeedItem key={`${item.type}-${item.id}-${item.createdAt}`} item={item} />
               ))}
             </div>

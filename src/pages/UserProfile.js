@@ -289,7 +289,10 @@ export default function UserProfile() {
   const [ratingsTab, setRatingsTab]   = useState('all');
   const [ratingsSort, setRatingsSort] = useState('score-desc');
 
-  const isOwn = currentUser?.username === username;
+  const loadedProfileId = data?.profile?.id;
+  const isOwn = loadedProfileId
+    ? currentUser?.id === loadedProfileId
+    : currentUser?.username?.toLowerCase() === username?.toLowerCase();
 
   useEffect(() => {
     setLoading(true);
