@@ -6,6 +6,16 @@ import {
 } from './supabase';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './supabaseData';
 import { generateSupabaseRecommendations } from './recommendations';
+import {
+  fetchSupabaseBookById,
+  fetchSupabaseBooksPage,
+  fetchSupabaseMovieById,
+  fetchSupabaseMovieCuratedRows,
+  fetchSupabaseMoviesPage,
+  fetchSupabaseTvShowById,
+  fetchSupabaseTvShowCuratedRows,
+  fetchSupabaseTvShowsPage,
+} from './supabaseMovieCatalog';
 import { resolveUserType } from './userAccess';
 
 const SEARCH_LIMIT = 8;
@@ -532,6 +542,158 @@ async function fetchTmdbSeason(searchParams) {
       airDate: episode.air_date,
     })),
   };
+}
+
+function normalizeEmbedRouteId(kind, value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+
+  if (kind === 'tmdb' && /^\d+$/.test(normalized)) {
+    return { kind: 'tmdb', value: normalized };
+  }
+
+  if (kind === 'imdb' && /^tt\d+$/i.test(normalized)) {
+    return { kind: 'imdb', value: normalized.toLowerCase() };
+  }
+
+  return null;
+}
+
+async function searchTmdbId({ title, year, type }) {
+  if (!TMDB_API_KEY || !title) {
+    return { kind: null, value: null };
+  }
+
+  const mediaType = type === 'tv_show' ? 'tv' : 'movie';
+  const params = new URLSearchParams({
+    api_key: TMDB_API_KEY,
+    query: title,
+  });
+
+  if (year) {
+    params.set(mediaType === 'tv' ? 'first_air_date_year' : 'year', year);
+  }
+
+  const response = await fetch(`https://api.themoviedb.org/3/search/${mediaType}?${params}`);
+  if (!response.ok) {
+    return { kind: null, value: null };
+  }
+
+  const data = await response.json();
+  const result = data.results?.[0];
+  return result?.id
+    ? { kind: 'tmdb', value: String(result.id), title: result.title || result.name || null }
+    : { kind: null, value: null };
+}
+
+async function fetchTmdbShow(searchParams) {
+  const tmdbId = String(searchParams.get('tmdbId') || '').trim();
+  if (!tmdbId) {
+    throw new Error('tmdbId required');
+  }
+
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY not set');
+  }
+
+  const response = await fetch(`https://api.themoviedb.org/3/tv/${encodeURIComponent(tmdbId)}?api_key=${encodeURIComponent(TMDB_API_KEY)}`);
+  if (!response.ok) {
+    throw new Error('TMDB error');
+  }
+
+  const data = await response.json();
+  return {
+    numberOfSeasons: data.number_of_seasons || null,
+    numberOfEpisodes: data.number_of_episodes || null,
+    status: data.status || null,
+    name: data.name || null,
+  };
+}
+
+async function handleMediaGet(pathname, searchParams) {
+  if (pathname === '/media/movies') {
+    const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
+    return fetchSupabaseMoviesPage({
+      page: Number(searchParams.get('page') || 1),
+      pageSize,
+      search: searchParams.get('search') || '',
+      genre: searchParams.get('genre') || '',
+      sortOrder: searchParams.get('sort') || 'title-asc',
+    });
+  }
+
+  if (pathname === '/media/movies/curated') {
+    return { rows: await fetchSupabaseMovieCuratedRows() };
+  }
+
+  const movieMatch = pathname.match(/^\/media\/movies\/([^/]+)$/);
+  if (movieMatch) {
+    const movie = await fetchSupabaseMovieById(decodeURIComponent(movieMatch[1]));
+    if (!movie) throw new Error('Movie not found.');
+    return movie;
+  }
+
+  if (pathname === '/media/tv-shows') {
+    const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
+    return fetchSupabaseTvShowsPage({
+      page: Number(searchParams.get('page') || 1),
+      pageSize,
+      search: searchParams.get('search') || '',
+      genre: searchParams.get('genre') || '',
+      sortOrder: searchParams.get('sort') || 'title-asc',
+    });
+  }
+
+  if (pathname === '/media/tv-shows/curated') {
+    return { rows: await fetchSupabaseTvShowCuratedRows() };
+  }
+
+  const tvMatch = pathname.match(/^\/media\/tv-shows\/([^/]+)$/);
+  if (tvMatch) {
+    const show = await fetchSupabaseTvShowById(decodeURIComponent(tvMatch[1]));
+    if (!show) throw new Error('TV show not found.');
+    return show;
+  }
+
+  if (pathname === '/media/books') {
+    const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 24);
+    return fetchSupabaseBooksPage({
+      page: Number(searchParams.get('page') || 1),
+      pageSize,
+      search: searchParams.get('search') || '',
+      genre: searchParams.get('genre') || '',
+      sortOrder: searchParams.get('sort') || 'title-asc',
+    });
+  }
+
+  const bookMatch = pathname.match(/^\/media\/books\/([^/]+)$/);
+  if (bookMatch) {
+    const book = await fetchSupabaseBookById(decodeURIComponent(bookMatch[1]));
+    if (!book) throw new Error('Book not found.');
+    return book;
+  }
+
+  if (pathname === '/media/embed-id') {
+    return (
+      normalizeEmbedRouteId('imdb', searchParams.get('imdb')) ||
+      normalizeEmbedRouteId('tmdb', searchParams.get('tmdb')) ||
+      await searchTmdbId({
+        title: searchParams.get('title') || '',
+        year: searchParams.get('year') || '',
+        type: searchParams.get('type') || '',
+      })
+    );
+  }
+
+  if (pathname === '/media/tmdb-show') {
+    return fetchTmdbShow(searchParams);
+  }
+
+  if (pathname === '/media/tmdb-season') {
+    return fetchTmdbSeason(searchParams);
+  }
+
+  throw new Error(`Unsupported media route: ${pathname}`);
 }
 
 async function handleSearch(searchParams) {
@@ -2079,12 +2241,12 @@ export async function executeSupabaseRoute(method, path, body) {
     return handleNotificationMutation(normalizedMethod, pathname);
   }
 
-  if (pathname === '/media/tmdb-season') {
+  if (pathname.startsWith('/media')) {
     if (normalizedMethod !== 'GET') {
       throw new Error(`Unsupported media route: ${pathname}`);
     }
 
-    return fetchTmdbSeason(searchParams);
+    return handleMediaGet(pathname, searchParams);
   }
 
   if (pathname.startsWith('/forum')) {
