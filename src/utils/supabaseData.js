@@ -790,28 +790,42 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
     userId = authUser.id;
   }
 
-  let query = client
-    .from('watchlist')
-    .select('id, user_id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter, updated_at')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false, nullsFirst: false })
-    .order('added_at',   { ascending: false });
+  function applyFilters(query) {
+    let nextQuery = query.eq('user_id', userId);
 
-  if (mediaType) {
-    query = query.eq('media_type', mediaType);
+    if (mediaType) {
+      nextQuery = nextQuery.eq('media_type', mediaType);
+    }
+
+    if (status) {
+      nextQuery = nextQuery.eq('status', status);
+    }
+
+    return nextQuery;
   }
 
-  if (status) {
-    query = query.eq('status', status);
+  let result = await applyFilters(
+    client
+      .from('watchlist')
+      .select('id, user_id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter, updated_at')
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('added_at', { ascending: false })
+  );
+
+  if (result.error && /current_|updated_at|column|schema cache/i.test(result.error.message || '')) {
+    result = await applyFilters(
+      client
+        .from('watchlist')
+        .select('id, user_id, media_type, media_id, status, added_at')
+        .order('added_at', { ascending: false })
+    );
   }
 
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error(toFriendlyError(error, 'Unable to load your library.'));
+  if (result.error) {
+    throw new Error(toFriendlyError(result.error, 'Unable to load your library.'));
   }
 
-  return enrichMediaRecords(data || []);
+  return enrichMediaRecords(result.data || []);
 }
 
 export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'plan_to_watch', media = null }) {

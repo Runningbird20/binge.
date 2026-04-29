@@ -481,7 +481,8 @@ function CuratedView({ onItemClick, onSeeAll }) {
       setLoading(true);
 
       try {
-        const nextRows = await fetchSupabaseMovieCuratedRows();
+        const data = await api.get('/media/movies/curated');
+        const nextRows = Array.isArray(data?.rows) ? data.rows : [];
         if (nextRows.length === 0) {
           throw new Error('No curated rows available');
         }
@@ -492,8 +493,7 @@ function CuratedView({ onItemClick, onSeeAll }) {
         }
       } catch {
         try {
-          const data = await api.get('/media/movies/curated');
-          const nextRows = Array.isArray(data?.rows) ? data.rows : [];
+          const nextRows = await fetchSupabaseMovieCuratedRows();
           if (nextRows.length === 0) {
             throw new Error('No curated rows available');
           }

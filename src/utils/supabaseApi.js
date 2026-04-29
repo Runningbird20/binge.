@@ -611,6 +611,15 @@ async function fetchTmdbShow(searchParams) {
 }
 
 async function handleMediaGet(pathname, searchParams) {
+  if (
+    pathname === '/media/popular-titles' ||
+    pathname === '/media/movies/curated' ||
+    pathname === '/media/tv-shows/curated' ||
+    ((pathname === '/media/movies' || pathname === '/media/tv-shows') && searchParams.get('sort') === 'relevance')
+  ) {
+    return null;
+  }
+
   if (pathname === '/media/movies') {
     const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
     return fetchSupabaseMoviesPage({

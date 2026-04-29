@@ -94,6 +94,7 @@ alter table public.profiles
   add column if not exists username text,
   add column if not exists is_admin boolean not null default false,
   add column if not exists is_dev boolean not null default false,
+  add column if not exists is_public boolean not null default true,
   add column if not exists bio text not null default '',
   add column if not exists avatar_url text,
   add column if not exists created_at timestamptz not null default now(),
@@ -139,11 +140,13 @@ update public.profiles
 set
   is_admin = coalesce(is_admin, false),
   is_dev = coalesce(is_dev, false),
+  is_public = coalesce(is_public, true),
   bio = coalesce(bio, ''),
   created_at = coalesce(created_at, now()),
   updated_at = coalesce(updated_at, now())
 where is_admin is null
    or is_dev is null
+   or is_public is null
    or bio is null
    or created_at is null
    or updated_at is null;
@@ -153,6 +156,8 @@ alter table public.profiles
   alter column is_admin set not null,
   alter column is_dev set default false,
   alter column is_dev set not null,
+  alter column is_public set default true,
+  alter column is_public set not null,
   alter column bio set default '',
   alter column created_at set default now(),
   alter column updated_at set default now();
@@ -411,17 +416,25 @@ alter table public.watchlist
   add column if not exists media_type text,
   add column if not exists media_id bigint,
   add column if not exists status text not null default 'plan_to_watch',
+  add column if not exists current_season integer,
+  add column if not exists current_episode integer,
+  add column if not exists current_page integer,
+  add column if not exists current_chapter text,
+  add column if not exists updated_at timestamptz,
   add column if not exists added_at timestamptz not null default now();
 
 update public.watchlist
 set
   status = coalesce(status, 'plan_to_watch'),
-  added_at = coalesce(added_at, now())
+  added_at = coalesce(added_at, now()),
+  updated_at = coalesce(updated_at, added_at, now())
 where status is null
-   or added_at is null;
+   or added_at is null
+   or updated_at is null;
 
 alter table public.watchlist
   alter column status set default 'plan_to_watch',
+  alter column updated_at set default now(),
   alter column added_at set default now();
 
 do $$
@@ -538,6 +551,12 @@ where trim(split_genre.genre_value) <> '';
 drop trigger if exists trg_profiles_set_updated_at on public.profiles;
 create trigger trg_profiles_set_updated_at
 before update on public.profiles
+for each row
+execute function public.set_updated_at();
+
+drop trigger if exists trg_watchlist_set_updated_at on public.watchlist;
+create trigger trg_watchlist_set_updated_at
+before update on public.watchlist
 for each row
 execute function public.set_updated_at();
 

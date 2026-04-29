@@ -101,9 +101,22 @@ export function AuthProvider({ children }) {
       }
 
       if (!session?.user) {
-        clearTokenCache();
-        setUser(null);
-        setAuthLoading(false);
+        try {
+          const restoredUser = await refreshUser();
+          if (active && !restoredUser) {
+            clearTokenCache();
+            setUser(null);
+          }
+        } catch {
+          if (active) {
+            clearTokenCache();
+            setUser(null);
+          }
+        } finally {
+          if (active) {
+            setAuthLoading(false);
+          }
+        }
         return;
       }
       // Cache the token so api.js doesn't call getSession() on every request

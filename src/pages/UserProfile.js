@@ -360,15 +360,12 @@ export default function UserProfile() {
   useEffect(() => {
     if (!isOwn) return;
     setOwnDataLoading(true);
-    Promise.all([
+    Promise.allSettled([
       fetchSupabaseWatchlist(),
       fetchSupabaseRatings(),
     ]).then(([wl, rt]) => {
-      setOwnWatchlist(wl);
-      setOwnRatings(rt);
-    }).catch(() => {
-      setOwnWatchlist([]);
-      setOwnRatings([]);
+      setOwnWatchlist(wl.status === 'fulfilled' && Array.isArray(wl.value) ? wl.value : []);
+      setOwnRatings(rt.status === 'fulfilled' && Array.isArray(rt.value) ? rt.value : []);
     }).finally(() => setOwnDataLoading(false));
   }, [isOwn]);
 
