@@ -176,6 +176,39 @@ export default function Navbar() {
           </div>
         )}
       </aside>
+
+      {/* Bottom navigation — mobile only */}
+      {user && (
+        <nav className="bottom-nav" aria-label="Bottom navigation">
+          <div className="bottom-nav-inner">
+            <NavLink to="/home" className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}>
+              <span className="bottom-nav-icon">🏠</span>
+              <span className="bottom-nav-label">Home</span>
+            </NavLink>
+            <NavLink to="/movies" className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}>
+              <span className="bottom-nav-icon">🎬</span>
+              <span className="bottom-nav-label">Movies</span>
+            </NavLink>
+            <NavLink to="/watchlist" className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}>
+              <span className="bottom-nav-icon">📋</span>
+              <span className="bottom-nav-label">Watchlist</span>
+            </NavLink>
+            <NavLink to="/forum" className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}>
+              <span className="bottom-nav-icon">💬</span>
+              <span className="bottom-nav-label">Forum</span>
+            </NavLink>
+            <button
+              className={`bottom-nav-item${panelOpen ? ' active' : ''}`}
+              onClick={() => setPanelOpen((v) => !v)}
+              type="button"
+              aria-label="More navigation"
+            >
+              <span className="bottom-nav-icon">☰</span>
+              <span className="bottom-nav-label">More</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </>
   );
 }

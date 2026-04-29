@@ -9,7 +9,15 @@ const defaultEnvPath = path.resolve(process.cwd(), '.env');
 dotenv.config({ path: localEnvPath });
 dotenv.config({ path: defaultEnvPath });
 
+const helmet = require('helmet');
+const rateLimit = require('./middleware/rateLimit');
+
 const app = express();
+
+// Security headers — HSTS, X-Frame-Options, X-Content-Type-Options, etc.
+// contentSecurityPolicy is disabled because the embed player loads cross-origin iframes
+// from multiple video providers which would all need to be whitelisted.
+app.use(helmet({ contentSecurityPolicy: false }));
 const configuredClientUrl = process.env.CLIENT_URL?.trim();
 const localhostOriginPattern = /^https?:\/\/localhost(:\d+)?$|^https?:\/\/127\.0\.0\.1(:\d+)?$|^https?:\/\[::1\](:\d+)?$/i;
 
@@ -32,11 +40,24 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '1mb' }));
+
+// Global rate limit: 200 requests / minute per IP (generous for normal use)
+app.use(rateLimit({ windowMs: 60_000, max: 200, message: 'Too many requests — slow down.' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+// Auth endpoints get a strict limit: 10 attempts / 15 min per IP
+const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 10, message: 'Too many login attempts — try again later.' });
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/signup', authLimiter);
+
+// Chat and forum: 30 posts / minute per IP
+const writeLimiter = rateLimit({ windowMs: 60_000, max: 30 });
+app.use('/api/chat', writeLimiter);
+app.use('/api/forum', writeLimiter);
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/lists', require('./routes/lists'));

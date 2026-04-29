@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -31,12 +32,25 @@ const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
 const YearInReview   = lazy(() => import('./pages/YearInReview'));
 
 function AppRouteFallback() {
-  return <div className="loading-state">Loading...</div>;
+  return (
+    <div className="app-layout">
+      <div className="route-skeleton">
+        <div className="route-skeleton-bar skeleton-block" />
+        <div className="route-skeleton-bar route-skeleton-bar--short skeleton-block" />
+        <div className="route-skeleton-grid">
+          {Array.from({ length: 12 }, (_, i) => (
+            <div key={i} className="route-skeleton-card skeleton-block" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter>
         <Suspense fallback={<AppRouteFallback />}>
           <Routes>
@@ -84,6 +98,7 @@ export default function App() {
           <ChatBot />
         </Suspense>
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

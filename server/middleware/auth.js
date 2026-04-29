@@ -14,7 +14,13 @@ function getCreateClient() {
   return createClientCache;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || (() => {
+  // Primary auth is Supabase (tokens verified via auth.getUser). JWT_SECRET is
+  // only used for the legacy SQLite auth path. Warn loudly but don't crash —
+  // crashing would break all API routes in serverless environments like Vercel.
+  console.warn('[auth] WARNING: JWT_SECRET env var is not set. Set it in your Vercel dashboard (or .env) to secure the legacy auth path.');
+  return 'dev-secret-change-in-production';
+})();
 
 function readBearerToken(req) {
   const auth = req.headers.authorization;
