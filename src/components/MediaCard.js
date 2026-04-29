@@ -129,6 +129,9 @@ export default function MediaCard({
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
   const description = showDescription ? (item.synopsis || item.overview || '') : '';
   const userScore = computeNormalizedScore(mediaType, userRating);
+  const rtScore = mediaType === 'movie' && Number.isFinite(Number(item.rotten_tomatoes_score))
+    ? Number(item.rotten_tomatoes_score)
+    : null;
 
   return (
     <div
@@ -183,6 +186,9 @@ export default function MediaCard({
               Community: {avgRating}/10
               <span className="rating-count"> ({item.rating_count})</span>
             </span>
+          )}
+          {rtScore !== null && (
+            <span className="media-card-rt">RT: {rtScore}%</span>
           )}
         </div>
 

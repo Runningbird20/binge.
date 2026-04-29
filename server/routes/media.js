@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { buildBookGenreFacets, matchesBookGenreFacet } = require('../bookGenres');
+const { calculateMovieRelevance } = require('../utils/movieRelevance');
 
 const router = express.Router();
 
@@ -10,6 +11,10 @@ const TRAKT_CLIENT_ID = process.env.TRAKT_CLIENT_ID || process.env.REACT_APP_TRA
 const TRAKT_CLIENT_SECRET = process.env.TRAKT_CLIENT_SECRET;
 const TRAKT_CACHE_TTL_MS = 60 * 60 * 1000;
 const traktCache = new Map();
+const OMDB_API_KEY = process.env.OMDB_API_KEY;
+const TMDB_API_KEY = process.env.TMDB_API_KEY || process.env.REACT_APP_TMDB_API_KEY;
+const OMDB_CACHE_DAYS = 30;
+const OMDB_ENRICH_LIMIT = 80;
 
 function normalizePage(value, fallback = 1) {
   const parsed = Number(value);
@@ -168,6 +173,150 @@ function sortRowsByTraktRelevance(items, relevanceMap) {
       return rightYear - leftYear;
     }
 
+    return String(left.title || '').localeCompare(String(right.title || ''));
+  });
+}
+
+function parsePercentRating(value) {
+  const match = String(value || '').match(/(\d+(?:\.\d+)?)\s*%/);
+  return match ? Math.round(Number(match[1])) : null;
+}
+
+function parseNumericRating(value) {
+  const match = String(value || '').match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : null;
+}
+
+function isOmdbCacheStale(movie) {
+  if (
+    movie.rotten_tomatoes_score == null &&
+    movie.imdb_rating == null &&
+    movie.metacritic_score == null
+  ) {
+    return true;
+  }
+
+  if (!movie.ratings_enriched_at) return true;
+
+  const enrichedAt = new Date(movie.ratings_enriched_at).getTime();
+  if (!Number.isFinite(enrichedAt)) return true;
+
+  return Date.now() - enrichedAt > OMDB_CACHE_DAYS * 24 * 60 * 60 * 1000;
+}
+
+async function fetchTmdbImdbId(tmdbId) {
+  if (!TMDB_API_KEY || !tmdbId) return null;
+
+  try {
+    const url = new URL(`https://api.themoviedb.org/3/movie/${encodeURIComponent(tmdbId)}/external_ids`);
+    url.searchParams.set('api_key', TMDB_API_KEY);
+    const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return /^tt\d+$/i.test(data?.imdb_id || '') ? data.imdb_id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOmdbRatings(imdbId) {
+  if (!OMDB_API_KEY || !/^tt\d+$/i.test(imdbId || '')) return null;
+
+  try {
+    const url = new URL('https://www.omdbapi.com/');
+    url.searchParams.set('i', imdbId);
+    url.searchParams.set('apikey', OMDB_API_KEY);
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data?.Response === 'False') return null;
+
+    const ratings = Array.isArray(data?.Ratings) ? data.Ratings : [];
+    const rt = ratings.find((rating) => rating.Source === 'Rotten Tomatoes')?.Value;
+    const imdb = ratings.find((rating) => rating.Source === 'Internet Movie Database')?.Value || data?.imdbRating;
+    const metacritic = ratings.find((rating) => rating.Source === 'Metacritic')?.Value || data?.Metascore;
+
+    return {
+      rotten_tomatoes_score: parsePercentRating(rt),
+      imdb_rating: parseNumericRating(imdb),
+      metacritic_score: parseNumericRating(metacritic),
+      ratings_enriched_at: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function enrichMovieForRelevance(movie) {
+  if (!movie?.id || !isOmdbCacheStale(movie)) return movie;
+
+  let imdbId = movie.imdb_id;
+  if (!imdbId) {
+    imdbId = await fetchTmdbImdbId(getTmdbIdFromSourceKey(movie.source_key));
+  }
+
+  if (!imdbId) {
+    const enrichedAt = new Date().toISOString();
+    db.prepare('UPDATE movies SET ratings_enriched_at = ? WHERE id = ?').run(enrichedAt, movie.id);
+    return { ...movie, ratings_enriched_at: enrichedAt };
+  }
+
+  const ratings = await fetchOmdbRatings(imdbId);
+  const payload = ratings || {
+    rotten_tomatoes_score: null,
+    imdb_rating: null,
+    metacritic_score: null,
+    ratings_enriched_at: new Date().toISOString(),
+  };
+
+  db.prepare(`
+    UPDATE movies
+    SET imdb_id = ?,
+        rotten_tomatoes_score = ?,
+        imdb_rating = ?,
+        metacritic_score = ?,
+        ratings_enriched_at = ?
+    WHERE id = ?
+  `).run(
+    imdbId,
+    payload.rotten_tomatoes_score,
+    payload.imdb_rating,
+    payload.metacritic_score,
+    payload.ratings_enriched_at,
+    movie.id
+  );
+
+  return { ...movie, imdb_id: imdbId, ...payload };
+}
+
+async function enrichMoviesForRelevance(movies) {
+  const enriched = [];
+  let attempts = 0;
+
+  for (const movie of movies) {
+    if (attempts < OMDB_ENRICH_LIMIT && isOmdbCacheStale(movie)) {
+      attempts += 1;
+      enriched.push(await enrichMovieForRelevance(movie));
+    } else {
+      enriched.push(movie);
+    }
+  }
+
+  return enriched;
+}
+
+async function sortRowsByMovieRelevance(items) {
+  const preSorted = [...items].sort((left, right) => {
+    const leftPopularity = Number(left.popularity) || 0;
+    const rightPopularity = Number(right.popularity) || 0;
+    if (leftPopularity !== rightPopularity) return rightPopularity - leftPopularity;
+    return (Number(right.year) || 0) - (Number(left.year) || 0);
+  });
+
+  const enriched = await enrichMoviesForRelevance(preSorted);
+  return enriched.sort((left, right) => {
+    const diff = calculateMovieRelevance(right) - calculateMovieRelevance(left);
+    if (diff !== 0) return diff;
     return String(left.title || '').localeCompare(String(right.title || ''));
   });
 }
@@ -409,10 +558,9 @@ router.get('/movies', async (req, res) => {
   const countParams = [...params, ...params]; // params used twice (inner + outer WHERE)
   const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
   const items = sort === 'relevance'
-    ? sortRowsByTraktRelevance(
-        db.prepare(dedupeBase).all(...countParams),
-        await getTraktRelevanceMap('movie')
-      ).slice(offset, offset + pageSize)
+    ? (await sortRowsByMovieRelevance(
+        db.prepare(dedupeBase).all(...countParams)
+      )).slice(offset, offset + pageSize)
     : db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
 
   const genres = buildMediaGenreFacets(
@@ -466,11 +614,14 @@ function getTopDeduped(table, where, orderBy, limit, extraParams = []) {
 async function buildMovieRows() {
   const CURRENT_YEAR = new Date().getFullYear();
   const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
-  const relevanceMap = await getTraktRelevanceMap('movie');
-  const featuredItems = sortRowsByTraktRelevance(
-    getTopDeduped('movies', `year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'title ASC', 500),
-    relevanceMap
-  ).slice(0, 48);
+  const featuredItems = (await sortRowsByMovieRelevance(
+    getTopDeduped(
+      'movies',
+      `year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`,
+      'popularity DESC, year DESC, title ASC',
+      500
+    )
+  )).slice(0, 48);
   const rows = [
     {
       id: 'featured',

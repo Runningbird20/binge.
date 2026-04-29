@@ -15,6 +15,14 @@ const MOVIE_COLUMNS = [
   'poster_url',
   'source_key',
   'external_id',
+  'release_date',
+  'imdb_id',
+  'vote_average',
+  'popularity',
+  'rotten_tomatoes_score',
+  'imdb_rating',
+  'metacritic_score',
+  'ratings_enriched_at',
 ].join(', ');
 
 const MOVIE_BROWSE_COLUMNS = [
@@ -26,6 +34,14 @@ const MOVIE_BROWSE_COLUMNS = [
   'poster_url',
   'source_key',
   'external_id',
+  'release_date',
+  'imdb_id',
+  'vote_average',
+  'popularity',
+  'rotten_tomatoes_score',
+  'imdb_rating',
+  'metacritic_score',
+  'ratings_enriched_at',
 ].join(', ');
 
 const TV_SHOW_COLUMNS = [
