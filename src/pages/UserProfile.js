@@ -9,7 +9,9 @@ import {
   fetchSupabaseWatchlist,
   fetchSupabaseRatings,
   updateWatchlistProgress,
+  removeSupabaseWatchlistItem,
 } from '../utils/supabaseData';
+import { useToast } from '../contexts/ToastContext';
 
 function resolvePoster(url) {
   if (!url) return null;
@@ -25,7 +27,7 @@ const MEDIA_ICONS   = { movie: '🎬', tv_show: '📺', book: '📖' };
 const TV_STATUSES   = ['plan_to_watch', 'watching', 'watched'];
 const BOOK_STATUSES = ['plan_to_read', 'reading', 'read'];
 
-function WatchlistCard({ item, isOwn, onUpdate }) {
+function WatchlistCard({ item, isOwn, onUpdate, onRemove }) {
   const [status, setStatus]   = useState(item.status);
   const [season, setSeason]   = useState(item.current_season ?? '');
   const [episode, setEpisode] = useState(item.current_episode ?? '');
@@ -110,9 +112,19 @@ function WatchlistCard({ item, isOwn, onUpdate }) {
 
         {/* Hover overlay */}
         <div className="profile-wl-overlay">
-          <Link to={mediaUrl} className="profile-wl-overlay-open" onClick={e => e.stopPropagation()}>
-            Open →
-          </Link>
+          <div className="profile-wl-overlay-top">
+            <Link to={mediaUrl} className="profile-wl-overlay-open" onClick={e => e.stopPropagation()}>
+              Open →
+            </Link>
+            <button
+              type="button"
+              className="profile-wl-overlay-remove"
+              title="Remove from library"
+              onClick={e => { e.stopPropagation(); onRemove?.(item); }}
+            >
+              ✕
+            </button>
+          </div>
           <div className="profile-wl-overlay-controls">
             {item.media_type === 'tv_show' && (
               <div className="profile-wl-overlay-progress">
@@ -386,6 +398,8 @@ export default function UserProfile() {
     finally { setFollowLoading(false); }
   }
 
+  const toast = useToast();
+
   function handleWatchlistItemUpdate(id, updates) {
     setOwnWatchlist(prev => prev
       ? prev.map(item => item.id === id ? {
@@ -398,6 +412,16 @@ export default function UserProfile() {
         } : item)
       : prev
     );
+  }
+
+  async function handleWatchlistItemRemove(item) {
+    try {
+      await removeSupabaseWatchlistItem(item.id);
+      setOwnWatchlist(prev => prev ? prev.filter(i => i.id !== item.id) : prev);
+      toast(`Removed "${item.title}" from your library`);
+    } catch (err) {
+      toast(err.message || 'Could not remove item', 'error');
+    }
   }
 
   // All hooks must be called before any early returns
@@ -547,6 +571,7 @@ export default function UserProfile() {
                         item={item}
                         isOwn={isOwn}
                         onUpdate={handleWatchlistItemUpdate}
+                        onRemove={isOwn ? handleWatchlistItemRemove : undefined}
                       />
                     ))}
                   </div>
