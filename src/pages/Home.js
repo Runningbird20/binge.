@@ -275,7 +275,7 @@ function WatchlistGallery({ items, loading }) {
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, authLoading } = useAuth();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [ratings, setRatings] = useState([]);
   const [watchlistItems, setWatchlistItems] = useState([]);
@@ -289,17 +289,26 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
+    if (authLoading || !user) {
+      setLoading(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     async function fetchStats() {
       setLoading(true);
 
       try {
-        const [ratingsData, watchlistData] = await Promise.all([
+        const [ratingsResult, watchlistResult] = await Promise.allSettled([
           fetchSupabaseRatings(),
           fetchSupabaseWatchlist(),
         ]);
 
         if (cancelled) return;
 
+        const ratingsData = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
+        const watchlistData = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
         const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
         const nextWatchlist = Array.isArray(watchlistData) ? watchlistData : [];
         setRatings(nextRatings);
@@ -332,7 +341,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [onboardingKey]);
+  }, [authLoading, onboardingKey, user]);
 
   function completeOnboarding() {
     localStorage.setItem(onboardingKey, '1');
@@ -345,6 +354,10 @@ export default function Home() {
     <div className="app-layout">
       <Navbar />
       <main className="page-content">
+        {(authLoading || !user) ? (
+          <div className="loading-state">Loading dashboard...</div>
+        ) : (
+        <>
         <div className="page-header home-header">
           <p className="page-kicker">Dashboard</p>
           <div className="home-profile">
@@ -596,6 +609,8 @@ export default function Home() {
             </div>
           </section>
         </div>
+        </>
+        )}
       </main>
     </div>
     </>

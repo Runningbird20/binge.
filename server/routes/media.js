@@ -108,16 +108,17 @@ async function getTraktRelevanceMap(type) {
     return rankMap;
   }
 
+  // Mirrors Trakt Discover's popular/trending media pages:
+  // https://app.trakt.tv/discover/popular?mode=media
+  // https://app.trakt.tv/discover/trending?mode=media
   const endpoints = type === 'tv'
     ? [
         { path: '/shows/trending', weight: 10000 },
         { path: '/shows/popular', weight: 7000 },
-        { path: '/shows/anticipated', weight: 5000 },
       ]
     : [
         { path: '/movies/trending', weight: 10000 },
         { path: '/movies/popular', weight: 7000 },
-        { path: '/movies/anticipated', weight: 5000 },
       ];
 
   await Promise.all(endpoints.map(async ({ path: endpoint, weight }) => {
