@@ -157,16 +157,43 @@ function BrowseView({
   }, [debouncedSearch, genre, sortOrder]);
 
   const fetchInitialMovies = useCallback(async () => {
-    try {
-      if (sortOrder === 'relevance') {
+    // ── Relevance sort path ────────────────────────────────────────────────────
+    // Try the server API first (full OMDB-enriched scoring). If it times out or
+    // fails (common on Vercel), fall back to Supabase with popularity-based sort
+    // so users always see ALL movies — never just the bundled snapshot.
+    if (sortOrder === 'relevance') {
+      try {
         const data = await fetchMoviesPageFromApi(1);
         if (data.items.length === 0 && !debouncedSearch && !genre) {
-          throw new Error('Movie catalog is empty');
+          throw new Error('empty');
         }
-
         return { source: 'api', ...data };
+      } catch {
+        const data = await fetchSupabaseMovieCatalogSegment({
+          offset: 0,
+          limit: PAGE_SIZE,
+          search: debouncedSearch,
+          genre,
+          sortOrder: 'relevance', // maps to popularity DESC in applyBrowseSort
+          includeCount: true,
+          includeFacets: true,
+          includeUpcoming: false,
+        });
+        const nextItems = normalizeMediaItems(data);
+        const totalCount = Number(data?.total) || nextItems.length;
+        return {
+          source: 'supabase',
+          items: nextItems,
+          total: totalCount,
+          totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+          facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
+          usingFallbackCatalog: false,
+        };
       }
+    }
 
+    // ── All other sorts — Supabase first, then API, then bundled snapshot ─────
+    try {
       const data = await fetchSupabaseMovieCatalogSegment({
         offset: 0,
         limit: PAGE_SIZE,
