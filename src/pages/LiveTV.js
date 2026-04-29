@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
-import HlsPlayer from '../components/HlsPlayer';
 import { fetchClientLiveTvChannels } from '../utils/liveTvCatalog';
 
 const CATEGORY_ICONS = {
@@ -10,7 +9,7 @@ const CATEGORY_ICONS = {
   'Classic': '📺', 'Music': '🎵', 'Entertainment': '🎉', 'Science': '🔬',
   'Nature': '🌿', 'History': '🏛', 'Crime': '🔍', 'Food': '🍕',
   'Travel': '✈️', 'Lifestyle': '🌟', 'Spanish': '🇪🇸', 'Latino': '🌎',
-  'International': '🌍', 'General': '📡',
+  'International': '🌍',
 };
 
 function getCategoryIcon(category) {
@@ -21,21 +20,12 @@ function getCategoryIcon(category) {
   return '📺';
 }
 
-// Which player to use for a channel
-function getPlayerType(channel) {
-  if (channel.ytEmbedId) return 'youtube';
-  if (channel.streamUrl)  return 'hls';
-  return 'pluto'; // open embed URL in iframe (Pluto TV)
-}
-
 export default function LiveTV() {
   const [channels, setChannels]               = useState([]);
   const [loading, setLoading]                 = useState(true);
-  const [iptvLoading, setIptvLoading]         = useState(false);
   const [error, setError]                     = useState('');
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [activeCategory, setActiveCategory]   = useState('All');
-  const [activeSource, setActiveSource]       = useState('All'); // 'All' | 'pluto' | 'iptv'
   const [search, setSearch]                   = useState('');
   const [sidebarOpen, setSidebarOpen]         = useState(true);
   const [isFullscreen, setIsFullscreen]       = useState(false);
@@ -44,7 +34,6 @@ export default function LiveTV() {
 
   const fetchChannels = useCallback(async () => {
     setLoading(true);
-    setIptvLoading(true);
     setError('');
     try {
       const list = await fetchClientLiveTvChannels();
@@ -54,11 +43,12 @@ export default function LiveTV() {
       setError(err.message || 'Failed to load channels');
     } finally {
       setLoading(false);
-      setIptvLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchChannels(); }, [fetchChannels]);
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
 
   useEffect(() => {
     function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
@@ -74,26 +64,13 @@ export default function LiveTV() {
     }
   }
 
-  const plutoCount = channels.filter(c => c.source === 'pluto').length;
-  const iptvCount  = channels.filter(c => c.source === 'iptv').length;
-
-  const categories = ['All', ...Array.from(
-    new Set(
-      channels
-        .filter(c => activeSource === 'All' || c.source === activeSource)
-        .map(c => c.category)
-        .filter(Boolean)
-    )
-  ).sort()];
+  const categories = ['All', ...Array.from(new Set(channels.map(c => c.category).filter(Boolean))).sort()];
 
   const filtered = channels.filter(c => {
-    const matchSource = activeSource === 'All' || c.source === activeSource;
     const matchCat    = activeCategory === 'All' || c.category === activeCategory;
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
-    return matchSource && matchCat && matchSearch;
+    return matchCat && matchSearch;
   });
-
-  const playerType = selectedChannel ? getPlayerType(selectedChannel) : null;
 
   return (
     <div className="app-layout">
@@ -107,33 +84,8 @@ export default function LiveTV() {
               <span>📡</span>
               <h2>Live TV</h2>
               {!loading && <span className="livetv-count">{channels.length}</span>}
-              {iptvLoading && <span className="livetv-iptv-loading-badge">loading IPTV…</span>}
             </div>
             <button className="livetv-sidebar-toggle" onClick={() => setSidebarOpen(o => !o)}>‹</button>
-          </div>
-
-          {/* Source filter tabs */}
-          <div className="livetv-source-tabs">
-            <button
-              className={`livetv-source-tab${activeSource === 'All' ? ' active' : ''}`}
-              onClick={() => { setActiveSource('All'); setActiveCategory('All'); }}
-            >
-              All
-            </button>
-            <button
-              className={`livetv-source-tab${activeSource === 'pluto' ? ' active' : ''}`}
-              onClick={() => { setActiveSource('pluto'); setActiveCategory('All'); }}
-            >
-              Pluto TV
-              {plutoCount > 0 && <span className="livetv-cat-count">{plutoCount}</span>}
-            </button>
-            <button
-              className={`livetv-source-tab${activeSource === 'iptv' ? ' active' : ''}`}
-              onClick={() => { setActiveSource('iptv'); setActiveCategory('All'); }}
-            >
-              IPTV
-              {iptvCount > 0 && <span className="livetv-cat-count">{iptvCount}</span>}
-            </button>
           </div>
 
           <div className="livetv-search-wrap">
@@ -154,12 +106,7 @@ export default function LiveTV() {
               >
                 {cat !== 'All' ? getCategoryIcon(cat) + ' ' : ''}{cat}
                 {cat !== 'All' && (
-                  <span className="livetv-cat-count">
-                    {channels.filter(c =>
-                      c.category === cat &&
-                      (activeSource === 'All' || c.source === activeSource)
-                    ).length}
-                  </span>
+                  <span className="livetv-cat-count">{channels.filter(c => c.category === cat).length}</span>
                 )}
               </button>
             ))}
@@ -198,7 +145,6 @@ export default function LiveTV() {
                     </span>
                   </div>
                   {selectedChannel?.id === channel.id && <span className="livetv-live-dot" />}
-                  {channel.source === 'iptv' && <span className="livetv-iptv-badge">IPTV</span>}
                 </button>
               ))
             )}
@@ -231,9 +177,6 @@ export default function LiveTV() {
                   <span className="livetv-now-cat-badge">
                     {getCategoryIcon(selectedChannel.category)} {selectedChannel.category}
                   </span>
-                  {selectedChannel.source === 'iptv' && (
-                    <span className="livetv-now-source-badge">IPTV</span>
-                  )}
                 </div>
                 <button className="livetv-player-btn" onClick={toggleFullscreen}
                   title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
@@ -242,48 +185,21 @@ export default function LiveTV() {
               </div>
 
               <div className="livetv-frame-wrap">
-                {playerType === 'hls' && (
-                  <HlsPlayer
-                    key={selectedChannel.id}
-                    src={selectedChannel.streamUrl}
-                    className="livetv-frame livetv-hls-video"
-                  />
-                )}
-                {playerType === 'youtube' && (
-                  <iframe
-                    key={selectedChannel.id}
-                    ref={iframeRef}
-                    src={`https://www.youtube-nocookie.com/embed/${selectedChannel.ytEmbedId}?autoplay=1&mute=0`}
-                    className="livetv-frame"
-                    allowFullScreen
-                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                    referrerPolicy="no-referrer"
-                    title={`Watch ${selectedChannel.name} live`}
-                  />
-                )}
-                {playerType === 'pluto' && (
-                  <iframe
-                    key={selectedChannel.id}
-                    ref={iframeRef}
-                    src={selectedChannel.embedUrl}
-                    className="livetv-frame"
-                    allowFullScreen
-                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                    referrerPolicy="no-referrer"
-                    title={`Watch ${selectedChannel.name} live`}
-                  />
-                )}
+                <iframe
+                  key={selectedChannel.id}
+                  ref={iframeRef}
+                  src={selectedChannel.embedUrl}
+                  className="livetv-frame"
+                  allowFullScreen
+                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                  referrerPolicy="no-referrer"
+                  title={`Watch ${selectedChannel.name} live`}
+                />
               </div>
 
               <div className="livetv-footer">
                 <p className="livetv-note">
-                  {channels.length} channels
-                  {plutoCount > 0 && iptvCount > 0
-                    ? ` · ${plutoCount} Pluto TV · ${iptvCount} IPTV (iptv-org)`
-                    : plutoCount > 0 ? ' · Pluto TV'
-                    : iptvCount  > 0 ? ' · iptv-org'
-                    : ''
-                  }
+                  {channels.length} channels · Powered by Pluto TV &amp; free streaming services
                 </p>
                 <button className="livetv-refresh-btn" onClick={fetchChannels}>↻ Refresh</button>
               </div>
