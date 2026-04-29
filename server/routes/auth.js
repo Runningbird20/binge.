@@ -6,7 +6,15 @@ const { requireAuth, JWT_SECRET } = require('../middleware/auth');
 
 const router = express.Router();
 const MAX_BIO_LENGTH = 280;
-const MAX_AVATAR_URL_LENGTH = 3_000_000;
+const MAX_AVATAR_URL_LENGTH = 500; // URL only — not base64 blobs
+const USERNAME_RE = /^[a-zA-Z0-9_.-]{2,30}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const BLOCKED_URL_SCHEMES = /^(javascript|data|vbscript):/i;
+
+function isSafeUrl(url) {
+  if (!url) return true;
+  return !BLOCKED_URL_SCHEMES.test(url.trim());
+}
 
 function serializeUser(user) {
   return {
@@ -37,14 +45,23 @@ router.post('/signup', async (req, res) => {
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email, and password are required' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!USERNAME_RE.test(username)) {
+    return res.status(400).json({ error: 'Username must be 2–30 characters and may only contain letters, numbers, underscores, hyphens, or dots' });
+  }
+  if (!EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   if (bio.length > MAX_BIO_LENGTH) {
     return res.status(400).json({ error: `Bio must be ${MAX_BIO_LENGTH} characters or fewer` });
   }
   if (avatarUrl && avatarUrl.length > MAX_AVATAR_URL_LENGTH) {
-    return res.status(400).json({ error: 'Avatar image is too large' });
+    return res.status(400).json({ error: 'Avatar URL is too long' });
+  }
+  if (!isSafeUrl(avatarUrl)) {
+    return res.status(400).json({ error: 'Invalid avatar URL' });
   }
   try {
     const hash = await bcrypt.hash(password, 10);
@@ -100,13 +117,19 @@ router.patch('/account', requireAuth, async (req, res) => {
   if (username !== undefined && !username) {
     return res.status(400).json({ error: 'Username is required' });
   }
+  if (username !== undefined && !USERNAME_RE.test(username)) {
+    return res.status(400).json({ error: 'Username must be 2–30 characters and may only contain letters, numbers, underscores, hyphens, or dots' });
+  }
 
   if (email !== undefined && !email) {
     return res.status(400).json({ error: 'Email is required' });
   }
+  if (email !== undefined && !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
 
-  if (newPassword !== undefined && newPassword.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (newPassword !== undefined && newPassword.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
   if (newPassword !== undefined && !currentPassword) {

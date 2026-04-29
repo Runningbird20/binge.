@@ -127,7 +127,7 @@ router.get('/:username', async (req, res) => {
     });
 
     res.json({ profile, ratings, watchlist: enrichedWatchlist, posts: posts || [], followers: followers || 0, following: following || 0 });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // GET /profile/:username/follow-status — am I following this user?
@@ -154,7 +154,7 @@ router.post('/:username/follow', async (req, res) => {
     if (target.id === user.id) return res.status(400).json({ error: "Can't follow yourself" });
     await sb.from('user_follows').upsert({ follower_id: user.id, following_id: target.id }, { onConflict: 'follower_id,following_id' });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // DELETE /profile/:username/follow
@@ -167,7 +167,7 @@ router.delete('/:username/follow', async (req, res) => {
     if (!target) return res.status(404).json({ error: 'User not found' });
     await sb.from('user_follows').delete().eq('follower_id', user.id).eq('following_id', target.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 module.exports = router;

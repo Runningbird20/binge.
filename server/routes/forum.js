@@ -101,6 +101,12 @@ function getCreateClient() {
   } catch { return null; }
 }
 
+const MAX_POST_TITLE_LENGTH = 300;
+const MAX_POST_BODY_LENGTH  = 40_000;
+const MAX_COMMENT_LENGTH    = 10_000;
+const MAX_FORUM_NAME_LENGTH = 60;
+const MAX_FORUM_DESC_LENGTH = 500;
+
 async function requireUser(req, res) {
   const user = await getUser(req);
   if (!user) { res.status(401).json({ error: 'Not signed in' }); return null; }
@@ -118,7 +124,7 @@ router.get('/', async (req, res) => {
     const { data, error } = await sb.from('forums').select('*').order('member_count', { ascending: false });
     if (error) throw error;
     res.json(data || []);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // GET /forum/search?q= — search forums
@@ -132,7 +138,7 @@ router.get('/search', async (req, res) => {
       .limit(20);
     if (error) throw error;
     res.json(data || []);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // POST /forum — create a forum
@@ -140,6 +146,8 @@ router.post('/', async (req, res) => {
   const user = await requireUser(req, res); if (!user) return;
   const { name, description = '', icon = '💬', banner_color = '#1a1a1a' } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+  if (name.trim().length > MAX_FORUM_NAME_LENGTH) return res.status(400).json({ error: `Forum name must be ${MAX_FORUM_NAME_LENGTH} characters or fewer` });
+  if (description.length > MAX_FORUM_DESC_LENGTH) return res.status(400).json({ error: `Description must be ${MAX_FORUM_DESC_LENGTH} characters or fewer` });
 
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -155,7 +163,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(forum);
   } catch (err) {
     if (err.message?.includes('unique')) return res.status(409).json({ error: 'A forum with that name already exists' });
-    res.status(500).json({ error: err.message });
+    console.error(err); res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -166,7 +174,7 @@ router.get('/:slug', async (req, res) => {
     const { data, error } = await sb.from('forums').select('*').eq('slug', req.params.slug).single();
     if (error || !data) return res.status(404).json({ error: 'Forum not found' });
     res.json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // POST /forum/:slug/join
@@ -180,7 +188,7 @@ router.post('/:slug/join', async (req, res) => {
     const { data: forumData } = await sb.from('forums').select('member_count').eq('id', forum.id).single();
     if (forumData) await sb.from('forums').update({ member_count: (forumData.member_count || 0) + 1 }).eq('id', forum.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // POST /forum/:slug/leave
@@ -194,7 +202,7 @@ router.post('/:slug/leave', async (req, res) => {
     const { data: fData } = await sb.from('forums').select('member_count').eq('id', forum.id).single();
     if (fData) await sb.from('forums').update({ member_count: Math.max(0, (fData.member_count || 1) - 1) }).eq('id', forum.id);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,7 +234,7 @@ router.get('/:slug/posts', async (req, res) => {
     if (error) throw error;
     const enriched = await enrichWithProfiles(sb, data || []);
     res.json({ posts: enriched, total: count || 0, page: Number(page) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // GET /forum/posts/feed — all posts across all forums (home feed)
@@ -249,7 +257,7 @@ router.get('/posts/feed', async (req, res) => {
     if (error) throw error;
     const enriched = await enrichWithProfiles(sb, data || []);
     res.json({ posts: enriched, total: count || 0, page: Number(page) });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // POST /forum/:slug/posts — create post (with AI moderation)
@@ -257,6 +265,9 @@ router.post('/:slug/posts', async (req, res) => {
   const user = await requireUser(req, res); if (!user) return;
   const { title, body = '', flair, tags = [] } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Title is required' });
+  if (title.trim().length > MAX_POST_TITLE_LENGTH) return res.status(400).json({ error: `Title must be ${MAX_POST_TITLE_LENGTH} characters or fewer` });
+  if (body.length > MAX_POST_BODY_LENGTH) return res.status(400).json({ error: `Post body must be ${MAX_POST_BODY_LENGTH} characters or fewer` });
+  if (!Array.isArray(tags) || tags.length > 10) return res.status(400).json({ error: 'Too many tags (max 10)' });
 
   // AI moderation
   const modResult = await moderateContent(`${title}\n\n${body}`);
@@ -274,7 +285,7 @@ router.post('/:slug/posts', async (req, res) => {
       .select().single();
     if (error) throw error;
     res.status(201).json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // GET /forum/post/:id — single post with comments
@@ -298,7 +309,7 @@ router.get('/post/:id', async (req, res) => {
     ]);
 
     res.json({ post: enrichedPost, comments: enrichedComments });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // DELETE /forum/post/:id
@@ -309,7 +320,7 @@ router.delete('/post/:id', async (req, res) => {
     const { error } = await sb.from('posts').delete().eq('id', req.params.id).eq('user_id', user.id);
     if (error) throw error;
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,7 +358,7 @@ router.post('/post/:id/vote', async (req, res) => {
     }
 
     res.json({ success: true, delta });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // POST /forum/comment/:id/vote
@@ -378,7 +389,7 @@ router.post('/comment/:id/vote', async (req, res) => {
     }
 
     res.json({ success: true, delta });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -390,6 +401,7 @@ router.post('/post/:id/comments', async (req, res) => {
   const user = await requireUser(req, res); if (!user) return;
   const { body, parent_comment_id = null } = req.body;
   if (!body?.trim()) return res.status(400).json({ error: 'Comment body is required' });
+  if (body.length > MAX_COMMENT_LENGTH) return res.status(400).json({ error: `Comment must be ${MAX_COMMENT_LENGTH} characters or fewer` });
 
   // AI moderation
   const modResult = await moderateContent(body);
@@ -410,7 +422,7 @@ router.post('/post/:id/comments', async (req, res) => {
     if (postForCount) await sb.from('posts').update({ comment_count: (postForCount.comment_count || 0) + 1 }).eq('id', req.params.id);
 
     res.status(201).json(enrichedComment || data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // DELETE /forum/comment/:id
@@ -425,7 +437,7 @@ router.delete('/comment/:id', async (req, res) => {
       if (postForDec) await sb.from('posts').update({ comment_count: Math.max(0, (postForDec.comment_count || 1) - 1) }).eq('id', comment.post_id);
     }
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // GET /forum/user/my-forums — forums the current user has joined
@@ -438,7 +450,7 @@ router.get('/user/my-forums', async (req, res) => {
       .eq('user_id', user.id);
     if (error) throw error;
     res.json((data || []).map(m => ({ ...m.forums, role: m.role })));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // PATCH /forum/comment/:id — edit own comment body
@@ -446,6 +458,7 @@ router.patch('/comment/:id', async (req, res) => {
   const user = await requireUser(req, res); if (!user) return;
   const { body } = req.body;
   if (!body?.trim()) return res.status(400).json({ error: 'Body is required' });
+  if (body.length > MAX_COMMENT_LENGTH) return res.status(400).json({ error: `Comment must be ${MAX_COMMENT_LENGTH} characters or fewer` });
 
   // Moderate edited content
   const modResult = await moderateContent(body);
@@ -460,7 +473,7 @@ router.patch('/comment/:id', async (req, res) => {
       .select('*').single();
     if (error || !data) return res.status(404).json({ error: 'Comment not found or not yours' });
     res.json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -497,7 +510,7 @@ router.patch('/admin/post/:id/pin', async (req, res) => {
     const { data, error } = await sb.from('posts').update({ is_pinned: pinned }).eq('id', req.params.id).select().single();
     if (error) throw error;
     res.json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 router.delete('/admin/post/:id', async (req, res) => {
@@ -513,7 +526,7 @@ router.delete('/admin/post/:id', async (req, res) => {
     const { error } = await sb.from('posts').delete().eq('id', req.params.id);
     if (error) throw error;
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // Admin: redact a comment (replace body, mark removed)
@@ -534,7 +547,7 @@ router.patch('/admin/comment/:id', async (req, res) => {
       .select('*').single();
     if (error) throw error;
     res.json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // Admin: get all posts across all forums (for moderation dashboard)
@@ -552,7 +565,7 @@ router.get('/admin/posts', async (req, res) => {
     if (error) throw error;
     const enriched = await enrichWithProfiles(sb, data || []);
     res.json(enriched);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── Trending posts ───────────────────────────────────────────
@@ -582,7 +595,7 @@ router.get('/trending', async (req, res) => {
       return { ...post, poster_url, author: post.profiles };
     });
     res.json(enriched);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 module.exports = router;

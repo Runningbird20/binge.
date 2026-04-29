@@ -6,6 +6,7 @@ import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
+import { SkeletonGrid } from '../components/SkeletonCard';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -813,10 +814,11 @@ export default function Books() {
           </div>
 
           {loading ? (
-            <div className="loading-state">Loading...</div>
+            <SkeletonGrid count={18} />
           ) : books.length === 0 ? (
             <div className="empty-state">
-              <p>No books found.</p>
+              <p style={{ fontSize: '2rem', margin: 0 }}>📖</p>
+              <p>No books match those filters.</p>
               <p className="empty-hint">Try a different search or clear the filters.</p>
             </div>
           ) : (
