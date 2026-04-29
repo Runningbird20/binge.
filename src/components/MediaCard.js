@@ -3,6 +3,8 @@ import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
 import ThemedSelect from './ThemedSelect';
 import { fetchSupabaseLists, addSupabaseListItem } from '../utils/supabaseData';
 import { useToast } from '../contexts/ToastContext';
+import useIsMobile from '../hooks/useIsMobile';
+import MobileMediaCard from './MobileMediaCard';
 
 function resolvePosterUrl(url) {
   if (!url) return null;
@@ -141,7 +143,20 @@ export default function MediaCard({
   onOpenDetails,
   showDescription = true,
 }) {
+  const isMobile = useIsMobile();
   const toast = useToast();
+
+  if (isMobile) {
+    return (
+      <MobileMediaCard
+        item={item}
+        mediaType={mediaType}
+        userRating={userRating}
+        onWatchlist={onWatchlist}
+        onOpenDetails={onOpenDetails}
+      />
+    );
+  }
   const imageUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;

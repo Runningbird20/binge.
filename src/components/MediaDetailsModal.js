@@ -3,6 +3,8 @@ import EmbedPlayer from './EmbedPlayer';
 import ListSaveControls from './ListSaveControls';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
+import useIsMobile from '../hooks/useIsMobile';
+import MobileMediaDetail from './MobileMediaDetail';
 
 function getImageUrl(item) {
   const raw = item.poster_url || item.cover_url || item.image_url || '';
@@ -46,6 +48,7 @@ export default function MediaDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
 }) {
+  const isMobile = useIsMobile();
   const [showPlayer, setShowPlayer] = useState(false);
   const [draftScores, setDraftScores] = useState({});
   const [draftReview, setDraftReview] = useState('');
@@ -79,6 +82,23 @@ export default function MediaDetailsModal({
   }, [item, onClose]);
 
   if (!item) return null;
+
+  if (isMobile) {
+    return (
+      <MobileMediaDetail
+        item={item}
+        mediaType={mediaType}
+        onClose={onClose}
+        onRate={onRate}
+        onWatchlist={onWatchlist}
+        userRating={userRating}
+        isAddingWatchlist={isAddingWatchlist}
+        detailMessage={detailMessage}
+        allowActions={allowActions}
+        browseOnlyMessage={browseOnlyMessage}
+      />
+    );
+  }
 
   const imageUrl = getImageUrl(item);
   const subtitle = item.director || item.creator || item.author || item.studio || '';
