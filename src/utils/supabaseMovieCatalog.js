@@ -71,6 +71,7 @@ const TV_SHOW_BROWSE_COLUMNS = [
   'seasons',
   'source_key',
   'external_id',
+  'popularity',
 ].join(', ');
 
 const BOOK_COLUMNS = [

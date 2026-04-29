@@ -158,28 +158,23 @@ function BrowseView({
 
   const fetchInitialMovies = useCallback(async () => {
     // ── Relevance sort path ────────────────────────────────────────────────────
-    // Try the server API first (full OMDB-enriched scoring). If it times out or
-    // fails (common on Vercel), fall back to Supabase with popularity-based sort
-    // so users always see ALL movies — never just the bundled snapshot.
+    // Supabase first (popularity DESC) — shows ALL movies on every environment.
+    // The Express/SQLite API is only used if Supabase is unavailable, because on
+    // Vercel the SQLite DB is just the bundled snapshot (subset of all movies).
     if (sortOrder === 'relevance') {
       try {
-        const data = await fetchMoviesPageFromApi(1);
-        if (data.items.length === 0 && !debouncedSearch && !genre) {
-          throw new Error('empty');
-        }
-        return { source: 'api', ...data };
-      } catch {
         const data = await fetchSupabaseMovieCatalogSegment({
           offset: 0,
           limit: PAGE_SIZE,
           search: debouncedSearch,
           genre,
-          sortOrder: 'relevance', // maps to popularity DESC in applyBrowseSort
+          sortOrder: 'relevance', // maps to popularity DESC, year DESC in applyBrowseSort
           includeCount: true,
           includeFacets: true,
           includeUpcoming: false,
         });
         const nextItems = normalizeMediaItems(data);
+        if (nextItems.length === 0 && !debouncedSearch && !genre) throw new Error('empty');
         const totalCount = Number(data?.total) || nextItems.length;
         return {
           source: 'supabase',
@@ -189,6 +184,16 @@ function BrowseView({
           facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
           usingFallbackCatalog: false,
         };
+      } catch {
+        // Supabase unavailable → Express API (has richer OMDB scoring on local dev)
+        try {
+          const data = await fetchMoviesPageFromApi(1);
+          if (data.items.length === 0 && !debouncedSearch && !genre) throw new Error('empty');
+          return { source: 'api', ...data };
+        } catch {
+          const data = await fetchMoviesPageFromFallback(1);
+          return { source: 'fallback', ...data };
+        }
       }
     }
 
