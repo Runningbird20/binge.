@@ -211,6 +211,29 @@ function shuffleItems(items) {
   return nextItems;
 }
 
+function buildTitleRankMap(titles = []) {
+  const ranks = new Map();
+  titles.forEach((title, index) => {
+    const key = normalizeSearchValue(title).toLowerCase();
+    if (key && !ranks.has(key)) {
+      ranks.set(key, index);
+    }
+  });
+  return ranks;
+}
+
+function sortItemsByTitleRank(items, titles = []) {
+  const ranks = buildTitleRankMap(titles);
+  if (!ranks.size) return shuffleItems(items);
+
+  return [...items].sort((left, right) => {
+    const leftRank = ranks.get(normalizeSearchValue(left?.title).toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = ranks.get(normalizeSearchValue(right?.title).toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return String(left?.title || '').localeCompare(String(right?.title || ''));
+  });
+}
+
 function buildIlikePattern(value) {
   const normalized = normalizeSearchValue(value)
     .split(' ')
@@ -504,8 +527,8 @@ export async function fetchSupabaseMovieCuratedRows() {
     {
       id: 'featured',
       title: 'Featured Picks',
-      seeAll: '/movies?sort=year-desc',
-      items: shuffleItems((featuredResult.data || []).map((movie) => normalizeMovie(movie))),
+      seeAll: '/movies?sort=relevance',
+      items: sortItemsByTitleRank((featuredResult.data || []).map((movie) => normalizeMovie(movie)), popularTitles),
     },
   ];
 
@@ -672,8 +695,8 @@ export async function fetchSupabaseTvShowCuratedRows() {
     {
       id: 'featured',
       title: 'Featured Series',
-      seeAll: '/tv-shows?sort=year-desc',
-      items: shuffleItems((featuredResult.data || []).map((show) => normalizeTvShow(show))),
+      seeAll: '/tv-shows?sort=relevance',
+      items: sortItemsByTitleRank((featuredResult.data || []).map((show) => normalizeTvShow(show)), popularTitles),
     },
   ];
 

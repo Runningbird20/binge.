@@ -114,6 +114,12 @@ export function buildMediaGenreFacets(items = []) {
 
 export function sortMediaItems(items, sortOrder) {
   return [...items].sort((left, right) => {
+    if (sortOrder === 'relevance') {
+      const leftScore = (left.poster_url ? 100 : 0) + (Number(left.year) || 0);
+      const rightScore = (right.poster_url ? 100 : 0) + (Number(right.year) || 0);
+      return rightScore - leftScore || left.title.localeCompare(right.title);
+    }
+
     if (sortOrder === 'year-desc') {
       if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
       if (left.year == null) return 1;
