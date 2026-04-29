@@ -71,6 +71,7 @@ const TV_SHOW_BROWSE_COLUMNS = [
   'seasons',
   'source_key',
   'external_id',
+  'popularity',
 ].join(', ');
 
 const BOOK_COLUMNS = [
@@ -290,6 +291,15 @@ function applyBookFilters(query, { search = '', genre = '' } = {}) {
 }
 
 function applyBrowseSort(query, sortOrder = 'title-asc') {
+  if (sortOrder === 'relevance' || sortOrder === 'popularity-desc') {
+    // Best proxy for server-side relevance: popularity first, then recency, then title.
+    // Used as a fallback when the API relevance endpoint is unavailable (e.g. Vercel timeout).
+    return query
+      .order('popularity', { ascending: false, nullsFirst: false })
+      .order('year', { ascending: false, nullsFirst: false })
+      .order('title', { ascending: true });
+  }
+
   if (sortOrder === 'year-desc') {
     return query
       .order('year', { ascending: false, nullsFirst: false })

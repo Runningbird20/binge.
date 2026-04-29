@@ -15,6 +15,8 @@ const OMDB_API_KEY = process.env.OMDB_API_KEY;
 const TMDB_API_KEY = process.env.TMDB_API_KEY || process.env.REACT_APP_TMDB_API_KEY;
 const OMDB_CACHE_DAYS = 30;
 const OMDB_ENRICH_LIMIT = 80;
+// On Vercel (10 s serverless limit), skip live OMDB fetch during requests — use cached data only.
+const VERCEL = Boolean(process.env.VERCEL);
 
 function normalizePage(value, fallback = 1) {
   const parsed = Number(value);
@@ -282,6 +284,10 @@ async function enrichMovieForRelevance(movie) {
 }
 
 async function enrichMoviesForRelevance(movies) {
+  // Skip live OMDB API calls on Vercel to stay within the 10-second serverless limit.
+  // Relevance sort will still work using popularity, vote_average, and year from the DB.
+  if (VERCEL) return movies;
+
   const enriched = [];
   let attempts = 0;
 

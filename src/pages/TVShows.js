@@ -157,16 +157,45 @@ function BrowseView({
   }, [debouncedSearch, genre, sortOrder]);
 
   const fetchInitialShows = useCallback(async () => {
-    try {
-      if (sortOrder === 'relevance') {
-        const data = await fetchShowsPageFromApi(1);
-        if (data.items.length === 0 && !debouncedSearch && !genre) {
-          throw new Error('TV catalog is empty');
+    // ── Relevance sort — Supabase first (same rationale as Movies.js) ─────────
+    if (sortOrder === 'relevance') {
+      try {
+        const data = await fetchSupabaseTvShowCatalogSegment({
+          offset: 0,
+          limit: PAGE_SIZE,
+          search: debouncedSearch,
+          genre,
+          sortOrder: 'relevance', // → popularity DESC, year DESC in applyBrowseSort
+          includeCount: true,
+          includeFacets: true,
+          includeUpcoming: false,
+        });
+        const nextItems = normalizeMediaItems(data);
+        if (nextItems.length === 0 && !debouncedSearch && !genre) throw new Error('empty');
+        const totalCount = Number(data?.total) || nextItems.length;
+        return {
+          source: 'supabase',
+          items: nextItems,
+          total: totalCount,
+          totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+          facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
+          usingFallbackCatalog: false,
+        };
+      } catch {
+        // Supabase unavailable → Express API (Trakt-scored, good on local dev)
+        try {
+          const data = await fetchShowsPageFromApi(1);
+          if (data.items.length === 0 && !debouncedSearch && !genre) throw new Error('empty');
+          return { source: 'api', ...data };
+        } catch {
+          const data = await fetchShowsPageFromFallback(1);
+          return { source: 'fallback', ...data };
         }
-
-        return { source: 'api', ...data };
       }
+    }
 
+    // ── All other sorts ────────────────────────────────────────────────────────
+    try {
       const data = await fetchSupabaseTvShowCatalogSegment({
         offset: 0,
         limit: PAGE_SIZE,

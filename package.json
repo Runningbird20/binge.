@@ -94,6 +94,7 @@
       "last 1 safari version"
     ]
   },
+  "proxy": "http://localhost:5001",
   "devDependencies": {
     "patch-package": "^8.0.1"
   }
