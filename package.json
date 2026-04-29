@@ -11,8 +11,10 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
+    "cheerio": "^1.2.0",
     "concurrently": "^9.2.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
@@ -70,7 +72,8 @@
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
-    "clean:adult": "node clean_adult_content.js"
+    "clean:adult": "node clean_adult_content.js",
+    "import:goodreads": "node goodreads_scraper.js"
   },
   "eslintConfig": {
     "extends": [
