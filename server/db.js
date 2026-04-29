@@ -340,14 +340,21 @@ function syncArchiveBookItems(items, syncOptions = {}) {
 function syncMovieItems(items, syncOptions = {}) {
   if (!Array.isArray(items)) return false;
   const upsertMovie = db.prepare(`
-    INSERT INTO movies (title, year, genre, director, writers, cast_members, age_rating, overview, synopsis, poster_url, source_key)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO movies (
+      title, year, genre, director, writers, cast_members, age_rating, overview, synopsis,
+      poster_url, source_key, release_date, imdb_id, vote_average, popularity
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(source_key) DO UPDATE SET
       title = excluded.title, year = excluded.year, genre = excluded.genre,
       director = excluded.director, writers = excluded.writers,
       cast_members = excluded.cast_members, age_rating = excluded.age_rating,
       overview = excluded.overview, synopsis = excluded.synopsis,
-      poster_url = excluded.poster_url
+      poster_url = excluded.poster_url,
+      release_date = excluded.release_date,
+      imdb_id = coalesce(excluded.imdb_id, movies.imdb_id),
+      vote_average = excluded.vote_average,
+      popularity = excluded.popularity
   `);
   const sync = db.transaction((records) => {
     const sourceKeys = [];
@@ -364,7 +371,11 @@ function syncMovieItems(items, syncOptions = {}) {
         normalizeString(item?.ageRating || item?.age_rating),
         normalizeString(item?.overview || item?.synopsis) || 'No description available yet.',
         normalizeString(item?.synopsis) || 'No description available yet.',
-        normalizeString(item?.posterUrl || item?.poster_url), sourceKey
+        normalizeString(item?.posterUrl || item?.poster_url), sourceKey,
+        normalizeString(item?.releaseDate || item?.release_date || item?.year),
+        normalizeString(item?.imdbId || item?.imdb_id),
+        Number.isFinite(Number(item?.voteAverage ?? item?.vote_average)) ? Number(item?.voteAverage ?? item?.vote_average) : null,
+        Number.isFinite(Number(item?.popularity)) ? Number(item.popularity) : null
       );
     }
     pruneImportedRows('movies', syncOptions.activeSourcePrefixes, sourceKeys, syncOptions.inactiveSourcePrefixes);
@@ -560,6 +571,9 @@ db.exec(`
     title TEXT NOT NULL, year INTEGER, genre TEXT, director TEXT,
     writers TEXT, cast_members TEXT, age_rating TEXT, overview TEXT,
     synopsis TEXT, poster_url TEXT, source_key TEXT,
+    release_date TEXT, imdb_id TEXT, vote_average REAL, popularity REAL,
+    rotten_tomatoes_score INTEGER, imdb_rating REAL, metacritic_score INTEGER,
+    ratings_enriched_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -711,6 +725,14 @@ if (!hasColumn('movies', 'writers'))         db.exec('ALTER TABLE movies ADD COL
 if (!hasColumn('movies', 'cast_members'))    db.exec('ALTER TABLE movies ADD COLUMN cast_members TEXT');
 if (!hasColumn('movies', 'age_rating'))      db.exec('ALTER TABLE movies ADD COLUMN age_rating TEXT');
 if (!hasColumn('movies', 'overview'))        db.exec('ALTER TABLE movies ADD COLUMN overview TEXT');
+if (!hasColumn('movies', 'release_date'))    db.exec('ALTER TABLE movies ADD COLUMN release_date TEXT');
+if (!hasColumn('movies', 'imdb_id'))         db.exec('ALTER TABLE movies ADD COLUMN imdb_id TEXT');
+if (!hasColumn('movies', 'vote_average'))    db.exec('ALTER TABLE movies ADD COLUMN vote_average REAL');
+if (!hasColumn('movies', 'popularity'))      db.exec('ALTER TABLE movies ADD COLUMN popularity REAL');
+if (!hasColumn('movies', 'rotten_tomatoes_score')) db.exec('ALTER TABLE movies ADD COLUMN rotten_tomatoes_score INTEGER');
+if (!hasColumn('movies', 'imdb_rating'))     db.exec('ALTER TABLE movies ADD COLUMN imdb_rating REAL');
+if (!hasColumn('movies', 'metacritic_score')) db.exec('ALTER TABLE movies ADD COLUMN metacritic_score INTEGER');
+if (!hasColumn('movies', 'ratings_enriched_at')) db.exec('ALTER TABLE movies ADD COLUMN ratings_enriched_at DATETIME');
 if (!hasColumn('tv_shows', 'source_key'))    db.exec('ALTER TABLE tv_shows ADD COLUMN source_key TEXT');
 if (!hasColumn('tv_shows', 'writers'))       db.exec('ALTER TABLE tv_shows ADD COLUMN writers TEXT');
 if (!hasColumn('tv_shows', 'cast_members'))  db.exec('ALTER TABLE tv_shows ADD COLUMN cast_members TEXT');

@@ -203,6 +203,14 @@ create table if not exists public.movies (
   synopsis text,
   poster_url text,
   source_key text,
+  release_date text,
+  imdb_id text,
+  vote_average numeric,
+  popularity numeric,
+  rotten_tomatoes_score integer,
+  imdb_rating numeric,
+  metacritic_score integer,
+  ratings_enriched_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -218,6 +226,14 @@ alter table public.movies
   add column if not exists synopsis text,
   add column if not exists poster_url text,
   add column if not exists source_key text,
+  add column if not exists release_date text,
+  add column if not exists imdb_id text,
+  add column if not exists vote_average numeric,
+  add column if not exists popularity numeric,
+  add column if not exists rotten_tomatoes_score integer,
+  add column if not exists imdb_rating numeric,
+  add column if not exists metacritic_score integer,
+  add column if not exists ratings_enriched_at timestamptz,
   add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.tv_shows (
@@ -508,6 +524,8 @@ create index if not exists idx_movies_source_key on public.movies(source_key);
 create index if not exists idx_movies_title_lower on public.movies(lower(title));
 create index if not exists idx_movies_year on public.movies(year);
 create index if not exists idx_movies_genre on public.movies(genre);
+create index if not exists idx_movies_imdb_id on public.movies(imdb_id);
+create index if not exists idx_movies_ratings_enriched_at on public.movies(ratings_enriched_at);
 create index if not exists idx_movies_title_trgm on public.movies using gin (title gin_trgm_ops);
 create index if not exists idx_movies_genre_trgm on public.movies using gin (genre gin_trgm_ops);
 create index if not exists idx_tv_shows_source_key on public.tv_shows(source_key);

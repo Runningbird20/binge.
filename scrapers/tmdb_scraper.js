@@ -289,6 +289,10 @@ function formatMovieRecord(item, details, genreMap) {
     posterUrl: details.poster_path ? `${POSTER_BASE}${details.poster_path}` : null,
     runtime:   details.runtime || null,
     tmdbId:    item.id,
+    imdbId:    details.external_ids?.imdb_id || details.imdb_id || null,
+    releaseDate: details.release_date || item.release_date || null,
+    voteAverage: details.vote_average ?? item.vote_average ?? null,
+    popularity:  details.popularity ?? item.popularity ?? null,
   };
 
   if (isAdultContent(record)) return null;
@@ -387,7 +391,7 @@ async function processPage(results, seenIds, stream, genreMap, formatRecord, med
     seenIds.add(item.id);
 
     try {
-      const appendTo = mediaType === 'movie' ? 'credits,release_dates' : 'credits,content_ratings';
+      const appendTo = mediaType === 'movie' ? 'credits,release_dates,external_ids' : 'credits,content_ratings';
       const details  = await tmdbFetch(`/${mediaType === 'movie' ? 'movie' : 'tv'}/${item.id}`, {
         append_to_response: appendTo,
       });
