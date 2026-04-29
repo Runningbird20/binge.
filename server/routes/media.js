@@ -188,14 +188,6 @@ function parseNumericRating(value) {
 }
 
 function isOmdbCacheStale(movie) {
-  if (
-    movie.rotten_tomatoes_score == null &&
-    movie.imdb_rating == null &&
-    movie.metacritic_score == null
-  ) {
-    return true;
-  }
-
   if (!movie.ratings_enriched_at) return true;
 
   const enrichedAt = new Date(movie.ratings_enriched_at).getTime();
