@@ -6,6 +6,7 @@ import MediaDetailsModal from '../components/MediaDetailsModal';
 import MediaRow from '../components/MediaRow';
 import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
+import { SkeletonGrid } from '../components/SkeletonCard';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -429,10 +430,11 @@ function BrowseView({
       </div>
 
       {loading ? (
-        <div className="loading-state">Loading...</div>
+        <SkeletonGrid count={20} />
       ) : shows.length === 0 ? (
         <div className="empty-state">
-          <p>No shows found.</p>
+          <p style={{ fontSize: '2rem', margin: 0 }}>📺</p>
+          <p>No shows match those filters.</p>
         </div>
       ) : (
         <>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
 import ThemedSelect from './ThemedSelect';
 import { fetchSupabaseLists, addSupabaseListItem } from '../utils/supabaseData';
+import { useToast } from '../contexts/ToastContext';
 
 function resolvePosterUrl(url) {
   if (!url) return null;
@@ -28,8 +29,8 @@ function ListQuickAdd({ mediaType, mediaId, itemTitle }) {
   const [open, setOpen] = useState(false);
   const [lists, setLists] = useState(null);
   const [selectedId, setSelectedId] = useState('');
-  const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -44,7 +45,6 @@ function ListQuickAdd({ mediaType, mediaId, itemTitle }) {
   async function handleOpen(e) {
     e.stopPropagation();
     setOpen(o => !o);
-    setStatus('');
     if (lists === null) {
       try {
         const data = await fetchSupabaseLists();
@@ -61,14 +61,13 @@ function ListQuickAdd({ mediaType, mediaId, itemTitle }) {
     e.stopPropagation();
     if (!selectedId) return;
     setSaving(true);
-    setStatus('');
     try {
       await addSupabaseListItem(selectedId, { mediaType, mediaId });
       const name = lists?.find(l => String(l.id) === selectedId)?.name;
-      setStatus(`Added to ${name || 'list'}`);
-      setTimeout(() => { setOpen(false); setStatus(''); }, 1200);
+      toast(`Added to ${name || 'list'}`);
+      setTimeout(() => setOpen(false), 300);
     } catch (err) {
-      setStatus(err.message || 'Error');
+      toast(err.message || 'Could not add to list', 'error');
     } finally {
       setSaving(false);
     }
@@ -109,11 +108,29 @@ function ListQuickAdd({ mediaType, mediaId, itemTitle }) {
               </button>
             </>
           )}
-          {status && <span className="mc-list-status">{status}</span>}
         </div>
       )}
     </div>
   );
+}
+
+async function shareItem(item) {
+  const text = `${item.title}${item.year ? ` (${item.year})` : ''}`;
+  const url = window.location.href;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'binge.', text: `Check out ${text} on binge!`, url });
+      return 'shared';
+    } catch {
+      return null;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} — ${url}`);
+    return 'copied';
+  } catch {
+    return null;
+  }
 }
 
 export default function MediaCard({
@@ -124,6 +141,7 @@ export default function MediaCard({
   onOpenDetails,
   showDescription = true,
 }) {
+  const toast = useToast();
   const imageUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
@@ -224,6 +242,18 @@ export default function MediaCard({
             mediaId={item.id}
             itemTitle={item.title}
           />
+          <button
+            className="btn-share"
+            type="button"
+            title="Share"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const result = await shareItem(item);
+              if (result === 'copied') toast('Link copied to clipboard', 'info');
+            }}
+          >
+            ↗
+          </button>
         </div>
       </div>
     </div>

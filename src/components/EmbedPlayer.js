@@ -192,6 +192,40 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // Keyboard shortcuts — refs avoid stale closures without re-binding on every render
+  const kbSeason = useRef(season);
+  const kbEpisode = useRef(episode);
+  const kbTotalSeasons = useRef(totalSeasons);
+  const kbEpCounts = useRef(seasonEpisodeCounts);
+  useEffect(() => { kbSeason.current = season; }, [season]);
+  useEffect(() => { kbEpisode.current = episode; }, [episode]);
+  useEffect(() => { kbTotalSeasons.current = totalSeasons; }, [totalSeasons]);
+  useEffect(() => { kbEpCounts.current = seasonEpisodeCounts; }, [seasonEpisodeCounts]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.key === 'Escape') { e.preventDefault(); onClose?.(); return; }
+      if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleFullscreen(); return; }
+      if (!isTV) return;
+      const s = kbSeason.current;
+      const ep = kbEpisode.current;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const epCount = kbEpCounts.current[s] ?? null;
+        if (epCount && ep < epCount) { setEpisode(ep + 1); }
+        else if (s < kbTotalSeasons.current) { setSeason(s + 1); setEpisode(1); }
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (ep > 1) { setEpisode(ep - 1); }
+        else if (s > 1) { setSeason(s - 1); setEpisode(1); }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isTV, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!isTV || !item?.id) return undefined;
 
@@ -595,6 +629,11 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         <p className="player-anime-hint">
           For anime try <strong>2Embed</strong> or <strong>AutoEmbed</strong> — they have the best anime coverage.
         </p>
+        <p className="player-kb-hint">
+          {isTV
+            ? 'Keyboard: F fullscreen · ← prev episode · → next episode · Esc close'
+            : 'Keyboard: F fullscreen · Esc close'}
+        </p>
 
         <div className="player-frame-wrap">
           {embedUrl ? (
@@ -606,6 +645,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
               allowFullScreen
               referrerPolicy="no-referrer"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-orientation-lock"
               title={`Watch ${item.title}`}
             />
           ) : (
