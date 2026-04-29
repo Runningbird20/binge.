@@ -1561,7 +1561,7 @@ body {
 .book-detail-overlay {
   position: fixed;
   inset: 0;
-  z-index: 400;
+  z-index: 1000;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -9964,7 +9964,7 @@ select.filter-input,
     overflow-y: auto;
     border-radius: 20px 20px 0 0;
     border-bottom: none;
-    padding: 1.25rem 1rem 2rem;
+    padding: 1.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
     margin: 0;
     gap: 1rem;
   }
