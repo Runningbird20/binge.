@@ -157,6 +157,15 @@ function BrowseView({
 
   const fetchInitialMovies = useCallback(async () => {
     try {
+      if (sortOrder === 'relevance') {
+        const data = await fetchMoviesPageFromApi(1);
+        if (data.items.length === 0 && !debouncedSearch && !genre) {
+          throw new Error('Movie catalog is empty');
+        }
+
+        return { source: 'api', ...data };
+      }
+
       const data = await fetchSupabaseMovieCatalogSegment({
         offset: 0,
         limit: PAGE_SIZE,
@@ -391,6 +400,7 @@ function BrowseView({
           aria-label="Movie sort order"
           value={sortOrder}
           options={[
+            { value: 'relevance', label: 'Relevance' },
             { value: 'title-asc', label: 'Title A-Z' },
             { value: 'title-desc', label: 'Title Z-A' },
             { value: 'year-desc', label: 'Newest First' },

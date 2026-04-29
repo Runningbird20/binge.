@@ -5,6 +5,12 @@ const { buildBookGenreFacets, matchesBookGenreFacet } = require('../bookGenres')
 
 const router = express.Router();
 
+const TRAKT_API_URL = 'https://api.trakt.tv';
+const TRAKT_CLIENT_ID = process.env.TRAKT_CLIENT_ID || process.env.REACT_APP_TRAKT_CLIENT_ID;
+const TRAKT_CLIENT_SECRET = process.env.TRAKT_CLIENT_SECRET;
+const TRAKT_CACHE_TTL_MS = 60 * 60 * 1000;
+const traktCache = new Map();
+
 function normalizePage(value, fallback = 1) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
@@ -25,6 +31,144 @@ function buildMediaGenreFacets(rows = []) {
         .filter(Boolean)
     )
   ).sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeTitleKey(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getTmdbIdFromSourceKey(sourceKey) {
+  const match = String(sourceKey || '').match(/^tmdb:(?:movie|tv):(\d+)$/);
+  return match ? match[1] : null;
+}
+
+function getTraktMediaEntry(item, mediaType) {
+  if (!item) return null;
+  if (item[mediaType]) return item[mediaType];
+  if (mediaType === 'show' && item.show) return item.show;
+  if (mediaType === 'movie' && item.movie) return item.movie;
+  if (item.ids || item.title) return item;
+  return null;
+}
+
+function addTraktRank(rankMap, media, rank, weight) {
+  if (!media) return;
+
+  const score = Math.max(1, weight - rank);
+  const ids = media.ids || {};
+  const keys = [
+    ids.tmdb ? `tmdb:${ids.tmdb}` : null,
+    ids.imdb ? `imdb:${String(ids.imdb).toLowerCase()}` : null,
+    media.title ? `title:${normalizeTitleKey(media.title)}` : null,
+    media.title || media.year ? `title:${normalizeTitleKey(media.title)}:${media.year || ''}` : null,
+  ].filter(Boolean);
+
+  for (const key of keys) {
+    rankMap.set(key, Math.max(rankMap.get(key) || 0, score));
+  }
+}
+
+async function fetchTrakt(endpoint, params = {}) {
+  if (!TRAKT_CLIENT_ID) return null;
+
+  const url = new URL(`${TRAKT_API_URL}${endpoint}`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== '') url.searchParams.set(key, String(value));
+  });
+
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': TRAKT_CLIENT_ID,
+    },
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Trakt ${endpoint} failed with ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function getTraktRelevanceMap(type) {
+  const mediaType = type === 'tv' ? 'show' : 'movie';
+  const cacheKey = `relevance:${type}`;
+  const cached = traktCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.value;
+
+  const rankMap = new Map();
+  if (!TRAKT_CLIENT_ID) {
+    traktCache.set(cacheKey, { value: rankMap, expiresAt: Date.now() + TRAKT_CACHE_TTL_MS });
+    return rankMap;
+  }
+
+  const endpoints = type === 'tv'
+    ? [
+        { path: '/shows/trending', weight: 10000 },
+        { path: '/shows/popular', weight: 7000 },
+        { path: '/shows/anticipated', weight: 5000 },
+      ]
+    : [
+        { path: '/movies/trending', weight: 10000 },
+        { path: '/movies/popular', weight: 7000 },
+        { path: '/movies/anticipated', weight: 5000 },
+      ];
+
+  await Promise.all(endpoints.map(async ({ path: endpoint, weight }) => {
+    try {
+      const data = await fetchTrakt(endpoint, { extended: 'full', limit: 100 });
+      (Array.isArray(data) ? data : []).forEach((item, index) => {
+        addTraktRank(rankMap, getTraktMediaEntry(item, mediaType), index, weight);
+      });
+    } catch (error) {
+      console.warn(error.message);
+    }
+  }));
+
+  traktCache.set(cacheKey, { value: rankMap, expiresAt: Date.now() + TRAKT_CACHE_TTL_MS });
+  return rankMap;
+}
+
+function scoreRowWithTrakt(row, relevanceMap) {
+  if (!row || !relevanceMap?.size) return 0;
+
+  const tmdbId = getTmdbIdFromSourceKey(row.source_key);
+  const externalId = String(row.external_id || '').trim();
+  const keys = [
+    tmdbId ? `tmdb:${tmdbId}` : null,
+    externalId.startsWith('tmdb:') ? `tmdb:${externalId.replace(/^tmdb:/, '')}` : null,
+    /^tt\d+$/i.test(externalId) ? `imdb:${externalId.toLowerCase()}` : null,
+    `title:${normalizeTitleKey(row.title)}`,
+    `title:${normalizeTitleKey(row.title)}:${row.year || ''}`,
+  ].filter(Boolean);
+
+  return keys.reduce((best, key) => Math.max(best, relevanceMap.get(key) || 0), 0);
+}
+
+function sortRowsByTraktRelevance(items, relevanceMap) {
+  if (!relevanceMap?.size) {
+    return sortMediaItems(items, 'year-desc');
+  }
+
+  return [...items].sort((left, right) => {
+    const leftScore = scoreRowWithTrakt(left, relevanceMap);
+    const rightScore = scoreRowWithTrakt(right, relevanceMap);
+    if (leftScore !== rightScore) return rightScore - leftScore;
+
+    const leftYear = Number(left.year);
+    const rightYear = Number(right.year);
+    if (Number.isFinite(leftYear) && Number.isFinite(rightYear) && leftYear !== rightYear) {
+      return rightYear - leftYear;
+    }
+
+    return String(left.title || '').localeCompare(String(right.title || ''));
+  });
 }
 
 function sortMediaItems(items, sort) {
@@ -220,7 +364,7 @@ async function lookupImdbId(title, year, type) {
 }
 
 // --- Movies ---
-router.get('/movies', (req, res) => {
+router.get('/movies', async (req, res) => {
   if (typeof db.syncImportedMovies === 'function') {
     db.syncImportedMovies();
   }
@@ -236,6 +380,10 @@ router.get('/movies', (req, res) => {
   if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
   if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
   if (year)   { innerWhere += ' AND year = ?';       params.push(Number(year)); }
+  if (sort === 'relevance' && !req.query.upcoming) {
+    innerWhere += ' AND (year IS NULL OR year <= ?)';
+    params.push(new Date().getFullYear());
+  }
 
   // Determine ORDER BY for SQL (sort in DB, not in memory)
   const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
@@ -259,7 +407,12 @@ router.get('/movies', (req, res) => {
 
   const countParams = [...params, ...params]; // params used twice (inner + outer WHERE)
   const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
-  const items = db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
+  const items = sort === 'relevance'
+    ? sortRowsByTraktRelevance(
+        db.prepare(dedupeBase).all(...countParams),
+        await getTraktRelevanceMap('movie')
+      ).slice(offset, offset + pageSize)
+    : db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
 
   const genres = buildMediaGenreFacets(
     db.prepare(`
@@ -309,10 +462,21 @@ function getTopDeduped(table, where, orderBy, limit, extraParams = []) {
 }
 
 // Movie row definitions
-function buildMovieRows() {
+async function buildMovieRows() {
   const CURRENT_YEAR = new Date().getFullYear();
   const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
+  const relevanceMap = await getTraktRelevanceMap('movie');
+  const featuredItems = sortRowsByTraktRelevance(
+    getTopDeduped('movies', `year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'title ASC', 500),
+    relevanceMap
+  ).slice(0, 48);
   const rows = [
+    {
+      id: 'featured',
+      title: 'Featured Picks',
+      seeAll: '/movies?sort=relevance',
+      items: featuredItems,
+    },
     {
       id: 'upcoming',
       title: 'Upcoming Releases',
@@ -449,10 +613,21 @@ function buildMovieRows() {
   return rows.filter(r => r.items.length > 0);
 }
 
-function buildTvRows() {
+async function buildTvRows() {
   const CURRENT_YEAR = new Date().getFullYear();
   const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
+  const relevanceMap = await getTraktRelevanceMap('tv');
+  const featuredItems = sortRowsByTraktRelevance(
+    getTopDeduped('tv_shows', `year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'title ASC', 500),
+    relevanceMap
+  ).slice(0, 48);
   const rows = [
+    {
+      id: 'featured',
+      title: 'Featured Series',
+      seeAll: '/tv-shows?sort=relevance',
+      items: featuredItems,
+    },
     {
       id: 'upcoming',
       title: 'Coming Soon',
@@ -698,6 +873,33 @@ async function fetchPopularTitlesFromGroq(mediaType) {
   }
 }
 
+async function fetchPopularTitlesFromTrakt(mediaType) {
+  const type = mediaType === 'tv' ? 'tv' : 'movie';
+  const cacheKey = `popular-titles:${type}`;
+  const cached = popularTitlesCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiresAt) return cached.titles;
+
+  const relevanceMap = await getTraktRelevanceMap(type);
+  if (!relevanceMap.size) return null;
+
+  const table = type === 'tv' ? 'tv_shows' : 'movies';
+  const rows = db.prepare(`
+    SELECT *
+    FROM ${table}
+    WHERE source_key IS NOT NULL
+      AND poster_url IS NOT NULL
+      AND TRIM(poster_url) <> ''
+  `).all();
+
+  const titles = sortRowsByTraktRelevance(rows, relevanceMap)
+    .slice(0, 80)
+    .map((row) => row.title)
+    .filter(Boolean);
+
+  popularTitlesCache.set(cacheKey, { titles, expiresAt: Date.now() + CACHE_TTL_MS });
+  return titles;
+}
+
 router.get('/popular-titles', requireAuth, async (req, res) => {
   const { type } = req.query;
   if (type !== 'movie' && type !== 'tv') {
@@ -705,16 +907,16 @@ router.get('/popular-titles', requireAuth, async (req, res) => {
   }
 
   try {
-    const titles = await fetchPopularTitlesFromGroq(type);
+    const titles = await fetchPopularTitlesFromTrakt(type) || await fetchPopularTitlesFromGroq(type);
     res.json({ titles: titles || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/movies/curated', requireAuth, (req, res) => {
+router.get('/movies/curated', requireAuth, async (req, res) => {
   try {
-    const rows = buildMovieRows();
+    const rows = await buildMovieRows();
     res.json({ rows });
   } catch (err) {
     console.error('Movie curated error:', err);
@@ -722,9 +924,9 @@ router.get('/movies/curated', requireAuth, (req, res) => {
   }
 });
 
-router.get('/tv-shows/curated', requireAuth, (req, res) => {
+router.get('/tv-shows/curated', requireAuth, async (req, res) => {
   try {
-    const rows = buildTvRows();
+    const rows = await buildTvRows();
     res.json({ rows });
   } catch (err) {
     console.error('TV curated error:', err);
@@ -761,7 +963,7 @@ router.get('/movies/:id', (req, res) => {
 });
 
 // --- TV Shows ---
-router.get('/tv-shows', (req, res) => {
+router.get('/tv-shows', async (req, res) => {
   if (typeof db.syncImportedTvShows === 'function') {
     db.syncImportedTvShows();
   }
@@ -775,6 +977,10 @@ router.get('/tv-shows', (req, res) => {
   let innerWhere = 'WHERE source_key IS NOT NULL';
   if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
   if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
+  if (sort === 'relevance' && !req.query.upcoming) {
+    innerWhere += ' AND (year IS NULL OR year <= ?)';
+    params.push(new Date().getFullYear());
+  }
 
   const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
                 : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
@@ -797,7 +1003,12 @@ router.get('/tv-shows', (req, res) => {
 
   const countParams = [...params, ...params];
   const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
-  const items = db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
+  const items = sort === 'relevance'
+    ? sortRowsByTraktRelevance(
+        db.prepare(dedupeBase).all(...countParams),
+        await getTraktRelevanceMap('tv')
+      ).slice(offset, offset + pageSize)
+    : db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
   const genres = buildMediaGenreFacets(
     db.prepare(`
       SELECT DISTINCT genre
