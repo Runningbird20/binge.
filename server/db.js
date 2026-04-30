@@ -19,6 +19,7 @@ const tmdbTvBulkDataPath = path.join(repoDataDir, 'tmdb_tv.bulk.jsonl');
 const internetArchiveBooksDataPath = path.join(repoDataDir, 'internet_archive_books.json');
 const internetArchiveBooksBulkDataPath = path.join(repoDataDir, 'internet_archive_books.bulk.jsonl');
 const openLibraryDataPath = path.join(repoDataDir, 'openlibrary.json');
+const goodreadsBooksDataPath = path.join(repoDataDir, 'goodreads_books.bulk.jsonl');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(path.join(dataDir, 'app.db'));
@@ -67,6 +68,7 @@ const tmdbTvBulkSyncState = createSeedSyncState();
 const archiveBookSyncState = createSeedSyncState();
 const archiveBulkSyncState = createSeedSyncState();
 const openLibrarySyncState = createSeedSyncState();
+const goodreadsBookSyncState = createSeedSyncState();
 
 function hasColumn(tableName, columnName) {
   return db.prepare(`PRAGMA table_info(${tableName})`).all().some((col) => col.name === columnName);
@@ -455,6 +457,23 @@ function syncTvShowsFromPlexBulk() {
     { activeSourcePrefixes: ['plex:tv:'], inactiveSourcePrefixes: [], defaultSourceKeyPrefix: 'plex:tv:' });
 }
 
+function syncBooksFromGoodreads() {
+  // If any legacy books exist (from before switching to Goodreads), remove them now.
+  // This check is cheap (LIMIT 1) and only triggers a reimport the one time legacy rows are present.
+  const hasLegacy = db.prepare("SELECT 1 FROM books WHERE source_key LIKE 'internet-archive:%' OR source_key LIKE 'openlibrary:%' LIMIT 1").get();
+  if (hasLegacy) {
+    console.log('[db] Removing legacy books to make way for Goodreads catalog...');
+    deleteImportedRowsByPrefix('books', 'internet-archive:');
+    deleteImportedRowsByPrefix('books', 'openlibrary:');
+    // Delete the sync state row (can't set to null — signature col is NOT NULL)
+    try { db.prepare('DELETE FROM _sync_state WHERE file_key = ?').run('goodreads_books.bulk.jsonl'); } catch {}
+    goodreadsBookSyncState.loaded = false;
+    goodreadsBookSyncState.signature = null;
+  }
+  return syncJsonlSeedFile(goodreadsBooksDataPath, goodreadsBookSyncState, syncArchiveBookItems,
+    { activeSourcePrefixes: ['goodreads:'], inactiveSourcePrefixes: [], defaultSourceKeyPrefix: 'goodreads:' });
+}
+
 function syncBooksFromInternetArchive() {
   return syncJsonSeedFile(internetArchiveBooksDataPath, archiveBookSyncState,
     (parsed) => Array.isArray(parsed?.books) ? parsed.books : Array.isArray(parsed?.items) ? parsed.items : [],
@@ -536,10 +555,11 @@ function syncPreferredTvShows() {
 }
 
 function syncPreferredBooks() {
+  if (fileHasContent(goodreadsBooksDataPath)) return syncBooksFromGoodreads();
   if (fileHasContent(internetArchiveBooksBulkDataPath)) return syncBooksFromInternetArchiveBulk();
   if (fileHasContent(internetArchiveBooksDataPath)) return syncBooksFromInternetArchive();
   if (fileHasContent(openLibraryDataPath)) return syncBooksFromOpenLibrary();
-  pruneImportedRows('books', ['internet-archive:', 'openlibrary:'], []);
+  pruneImportedRows('books', ['internet-archive:', 'openlibrary:', 'goodreads:'], []);
   return false;
 }
 
