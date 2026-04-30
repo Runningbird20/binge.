@@ -59,13 +59,6 @@ function timeUntil(unix) {
   return `${m}m`;
 }
 
-// Extract src from the raw <iframe ...> HTML string ppv.to returns
-function extractIframeSrc(s) {
-  if (!s) return null;
-  const m = s.match(/src=["']([^"']+)["']/);
-  return m ? m[1] : null;
-}
-
 export default function Sports() {
   const [streams, setStreams]           = useState([]);
   const [loading, setLoading]           = useState(true);
