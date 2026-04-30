@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
+import HlsPlayer from '../components/HlsPlayer';
 import { fetchClientLiveTvChannels } from '../utils/liveTvCatalog';
 
 const CATEGORY_ICONS = {
@@ -9,7 +10,7 @@ const CATEGORY_ICONS = {
   'Classic': '📺', 'Music': '🎵', 'Entertainment': '🎉', 'Science': '🔬',
   'Nature': '🌿', 'History': '🏛', 'Crime': '🔍', 'Food': '🍕',
   'Travel': '✈️', 'Lifestyle': '🌟', 'Spanish': '🇪🇸', 'Latino': '🌎',
-  'International': '🌍',
+  'International': '🌍', 'General': '📡',
 };
 
 function getCategoryIcon(category) {
@@ -18,6 +19,12 @@ function getCategoryIcon(category) {
     if (category.toLowerCase().includes(key.toLowerCase())) return icon;
   }
   return '📺';
+}
+
+function getPlayerType(channel) {
+  if (channel.ytEmbedId) return 'youtube';
+  if (channel.streamUrl)  return 'hls';
+  return 'pluto';
 }
 
 export default function LiveTV() {
@@ -38,7 +45,7 @@ export default function LiveTV() {
     try {
       const list = await fetchClientLiveTvChannels();
       setChannels(list);
-      setSelectedChannel((current) => (list.length > 0 && !current ? list[0] : current));
+      setSelectedChannel(current => (list.length > 0 && !current ? list[0] : current));
     } catch (err) {
       setError(err.message || 'Failed to load channels');
     } finally {
@@ -46,9 +53,7 @@ export default function LiveTV() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchChannels();
-  }, [fetchChannels]);
+  useEffect(() => { fetchChannels(); }, [fetchChannels]);
 
   useEffect(() => {
     function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
@@ -64,13 +69,17 @@ export default function LiveTV() {
     }
   }
 
-  const categories = ['All', ...Array.from(new Set(channels.map(c => c.category).filter(Boolean))).sort()];
+  const categories = ['All', ...Array.from(
+    new Set(channels.map(c => c.category).filter(Boolean))
+  ).sort()];
 
   const filtered = channels.filter(c => {
     const matchCat    = activeCategory === 'All' || c.category === activeCategory;
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
+
+  const playerType = selectedChannel ? getPlayerType(selectedChannel) : null;
 
   return (
     <div className="app-layout">
@@ -106,7 +115,9 @@ export default function LiveTV() {
               >
                 {cat !== 'All' ? getCategoryIcon(cat) + ' ' : ''}{cat}
                 {cat !== 'All' && (
-                  <span className="livetv-cat-count">{channels.filter(c => c.category === cat).length}</span>
+                  <span className="livetv-cat-count">
+                    {channels.filter(c => c.category === cat).length}
+                  </span>
                 )}
               </button>
             ))}
@@ -185,21 +196,42 @@ export default function LiveTV() {
               </div>
 
               <div className="livetv-frame-wrap">
-                <iframe
-                  key={selectedChannel.id}
-                  ref={iframeRef}
-                  src={selectedChannel.embedUrl}
-                  className="livetv-frame"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                  referrerPolicy="no-referrer"
-                  title={`Watch ${selectedChannel.name} live`}
-                />
+                {playerType === 'hls' && (
+                  <HlsPlayer
+                    key={selectedChannel.id}
+                    src={selectedChannel.streamUrl}
+                    className="livetv-frame livetv-hls-video"
+                  />
+                )}
+                {playerType === 'youtube' && (
+                  <iframe
+                    key={selectedChannel.id}
+                    ref={iframeRef}
+                    src={`https://www.youtube-nocookie.com/embed/${selectedChannel.ytEmbedId}?autoplay=1&mute=0`}
+                    className="livetv-frame"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                    referrerPolicy="no-referrer"
+                    title={`Watch ${selectedChannel.name} live`}
+                  />
+                )}
+                {playerType === 'pluto' && (
+                  <iframe
+                    key={selectedChannel.id}
+                    ref={iframeRef}
+                    src={selectedChannel.embedUrl}
+                    className="livetv-frame"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                    referrerPolicy="no-referrer"
+                    title={`Watch ${selectedChannel.name} live`}
+                  />
+                )}
               </div>
 
               <div className="livetv-footer">
                 <p className="livetv-note">
-                  {channels.length} channels · Powered by Pluto TV &amp; free streaming services
+                  {channels.length} channels · Powered by Pluto TV
                 </p>
                 <button className="livetv-refresh-btn" onClick={fetchChannels}>↻ Refresh</button>
               </div>
