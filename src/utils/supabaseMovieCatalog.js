@@ -71,7 +71,6 @@ const TV_SHOW_BROWSE_COLUMNS = [
   'seasons',
   'source_key',
   'external_id',
-  'popularity',
 ].join(', ');
 
 const BOOK_COLUMNS = [
@@ -630,6 +629,9 @@ export async function fetchSupabaseTvShowCatalogSegment({
 } = {}) {
   const client = requireSupabaseCatalog();
 
+  // tv_shows has no 'popularity' column — map relevance to newest-first as best proxy.
+  const effectiveSort = sortOrder === 'relevance' ? 'year-desc' : sortOrder;
+
   let showsQuery = client
     .from('tv_shows')
     .select(TV_SHOW_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
@@ -638,7 +640,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
   if (!includeUpcoming) {
     showsQuery = showsQuery.lte('year', THIS_YEAR);
   }
-  showsQuery = applyBrowseSort(showsQuery, sortOrder);
+  showsQuery = applyBrowseSort(showsQuery, effectiveSort);
 
   const tasks = [
     showsQuery.range(offset, offset + limit - 1),

@@ -22,6 +22,7 @@ const AdminHome      = lazy(() => import('./pages/AdminHome'));
 const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
 const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const LiveTV         = lazy(() => import('./pages/LiveTV'));
+const Sports         = lazy(() => import('./pages/Sports'));
 const Ratings        = lazy(() => import('./pages/Ratings'));
 const Watchlist      = lazy(() => import('./pages/Watchlist'));
 const Forum          = lazy(() => import('./pages/Forum'));
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
             <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
             <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
+            <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
             <Route
               path="/__ops/dev-lab"
               element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>}
