@@ -1,6 +1,6 @@
-// Fallback channels used when both the server proxy and direct Pluto API call fail.
+// Shown immediately on page load; upgraded in background if API returns more channels.
 // All use Pluto TV embed URLs — no YouTube (YouTube blocks 3rd-party embedding).
-const FALLBACK_CHANNELS = [
+export const FALLBACK_CHANNELS = [
   { id: 'cbs-news-24-7',  name: 'CBS News 24/7',      category: 'News',         thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/cbs-news-24-7',                ytEmbedId: null, source: 'pluto' },
   { id: 'abc-news-live',  name: 'ABC News Live',       category: 'News',         thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/abc-news-live',                ytEmbedId: null, source: 'pluto' },
   { id: 'nbc-news-now',   name: 'NBC News Now',        category: 'News',         thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/nbc-news-now',                 ytEmbedId: null, source: 'pluto' },
