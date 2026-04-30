@@ -157,48 +157,16 @@ function BrowseView({
   }, [debouncedSearch, genre, sortOrder]);
 
   const fetchInitialMovies = useCallback(async () => {
-    // ── Relevance sort path ────────────────────────────────────────────────────
-    // Supabase first (popularity DESC) — shows ALL movies on every environment.
-    // The Express/SQLite API is only used if Supabase is unavailable, because on
-    // Vercel the SQLite DB is just the bundled snapshot (subset of all movies).
-    if (sortOrder === 'relevance') {
-      try {
-        const data = await fetchSupabaseMovieCatalogSegment({
-          offset: 0,
-          limit: PAGE_SIZE,
-          search: debouncedSearch,
-          genre,
-          sortOrder: 'relevance', // maps to popularity DESC, year DESC in applyBrowseSort
-          includeCount: true,
-          includeFacets: true,
-          includeUpcoming: false,
-        });
-        const nextItems = normalizeMediaItems(data);
-        if (nextItems.length === 0 && !debouncedSearch && !genre) throw new Error('empty');
-        const totalCount = Number(data?.total) || nextItems.length;
-        return {
-          source: 'supabase',
-          items: nextItems,
-          total: totalCount,
-          totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
-          facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
-          usingFallbackCatalog: false,
-        };
-      } catch {
-        // Supabase unavailable → Express API (has richer OMDB scoring on local dev)
-        try {
-          const data = await fetchMoviesPageFromApi(1);
-          if (data.items.length === 0 && !debouncedSearch && !genre) throw new Error('empty');
-          return { source: 'api', ...data };
-        } catch {
-          const data = await fetchMoviesPageFromFallback(1);
-          return { source: 'fallback', ...data };
-        }
-      }
-    }
-
-    // ── All other sorts — Supabase first, then API, then bundled snapshot ─────
     try {
+      if (sortOrder === 'relevance') {
+        const data = await fetchMoviesPageFromApi(1);
+        if (data.items.length === 0 && !debouncedSearch && !genre) {
+          throw new Error('Movie catalog is empty');
+        }
+
+        return { source: 'api', ...data };
+      }
+
       const data = await fetchSupabaseMovieCatalogSegment({
         offset: 0,
         limit: PAGE_SIZE,

@@ -9,7 +9,8 @@ const CATEGORY_ICONS = {
   'Kids': '🎠', 'Anime': '⛩', 'Documentary': '🔭', 'Reality': '⭐',
   'Classic': '📺', 'Music': '🎵', 'Entertainment': '🎉', 'Science': '🔬',
   'Nature': '🌿', 'History': '🏛', 'Crime': '🔍', 'Food': '🍕',
-  'Travel': '✈️', 'Lifestyle': '🌟', 'General': '📡',
+  'Travel': '✈️', 'Lifestyle': '🌟', 'Spanish': '🇪🇸', 'Latino': '🌎',
+  'International': '🌍', 'General': '📡',
 };
 
 function getCategoryIcon(category) {
