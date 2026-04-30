@@ -74,6 +74,7 @@ app.use('/api/forum', require('./routes/forum'));
 app.use('/api/dev-lab', require('./routes/devLab'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/manga',  require('./routes/manga'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/watchroom', require('./routes/watchroom'));
 app.use('/api/profile', require('./routes/profile'));
