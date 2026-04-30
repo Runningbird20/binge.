@@ -10055,19 +10055,71 @@ select.filter-input,
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
+  /* Full-screen container; sidebar and player stack as overlapping layers */
   .sports-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    height: auto;
+    display: block;
+    position: relative;
+    height: calc(100vh - 56px);
+    overflow: hidden;
   }
+
+  /* Sidebar fills the screen and slides out when hidden */
   .sports-sidebar {
-    height: auto;
-    max-height: 45vw;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    z-index: 2;
     border-right: none;
-    border-bottom: 1px solid #1e1e1e;
+    border-bottom: none;
+    transform: translateX(0);
+    transition: transform 0.25s ease;
+    overflow: hidden;
   }
-  .sports-categories { max-height: 80px; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; }
-  .sports-player-area { min-height: 56vw; }
+  .sports-sidebar--hidden {
+    transform: translateX(-100%);
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Categories scroll horizontally */
+  .sports-categories {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-height: none;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sports-categories::-webkit-scrollbar { display: none; }
+
+  /* Hide desktop sidebar toggle — tapping a stream closes sidebar instead */
+  .sports-sidebar-toggle { display: none; }
+
+  /* Player fills screen behind the sidebar */
+  .sports-player-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* "☰ Streams" back button — fixed bottom-left above mobile nav */
+  .sports-sidebar-show-btn {
+    position: fixed;
+    bottom: 72px;
+    left: 12px;
+    z-index: 10;
+  }
+
+  /* Player frame fills remaining height */
+  .sports-frame-wrap { flex: 1; }
+  .sports-frame      { height: 100%; }
 }
 
 /* ══════════════════════════════════════════════════════════════

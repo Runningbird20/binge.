@@ -224,7 +224,7 @@ export default function Sports() {
                   <button
                     key={s.id}
                     className={`sports-stream-btn ${selected?.id === s.id ? 'active' : ''}`}
-                    onClick={() => setSelected(s)}
+                    onClick={() => { setSelected(s); if (window.innerWidth < 768) setSidebar(false); }}
                   >
                     {s.poster ? (
                       <img src={s.poster} alt={s.name} className="sports-stream-poster"
@@ -268,7 +268,7 @@ export default function Sports() {
         <main className="sports-player-area" ref={playerRef}>
           {!sidebarOpen && (
             <button className="sports-sidebar-show-btn" onClick={() => setSidebar(true)}>
-              ☰ Streams
+              ← Streams
             </button>
           )}
 
