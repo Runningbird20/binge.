@@ -54,11 +54,10 @@ function buildIlikePattern(value) {
   return normalized ? `%${normalized}%` : '';
 }
 
-// Returns multiple ilike patterns covering punctuation-stripped variants.
-// E.g. "jojos" → ["%jojos%", "%jo%jos%", "%joj%os%", "%jojo%s%"]
-// so that "JoJo's Bizarre Adventure" is matched even without the apostrophe.
+// Returns ilike patterns covering punctuation-stripped variants.
+// Kept to ≤3 patterns to avoid bloated OR filters that slow Supabase queries.
+// "jojos" → ["%jojos%", "%jo%jos%"] so "JoJo's Bizarre Adventure" still matches.
 function buildFuzzyIlikePatterns(value) {
-  // Strip all non-alphanumeric (except spaces) for the base words
   const stripped = String(value || '').toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const words = stripped.split(' ').filter(w => w.length >= 2);
@@ -66,23 +65,19 @@ function buildFuzzyIlikePatterns(value) {
 
   const patterns = new Set();
 
-  // 1. Existing behaviour: apostrophes → word separators (handles "jojo's" input)
+  // Base: apostrophes/hyphens become word separators (handles "jojo's" input)
   const legacyNorm = normalizeSearchTerm(value).split(' ').filter(Boolean).join('%');
   if (legacyNorm) patterns.add(`%${legacyNorm}%`);
 
-  // 2. Pure stripped words joined (handles "jojos" input — no punctuation in query)
+  // Pure stripped words joined (handles "jojos" — no punctuation in query)
   patterns.add(`%${words.join('%')}%`);
 
-  // 3. For each word, try inserting a wildcard at every interior position so that
-  //    punctuation stored in the DB (e.g. the apostrophe in "JoJo's") is bridged.
-  //    Cap total patterns at 10 to keep the OR filter manageable.
-  for (let wi = 0; wi < Math.min(words.length, 2) && patterns.size < 10; wi++) {
-    const word = words[wi];
-    for (let i = 2; i < word.length && patterns.size < 10; i++) {
-      const split = `${word.slice(0, i)}%${word.slice(i)}`;
-      const allWords = [...words.slice(0, wi), split, ...words.slice(wi + 1)];
-      patterns.add(`%${allWords.join('%')}%`);
-    }
+  // One interior split on the first word — bridges DB punctuation (e.g. "JoJo's").
+  // Only add if the query is a single short word with no spaces (pure punctuation-free case).
+  if (words.length === 1 && words[0].length <= 8 && patterns.size < 3) {
+    const word = words[0];
+    const mid = Math.floor(word.length / 2);
+    patterns.add(`%${word.slice(0, mid)}%${word.slice(mid)}%`);
   }
 
   return [...patterns];
@@ -739,20 +734,24 @@ async function handleMediaGet(pathname, searchParams) {
   throw new Error(`Unsupported media route: ${pathname}`);
 }
 
+const _searchCache = new Map(); // key → { ts, payload }
+const SEARCH_CACHE_TTL = 60_000;
+
 async function handleSearch(searchParams) {
   const client = requireSupabaseClient();
   const rawQuery = searchParams.get('q') || '';
   const query = buildIlikePattern(rawQuery);
-  const types = new Set(
-    String(searchParams.get('types') || 'movies,tv,books,forums,people')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean)
-  );
+  const typesRaw = String(searchParams.get('types') || 'movies,tv,books,forums,people');
+  const types = new Set(typesRaw.split(',').map((v) => v.trim()).filter(Boolean));
 
   if (!query || normalizeSearchTerm(rawQuery).length < 2) {
     return { movies: [], tv: [], books: [], forums: [], posts: [], people: [] };
   }
+
+  // Return cached result if still fresh
+  const cacheKey = `${rawQuery.toLowerCase().trim()}|${typesRaw}`;
+  const cached = _searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < SEARCH_CACHE_TTL) return cached.payload;
 
   // Build fuzzy OR filter: covers punctuation-stripped variants so e.g.
   // "jojos" matches "JoJo's Bizarre Adventure" via the %jojo%s% pattern.
@@ -884,47 +883,11 @@ async function handleSearch(searchParams) {
     );
   }
 
-  // Run fuzzy trigram RPC in parallel — catches spelling errors ilike misses
-  tasks.push(
-    client.rpc('fuzzy_search', { q: rawQuery, lim: SEARCH_LIMIT })
-      .then(({ data, error }) => ['_fuzzy', error ? [] : (data || [])])
-  );
-
   const results = await Promise.all(tasks);
-  const payload = {
-    movies: [],
-    tv: [],
-    books: [],
-    forums: [],
-    posts: [],
-    people: [],
-  };
+  const payload = { movies: [], tv: [], books: [], forums: [], posts: [], people: [] };
+  for (const [key, value] of results) payload[key] = value;
 
-  const fuzzyRows = [];
-  for (const [key, value] of results) {
-    if (key === '_fuzzy') { fuzzyRows.push(...value); continue; }
-    payload[key] = value;
-  }
-
-  // Merge trigram results — append any that ilike didn't already return
-  const typeMap = { movie: 'movies', tv: 'tv', book: 'books' };
-  for (const row of fuzzyRows) {
-    const bucket = typeMap[row.result_type];
-    if (!bucket) continue;
-    if (payload[bucket].some(r => String(r.id) === String(row.id))) continue;
-    payload[bucket].push({
-      id:          row.id,
-      title:       row.title,
-      year:        row.year,
-      genre:       row.genre,
-      poster_url:  row.poster_url  ?? row.cover_url ?? null,
-      cover_url:   row.cover_url   ?? null,
-      author:      row.author      ?? null,
-      source_key:  row.source_key,
-      external_id: row.external_id ?? null,
-    });
-  }
-
+  _searchCache.set(cacheKey, { ts: Date.now(), payload });
   return payload;
 }
 
