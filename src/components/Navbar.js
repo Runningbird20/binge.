@@ -63,6 +63,7 @@ export default function Navbar() {
 
             <div className="navbar-links navbar-links--desktop">
               <NavLink to="/live-tv"  className={({ isActive }) => isActive ? 'active' : ''}>Live TV</NavLink>
+              <NavLink to="/sports"   className={({ isActive }) => isActive ? 'active' : ''}>Sports</NavLink>
               <NavLink to="/movies"   className={({ isActive }) => isActive ? 'active' : ''}>Movies</NavLink>
               <NavLink to="/tv-shows" className={({ isActive }) => isActive ? 'active' : ''}>TV</NavLink>
               <NavLink to="/books"    className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
@@ -129,6 +130,7 @@ export default function Navbar() {
                 <nav className="nav-panel-nav">
                   <NavLink to="/home"     className={link} onClick={close}>🏠 Home</NavLink>
                   <NavLink to="/live-tv"  className={link} onClick={close}>📡 Live TV</NavLink>
+                  <NavLink to="/sports"   className={link} onClick={close}>🏆 Sports</NavLink>
                   <NavLink to="/movies"   className={link} onClick={close}>🎬 Movies</NavLink>
                   <NavLink to="/tv-shows" className={link} onClick={close}>📺 TV Shows</NavLink>
                   <NavLink to="/books"    className={link} onClick={close}>📖 Books</NavLink>
