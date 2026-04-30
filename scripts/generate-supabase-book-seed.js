@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_OUTPUT_PATH = path.join(__dirname, '..', 'supabase', 'repeatable_books_seed.sql');
+const GOODREADS_INPUT_PATH = path.join(__dirname, '..', 'data', 'goodreads_books.bulk.jsonl');
 const PRIMARY_INPUT_PATH = path.join(__dirname, '..', 'data', 'internet_archive_books.bulk.jsonl');
 const FALLBACK_INPUT_PATH = path.join(__dirname, '..', 'data', 'internet_archive_books.json');
 
@@ -136,7 +137,10 @@ function loadBooks() {
   };
 
   let rawItems = [];
-  if (fs.existsSync(PRIMARY_INPUT_PATH)) {
+  if (fs.existsSync(GOODREADS_INPUT_PATH)) {
+    rawItems = parseJsonLines(GOODREADS_INPUT_PATH);
+    stats.sourceFile = GOODREADS_INPUT_PATH;
+  } else if (fs.existsSync(PRIMARY_INPUT_PATH)) {
     rawItems = parseJsonLines(PRIMARY_INPUT_PATH);
     stats.sourceFile = PRIMARY_INPUT_PATH;
   } else if (fs.existsSync(FALLBACK_INPUT_PATH)) {
@@ -303,12 +307,11 @@ function buildSql(records, stats) {
     '  source_key = excluded.source_key;',
     '',
     'delete from public.books as books',
-    "where books.source_key like 'internet-archive:%'",
-    '  and not exists (',
-    '    select 1',
-    '    from temp_books_seed',
-    '    where temp_books_seed.id = books.id',
-    '  );',
+    'where not exists (',
+    '  select 1',
+    '  from temp_books_seed',
+    '  where temp_books_seed.id = books.id',
+    ');',
     '',
     "select setval(pg_get_serial_sequence('public.books', 'id'), greatest(coalesce((select max(id) from public.books), 1), 1), true);",
     'analyze public.books;',
@@ -339,7 +342,7 @@ function main() {
   const { records, stats } = loadBooks();
 
   if (records.length === 0) {
-    throw new Error('No book records were found in data/internet_archive_books.bulk.jsonl or data/internet_archive_books.json.');
+    throw new Error('No book records were found in data/goodreads_books.bulk.jsonl, data/internet_archive_books.bulk.jsonl, or data/internet_archive_books.json.');
   }
 
   const sql = buildSql(records, stats);
