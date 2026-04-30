@@ -17,38 +17,56 @@ function getSb() {
   return getCreateClient()(url, key);
 }
 
+// Strip punctuation and lowercase — used for the SQLite column-normalised search.
+// REPLACE(REPLACE(REPLACE(LOWER(col), '''', ''), '-', ''), '.', '') covers
+// apostrophes, hyphens, and dots so "jojos" matches "JoJo's".
+function normalizedCol(col) {
+  return `REPLACE(REPLACE(REPLACE(LOWER(${col}), '''', ''), '-', ''), '.', '')`;
+}
+
+function buildSqlitePattern(raw) {
+  // Strip all non-alphanumeric except spaces, lowercase
+  return `%${raw.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '%')}%`;
+}
+
 // GET /search?q=query&types=movies,tv,books,forums,people
 router.get('/', async (req, res) => {
   const { q = '', types = 'movies,tv,books,forums,people' } = req.query;
   if (!q.trim() || q.length < 2) return res.json({ movies: [], tv: [], books: [], forums: [], posts: [], people: [] });
 
-  const typeArr = types.split(',');
-  const results = { movies: [], tv: [], books: [], forums: [], posts: [], people: [] };
-  const query   = `%${q.trim()}%`;
-  const limit   = 8;
+  const typeArr    = types.split(',');
+  const results    = { movies: [], tv: [], books: [], forums: [], posts: [], people: [] };
+  const exactPat   = `%${q.trim()}%`;           // original (case-insensitive via SQLite)
+  const fuzzyPat   = buildSqlitePattern(q);     // punctuation-stripped
+  const limit      = 8;
 
   try {
     // SQLite: movies, tv, books
+    // Two conditions per field: exact LIKE and normalised LIKE (strips apostrophes etc.)
+    const mediaWhere = (titleCol, secondCol) =>
+      `(${titleCol} LIKE ? OR ${normalizedCol(titleCol)} LIKE ?` +
+      ` OR ${secondCol} LIKE ? OR ${normalizedCol(secondCol)} LIKE ?)`;
+
     if (typeArr.includes('movies')) {
       results.movies = db.prepare(
         `SELECT id, title, year, genre, poster_url, source_key FROM movies
-         WHERE (title LIKE ? OR genre LIKE ?) AND source_key IS NOT NULL
+         WHERE ${mediaWhere('title', 'genre')} AND source_key IS NOT NULL
          ORDER BY year DESC NULLS LAST LIMIT ?`
-      ).all(query, query, limit);
+      ).all(exactPat, fuzzyPat, exactPat, fuzzyPat, limit);
     }
     if (typeArr.includes('tv')) {
       results.tv = db.prepare(
         `SELECT id, title, year, genre, poster_url, source_key FROM tv_shows
-         WHERE (title LIKE ? OR genre LIKE ?) AND source_key IS NOT NULL
+         WHERE ${mediaWhere('title', 'genre')} AND source_key IS NOT NULL
          ORDER BY year DESC NULLS LAST LIMIT ?`
-      ).all(query, query, limit);
+      ).all(exactPat, fuzzyPat, exactPat, fuzzyPat, limit);
     }
     if (typeArr.includes('books')) {
       results.books = db.prepare(
         `SELECT id, title, author, year, genre, cover_url, source_key FROM books
-         WHERE (title LIKE ? OR author LIKE ?) AND source_key IS NOT NULL
+         WHERE ${mediaWhere('title', 'author')} AND source_key IS NOT NULL
          ORDER BY year DESC NULLS LAST LIMIT ?`
-      ).all(query, query, limit);
+      ).all(exactPat, fuzzyPat, exactPat, fuzzyPat, limit);
     }
 
     // Supabase: forums, posts, people
@@ -56,17 +74,17 @@ router.get('/', async (req, res) => {
     if (sb) {
       if (typeArr.includes('forums')) {
         const { data: forums } = await sb.from('forums').select('id, name, slug, icon, description, member_count')
-          .ilike('name', query).limit(limit);
+          .ilike('name', exactPat).limit(limit);
         results.forums = forums || [];
       }
       if (typeArr.includes('forums')) {
         const { data: posts } = await sb.from('posts').select('id, title, flair, score, comment_count, created_at, forums(name, slug, icon)')
-          .ilike('title', query).eq('is_removed', false).order('score', { ascending: false }).limit(limit);
+          .ilike('title', exactPat).eq('is_removed', false).order('score', { ascending: false }).limit(limit);
         results.posts = posts || [];
       }
       if (typeArr.includes('people')) {
         const { data: people } = await sb.from('profiles').select('id, username, avatar_url, bio')
-          .ilike('username', query).limit(limit);
+          .ilike('username', exactPat).limit(limit);
         results.people = people || [];
       }
     }

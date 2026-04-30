@@ -54,6 +54,40 @@ function buildIlikePattern(value) {
   return normalized ? `%${normalized}%` : '';
 }
 
+// Returns multiple ilike patterns covering punctuation-stripped variants.
+// E.g. "jojos" → ["%jojos%", "%jo%jos%", "%joj%os%", "%jojo%s%"]
+// so that "JoJo's Bizarre Adventure" is matched even without the apostrophe.
+function buildFuzzyIlikePatterns(value) {
+  // Strip all non-alphanumeric (except spaces) for the base words
+  const stripped = String(value || '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = stripped.split(' ').filter(w => w.length >= 2);
+  if (!words.length) return [];
+
+  const patterns = new Set();
+
+  // 1. Existing behaviour: apostrophes → word separators (handles "jojo's" input)
+  const legacyNorm = normalizeSearchTerm(value).split(' ').filter(Boolean).join('%');
+  if (legacyNorm) patterns.add(`%${legacyNorm}%`);
+
+  // 2. Pure stripped words joined (handles "jojos" input — no punctuation in query)
+  patterns.add(`%${words.join('%')}%`);
+
+  // 3. For each word, try inserting a wildcard at every interior position so that
+  //    punctuation stored in the DB (e.g. the apostrophe in "JoJo's") is bridged.
+  //    Cap total patterns at 10 to keep the OR filter manageable.
+  for (let wi = 0; wi < Math.min(words.length, 2) && patterns.size < 10; wi++) {
+    const word = words[wi];
+    for (let i = 2; i < word.length && patterns.size < 10; i++) {
+      const split = `${word.slice(0, i)}%${word.slice(i)}`;
+      const allWords = [...words.slice(0, wi), split, ...words.slice(wi + 1)];
+      patterns.add(`%${allWords.join('%')}%`);
+    }
+  }
+
+  return [...patterns];
+}
+
 function buildDaysAgoIso(days) {
   return new Date(Date.now() - (Number(days) || 0) * 24 * 60 * 60 * 1000).toISOString();
 }
@@ -720,6 +754,13 @@ async function handleSearch(searchParams) {
     return { movies: [], tv: [], books: [], forums: [], posts: [], people: [] };
   }
 
+  // Build fuzzy OR filter: covers punctuation-stripped variants so e.g.
+  // "jojos" matches "JoJo's Bizarre Adventure" via the %jojo%s% pattern.
+  const fuzzyPatterns = buildFuzzyIlikePatterns(rawQuery);
+  function fuzzyOr(...fields) {
+    return fuzzyPatterns.flatMap(p => fields.map(f => `${f}.ilike.${p}`)).join(',');
+  }
+
   const tasks = [];
 
   if (types.has('movies')) {
@@ -727,7 +768,7 @@ async function handleSearch(searchParams) {
       client
         .from('movies')
         .select('id, title, year, genre, poster_url, source_key, external_id')
-        .or(`title.ilike.${query},genre.ilike.${query}`)
+        .or(fuzzyOr('title', 'genre'))
         .not('source_key', 'is', null)
         .order('year', { ascending: false, nullsFirst: false })
         .limit(SEARCH_LIMIT)
@@ -748,7 +789,7 @@ async function handleSearch(searchParams) {
       client
         .from('tv_shows')
         .select('id, title, year, genre, poster_url, source_key, external_id')
-        .or(`title.ilike.${query},genre.ilike.${query}`)
+        .or(fuzzyOr('title', 'genre'))
         .not('source_key', 'is', null)
         .order('year', { ascending: false, nullsFirst: false })
         .limit(SEARCH_LIMIT)
@@ -769,7 +810,7 @@ async function handleSearch(searchParams) {
       client
         .from('books')
         .select('id, title, author, year, genre, cover_url, source_key, external_id')
-        .or(`title.ilike.${query},author.ilike.${query}`)
+        .or(fuzzyOr('title', 'author'))
         .not('source_key', 'is', null)
         .order('year', { ascending: false, nullsFirst: false })
         .limit(SEARCH_LIMIT)
@@ -790,7 +831,7 @@ async function handleSearch(searchParams) {
       client
         .from('forums')
         .select('id, name, slug, icon, description, member_count')
-        .ilike('name', query)
+        .or(fuzzyOr('name'))
         .order('member_count', { ascending: false })
         .limit(SEARCH_LIMIT)
         .then(({ data, error }) => {
@@ -808,7 +849,7 @@ async function handleSearch(searchParams) {
       client
         .from('posts')
         .select('id, title, flair, score, comment_count, created_at, forums(name, slug, icon)')
-        .ilike('title', query)
+        .or(fuzzyOr('title'))
         .eq('is_removed', false)
         .order('score', { ascending: false })
         .limit(SEARCH_LIMIT)
@@ -829,7 +870,7 @@ async function handleSearch(searchParams) {
       client
         .from('profiles')
         .select('id, username, avatar_url, bio')
-        .ilike('username', query)
+        .or(fuzzyOr('username'))
         .limit(SEARCH_LIMIT)
         .then(({ data, error }) => {
           if (error) {
