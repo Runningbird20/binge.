@@ -884,6 +884,12 @@ async function handleSearch(searchParams) {
     );
   }
 
+  // Run fuzzy trigram RPC in parallel — catches spelling errors ilike misses
+  tasks.push(
+    client.rpc('fuzzy_search', { q: rawQuery, lim: SEARCH_LIMIT })
+      .then(({ data, error }) => ['_fuzzy', error ? [] : (data || [])])
+  );
+
   const results = await Promise.all(tasks);
   const payload = {
     movies: [],
@@ -894,8 +900,29 @@ async function handleSearch(searchParams) {
     people: [],
   };
 
+  const fuzzyRows = [];
   for (const [key, value] of results) {
+    if (key === '_fuzzy') { fuzzyRows.push(...value); continue; }
     payload[key] = value;
+  }
+
+  // Merge trigram results — append any that ilike didn't already return
+  const typeMap = { movie: 'movies', tv: 'tv', book: 'books' };
+  for (const row of fuzzyRows) {
+    const bucket = typeMap[row.result_type];
+    if (!bucket) continue;
+    if (payload[bucket].some(r => String(r.id) === String(row.id))) continue;
+    payload[bucket].push({
+      id:          row.id,
+      title:       row.title,
+      year:        row.year,
+      genre:       row.genre,
+      poster_url:  row.poster_url  ?? row.cover_url ?? null,
+      cover_url:   row.cover_url   ?? null,
+      author:      row.author      ?? null,
+      source_key:  row.source_key,
+      external_id: row.external_id ?? null,
+    });
   }
 
   return payload;
