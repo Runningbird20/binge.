@@ -72,8 +72,8 @@ router.get('/stats', async (req, res) => {
       const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
       if (sbUrl && sbKey) {
         const sb2 = getCreateClient()(sbUrl, sbKey);
-        const { count } = await sb2.from('profiles').select('*', { count: 'exact', head: true });
-        uniqueUsers = count ?? 0;
+        const { data: profileRows } = await sb2.from('profiles').select('id').limit(5000);
+        uniqueUsers = profileRows?.length ?? 0;
       }
     } catch { /* fall back to 0 */ }
 
