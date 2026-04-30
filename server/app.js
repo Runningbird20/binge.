@@ -67,6 +67,7 @@ app.use('/api/ratings', require('./routes/ratings'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/livetv',      require('./routes/livetv'));
+app.use('/api/sports',      require('./routes/sports'));
 app.use('/api/proxy',      require('./routes/proxy'));
 app.use('/api/embed-proxy', require('./routes/embedProxy'));
 app.use('/api/forum', require('./routes/forum'));

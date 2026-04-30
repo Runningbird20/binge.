@@ -640,7 +640,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
             <iframe
               key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
               ref={iframeRef}
-              src={`/api/embed-proxy?url=${encodeURIComponent(embedUrl)}`}
+              src={embedUrl}
               className="player-frame"
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
               allowFullScreen
