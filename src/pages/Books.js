@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import MangaTab from '../components/MangaTab';
 import ListSaveControls from '../components/ListSaveControls';
 import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
@@ -389,6 +390,7 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
 export default function Books() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
+  const [activeTab, setActiveTab] = useState('books');
 
   const [books, setBooks] = useState([]);
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -736,14 +738,38 @@ export default function Books() {
         <div className="page-header books-page-header">
           <div>
             <p className="page-kicker">Browse</p>
-            <h1>Books</h1>
+            <h1>{activeTab === 'manga' ? 'Manga & Comics' : 'Books'}</h1>
             <p className="page-subtitle books-page-subtitle">
-              Search the shelf, open richer book details, and save future reads to your library or shared lists.
+              {activeTab === 'manga'
+                ? 'Browse and read manga, manhwa, manhua, and comics in-site — powered by MangaDex.'
+                : 'Search the shelf, open richer book details, and save future reads to your library or shared lists.'}
             </p>
           </div>
         </div>
 
-        <section className="surface-panel">
+        {/* Tab bar */}
+        <div className="books-tab-bar">
+          <button
+            type="button"
+            className={`books-tab ${activeTab === 'books' ? 'active' : ''}`}
+            onClick={() => setActiveTab('books')}
+          >
+            📚 Books
+          </button>
+          <button
+            type="button"
+            className={`books-tab ${activeTab === 'manga' ? 'active' : ''}`}
+            onClick={() => setActiveTab('manga')}
+          >
+            📖 Manga & Comics
+          </button>
+        </div>
+
+        {/* Manga tab */}
+        {activeTab === 'manga' && <MangaTab />}
+
+        {/* Books tab */}
+        {activeTab === 'books' && <><section className="surface-panel">
           <div className="surface-panel-header">
             <div>
               <h2>Filter the Shelf</h2>
@@ -859,6 +885,7 @@ export default function Books() {
             </>
           )}
         </section>
+        </>}
       </main>
 
       {selectedBook && (
