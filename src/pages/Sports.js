@@ -2,6 +2,68 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 
 const POLL_MS = 60_000;
+const PPV_API = 'https://api.ppv.to/api/streams';
+
+function truthy(v) { return v === 1 || v === true || v === '1'; }
+
+function parsePpvResponse(data) {
+  const now = Math.floor(Date.now() / 1000);
+  const streams = [];
+  for (const cat of data.streams || []) {
+    const catLive = truthy(cat.always_live);
+    for (const s of cat.streams || []) {
+      const alwaysLive = catLive || truthy(s.always_live);
+      const live     = alwaysLive || (s.starts_at <= now && s.ends_at >= now);
+      const upcoming = !alwaysLive && s.starts_at > now;
+      const ended    = !alwaysLive && s.ends_at < now;
+      if (ended && !truthy(s.allowpaststreams)) continue;
+      streams.push({
+        id:         s.id,
+        name:       s.name,
+        tag:        s.tag        || null,
+        poster:     s.poster     || null,
+        category:   s.category_name || cat.category,
+        uriName:    s.uri_name,
+        startsAt:   s.starts_at,
+        endsAt:     s.ends_at,
+        alwaysLive,
+        live,
+        upcoming,
+        replay:     ended && truthy(s.allowpaststreams),
+        iframeSrc:  s.iframe || null,
+      });
+    }
+  }
+  streams.sort((a, b) => {
+    if (a.live !== b.live)         return a.live ? -1 : 1;
+    if (a.upcoming !== b.upcoming) return a.upcoming ? -1 : 1;
+    return a.startsAt - b.startsAt;
+  });
+  return streams;
+}
+
+async function fetchStreams() {
+  // 1. Try server-side proxy route
+  try {
+    const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.error && Array.isArray(data.streams) && data.streams.length > 0) {
+        return data.streams;
+      }
+    }
+  } catch { /* fall through */ }
+
+  // 2. Direct browser call — ppv.to allows Access-Control-Allow-Origin: *
+  const res = await fetch(PPV_API, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`ppv.to ${res.status}`);
+  const data = await res.json();
+  if (!data.success) throw new Error('ppv.to error');
+  return parsePpvResponse(data);
+}
 
 const CAT_ICONS = {
   Basketball: '🏀', Soccer: '⚽', Football: '🏈', Baseball: '⚾',
@@ -65,11 +127,8 @@ export default function Sports() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/sports/streams');
-      if (!res.ok) throw new Error(`${res.status}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setStreams(data.streams || []);
+      const streams = await fetchStreams();
+      setStreams(streams);
       setError('');
     } catch (e) {
       setError('Could not load sports streams. ' + (e.message || ''));
