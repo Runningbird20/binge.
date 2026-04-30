@@ -6167,6 +6167,17 @@ body {
    LIVE TV PAGE
    ══════════════════════════════════════════════ */
 
+.livetv-pluto-wrap {
+  height: calc(100vh - 56px);
+  background: #000;
+}
+.livetv-pluto-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
 .livetv-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
