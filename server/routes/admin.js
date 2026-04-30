@@ -64,7 +64,18 @@ router.get('/stats', async (req, res) => {
     const totalQueries      = db.prepare('SELECT COUNT(*) as c FROM chat_logs').get().c;
     const queriesLast7Days  = db.prepare('SELECT COUNT(*) as c FROM chat_logs WHERE created_at >= ?').get(d7).c;
     const queriesLast30Days = db.prepare('SELECT COUNT(*) as c FROM chat_logs WHERE created_at >= ?').get(d30).c;
-    const uniqueUsers       = db.prepare('SELECT COUNT(DISTINCT user_id) as c FROM chat_logs').get().c;
+
+    // Count all registered users from Supabase profiles (not just chat users)
+    let uniqueUsers = 0;
+    try {
+      const sbUrl = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+      const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+      if (sbUrl && sbKey) {
+        const sb2 = getCreateClient()(sbUrl, sbKey);
+        const { count } = await sb2.from('profiles').select('*', { count: 'exact', head: true });
+        uniqueUsers = count ?? 0;
+      }
+    } catch { /* fall back to 0 */ }
 
     // Latency stats
     const latRow = db.prepare(`
