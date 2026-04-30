@@ -1,78 +1,69 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 
-const POLL_INTERVAL = 60 * 1000; // 60 s per API docs
+const POLL_MS = 60_000;
 
-const CATEGORY_ICONS = {
-  'Basketball':     '🏀',
-  'Soccer':         '⚽',
-  'Football':       '🏈',
-  'Baseball':       '⚾',
-  'Hockey':         '🏒',
-  'Combat Sports':  '🥊',
-  'Boxing':         '🥊',
-  'MMA':            '🥊',
-  'Wrestling':      '🤼',
-  'Tennis':         '🎾',
-  'Golf':           '⛳',
-  'Racing':         '🏎️',
-  'Rugby':          '🏉',
-  'Cricket':        '🏏',
-  'Volleyball':     '🏐',
-  'Olympics':       '🏅',
-  'Esports':        '🎮',
-  'Athletics':      '🏃',
-  'Cycling':        '🚴',
-  'Motorsport':     '🏎️',
+const CAT_ICONS = {
+  Basketball: '🏀', Soccer: '⚽', Football: '🏈', Baseball: '⚾',
+  Hockey: '🏒', Boxing: '🥊', MMA: '🥊', 'Combat Sports': '🥊',
+  Wrestling: '🤼', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
+  Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Olympics: '🏅',
+  Esports: '🎮', Athletics: '🏃', Cycling: '🚴', Motorsport: '🏎️',
+  'American Football': '🏈', 'Australian Football': '🏈',
 };
 
-function getCatIcon(cat) {
+function catIcon(cat) {
   if (!cat) return '🏆';
-  for (const [k, v] of Object.entries(CATEGORY_ICONS)) {
+  for (const [k, v] of Object.entries(CAT_ICONS)) {
     if (cat.toLowerCase().includes(k.toLowerCase())) return v;
   }
   return '🏆';
 }
 
-function formatTime(unix) {
+function fmtTime(unix) {
   if (!unix) return '';
-  const d = new Date(unix * 1000);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(unix * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(unix) {
+function fmtDate(unix) {
   if (!unix) return '';
   const d = new Date(unix * 1000);
-  const today    = new Date();
-  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  if (d.toDateString() === today.toDateString())    return 'Today';
-  if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+  const today = new Date();
+  const tom   = new Date(today); tom.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === tom.toDateString())   return 'Tomorrow';
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function timeUntil(unix) {
   const diff = unix * 1000 - Date.now();
   if (diff <= 0) return null;
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function getStatus(s, nowMs) {
+  const nowSec = Math.floor(nowMs / 1000);
+  if (s.alwaysLive) return 'live';
+  if (s.startsAt <= nowSec && s.endsAt >= nowSec) return 'live';
+  if (s.startsAt > nowSec) return 'upcoming';
+  return 'replay';
 }
 
 export default function Sports() {
-  const [streams, setStreams]           = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState('');
-  const [selected, setSelected]         = useState(null);
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [sidebarOpen, setSidebarOpen]   = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [now, setNow]                   = useState(Date.now());
+  const [streams, setStreams]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
+  const [selected, setSelected]     = useState(null);
+  const [category, setCategory]     = useState('All');
+  const [sidebarOpen, setSidebar]   = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [nowMs, setNowMs]           = useState(Date.now());
   const iframeRef = useRef(null);
   const playerRef = useRef(null);
-  const pollRef   = useRef(null);
 
-  const fetchStreams = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
       const res = await fetch('/api/sports/streams');
       if (!res.ok) throw new Error(`${res.status}`);
@@ -80,29 +71,27 @@ export default function Sports() {
       if (data.error) throw new Error(data.error);
       setStreams(data.streams || []);
       setError('');
-    } catch (err) {
-      setError('Could not load sports streams. ' + (err.message || ''));
+    } catch (e) {
+      setError('Could not load sports streams. ' + (e.message || ''));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchStreams();
-    // Tick "now" every 30s so live status updates without a re-fetch
-    const ticker = setInterval(() => setNow(Date.now()), 30000);
-    // Poll API every 60 s
-    pollRef.current = setInterval(fetchStreams, POLL_INTERVAL);
-    return () => { clearInterval(ticker); clearInterval(pollRef.current); };
-  }, [fetchStreams]);
+    load();
+    const tick  = setInterval(() => setNowMs(Date.now()), 30_000);
+    const poll  = setInterval(load, POLL_MS);
+    return () => { clearInterval(tick); clearInterval(poll); };
+  }, [load]);
 
   useEffect(() => {
-    function onFsChange() { setIsFullscreen(!!document.fullscreenElement); }
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
+    const fn = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', fn);
+    return () => document.removeEventListener('fullscreenchange', fn);
   }, []);
 
-  function toggleFullscreen() {
+  function toggleFs() {
     if (!document.fullscreenElement) {
       (iframeRef.current || playerRef.current)?.requestFullscreen();
     } else {
@@ -110,26 +99,15 @@ export default function Sports() {
     }
   }
 
-  // Derive live/upcoming status from current time (updates every 30s)
-  function getLiveStatus(s) {
-    const nowSec = Math.floor(now / 1000);
-    if (s.alwaysLive) return 'live';
-    if (s.startsAt <= nowSec && s.endsAt >= nowSec) return 'live';
-    if (s.startsAt > nowSec) return 'upcoming';
-    return 'replay';
-  }
-
   const categories = ['All', ...Array.from(
     new Set(streams.map(s => s.category).filter(Boolean))
   ).sort()];
 
-  const liveCount = streams.filter(s => getLiveStatus(s) === 'live').length;
+  const liveCount = streams.filter(s => getStatus(s, nowMs) === 'live').length;
 
-  const filtered = streams.filter(s => {
-    return activeCategory === 'All' || s.category === activeCategory;
-  });
-
-  const iframeSrc = selected?.iframeSrc;
+  const filtered = category === 'All'
+    ? streams
+    : streams.filter(s => s.category === category);
 
   return (
     <div className="app-layout">
@@ -146,21 +124,21 @@ export default function Sports() {
                 <span className="sports-live-count">{liveCount} LIVE</span>
               )}
             </div>
-            <button className="sports-sidebar-toggle" onClick={() => setSidebarOpen(o => !o)}>‹</button>
+            <button className="sports-sidebar-toggle" onClick={() => setSidebar(o => !o)}>‹</button>
           </div>
 
           <div className="sports-categories">
             {categories.map(cat => {
               const count = cat === 'All'
-                ? filtered.length
+                ? streams.length
                 : streams.filter(s => s.category === cat).length;
               return (
                 <button
                   key={cat}
-                  className={`sports-cat-btn ${activeCategory === cat ? 'active' : ''}`}
-                  onClick={() => setActiveCategory(cat)}
+                  className={`sports-cat-btn ${category === cat ? 'active' : ''}`}
+                  onClick={() => setCategory(cat)}
                 >
-                  {cat !== 'All' ? getCatIcon(cat) + ' ' : ''}{cat}
+                  {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
                   <span className="sports-cat-count">{count}</span>
                 </button>
               );
@@ -176,13 +154,13 @@ export default function Sports() {
             ) : error ? (
               <div className="sports-error">
                 <p>⚠️ {error}</p>
-                <button className="sports-retry-btn" onClick={fetchStreams}>Retry</button>
+                <button className="sports-retry-btn" onClick={load}>Retry</button>
               </div>
             ) : filtered.length === 0 ? (
-              <p className="sports-empty">No streams available right now.</p>
+              <p className="sports-empty">No streams in this category.</p>
             ) : (
               filtered.map(s => {
-                const status = getLiveStatus(s);
+                const status = getStatus(s, nowMs);
                 return (
                   <button
                     key={s.id}
@@ -194,7 +172,7 @@ export default function Sports() {
                         onError={e => { e.target.style.display = 'none'; }} />
                     ) : (
                       <div className="sports-stream-poster sports-stream-poster--placeholder">
-                        {getCatIcon(s.category)}
+                        {catIcon(s.category)}
                       </div>
                     )}
                     <div className="sports-stream-info">
@@ -206,7 +184,7 @@ export default function Sports() {
                         )}
                         {status === 'upcoming' && (
                           <span className="sports-badge sports-badge--upcoming">
-                            {formatDate(s.startsAt)} {formatTime(s.startsAt)}
+                            {fmtDate(s.startsAt)} {fmtTime(s.startsAt)}
                             {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
                           </span>
                         )}
@@ -223,14 +201,14 @@ export default function Sports() {
 
           <div className="sports-sidebar-footer">
             <span>Powered by ppv.to</span>
-            <button className="sports-refresh-btn" onClick={fetchStreams} title="Refresh streams">↻</button>
+            <button className="sports-refresh-btn" onClick={load} title="Refresh">↻</button>
           </div>
         </aside>
 
         {/* ── Player ── */}
         <main className="sports-player-area" ref={playerRef}>
           {!sidebarOpen && (
-            <button className="sports-sidebar-show-btn" onClick={() => setSidebarOpen(true)}>
+            <button className="sports-sidebar-show-btn" onClick={() => setSidebar(true)}>
               ☰ Streams
             </button>
           )}
@@ -239,28 +217,27 @@ export default function Sports() {
             <>
               <div className="sports-now-playing">
                 <div className="sports-now-info">
-                  {getLiveStatus(selected) === 'live' && (
+                  {getStatus(selected, nowMs) === 'live' && (
                     <span className="sports-live-badge">● LIVE</span>
                   )}
                   <span className="sports-now-name">{selected.name}</span>
                   {selected.tag && <span className="sports-now-tag">{selected.tag}</span>}
                   <span className="sports-now-cat">
-                    {getCatIcon(selected.category)} {selected.category}
+                    {catIcon(selected.category)} {selected.category}
                   </span>
                 </div>
-                <button className="sports-fullscreen-btn" onClick={toggleFullscreen}
-                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                  {isFullscreen ? '↙' : '↗'}
+                <button className="sports-fullscreen-btn" onClick={toggleFs}
+                  title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+                  {fullscreen ? '↙' : '↗'}
                 </button>
               </div>
 
               <div className="sports-frame-wrap">
-                {iframeSrc ? (
-                  /* Render WITHOUT sandbox — required by ppv.to terms */
+                {selected.iframeSrc ? (
                   <iframe
                     key={selected.id}
                     ref={iframeRef}
-                    src={iframeSrc}
+                    src={selected.iframeSrc}
                     className="sports-frame"
                     allowFullScreen
                     allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
@@ -270,17 +247,16 @@ export default function Sports() {
                   />
                 ) : (
                   <div className="sports-no-stream">
-                    <div style={{ fontSize: '3rem' }}>{getCatIcon(selected.category)}</div>
+                    <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
                     <h3>{selected.name}</h3>
-                    {getLiveStatus(selected) === 'upcoming' && (
-                      <p>Starts {formatDate(selected.startsAt)} at {formatTime(selected.startsAt)}
-                        {timeUntil(selected.startsAt) && ` (in ${timeUntil(selected.startsAt)})`}
-                      </p>
-                    )}
-                    {getLiveStatus(selected) === 'upcoming' && (
-                      <p className="sports-no-stream-note">Stream link will appear when the event goes live.</p>
-                    )}
-                    {getLiveStatus(selected) !== 'upcoming' && (
+                    {getStatus(selected, nowMs) === 'upcoming' ? (
+                      <>
+                        <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}
+                          {timeUntil(selected.startsAt) && ` (in ${timeUntil(selected.startsAt)})`}
+                        </p>
+                        <p className="sports-no-stream-note">Stream link will appear when the event goes live.</p>
+                      </>
+                    ) : (
                       <p className="sports-no-stream-note">Stream unavailable — try refreshing.</p>
                     )}
                   </div>
@@ -292,10 +268,13 @@ export default function Sports() {
               <div style={{ fontSize: '5rem' }}>🏆</div>
               <h2>Live Sports</h2>
               <p>Select a stream from the sidebar to start watching.</p>
-              {liveCount > 0 && <p className="sports-live-hint">{liveCount} event{liveCount > 1 ? 's' : ''} live now</p>}
+              {liveCount > 0 && (
+                <p className="sports-live-hint">{liveCount} event{liveCount !== 1 ? 's' : ''} live now</p>
+              )}
             </div>
           )}
         </main>
+
       </div>
     </div>
   );
