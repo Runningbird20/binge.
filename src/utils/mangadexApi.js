@@ -1,9 +1,4 @@
-const BASE = 'https://api.mangadex.org';
-const CDN  = 'https://uploads.mangadex.org';
-
-function appendAll(params, key, values) {
-  for (const v of values) params.append(key, v);
-}
+const CDN = 'https://uploads.mangadex.org';
 
 export const FORMAT_LANGUAGES = {
   manga:   ['ja'],
@@ -21,7 +16,7 @@ export const FORMAT_LABELS = {
 };
 
 export function getMangaCover(mangaId, relationships) {
-  const rel = (relationships || []).find(r => r.type === 'cover_art');
+  const rel  = (relationships || []).find(r => r.type === 'cover_art');
   const file = rel?.attributes?.fileName;
   return file ? `${CDN}/covers/${mangaId}/${file}.256.jpg` : null;
 }
@@ -49,40 +44,74 @@ export function getMangaFormat(manga) {
   return 'manga';
 }
 
-export async function searchManga({ query = '', format = 'all', page = 1, pageSize = 24, signal } = {}) {
-  const params = new URLSearchParams();
-  params.set('limit', String(pageSize));
-  params.set('offset', String((page - 1) * pageSize));
-  appendAll(params, 'includes[]', ['cover_art', 'author']);
-  appendAll(params, 'contentRating[]', ['safe', 'suggestive']);
-  params.set('order[followedCount]', 'desc');
-  params.set('hasAvailableChapters', 'true');
-  appendAll(params, 'availableTranslatedLanguage[]', ['en']);
+// ── internal helpers ──────────────────────────────────────────
 
-  if (query.trim()) params.set('title', query.trim());
+function appendAll(params, key, values) {
+  for (const v of values) params.append(key, v);
+}
 
-  const langs = FORMAT_LANGUAGES[format];
-  if (langs) appendAll(params, 'originalLanguage[]', langs);
+async function apiFetch(serverPath, directUrl, signal) {
+  // Try server proxy first (avoids CORS/CSP issues on deployed builds)
+  try {
+    const res = await fetch(serverPath, { signal });
+    if (res.ok) return res.json();
+  } catch { /* fall through */ }
 
-  const res = await fetch(`${BASE}/manga?${params}`, { signal });
+  // Direct MangaDex fallback (works locally / if proxy unavailable)
+  const res = await fetch(directUrl, {
+    headers: { Accept: 'application/json' },
+    signal,
+  });
   if (!res.ok) throw new Error(`MangaDex ${res.status}`);
-  return res.json(); // { data, total, limit, offset }
+  return res.json();
+}
+
+// ── public API ────────────────────────────────────────────────
+
+export async function searchManga({ query = '', format = 'all', page = 1, pageSize = 24, signal } = {}) {
+  // Server proxy path
+  const serverParams = new URLSearchParams({
+    title: query,
+    format,
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  // Direct MangaDex path (fallback)
+  const directParams = new URLSearchParams();
+  directParams.set('limit', String(pageSize));
+  directParams.set('offset', String((page - 1) * pageSize));
+  appendAll(directParams, 'includes[]', ['cover_art', 'author']);
+  appendAll(directParams, 'contentRating[]', ['safe', 'suggestive']);
+  directParams.set('order[followedCount]', 'desc');
+  directParams.set('hasAvailableChapters', 'true');
+  directParams.append('availableTranslatedLanguage[]', 'en');
+  if (query.trim()) directParams.set('title', query.trim());
+  const langs = FORMAT_LANGUAGES[format];
+  if (langs) appendAll(directParams, 'originalLanguage[]', langs);
+
+  return apiFetch(
+    `/api/manga/search?${serverParams}`,
+    `https://api.mangadex.org/manga?${directParams}`,
+    signal,
+  );
 }
 
 export async function getMangaChapters(mangaId, signal) {
-  const params = new URLSearchParams();
-  appendAll(params, 'translatedLanguage[]', ['en']);
-  params.set('order[chapter]', 'asc');
-  params.set('limit', '500');
-  appendAll(params, 'includes[]', ['scanlation_group']);
-  params.set('contentRating[]', 'safe');
-  params.append('contentRating[]', 'suggestive');
+  const directParams = new URLSearchParams();
+  appendAll(directParams, 'translatedLanguage[]', ['en']);
+  directParams.set('order[chapter]', 'asc');
+  directParams.set('limit', '500');
+  appendAll(directParams, 'includes[]', ['scanlation_group']);
+  appendAll(directParams, 'contentRating[]', ['safe', 'suggestive']);
 
-  const res = await fetch(`${BASE}/manga/${mangaId}/feed?${params}`, { signal });
-  if (!res.ok) throw new Error(`MangaDex chapters ${res.status}`);
-  const json = await res.json();
+  const json = await apiFetch(
+    `/api/manga/chapters/${mangaId}`,
+    `https://api.mangadex.org/manga/${mangaId}/feed?${directParams}`,
+    signal,
+  );
 
-  // Deduplicate by chapter number — keep first occurrence (best scanlation)
+  // Deduplicate by chapter number — keep first occurrence
   const seen = new Set();
   const chapters = [];
   for (const ch of (json.data || [])) {
@@ -93,8 +122,11 @@ export async function getMangaChapters(mangaId, signal) {
 }
 
 export async function getChapterPages(chapterId, signal) {
-  const res = await fetch(`${BASE}/at-home/server/${chapterId}`, { signal });
-  if (!res.ok) throw new Error(`MangaDex pages ${res.status}`);
-  const { baseUrl, chapter } = await res.json();
+  const json = await apiFetch(
+    `/api/manga/pages/${chapterId}`,
+    `https://api.mangadex.org/at-home/server/${chapterId}`,
+    signal,
+  );
+  const { baseUrl, chapter } = json;
   return (chapter.data || []).map(f => `${baseUrl}/data/${chapter.hash}/${f}`);
 }
