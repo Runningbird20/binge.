@@ -53,7 +53,8 @@
   .navbar-search-wrap,
   .navbar-links--desktop,
   .navbar-role-btns,
-  .navbar-avatar-link {
+  .navbar-avatar-link,
+  .notif-bell-wrap {
     display: none !important;
   }
 
@@ -68,6 +69,29 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  /* Make hamburger button clearly tappable */
+  .nav-panel-trigger {
+    width: 40px !important;
+    height: 40px !important;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background: rgba(255,255,255,0.08) !important;
+    border-radius: 10px !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+  }
+
+  .nav-panel-trigger-bar {
+    width: 18px;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+    display: block;
+    transition: all 0.2s ease;
   }
 
   /* ── Main layout ────────────────────────────────────────── */
@@ -660,6 +684,248 @@
   /* ── Year in Review ─────────────────────────────────────── */
   .yir-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE VIDEO PLAYER  (mp-*)
+   Full-screen player for portrait mobile / PWA.
+   Not scoped to a media query — it's only rendered by JS when
+   isMobile is true, so it's safe globally.
+═══════════════════════════════════════════════════════════════ */
+
+.mp-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mp-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 1rem 10px;
+  background: rgba(6,6,6,0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  gap: 0.5rem;
+}
+
+.mp-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  overflow: hidden;
+}
+
+.mp-title-text {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-title-ep {
+  font-size: 0.72rem;
+  color: #888;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mp-header-btns {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.mp-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #fff;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mp-btn-close {
+  background: rgba(239,68,68,0.15);
+  color: #f87171;
+}
+
+.mp-video-wrap {
+  flex-shrink: 0;
+  height: 45dvh;
+  background: #000;
+  position: relative;
+}
+
+.mp-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.mp-no-url {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  font-size: 0.85rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mp-controls {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0a0a0a;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mp-status {
+  margin: 0.75rem 1rem 0;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.mp-status--err {
+  background: rgba(239,68,68,0.08);
+  color: #f87171;
+}
+
+.mp-row {
+  padding: 0.75rem 1rem 0.4rem;
+}
+
+.mp-row-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+.mp-chips {
+  display: flex;
+  flex-direction: row;
+  gap: 0.4rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.mp-chips::-webkit-scrollbar { display: none; }
+
+.mp-chip {
+  flex-shrink: 0;
+  padding: 0.38rem 0.7rem;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.mp-chip.active {
+  background: rgba(232,201,122,0.15);
+  border-color: rgba(232,201,122,0.55);
+  color: #e8c97a;
+}
+
+.mp-chip-watched { opacity: 0.3; }
+
+.mp-chip-done {
+  border-color: rgba(74,222,128,0.4);
+  color: rgba(74,222,128,0.7);
+}
+
+.mp-chip-partial { border-color: rgba(232,201,122,0.25); }
+
+.mp-loading {
+  color: #555;
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+}
+
+.mp-mark-row {
+  padding: 0.25rem 1rem 0.5rem;
+}
+
+.mp-watch-btn {
+  width: 100%;
+  padding: 0.72rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.65);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: all 0.15s;
+}
+
+.mp-watch-btn.marked {
+  background: rgba(34,197,94,0.12);
+  border-color: rgba(34,197,94,0.45);
+  color: #4ade80;
+}
+
+.mp-watch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mp-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 0.25rem 0;
+}
+
+/* Landscape: side-by-side */
+@media (max-width: 900px) and (orientation: landscape) {
+  .mp-shell { flex-direction: row; }
+  .mp-header { display: none; }
+  .mp-video-wrap { flex: 1; height: 100dvh; }
+  .mp-controls {
+    width: 220px;
+    flex: none;
+    height: 100dvh;
+    border-left: 1px solid rgba(255,255,255,0.07);
   }
 }
 
