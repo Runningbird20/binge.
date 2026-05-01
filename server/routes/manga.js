@@ -1,89 +1,77 @@
 const express = require('express');
 const router  = express.Router();
 const https   = require('https');
-const http    = require('http');
 
-const MDEX_BASE = 'https://api.mangadex.org';
+const API_HOST = 'comick-source-api.notaspider.dev';
 
-function mdexFetch(path, res) {
-  const url = `${MDEX_BASE}${path}`;
-  const mod = url.startsWith('https') ? https : http;
-
-  const req = mod.get(url, {
+function upstreamRequest({ method, path, body }, res) {
+  const bodyStr = body ? JSON.stringify(body) : null;
+  const opts = {
+    hostname: API_HOST,
+    port: 443,
+    path,
+    method: method || 'GET',
     headers: {
-      'Accept': 'application/json',
+      'Accept':     'application/json',
       'User-Agent': 'BingeApp/1.0',
+      ...(bodyStr ? {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+      } : {}),
     },
-    timeout: 12000,
-  }, upstream => {
-    if (upstream.statusCode === 429) {
-      return res.status(429).json({ error: 'MangaDex rate limit — try again shortly.' });
-    }
-    if (upstream.statusCode >= 400) {
-      return res.status(upstream.statusCode).json({ error: `MangaDex ${upstream.statusCode}` });
-    }
-
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'public, max-age=60');
-    upstream.pipe(res);
-  });
-
-  req.on('error', err => {
-    if (!res.headersSent) res.status(502).json({ error: err.message });
-  });
-  req.on('timeout', () => {
-    req.destroy();
-    if (!res.headersSent) res.status(504).json({ error: 'MangaDex timeout' });
-  });
-}
-
-// GET /api/manga/search?title=&format=&page=&pageSize=
-router.get('/search', (req, res) => {
-  const { title = '', format = 'all', page = '1', pageSize = '24' } = req.query;
-
-  const langMap = {
-    manga:   ['ja'],
-    manhwa:  ['ko'],
-    manhua:  ['zh', 'zh-hk'],
-    comics:  ['en'],
   };
 
-  const params = new URLSearchParams();
-  params.set('limit', String(Math.min(Number(pageSize) || 24, 48)));
-  params.set('offset', String((Math.max(Number(page) || 1, 1) - 1) * (Number(pageSize) || 24)));
-  ['cover_art', 'author'].forEach(v => params.append('includes[]', v));
-  ['safe', 'suggestive'].forEach(v => params.append('contentRating[]', v));
-  params.set('order[followedCount]', 'desc');
-  params.set('hasAvailableChapters', 'true');
-  params.append('availableTranslatedLanguage[]', 'en');
-  if (title.trim()) params.set('title', title.trim().slice(0, 200));
-  const langs = langMap[format];
-  if (langs) langs.forEach(l => params.append('originalLanguage[]', l));
+  const req = https.request(opts, upstream => {
+    if (upstream.statusCode === 429) {
+      return res.status(429).json({ error: 'Rate limited — try again shortly.' });
+    }
+    if (upstream.statusCode >= 400) {
+      return res.status(upstream.statusCode).json({ error: `Upstream ${upstream.statusCode}` });
+    }
 
-  mdexFetch(`/manga?${params}`, res);
+    // Collect body then forward — avoids gzip/encoding pipe issues
+    const chunks = [];
+    upstream.on('data', c => chunks.push(c));
+    upstream.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      try {
+        const parsed = JSON.parse(raw);
+        res.setHeader('Cache-Control', 'public, max-age=60');
+        res.json(parsed);
+      } catch {
+        res.status(502).json({ error: 'Invalid upstream JSON' });
+      }
+    });
+    upstream.on('error', err => {
+      if (!res.headersSent) res.status(502).json({ error: err.message });
+    });
+  });
+
+  req.on('error',   err => { if (!res.headersSent) res.status(502).json({ error: err.message }); });
+  req.on('timeout', ()  => { req.destroy(); if (!res.headersSent) res.status(504).json({ error: 'Upstream timeout' }); });
+  req.setTimeout(25000);
+
+  if (bodyStr) req.write(bodyStr);
+  req.end();
+}
+
+// GET /api/manga/sources
+router.get('/sources', (req, res) => {
+  upstreamRequest({ method: 'GET', path: '/api/sources' }, res);
 });
 
-// GET /api/manga/chapters/:mangaId
-router.get('/chapters/:mangaId', (req, res) => {
-  const { mangaId } = req.params;
-  if (!/^[0-9a-f-]{36}$/.test(mangaId)) return res.status(400).json({ error: 'Invalid manga ID' });
-
-  const params = new URLSearchParams();
-  params.append('translatedLanguage[]', 'en');
-  params.set('order[chapter]', 'asc');
-  params.set('limit', '500');
-  params.append('includes[]', 'scanlation_group');
-  ['safe', 'suggestive'].forEach(v => params.append('contentRating[]', v));
-
-  mdexFetch(`/manga/${mangaId}/feed?${params}`, res);
+// POST /api/manga/search   body: { query, source }
+router.post('/search', (req, res) => {
+  const { query = '', source = 'all' } = req.body || {};
+  if (!query.trim()) return res.json({ results: [] });
+  upstreamRequest({ method: 'POST', path: '/api/search', body: { query: query.slice(0, 200), source } }, res);
 });
 
-// GET /api/manga/pages/:chapterId
-router.get('/pages/:chapterId', (req, res) => {
-  const { chapterId } = req.params;
-  if (!/^[0-9a-f-]{36}$/.test(chapterId)) return res.status(400).json({ error: 'Invalid chapter ID' });
-
-  mdexFetch(`/at-home/server/${chapterId}`, res);
+// POST /api/manga/chapters   body: { url, source? }
+router.post('/chapters', (req, res) => {
+  const { url, source } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'url required' });
+  upstreamRequest({ method: 'POST', path: '/api/chapters', body: { url, source } }, res);
 });
 
 module.exports = router;
