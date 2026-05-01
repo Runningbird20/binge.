@@ -7897,8 +7897,14 @@ body {
 .global-search-placeholder { flex: 1; font-size: 0.85rem; color: #444; }
 .global-search-kbd { font-size: 0.65rem; color: #333; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.1rem 0.35rem; font-family: monospace; flex-shrink: 0; }
 
-.global-search-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh; backdrop-filter: blur(4px); }
+.global-search-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1100; display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .global-search-modal { width: 100%; max-width: 620px; background: #111; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,0.6); }
+@media (max-width: 768px) {
+  .global-search-overlay { padding-top: 0; align-items: flex-end; background: rgba(0,0,0,0.85); }
+  .global-search-modal { border-radius: 20px 20px 0 0; max-height: 88dvh; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .global-search-input { font-size: 16px; }
+  .global-search-results { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+}
 .global-search-input-wrap { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.07); }
 .global-search-input-icon { font-size: 1rem; opacity: 0.4; flex-shrink: 0; }
 .global-search-input { flex: 1; background: none; border: none; color: #f0f0f0; font-size: 1rem; outline: none; }
@@ -9678,16 +9684,17 @@ select.filter-input,
   .mr-header { padding: 0 0.9rem 0.65rem; }
   .mr-scroll { padding: 0 0.9rem 0.75rem; }
 
-  /* ── Chatbot FAB: float above bottom nav ──────────────────── */
-  .chatbot-fab {
-    bottom: calc(0.85rem + 54px + env(safe-area-inset-bottom, 0px));
-    right: 0.85rem;
-  }
+  /* ── Chatbot: FAB hidden, panel is a full-width bottom sheet ─ */
+  .chatbot-fab { display: none !important; }
 
   .chatbot-panel {
-    bottom: calc(4.5rem + 54px + env(safe-area-inset-bottom, 0px));
-    right: 0.85rem;
-    width: calc(100vw - 1.7rem);
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    right: 0;
+    left: 0;
+    width: 100%;
+    max-height: 85dvh;
+    border-radius: 20px 20px 0 0;
+    z-index: 1050;
   }
 
   /* ── Modals ───────────────────────────────────────────────── */

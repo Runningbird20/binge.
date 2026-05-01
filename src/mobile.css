@@ -1,0 +1,659 @@
+/* ═══════════════════════════════════════════════════════════════
+   BINGE — MOBILE STYLESHEET
+   Applied at ≤ 768 px. Overrides desktop styles and introduces
+   the bottom-nav shell, frosted glass, and content-forward layout.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Bottom nav component ──────────────────────────────────── */
+.bottom-nav {
+  display: none; /* shown only on mobile via media query below */
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE BREAKPOINT
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Foundation ──────────────────────────────────────────── */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    font-size: 16px;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    background: #000;
+  }
+
+  /* ── Hide desktop chrome ────────────────────────────────── */
+  .navbar              { display: none !important; }
+  .chatbot-fab         { display: none !important; }
+
+  /* ── Main layout ────────────────────────────────────────── */
+  .app-layout {
+    background: #000;
+    /* Room for bottom nav + device safe area */
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    min-height: 100dvh;
+  }
+
+  .page-content {
+    max-width: 100%;
+    padding: 1rem 1rem 0.5rem;
+  }
+
+  .page-header {
+    margin-bottom: 1.25rem;
+  }
+
+  .page-header h1 {
+    font-size: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  .page-kicker {
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+  }
+
+  .page-subtitle {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    opacity: 0.7;
+  }
+
+  /* ── Bottom Navigation Bar ──────────────────────────────── */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(8, 8, 8, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    align-items: stretch;
+    justify-content: space-around;
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px 4px;
+    color: rgba(255, 255, 255, 0.45);
+    transition: color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 44px;
+    position: relative;
+  }
+
+  .bottom-nav-item.active {
+    color: #fff;
+  }
+
+  .bottom-nav-item:active {
+    transform: scale(0.92);
+    transition: transform 0.1s ease;
+  }
+
+  .bottom-nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  /* Active indicator dot above icon */
+  .bottom-nav-item.active::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent, #7c6af7);
+  }
+
+  /* Avatar ring when profile is active */
+  .bottom-nav-avatar {
+    display: block;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    transition: border-color 0.15s;
+  }
+  .bottom-nav-avatar.active {
+    border-color: var(--accent, #7c6af7);
+  }
+  .bottom-nav-avatar img,
+  .bottom-nav-avatar > * {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    display: block;
+  }
+
+  /* AI tab — gradient icon, always labeled */
+  .bottom-nav-ai {
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .bottom-nav-ai.active,
+  .bottom-nav-ai:hover {
+    color: #fff;
+  }
+
+  .bottom-nav-ai-icon {
+    background: linear-gradient(135deg, #7c6af7 0%, #a78bfa 50%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 8px rgba(124, 106, 247, 0.5));
+  }
+
+  .bottom-nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    line-height: 1;
+  }
+
+  .bottom-nav-ai-label {
+    background: linear-gradient(135deg, #7c6af7, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Surface panels ─────────────────────────────────────── */
+  .surface-panel {
+    border-radius: 16px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    background: #111;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .surface-panel-header {
+    margin-bottom: 0.75rem;
+  }
+
+  .surface-panel-header h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .surface-panel-copy {
+    font-size: 0.8rem;
+    opacity: 0.6;
+  }
+
+  /* ── Filter bar → horizontal scroll chips ───────────────── */
+  .filter-bar {
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0.5rem !important;
+    padding-bottom: 4px;
+    flex-wrap: nowrap !important;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+
+  .filter-bar .search-input {
+    min-width: 200px;
+    flex-shrink: 0;
+  }
+
+  .filter-bar .filter-input {
+    min-width: 140px;
+    flex-shrink: 0;
+  }
+
+  /* ── Content grids → 2 columns ──────────────────────────── */
+  .content-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Books grid */
+  .books-results-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Manga grid */
+  .manga-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+  .manga-skeleton-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Trending / movie / tv cards */
+  .trending-grid,
+  .movie-grid,
+  .tv-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ── Cards ──────────────────────────────────────────────── */
+  .media-card {
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* Book cards */
+  .book-card {
+    border-radius: 10px;
+  }
+
+  /* Manga cards */
+  .manga-card {
+    border-radius: 10px;
+  }
+
+  /* ── Tap targets ────────────────────────────────────────── */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Override where small buttons are intentional */
+  .manga-chapter-btn,
+  .player-ep-btn,
+  .books-tab,
+  .bottom-nav-item {
+    min-height: unset;
+    min-width: unset;
+  }
+  /* Ensure they still have comfortable touch size */
+  .manga-chapter-btn { padding: 0.5rem 0.6rem; }
+  .player-ep-btn { min-height: 36px; min-width: 36px; }
+  .books-tab { min-height: 40px; }
+
+  /* ── Modals → Bottom sheets ─────────────────────────────── */
+  .book-detail-overlay,
+  .manga-detail-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .book-detail-modal,
+  .book-detail-modal-wide {
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 92dvh !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .manga-detail-modal {
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 92dvh !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Drag handle on bottom sheets */
+  .book-detail-modal::before,
+  .manga-detail-modal::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 10px auto 0;
+    flex-shrink: 0;
+  }
+
+  /* ── Player → Full screen on mobile ─────────────────────── */
+  .player-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  .player-modal {
+    border-radius: 0 !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+    max-height: 100dvh !important;
+    height: 100dvh !important;
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .player-header {
+    flex-shrink: 0;
+    padding: 0.75rem 1rem;
+  }
+
+  .player-tv-controls {
+    flex-shrink: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1rem 0.5rem;
+  }
+
+  .player-providers {
+    flex-shrink: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    padding: 0.25rem 1rem;
+  }
+
+  .player-frame-wrap {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .player-frame {
+    width: 100%;
+    height: 100%;
+  }
+
+  .player-kb-hint,
+  .player-note,
+  .player-anime-hint {
+    display: none;
+  }
+
+  .player-episode-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* ── Manga reader → full screen ─────────────────────────── */
+  .manga-reader-overlay {
+    padding: 0 !important;
+  }
+
+  .manga-reader-header {
+    padding: 0.75rem 1rem;
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  .manga-reader-body {
+    padding: 0;
+  }
+
+  .comix-frame {
+    border-radius: 0;
+  }
+
+  /* ── Book detail layout ─────────────────────────────────── */
+  .book-detail-cover-panel {
+    flex-direction: row !important;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .book-detail-cover-frame {
+    width: 100px !important;
+    flex-shrink: 0;
+  }
+
+  .book-detail-cover-image {
+    width: 100px !important;
+    height: 150px !important;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+
+  .book-detail-cover-placeholder {
+    width: 100px !important;
+    height: 150px !important;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+  }
+
+  .artifact-panel {
+    display: none; /* hide rating wheel on mobile — too small */
+  }
+
+  /* ── Home page ──────────────────────────────────────────── */
+  .home-page-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .home-insights-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem;
+  }
+
+  .home-stat-cards {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem;
+  }
+
+  /* ── Trending page ──────────────────────────────────────── */
+  .trending-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    white-space: nowrap;
+    display: flex;
+    gap: 0.5rem;
+    padding-bottom: 4px;
+    flex-wrap: nowrap;
+  }
+  .trending-tabs::-webkit-scrollbar { display: none; }
+
+  /* ── Forum ──────────────────────────────────────────────── */
+  .forum-sidebar {
+    display: none !important;
+  }
+
+  .forum-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Live TV ─────────────────────────────────────────────── */
+  .livetv-sidebar {
+    display: none !important;
+  }
+
+  .livetv-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Account settings ───────────────────────────────────── */
+  .settings-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Books filter sidebar ───────────────────────────────── */
+  .books-filter-sidebar {
+    display: none;
+  }
+
+  .books-page-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Watchlist / Ratings ─────────────────────────────────── */
+  .watchlist-grid,
+  .ratings-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ── Typography polish ──────────────────────────────────── */
+  h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; }
+  h2 { font-size: 1.3rem; font-weight: 700; }
+  h3 { font-size: 1.1rem; font-weight: 600; }
+
+  /* ── Inputs ─────────────────────────────────────────────── */
+  .search-input,
+  .filter-input,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea {
+    font-size: 16px; /* prevents iOS zoom on focus */
+    border-radius: 10px;
+  }
+
+  /* ── Tables → scroll ─────────────────────────────────────── */
+  .admin-table-wrap,
+  table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    display: block;
+  }
+
+  /* ── Misc polish ─────────────────────────────────────────── */
+  .empty-state {
+    padding: 2.5rem 1rem;
+  }
+
+  .empty-state p { font-size: 0.9rem; }
+
+  .btn-primary,
+  .btn-watch,
+  .btn-ghost {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Where full-width buttons would look wrong, override */
+  .bottom-nav-item,
+  .manga-chapter-btn,
+  .player-ep-btn,
+  .player-provider-btn,
+  .player-mark-btn,
+  .manga-reader-nav,
+  .manga-reader-close,
+  .books-tab {
+    width: auto !important;
+  }
+
+  /* ── Scrollbar hide on all horizontal scrollers ─────────── */
+  [class*="-scroll"],
+  [class*="scroll-"] {
+    scrollbar-width: none;
+  }
+  [class*="-scroll"]::-webkit-scrollbar,
+  [class*="scroll-"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ── WatchRoom ──────────────────────────────────────────── */
+  .wr-room-body {
+    grid-template-columns: 1fr !important;
+  }
+
+  .wr-features {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Admin ──────────────────────────────────────────────── */
+  .admin-status-row,
+  .admin-charts-row,
+  .admin-bottom-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Year in Review ─────────────────────────────────────── */
+  .yir-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LANDSCAPE ON MOBILE
+   Handles devices that flip to landscape (phones in landscape).
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) and (orientation: landscape) {
+  /* Hide bottom nav in landscape to reclaim vertical space */
+  .bottom-nav {
+    display: none;
+  }
+
+  /* Remove bottom nav padding */
+  .app-layout {
+    padding-bottom: 0;
+  }
+
+  /* Player goes full-screen in landscape */
+  .player-modal {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+
+  /* Manga reader in landscape */
+  .manga-reader-overlay {
+    flex-direction: row;
+  }
+
+  .manga-reader-body {
+    flex: 1;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOUCH DEVICE ENHANCEMENTS
+   Applied regardless of screen size for any touch-capable device.
+═══════════════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  /* Remove hover effects that look wrong on touch */
+  .media-card:hover,
+  .book-card:hover,
+  .manga-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Increase touch responsiveness */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Active state provides the tap feedback instead */
+  .media-card:active,
+  .book-card:active,
+  .manga-card:active {
+    transform: scale(0.97) !important;
+    transition: transform 0.1s ease !important;
+  }
+
+  button:active {
+    opacity: 0.75;
+    transition: opacity 0.1s ease;
+  }
+}
