@@ -222,16 +222,21 @@ export default function MangaTab() {
   const [reader, setReader]         = useState(null);   // { comic, chapters, index }
   const abortRef = useRef(null);
 
-  // Load sources once
+  // Load sources once — prefer a curated subset so the dropdown isn't 69 items
+  const CURATED = ['mangakatana','weebcentral','asurascan','flamecomics','webtoon','mangapark','bato','mangaread','likemanga'];
   useEffect(() => {
     const ctrl = new AbortController();
     getSources(ctrl.signal)
       .then(list => {
-        setSources(list);
-        if (list.length) setSource(list[0].id);
+        const curated = list.filter(s => CURATED.includes(s.id));
+        const shown   = curated.length ? curated : list.slice(0, 12);
+        setSources(shown);
+        const preferred = shown.find(s => s.id === 'mangakatana') || shown[0];
+        if (preferred) setSource(preferred.id);
       })
       .catch(() => {});
     return () => ctrl.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Debounce query
