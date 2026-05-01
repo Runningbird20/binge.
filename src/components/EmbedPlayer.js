@@ -6,6 +6,7 @@ import {
   unmarkEpisodeWatched,
   updateWatchlistProgress,
 } from '../utils/supabaseData';
+import useDeviceType from '../hooks/useDeviceType';
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
@@ -146,6 +147,7 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
 }
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
+  const { isMobile } = useDeviceType();
   const [provider, setProvider] = useState(PROVIDERS[0].id);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
@@ -459,11 +461,152 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   }
 
   const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
-  // Only show episode count when we actually have data from TMDB
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
-  const usingManualEpisodeInput = false; // Always use episode buttons
+  const usingManualEpisodeInput = false;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
+  // ── Mobile player ────────────────────────────────────────────
+  const epChipsRef = useRef(null);
+  useEffect(() => {
+    if (!epChipsRef.current) return;
+    const active = epChipsRef.current.querySelector('.mp-chip.active');
+    active?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [episode, season]);
+
+  if (isMobile) {
+    return (
+      <div className="mp-shell">
+        {/* Header */}
+        <div className="mp-header">
+          <div className="mp-title">
+            <span className="mp-title-text">{item.title}</span>
+            {isTV && <span className="mp-title-ep">S{season} E{episode}</span>}
+          </div>
+          <div className="mp-header-btns">
+            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Fullscreen">
+              {isFullscreen ? '↙' : '↗'}
+            </button>
+            <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close">✕</button>
+          </div>
+        </div>
+
+        {/* Video */}
+        <div className="mp-video-wrap" ref={modalRef}>
+          {embedUrl ? (
+            <iframe
+              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
+              ref={iframeRef}
+              src={embedUrl}
+              className="mp-iframe"
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
+              allowFullScreen
+              referrerPolicy="no-referrer-when-downgrade"
+              title={`Watch ${item.title}`}
+            />
+          ) : (
+            <div className="mp-no-url">
+              <p>{lookupState === 'loading' ? 'Preparing stream…' : 'Stream unavailable.'}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Controls */}
+        <div className="mp-controls">
+          {lookupState === 'loading' && (
+            <div className="mp-status">Looking up stream ID…</div>
+          )}
+          {lookupState === 'error' && (
+            <div className="mp-status mp-status--err">{lookupError || `Could not find stream for "${item.title}".`}</div>
+          )}
+
+          {isTV && (
+            <>
+              {/* Season */}
+              <div className="mp-row">
+                <span className="mp-row-label">Season</span>
+                <div className="mp-chips">
+                  {Array.from({ length: totalSeasons }, (_, i) => i + 1).map((s) => {
+                    const wc = Array.from(watched).filter(k => k.startsWith(`${s}:`)).length;
+                    const tc = seasonEpisodeCounts[s];
+                    return (
+                      <button
+                        key={s}
+                        className={`mp-chip ${season === s ? 'active' : ''} ${tc && wc === tc ? 'mp-chip-done' : wc > 0 ? 'mp-chip-partial' : ''}`}
+                        onClick={() => { setSeason(s); setEpisode(1); }}
+                        type="button"
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Episode */}
+              <div className="mp-row">
+                <span className="mp-row-label">
+                  Episode{episodeCount !== undefined ? ` · ${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''}` : ''}
+                </span>
+                <div className="mp-chips" ref={epChipsRef}>
+                  {episodeCount === undefined ? (
+                    <span className="mp-loading">Loading episodes…</span>
+                  ) : (
+                    Array.from({ length: episodeCount }, (_, i) => i + 1).map((ep) => {
+                      const isWatched = watched.has(`${season}:${ep}`);
+                      const isCurrent = episode === ep;
+                      return (
+                        <button
+                          key={ep}
+                          className={`mp-chip ${isCurrent ? 'active' : ''} ${isWatched && !isCurrent ? 'mp-chip-watched' : ''}`}
+                          onClick={() => setEpisode(ep)}
+                          type="button"
+                        >
+                          {ep}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Mark watched */}
+              <div className="mp-mark-row">
+                <button
+                  className={`mp-watch-btn ${watched.has(currentEpisodeKey) ? 'marked' : ''}`}
+                  onClick={() => markWatched(season, episode)}
+                  disabled={!canTrackEpisodes || markingWatched}
+                  type="button"
+                >
+                  {watched.has(currentEpisodeKey) ? '✓ Watched' : '+ Mark as watched'}
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="mp-divider" />
+
+          {/* Source */}
+          <div className="mp-row">
+            <span className="mp-row-label">Source</span>
+            <div className="mp-chips">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  className={`mp-chip ${provider === p.id ? 'active' : ''}`}
+                  onClick={() => setProvider(p.id)}
+                  type="button"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop player ───────────────────────────────────────────
   return (
     <div className="player-overlay" onClick={onClose}>
       <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
@@ -645,7 +788,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-orientation-lock allow-downloads"
               title={`Watch ${item.title}`}
             />
           ) : (
