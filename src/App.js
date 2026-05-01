@@ -1,12 +1,17 @@
 import { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import BottomNav from './components/BottomNav';
+import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import './App.css';
+import './mobile.css';
 
 const ChatBot        = lazy(() => import('./components/ChatBot'));
 const Home           = lazy(() => import('./pages/Home'));
@@ -32,6 +37,23 @@ const Trending       = lazy(() => import('./pages/Trending'));
 const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
 const YearInReview   = lazy(() => import('./pages/YearInReview'));
 
+// Routes where we never show the bottom nav
+const NO_NAV_PATHS = ['/', '/login', '/signup'];
+
+function AppShell({ children }) {
+  const { isMobile } = useDeviceType();
+  const { user }     = useAuth();
+  const location     = useLocation();
+  const showBottomNav = isMobile && !!user && !NO_NAV_PATHS.includes(location.pathname);
+
+  return (
+    <>
+      {children}
+      {showBottomNav && <BottomNav />}
+    </>
+  );
+}
+
 function AppRouteFallback() {
   return (
     <div className="app-layout">
@@ -52,54 +74,69 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-      <BrowserRouter>
-        <Suspense fallback={<AppRouteFallback />}>
-          <Routes>
-            <Route path="/"          element={<Landing />} />
-            <Route path="/login"     element={<Login />} />
-            <Route path="/signup"    element={<Signup />} />
-            <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
-            <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
-            <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
-            <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
-            <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
-            <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
-            <Route path="/following" element={<ProtectedRoute><Following /></ProtectedRoute>} />
-            <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
-            <Route path="/lists/:shareCode" element={<SharedList />} />
-            <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-            <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
-            <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
-            <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
-            <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
-            <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
-            <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
-            <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
-            <Route path="/trending"               element={<ProtectedRoute><Trending /></ProtectedRoute>} />
-            <Route path="/year-in-review"         element={<ProtectedRoute><YearInReview /></ProtectedRoute>} />
-            <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
-            <Route path="*" element={
-              <div className="app-layout">
-                <div className="page-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',gap:'1rem'}}>
-                  <p style={{fontSize:'3rem'}}>🔍</p>
-                  <h2 style={{color:'#e0e0e0',margin:0}}>Page not found</h2>
-                  <p style={{color:'#555',margin:0}}>The page you're looking for doesn't exist.</p>
-                  <a href="/home" style={{color:'#e8c97a',fontSize:'0.9rem'}}>← Go home</a>
-                </div>
-              </div>
-            } />
-            <Route path="/admin/requests" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
-            <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
-            <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
-            <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
-            <Route
-              path="/__ops/dev-lab"
-              element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>}
-            />
-          </Routes>
-          <ChatBot />
-        </Suspense>
-      </BrowserRouter>
+        <BrowserRouter>
+          <Suspense fallback={<AppRouteFallback />}>
+            <AppShell>
+              <Routes>
+                <Route path="/"          element={<Landing />} />
+                <Route path="/login"     element={<Login />} />
+                <Route path="/signup"    element={<Signup />} />
+                <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
+                <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
+                <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
+                <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
+                <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
+                <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+                <Route path="/following" element={<ProtectedRoute><Following /></ProtectedRoute>} />
+                <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
+                <Route path="/lists/:shareCode" element={<SharedList />} />
+                <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+                <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
+                <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
+                <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
+                <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
+                <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
+                <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+                <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
+                <Route path="/trending"                 element={<ProtectedRoute><Trending /></ProtectedRoute>} />
+                <Route path="/year-in-review"           element={<ProtectedRoute><YearInReview /></ProtectedRoute>} />
+                <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
+                <Route path="/admin/requests"  element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
+                <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
+                <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
+                <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
+                <Route path="/__ops/dev-lab" element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>} />
+                <Route path="*" element={
+                  <div className="app-layout">
+                    <div className="page-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',gap:'1rem'}}>
+                      <p style={{fontSize:'3rem'}}>🔍</p>
+                      <h2 style={{color:'#e0e0e0',margin:0}}>Page not found</h2>
+                      <p style={{color:'#555',margin:0}}>The page you're looking for doesn't exist.</p>
+                      <a href="/home" style={{color:'#e8c97a',fontSize:'0.9rem'}}>← Go home</a>
+                    </div>
+                  </div>
+                } />
+              </Routes>
+              <ChatBot />
+            </AppShell>
+          </Suspense>
+
+          {/* Sonner toasts — positioned above bottom nav on mobile */}
+          <Toaster
+            theme="dark"
+            position="bottom-center"
+            offset={{ bottom: 80 }}
+            toastOptions={{
+              style: {
+                background: '#1c1c1e',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff',
+                borderRadius: '12px',
+                fontSize: '14px',
+              },
+            }}
+          />
+        </BrowserRouter>
       </ToastProvider>
     </AuthProvider>
   );

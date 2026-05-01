@@ -642,10 +642,9 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               ref={iframeRef}
               src={embedUrl}
               className="player-frame"
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
               allowFullScreen
-              referrerPolicy="no-referrer"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-orientation-lock"
+              referrerPolicy="no-referrer-when-downgrade"
               title={`Watch ${item.title}`}
             />
           ) : (
