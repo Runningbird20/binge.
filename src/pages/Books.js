@@ -5,6 +5,8 @@ import MangaTab from '../components/MangaTab';
 import ListSaveControls from '../components/ListSaveControls';
 import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
+import MobileBookDetail from '../components/MobileBookDetail';
+import useIsMobile from '../hooks/useIsMobile';
 import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
@@ -80,6 +82,7 @@ function BookDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
 }) {
+  const isMobile = useIsMobile();
   const [showReader, setShowReader] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
@@ -175,6 +178,35 @@ function BookDetailsModal({
     } finally {
       setIsSaving(false);
     }
+  }
+
+  // Mobile gets the dedicated native-feeling layout
+  if (isMobile) {
+    return (
+      <>
+        <MobileBookDetail
+          book={book}
+          onClose={onClose}
+          onAddToLibrary={onAddToLibrary}
+          isInLibrary={isInLibrary}
+          isAddingToLibrary={isAddingToLibrary}
+          onRate={onRate}
+          userRating={userRating}
+          detailMessage={detailMessage}
+          allowActions={allowActions}
+          browseOnlyMessage={browseOnlyMessage}
+          onReadNow={() => setShowReader(true)}
+        />
+        {showReader && (
+          <BookReader
+            book={book}
+            archiveId={archiveId}
+            itemUrl={itemUrl}
+            onClose={() => setShowReader(false)}
+          />
+        )}
+      </>
+    );
   }
 
   return (

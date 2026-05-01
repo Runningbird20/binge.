@@ -10855,6 +10855,51 @@ select.filter-input,
   box-shadow: 0 4px 16px rgba(232,201,122,0.28);
 }
 
+/* ── Mobile book detail — download section ──────────────────── */
+.mob-book-download-row {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.mob-book-download-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+  margin: 0 0 0.5rem;
+}
+
+.mob-book-download-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mob-book-download-btn {
+  flex: 1;
+  padding: 0.55rem 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  color: #ccc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 0.12s;
+}
+
+.mob-book-download-btn:active { background: rgba(255,255,255,0.12); }
+.mob-book-download-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.mob-book-download-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  margin: 0.4rem 0 0;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BOOKS TAB BAR
 ═══════════════════════════════════════════════════════════════ */
