@@ -14,10 +14,46 @@ const rateLimit = require('./middleware/rateLimit');
 
 const app = express();
 
-// Security headers — HSTS, X-Frame-Options, X-Content-Type-Options, etc.
-// contentSecurityPolicy is disabled because the embed player loads cross-origin iframes
-// from multiple video providers which would all need to be whitelisted.
-app.use(helmet({ contentSecurityPolicy: false }));
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      // Whitelist every domain we embed so no rogue iframe can be injected
+      'frame-src': [
+        "'self'",
+        // Video providers
+        'https://vidsrc-embed.ru',
+        'https://vidsrc-embed.su',
+        'https://www.2embed.stream',
+        'https://2embed.stream',
+        'https://autoembed.co',
+        'https://vidlink.pro',
+        'https://multiembed.mov',
+        'https://vsrc.su',
+        // Manga / comics
+        'https://mangakatana.com',
+        'https://*.mangakatana.com',
+        'https://weebcentral.com',
+        'https://*.weebcentral.com',
+        'https://asurascan.com',
+        'https://*.asurascan.com',
+        'https://webtoon.com',
+        'https://*.webtoon.com',
+        'https://bato.to',
+        'https://*.bato.to',
+        // Books
+        'https://archive.org',
+        // Embed proxy (self-hosted)
+        "'self'",
+      ],
+      // Scripts: self + inline needed for React, plus allow data: URIs
+      'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      // Upgrade insecure requests where possible
+      'upgrade-insecure-requests': [],
+    },
+  },
+}));
 const configuredClientUrl = process.env.CLIENT_URL?.trim();
 const localhostOriginPattern = /^https?:\/\/localhost(:\d+)?$|^https?:\/\/127\.0\.0\.1(:\d+)?$|^https?:\/\[::1\](:\d+)?$/i;
 
