@@ -11391,6 +11391,39 @@ select.filter-input,
 }
 @keyframes manga-spin { to { transform: rotate(360deg); } }
 
+/* Vertical page image (image-based reader) */
+.manga-page-img {
+  width: 100%;
+  max-width: 800px;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Active toggle state (LQ/HQ button) */
+.manga-reader-nav--active { background: rgba(232,201,122,0.14); color: #e8c97a; }
+
+/* Page count in footer */
+.manga-reader-page-count { color: #888; font-size: 0.82rem; min-width: 60px; text-align: center; }
+
+/* Genre tag pills inside detail modal */
+.manga-tag {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  color: #c0b899;
+}
+
+/* "Popular Right Now" heading */
+.manga-section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e8c97a;
+  margin: 0 0 1rem;
+  letter-spacing: 0.02em;
+}
+
 /* ─── Mobile ─────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .manga-grid { grid-template-columns: repeat(2, 1fr); gap: 0.85rem; }
