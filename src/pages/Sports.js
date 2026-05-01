@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
+import useDeviceType from '../hooks/useDeviceType';
 
 const POLL_MS = 60_000;
 const PPV_API = 'https://api.ppv.to/api/streams';
@@ -114,6 +115,7 @@ function getStatus(s, nowMs) {
 }
 
 export default function Sports() {
+  const { isMobile } = useDeviceType();
   const [streams, setStreams]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
@@ -168,6 +170,163 @@ export default function Sports() {
     ? streams
     : streams.filter(s => s.category === category);
 
+  // ── Mobile layout ────────────────────────────────────────────
+  if (isMobile) {
+    // Full-screen player when a stream is selected
+    if (selected) {
+      const status = getStatus(selected, nowMs);
+      return (
+        <div className="sp-shell">
+          {/* Header bar */}
+          <div className="sp-header">
+            <button className="sp-back-btn" onClick={() => setSelected(null)} type="button">
+              ← Back
+            </button>
+            <div className="sp-header-title">
+              {status === 'live' && <span className="sp-badge-live">● LIVE</span>}
+              <span className="sp-title-text">{selected.name}</span>
+            </div>
+            <button className="mp-btn" onClick={toggleFs} type="button">
+              {fullscreen ? '↙' : '↗'}
+            </button>
+          </div>
+
+          {/* Video */}
+          <div className="sp-video-wrap" ref={playerRef}>
+            {selected.iframeSrc ? (
+              <iframe
+                key={selected.id}
+                ref={iframeRef}
+                src={selected.iframeSrc}
+                className="mp-iframe"
+                allowFullScreen
+                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                referrerPolicy="no-referrer-when-downgrade"
+                title={selected.name}
+              />
+            ) : (
+              <div className="mp-no-url">
+                <span style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</span>
+                {status === 'upcoming' ? (
+                  <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}</p>
+                ) : (
+                  <p>Stream unavailable — try refreshing.</p>
+                )}
+                <button className="sp-refresh-btn" onClick={load} type="button">↻ Refresh</button>
+              </div>
+            )}
+          </div>
+
+          {/* Event info + other streams */}
+          <div className="sp-player-info">
+            <div className="sp-now-meta">
+              <span className="sp-cat-pill">{catIcon(selected.category)} {selected.category}</span>
+              {selected.tag && <span className="sp-tag">{selected.tag}</span>}
+              {status === 'upcoming' && (
+                <span className="sp-upcoming-time">{fmtDate(selected.startsAt)} {fmtTime(selected.startsAt)}</span>
+              )}
+            </div>
+            <p className="sp-section-label">More Streams</p>
+            {filtered.filter(s => s.id !== selected.id).slice(0, 8).map(s => {
+              const st = getStatus(s, nowMs);
+              return (
+                <button key={s.id} className="sp-mini-card" onClick={() => setSelected(s)} type="button">
+                  <span className={`sp-dot ${st === 'live' ? 'live' : st === 'upcoming' ? 'upcoming' : 'replay'}`} />
+                  <span className="sp-mini-name">{s.name}</span>
+                  <span className="sp-mini-cat">{catIcon(s.category)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // Stream list view
+    return (
+      <div className="app-layout">
+        <Navbar />
+        <div className="sp-feed-shell">
+          {/* Category filter chips */}
+          <div className="sp-cat-strip">
+            {liveCount > 0 && (
+              <span className="sp-live-pill">● {liveCount} LIVE</span>
+            )}
+            {categories.map(cat => (
+              <button
+                key={cat}
+                className={`sp-cat-chip ${category === cat ? 'active' : ''}`}
+                onClick={() => setCategory(cat)}
+                type="button"
+              >
+                {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Stream cards */}
+          <div className="sp-feed">
+            {loading && (
+              <div className="sp-feed-loading">
+                {[1,2,3,4,5].map(i => <div key={i} className="sp-skeleton-card" />)}
+              </div>
+            )}
+            {error && (
+              <div className="sp-feed-error">
+                <p>⚠️ {error}</p>
+                <button className="sp-refresh-btn" onClick={load} type="button">↻ Retry</button>
+              </div>
+            )}
+            {!loading && !error && filtered.length === 0 && (
+              <div className="sp-feed-empty">
+                <p style={{ fontSize: '2.5rem', margin: 0 }}>🏆</p>
+                <p>No streams in this category.</p>
+              </div>
+            )}
+            {filtered.map(s => {
+              const status = getStatus(s, nowMs);
+              return (
+                <button
+                  key={s.id}
+                  className="sp-card"
+                  onClick={() => setSelected(s)}
+                  type="button"
+                >
+                  <div className="sp-card-left">
+                    {s.poster ? (
+                      <img src={s.poster} alt={s.name} className="sp-card-poster"
+                        onError={e => { e.target.style.display = 'none'; }} />
+                    ) : (
+                      <div className="sp-card-poster sp-card-poster--icon">
+                        {catIcon(s.category)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="sp-card-body">
+                    <div className="sp-card-badges">
+                      {status === 'live' && <span className="sp-badge-live">● LIVE</span>}
+                      {status === 'replay' && <span className="sp-badge-replay">REPLAY</span>}
+                      {status === 'upcoming' && (
+                        <span className="sp-badge-upcoming">
+                          {fmtDate(s.startsAt)} · {fmtTime(s.startsAt)}
+                          {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="sp-card-name">{s.name}</p>
+                    <p className="sp-card-cat">{catIcon(s.category)} {s.category}</p>
+                  </div>
+                  <span className="sp-card-arrow">›</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop layout ───────────────────────────────────────────
   return (
     <div className="app-layout">
       <Navbar />

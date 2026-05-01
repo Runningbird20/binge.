@@ -962,6 +962,416 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   MOBILE SPORTS  (sp-*)
+   Completely separate layout rendered only when isMobile=true.
+═══════════════════════════════════════════════════════════════ */
+
+/* Full-screen player shell (when stream is selected) */
+.sp-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sp-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 1rem 10px;
+  background: rgba(6,6,6,0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.sp-back-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #e8c97a;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0.25rem 0;
+  white-space: nowrap;
+}
+
+.sp-header-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+}
+
+.sp-title-text {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-video-wrap {
+  flex-shrink: 0;
+  height: 45dvh;
+  background: #000;
+}
+
+.sp-player-info {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0a0a0a;
+  padding: 0.75rem 1rem;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+
+.sp-now-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.sp-cat-pill {
+  background: rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  color: #aaa;
+}
+
+.sp-tag {
+  font-size: 0.72rem;
+  color: #666;
+}
+
+.sp-upcoming-time {
+  font-size: 0.75rem;
+  color: #e8c97a;
+}
+
+.sp-section-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0.5rem 0 0.4rem;
+}
+
+.sp-mini-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  text-align: left;
+}
+
+.sp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sp-dot.live { background: #ef4444; }
+.sp-dot.upcoming { background: #e8c97a; }
+.sp-dot.replay { background: #555; }
+
+.sp-mini-name {
+  flex: 1;
+  font-size: 0.82rem;
+  color: #ccc;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sp-mini-cat { font-size: 1rem; flex-shrink: 0; }
+
+.sp-refresh-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: #ccc;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Feed view (stream list) */
+.sp-feed-shell {
+  padding-top: 0;
+}
+
+.sp-cat-strip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 0.75rem 1rem;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sp-cat-strip::-webkit-scrollbar { display: none; }
+
+.sp-live-pill {
+  flex-shrink: 0;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 20px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.sp-cat-chip {
+  flex-shrink: 0;
+  padding: 0.3rem 0.7rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  color: rgba(255,255,255,0.55);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: all 0.12s;
+}
+
+.sp-cat-chip.active {
+  background: rgba(232,201,122,0.15);
+  border-color: rgba(232,201,122,0.5);
+  color: #e8c97a;
+}
+
+.sp-feed {
+  padding: 0.5rem 0;
+}
+
+.sp-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 0.1s;
+}
+
+.sp-card:active { background: rgba(255,255,255,0.04); }
+
+.sp-card-poster {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.07);
+}
+
+.sp-card-poster--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+}
+
+.sp-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-card-badges {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.2rem;
+  flex-wrap: wrap;
+}
+
+.sp-badge-live {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.05em;
+}
+
+.sp-badge-replay {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #666;
+  letter-spacing: 0.05em;
+}
+
+.sp-badge-upcoming {
+  font-size: 0.7rem;
+  color: #e8c97a;
+  font-weight: 600;
+}
+
+.sp-card-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin: 0 0 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-card-cat {
+  font-size: 0.72rem;
+  color: #666;
+  margin: 0;
+}
+
+.sp-card-arrow {
+  font-size: 1.2rem;
+  color: #444;
+  flex-shrink: 0;
+}
+
+.sp-feed-loading {
+  padding: 0.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sp-skeleton-card {
+  height: 72px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.sp-feed-error,
+.sp-feed-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: #555;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+/* Landscape: sports player side by side */
+@media (max-width: 900px) and (orientation: landscape) {
+  .sp-shell { flex-direction: row; }
+  .sp-header { display: none; }
+  .sp-video-wrap { flex: 1; height: 100dvh; }
+  .sp-player-info {
+    width: 240px;
+    flex: none;
+    height: 100dvh;
+    border-left: 1px solid rgba(255,255,255,0.07);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE PROFILE  (portrait)
+   Compact, Instagram-style stat row instead of stacked cards.
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Profile header: avatar + info stacked vertically, centered */
+  .profile-header {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 1.25rem 1rem 1rem !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Stat cards: horizontal row instead of wrapping column */
+  .profile-stat-cards {
+    flex-wrap: nowrap !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    margin-top: 0.5rem !important;
+  }
+
+  .profile-stat-card {
+    padding: 0.5rem 0.75rem !important;
+    min-width: 60px !important;
+    flex: 1;
+    max-width: 90px;
+  }
+
+  .profile-stat-num {
+    font-size: 1.15rem !important;
+  }
+
+  .profile-stat-label {
+    font-size: 0.58rem !important;
+  }
+
+  /* Profile actions (follow / edit buttons) */
+  .profile-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .profile-actions .btn-primary,
+  .profile-actions .btn-ghost {
+    width: auto !important;
+    flex: 1;
+    max-width: 160px;
+    padding: 0.55rem 1rem !important;
+    font-size: 0.85rem !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    TOUCH DEVICE ENHANCEMENTS
    Applied regardless of screen size for any touch-capable device.
 ═══════════════════════════════════════════════════════════════ */

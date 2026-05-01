@@ -6,6 +6,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
+import GlobalSearch from './components/GlobalSearch';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -49,6 +50,9 @@ function AppShell({ children }) {
   return (
     <>
       {children}
+      {/* GlobalSearch mounted at root level on mobile so its overlay
+          isn't trapped inside a display:none navbar container */}
+      {isMobile && user && <GlobalSearch />}
       {showBottomNav && <BottomNav />}
     </>
   );
