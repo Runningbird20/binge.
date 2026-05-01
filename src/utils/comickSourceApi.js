@@ -38,9 +38,26 @@ async function proxyGet(path, signal) {
   return res.json();
 }
 
+// Curated fallback shown if the API is unreachable
+const FALLBACK_SOURCES = [
+  { id: 'mangakatana', name: 'MangaKatana' },
+  { id: 'weebcentral', name: 'WeebCentral' },
+  { id: 'asurascan',   name: 'AsuraScan'   },
+  { id: 'flamecomics', name: 'FlameComics' },
+  { id: 'webtoon',     name: 'WEBTOON'     },
+  { id: 'mangapark',   name: 'MangaPark'   },
+  { id: 'bato',        name: 'Bato'        },
+];
+
 export async function getSources(signal) {
-  const data = await proxyGet('/api/sources', signal);
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await proxyGet('/api/sources', signal);
+    // API returns { sources: [...] } — not a plain array
+    const list = Array.isArray(data) ? data : (data?.sources || []);
+    return list.length ? list : FALLBACK_SOURCES;
+  } catch {
+    return FALLBACK_SOURCES;
+  }
 }
 
 // Returns SearchResult[]: { id, title, url, coverImage?, latestChapter, lastUpdated, rating?, followers? }
