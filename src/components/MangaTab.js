@@ -27,7 +27,7 @@ function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
       .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [chapter?.id, dataSaver]);
+  }, [chapter, dataSaver]);
 
   useEffect(() => {
     function onKey(e) {
