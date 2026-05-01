@@ -1,77 +1,65 @@
 const express = require('express');
 const router  = express.Router();
-const https   = require('https');
 
-const API_HOST = 'comick-source-api.notaspider.dev';
+const API = 'https://comick-source-api.notaspider.dev';
 
-function upstreamRequest({ method, path, body }, res) {
-  const bodyStr = body ? JSON.stringify(body) : null;
+async function upstream(path, { method = 'GET', body } = {}) {
   const opts = {
-    hostname: API_HOST,
-    port: 443,
-    path,
-    method: method || 'GET',
-    headers: {
-      'Accept':     'application/json',
-      'User-Agent': 'BingeApp/1.0',
-      ...(bodyStr ? {
-        'Content-Type':   'application/json',
-        'Content-Length': Buffer.byteLength(bodyStr),
-      } : {}),
-    },
+    method,
+    headers: { 'Accept': 'application/json', 'User-Agent': 'BingeApp/1.0' },
+    signal: AbortSignal.timeout(22000),
   };
-
-  const req = https.request(opts, upstream => {
-    if (upstream.statusCode === 429) {
-      return res.status(429).json({ error: 'Rate limited — try again shortly.' });
-    }
-    if (upstream.statusCode >= 400) {
-      return res.status(upstream.statusCode).json({ error: `Upstream ${upstream.statusCode}` });
-    }
-
-    // Collect body then forward — avoids gzip/encoding pipe issues
-    const chunks = [];
-    upstream.on('data', c => chunks.push(c));
-    upstream.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try {
-        const parsed = JSON.parse(raw);
-        res.setHeader('Cache-Control', 'public, max-age=60');
-        res.json(parsed);
-      } catch {
-        res.status(502).json({ error: 'Invalid upstream JSON' });
-      }
-    });
-    upstream.on('error', err => {
-      if (!res.headersSent) res.status(502).json({ error: err.message });
-    });
-  });
-
-  req.on('error',   err => { if (!res.headersSent) res.status(502).json({ error: err.message }); });
-  req.on('timeout', ()  => { req.destroy(); if (!res.headersSent) res.status(504).json({ error: 'Upstream timeout' }); });
-  req.setTimeout(25000);
-
-  if (bodyStr) req.write(bodyStr);
-  req.end();
+  if (body !== undefined) {
+    opts.body = JSON.stringify(body);
+    opts.headers['Content-Type'] = 'application/json';
+  }
+  const res = await fetch(`${API}${path}`, opts);
+  if (!res.ok) {
+    const err = new Error(`Upstream ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json(); // native fetch decompresses gzip/brotli automatically
 }
 
-// GET /api/manga/sources
-router.get('/sources', (req, res) => {
-  upstreamRequest({ method: 'GET', path: '/api/sources' }, res);
+router.get('/sources', async (req, res) => {
+  try {
+    const data = await upstream('/api/sources');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
 });
 
-// POST /api/manga/search   body: { query, source }
-router.post('/search', (req, res) => {
-  const { query = '', source = 'all' } = req.body || {};
+router.post('/search', async (req, res) => {
+  const { query = '', source = 'mangakatana' } = req.body || {};
   if (!query.trim()) return res.json({ results: [] });
-  upstreamRequest({ method: 'POST', path: '/api/search', body: { query: query.slice(0, 200), source } }, res);
+  try {
+    const data = await upstream('/api/search', {
+      method: 'POST',
+      body: { query: query.slice(0, 200), source },
+    });
+    res.setHeader('Cache-Control', 'public, max-age=30');
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
 });
 
-// POST /api/manga/chapters   body: { url, source? }
-router.post('/chapters', (req, res) => {
+router.post('/chapters', async (req, res) => {
   const { url, source } = req.body || {};
   if (!url) return res.status(400).json({ error: 'url required' });
-  upstreamRequest({ method: 'POST', path: '/api/chapters', body: { url, source } }, res);
+  try {
+    const data = await upstream('/api/chapters', {
+      method: 'POST',
+      body: { url, source },
+    });
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json(data);
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
 });
 
 module.exports = router;
