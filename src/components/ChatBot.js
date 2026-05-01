@@ -490,6 +490,13 @@ export default function ChatBot() {
     runStatusCheck();
   }, [isOpen, apiStatus, runStatusCheck]);
 
+  // Allow the mobile bottom nav AI tab to open the chatbot
+  useEffect(() => {
+    const handler = () => { setIsOpen(true); setIsMinimized(false); };
+    window.addEventListener('binge:openAI', handler);
+    return () => window.removeEventListener('binge:openAI', handler);
+  }, []);
+
   async function checkStatus() {
     try {
       await checkChatbotStatus();

@@ -21,6 +21,16 @@ export default function GlobalSearch() {
   const navigate  = useNavigate();
   const debounced = useDebounce(query, 280);
 
+  // Mobile bottom nav search tap opens the overlay
+  useEffect(() => {
+    const handler = () => {
+      setOpen(true);
+      setTimeout(() => inputRef.current?.focus(), 80);
+    };
+    window.addEventListener('binge:openSearch', handler);
+    return () => window.removeEventListener('binge:openSearch', handler);
+  }, []);
+
   // Keyboard shortcuts: Cmd+K / Ctrl+K, or bare S key when no input is focused
   useEffect(() => {
     function handleKey(e) {

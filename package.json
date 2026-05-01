@@ -6,6 +6,7 @@
     "node": "24.x"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.103.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -19,6 +20,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
+    "framer-motion": "^12.38.0",
     "helmet": "^8.1.0",
     "hls.js": "^1.6.16",
     "jsonwebtoken": "^9.0.3",
@@ -30,6 +32,7 @@
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",
     "react-scripts": "5.0.1",
+    "sonner": "^2.0.7",
     "supabase": "^2.90.0",
     "web-vitals": "^2.1.4"
   },
@@ -39,7 +42,7 @@
     "start:client": "react-scripts start",
     "server": "node server/index.js",
     "dev": "npm start",
-    "import:goodreads": "node goodreads_scraper.js --pages 5",
+    "import:goodreads": "node goodreads_scraper.js",
     "import:goodreads:quick": "node goodreads_scraper.js --pages 3 --quick",
     "import:goodreads:full": "node goodreads_scraper.js --pages 10",
     "import:goodreads:resume": "node goodreads_scraper.js --pages 5 --resume",
@@ -77,8 +80,7 @@
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
-    "clean:adult": "node clean_adult_content.js",
-    "import:goodreads": "node goodreads_scraper.js"
+    "clean:adult": "node clean_adult_content.js"
   },
   "eslintConfig": {
     "extends": [
