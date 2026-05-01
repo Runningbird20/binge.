@@ -645,6 +645,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-orientation-lock allow-downloads"
               title={`Watch ${item.title}`}
             />
           ) : (
