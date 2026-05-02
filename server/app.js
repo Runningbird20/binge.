@@ -23,14 +23,13 @@ app.use(helmet({
       'frame-src': [
         "'self'",
         // Video providers
-        'https://vidsrc-embed.ru',
-        'https://vidsrc-embed.su',
+        'https://vsembed.ru',
+        'https://vsembed.su',
         'https://www.2embed.stream',
         'https://2embed.stream',
         'https://autoembed.co',
         'https://vidlink.pro',
         'https://multiembed.mov',
-        'https://vsrc.su',
         // Manga / comics
         'https://mangakatana.com',
         'https://*.mangakatana.com',

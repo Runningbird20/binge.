@@ -13,7 +13,6 @@ const PROVIDERS = [
   { id: '2embed',          label: '2Embed ★ anime'   },
   { id: 'autoembed',       label: 'AutoEmbed ★ anime' },
   { id: 'superembed',      label: 'SuperEmbed'        },
-  { id: 'vsrc-su',         label: 'Vidsrc 3'          },
 ];
 
 const REACTIONS = ['😂','🔥','😮','❤️','👏','😭','🤯','👀','💀','🎉'];
@@ -126,14 +125,14 @@ function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
 
   switch (provider) {
     case 'vidsrc-embed-ru': {
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vidsrc-embed.ru');
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
       url.searchParams.set('tmdb', id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
+      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); url.searchParams.set('autonext', '1'); }
       url.searchParams.set('autoplay', '1');
       return url.toString();
     }
     case 'vidsrc2': {
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vidsrc-embed.su');
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.su');
       url.searchParams.set('tmdb', id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
       url.searchParams.set('autoplay', '1');
@@ -157,13 +156,6 @@ function buildEmbedUrl(tmdbId, mediaType, provider, season, episode) {
       return isTV
         ? `https://multiembed.mov/?video_id=${id.value}&tmdb=1&s=${season}&e=${episode}`
         : `https://multiembed.mov/?video_id=${id.value}&tmdb=1`;
-    case 'vsrc-su': {
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsrc.su');
-      url.searchParams.set('tmdb', id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
-      return url.toString();
-    }
     default: return null;
   }
 }

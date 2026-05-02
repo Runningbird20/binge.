@@ -14,9 +14,8 @@ const PROVIDERS = [
     id: 'vidsrc-embed-ru',
     label: 'Vidsrc',
     buildUrl(id, mediaType, season, episode) {
-      const base = 'https://vidsrc-embed.ru';
       const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', base);
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
       url.searchParams.set(id.kind, id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); url.searchParams.set('autonext', '1'); }
       url.searchParams.set('autoplay', '1');
@@ -28,7 +27,7 @@ const PROVIDERS = [
     label: 'Vidsrc 2',
     buildUrl(id, mediaType, season, episode) {
       const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vidsrc-embed.su');
+      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.su');
       url.searchParams.set(id.kind, id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
       url.searchParams.set('autoplay', '1');
@@ -83,19 +82,6 @@ const PROVIDERS = [
       return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}`;
     },
   },
-  {
-    id: 'vsrc-su',
-    label: 'Vidsrc 3',
-    buildUrl(id, mediaType, season, episode) {
-      const base = 'https://vsrc.su';
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', base);
-      url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
-      return url.toString();
-    },
-  },
 ];
 
 const AUTO_WATCH_SECONDS = 5 * 60;
@@ -137,7 +123,7 @@ function getEmbeddedId(item) {
 }
 
 function buildUrl(providerId, externalId, mediaType, season, episode) {
-  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
+  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[4];
   if (!provider || !externalId) return null;
   try {
     return provider.buildUrl(externalId, mediaType, season, episode);
@@ -148,7 +134,7 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
   const { isMobile } = useDeviceType();
-  const [provider, setProvider] = useState(PROVIDERS[0].id);
+  const [provider, setProvider] = useState(PROVIDERS[4].id);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
@@ -176,7 +162,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const canTrackEpisodes = Boolean(item?.id);
 
   useEffect(() => {
-    setProvider(PROVIDERS[0].id);
+    setProvider(PROVIDERS[4].id);
     setSeason(1);
     setEpisode(1);
     setSeasonEpisodeCounts({});
