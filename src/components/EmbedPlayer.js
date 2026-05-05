@@ -399,9 +399,9 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       // requestFullscreen() doesn't work on iframes in iOS Safari.
       try {
         if (isLandscape) {
-          screen.orientation?.unlock?.();
+          window.screen.orientation?.unlock?.();
         } else {
-          screen.orientation?.lock?.('landscape').catch(() => {});
+          window.screen.orientation?.lock?.('landscape').catch(() => {});
         }
       } catch {}
       return;
