@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 
 function getState() {
   const w = window.innerWidth;
+  const h = window.innerHeight;
+  // Use the short side so isMobile stays true when a phone rotates to landscape
+  const short = Math.min(w, h);
   return {
-    isMobile:   w <= 768,
-    isTablet:   w > 768 && w <= 1024,
-    isDesktop:  w > 1024,
-    isPortrait: window.innerHeight >= window.innerWidth,
-    isLandscape: window.innerWidth > window.innerHeight,
+    isMobile:    short <= 768,
+    isTablet:    short > 768 && short <= 1024,
+    isDesktop:   short > 1024,
+    isPortrait:  h >= w,
+    isLandscape: w > h,
     width: w,
   };
 }
