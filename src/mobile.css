@@ -1114,6 +1114,23 @@
   white-space: nowrap;
 }
 
+/* Episode/source selector panel that slides up from the bottom of the video in landscape */
+.mp-ls-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9;
+  background: rgba(8,8,8,0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255,255,255,0.09);
+  max-height: 55%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* ═══════════════════════════════════════════════════════════════
    LANDSCAPE ON MOBILE
    Handles devices that flip to landscape (phones in landscape).
