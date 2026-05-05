@@ -929,7 +929,7 @@
   flex-shrink: 0;
   height: 45dvh;
   background: #000;
-  position: relative;
+  position: relative; /* needed for mp-ls-overlay absolute positioning */
 }
 
 .mp-iframe {
@@ -1074,24 +1074,53 @@
   margin: 0.25rem 0;
 }
 
-/* Landscape: side-by-side */
-@media (max-width: 900px) and (orientation: landscape) {
-  .mp-shell { flex-direction: row; }
-  .mp-header { display: none; }
-  .mp-video-wrap { flex: 1; height: 100dvh; }
-  .mp-controls {
-    width: 220px;
-    flex: none;
-    height: 100dvh;
-    border-left: 1px solid rgba(255,255,255,0.07);
-  }
+/* ── Landscape full-screen mode (driven by JS mp-shell--ls class) ── */
+
+/* In landscape, hide header and controls; video expands to fill the shell */
+.mp-shell--ls .mp-header  { display: none; }
+.mp-shell--ls .mp-controls { display: none; }
+.mp-shell--ls .mp-video-wrap {
+  flex: 1;
+  height: 0;          /* override the fixed 45dvh; flex:1 takes over */
+  min-height: 0;
+  /* Pad away from notch (left in landscape) and home bar (bottom) */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Floating close button inside the video wrap, only visible in landscape */
+.mp-ls-overlay {
+  display: none;
+}
+.mp-shell--ls .mp-ls-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 8px);
+  right: max(env(safe-area-inset-right, 0px), 8px);
+  z-index: 10;
+  /* semi-transparent backing so it's visible over bright video */
+  background: rgba(0,0,0,0.45);
+  border-radius: 24px;
+  padding: 4px 4px 4px 10px;
+}
+
+.mp-ls-ep-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.8);
+  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════════════
    LANDSCAPE ON MOBILE
    Handles devices that flip to landscape (phones in landscape).
+   Use max-height: 600px — more reliable than max-width for phones,
+   since all phones have a portrait width (= landscape height) < 600px.
 ═══════════════════════════════════════════════════════════════ */
-@media (max-width: 900px) and (orientation: landscape) {
+@media (orientation: landscape) and (max-height: 600px) {
   /* Hide bottom nav in landscape to reclaim vertical space */
   .bottom-nav {
     display: none;
@@ -1103,7 +1132,7 @@
     padding-bottom: 0;
   }
 
-  /* Player goes full-screen in landscape */
+  /* Desktop player goes full-height in landscape */
   .player-modal {
     height: 100dvh !important;
     max-height: 100dvh !important;
@@ -1460,16 +1489,23 @@
   text-align: center;
 }
 
-/* Landscape: sports player side by side */
-@media (max-width: 900px) and (orientation: landscape) {
+/* Landscape: sports player side by side.
+   max-height: 600px targets phones in landscape (portrait width < 600px on all phones). */
+@media (orientation: landscape) and (max-height: 600px) {
   .sp-shell { flex-direction: row; }
   .sp-header { display: none; }
-  .sp-video-wrap { flex: 1; height: 100dvh; }
+  .sp-video-wrap {
+    flex: 1;
+    height: 100dvh;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
   .sp-player-info {
     width: 240px;
     flex: none;
     height: 100dvh;
     border-left: 1px solid rgba(255,255,255,0.07);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 }
 

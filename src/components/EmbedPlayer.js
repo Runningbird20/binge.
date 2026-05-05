@@ -133,7 +133,7 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
 }
 
 export default function EmbedPlayer({ item, mediaType, onClose }) {
-  const { isMobile } = useDeviceType();
+  const { isMobile, isLandscape } = useDeviceType();
   const [provider, setProvider] = useState(PROVIDERS[4].id);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
@@ -394,6 +394,18 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   }, [item?.id, isTV]);
 
   function toggleFullscreen() {
+    if (isMobile) {
+      // On mobile, use Screen Orientation API to rotate to landscape.
+      // requestFullscreen() doesn't work on iframes in iOS Safari.
+      try {
+        if (isLandscape) {
+          screen.orientation?.unlock?.();
+        } else {
+          screen.orientation?.lock?.('landscape').catch(() => {});
+        }
+      } catch {}
+      return;
+    }
     if (!document.fullscreenElement) {
       const element = iframeRef.current || modalRef.current;
       element?.requestFullscreen().catch(() => {
@@ -401,7 +413,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       });
       return;
     }
-
     document.exitFullscreen();
   }
 
@@ -461,22 +472,22 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
   if (isMobile) {
     return (
-      <div className="mp-shell">
-        {/* Header */}
+      <div className={`mp-shell${isLandscape ? ' mp-shell--ls' : ''}`}>
+        {/* Header — hidden in landscape via CSS */}
         <div className="mp-header">
           <div className="mp-title">
             <span className="mp-title-text">{item.title}</span>
             {isTV && <span className="mp-title-ep">S{season} E{episode}</span>}
           </div>
           <div className="mp-header-btns">
-            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Fullscreen">
-              {isFullscreen ? '↙' : '↗'}
+            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape">
+              ⤢
             </button>
             <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close">✕</button>
           </div>
         </div>
 
-        {/* Video */}
+        {/* Video — expands to fill shell in landscape */}
         <div className="mp-video-wrap" ref={modalRef}>
           {embedUrl ? (
             <iframe
@@ -494,6 +505,11 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               <p>{lookupState === 'loading' ? 'Preparing stream…' : 'Stream unavailable.'}</p>
             </div>
           )}
+          {/* Landscape overlay — close button in corner, only visible in landscape */}
+          <div className="mp-ls-overlay">
+            {isTV && <span className="mp-ls-ep-badge">S{season} E{episode}</span>}
+            <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close">✕</button>
+          </div>
         </div>
 
         {/* Controls */}
