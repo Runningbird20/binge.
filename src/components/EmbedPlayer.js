@@ -147,6 +147,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const [watched, setWatched] = useState(new Set());
   const [markingWatched, setMarkingWatched] = useState(false);
   const [realSeasonCount, setRealSeasonCount] = useState(null);
+  const [lsControlsOpen, setLsControlsOpen] = useState(false);
 
   const modalRef = useRef(null);
   const iframeRef = useRef(null);
@@ -179,6 +180,10 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  useEffect(() => {
+    if (!isLandscape) setLsControlsOpen(false);
+  }, [isLandscape]);
 
   // Keyboard shortcuts — refs avoid stale closures without re-binding on every render
   const kbSeason = useRef(season);
@@ -505,11 +510,86 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               <p>{lookupState === 'loading' ? 'Preparing stream…' : 'Stream unavailable.'}</p>
             </div>
           )}
-          {/* Landscape overlay — close button in corner, only visible in landscape */}
+          {/* Landscape overlay — top-right corner buttons, hidden in portrait via CSS */}
           <div className="mp-ls-overlay">
+            {isTV && (
+              <button
+                className="mp-btn"
+                onClick={() => setLsControlsOpen(v => !v)}
+                type="button"
+                title="Episodes"
+              >
+                {lsControlsOpen ? '✕' : '⋮'}
+              </button>
+            )}
             {isTV && <span className="mp-ls-ep-badge">S{season} E{episode}</span>}
             <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close">✕</button>
           </div>
+
+          {/* Landscape episode/source picker — slides up from bottom of video area */}
+          {isLandscape && lsControlsOpen && (
+            <div className="mp-ls-controls">
+              {isTV && (
+                <>
+                  <div className="mp-row">
+                    <span className="mp-row-label">Season</span>
+                    <div className="mp-chips">
+                      {Array.from({ length: totalSeasons }, (_, i) => i + 1).map((s) => {
+                        const wc = Array.from(watched).filter(k => k.startsWith(`${s}:`)).length;
+                        const tc = seasonEpisodeCounts[s];
+                        return (
+                          <button
+                            key={s}
+                            className={`mp-chip ${season === s ? 'active' : ''} ${tc && wc === tc ? 'mp-chip-done' : wc > 0 ? 'mp-chip-partial' : ''}`}
+                            onClick={() => { setSeason(s); setEpisode(1); }}
+                            type="button"
+                          >{s}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mp-row">
+                    <span className="mp-row-label">
+                      Episode{episodeCount !== undefined ? ` · ${episodeCount} total` : ''}
+                    </span>
+                    <div className="mp-chips">
+                      {episodeCount === undefined ? (
+                        <span className="mp-loading">Loading episodes…</span>
+                      ) : (
+                        Array.from({ length: episodeCount }, (_, i) => i + 1).map((ep) => {
+                          const isWatched = watched.has(`${season}:${ep}`);
+                          const isCurrent = episode === ep;
+                          return (
+                            <button
+                              key={ep}
+                              className={`mp-chip ${isCurrent ? 'active' : ''} ${isWatched && !isCurrent ? 'mp-chip-watched' : ''}`}
+                              onClick={() => { setEpisode(ep); setLsControlsOpen(false); }}
+                              type="button"
+                            >{ep}</button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="mp-row">
+                <span className="mp-row-label">Source</span>
+                <div className="mp-chips">
+                  {PROVIDERS.map((p) => (
+                    <button
+                      key={p.id}
+                      className={`mp-chip ${provider === p.id ? 'active' : ''}`}
+                      onClick={() => setProvider(p.id)}
+                      type="button"
+                    >{p.label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Controls */}
