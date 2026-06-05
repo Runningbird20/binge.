@@ -5,6 +5,7 @@ import {
   searchArchive,
   annasArchiveUrl,
 } from '../utils/gutenbergApi';
+import { EMBED_SANDBOX } from '../utils/embedSecurity';
 
 // ─── BookReader (iframe overlay) ─────────────────────────────
 function BookReader({ book, onClose }) {
@@ -85,6 +86,7 @@ function BookReader({ book, onClose }) {
             allowFullScreen
             allow="fullscreen"
             referrerPolicy="no-referrer-when-downgrade"
+            sandbox={EMBED_SANDBOX}
             onError={() => setFrameBlocked(true)}
           />
         )}

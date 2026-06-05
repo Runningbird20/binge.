@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
+import { EMBED_SANDBOX } from '../utils/embedSecurity';
 
 // ── Constants ─────────────────────────────────────────────────
 const PROVIDERS = [
@@ -740,6 +741,7 @@ function RoomView({ roomId }) {
               allowFullScreen
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
               referrerPolicy="no-referrer"
+              sandbox={EMBED_SANDBOX}
               title="Watch Together"
               onLoad={() => {
                 playerReadyRef.current = false;
