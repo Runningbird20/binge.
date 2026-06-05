@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 import useDeviceType from '../hooks/useDeviceType';
+import { EMBED_SANDBOX } from '../utils/embedSecurity';
 
 const POLL_MS = 60_000;
 const PPV_API = 'https://api.ppv.to/api/streams';
@@ -202,6 +203,7 @@ export default function Sports() {
                 allowFullScreen
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                 referrerPolicy="no-referrer-when-downgrade"
+                sandbox={EMBED_SANDBOX}
                 title={selected.name}
               />
             ) : (
@@ -460,6 +462,7 @@ export default function Sports() {
                     allowFullScreen
                     allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
                     referrerPolicy="no-referrer-when-downgrade"
+                    sandbox={EMBED_SANDBOX}
                     scrolling="no"
                     title={selected.name}
                   />

@@ -7,6 +7,7 @@ import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
 import GlobalSearch from './components/GlobalSearch';
+import AdBlocker from './components/AdBlocker';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -81,6 +82,7 @@ export default function App() {
         <BrowserRouter>
           <Suspense fallback={<AppRouteFallback />}>
             <AppShell>
+              <AdBlocker />
               <Routes>
                 <Route path="/"          element={<Landing />} />
                 <Route path="/login"     element={<Login />} />
