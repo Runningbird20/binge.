@@ -43,9 +43,10 @@ app.use(helmet({
         'https://*.bato.to',
         // Books
         'https://archive.org',
-        // Embed proxy (self-hosted)
-        "'self'",
+        // Sports streams and any other HTTPS embeds (CDN domains vary per provider)
+        'https:',
       ],
+      'connect-src': ["'self'", 'https://api.themoviedb.org'],
       // Scripts: self + inline needed for React, plus allow data: URIs
       'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       // Upgrade insecure requests where possible
@@ -109,7 +110,10 @@ app.use('/api/forum', require('./routes/forum'));
 app.use('/api/dev-lab', require('./routes/devLab'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/manga',  require('./routes/manga'));
+app.use('/api/manga',       require('./routes/manga'));
+app.use('/api/weebcentral', require('./routes/weebcentral'));
+app.use('/api/bato',        require('./routes/bato'));
+app.use('/api/books',       require('./routes/books'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/watchroom', require('./routes/watchroom'));
 app.use('/api/profile', require('./routes/profile'));
