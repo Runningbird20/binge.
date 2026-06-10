@@ -1263,6 +1263,28 @@
   color: #e8c97a;
 }
 
+.sp-provider-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.sp-provider-btn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #aaa;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.sp-provider-btn.active {
+  background: #e8c97a;
+  border-color: #e8c97a;
+  color: #000;
+  font-weight: 600;
+}
+
 .sp-section-label {
   font-size: 0.62rem;
   font-weight: 700;

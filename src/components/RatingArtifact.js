@@ -23,12 +23,20 @@ export const RATING_CATEGORIES = {
     { key: 'pacing',        label: 'Pacing',       max: 5 },
     { key: 'resonance',     label: 'Resonance',    max: 5 },
   ],
+  manga: [
+    { key: 'art',           label: 'Art',          max: 5 },
+    { key: 'story',         label: 'Story',        max: 5 },
+    { key: 'characters',    label: 'Characters',   max: 5 },
+    { key: 'pacing',        label: 'Pacing',       max: 5 },
+    { key: 'enjoyment',     label: 'Enjoyment',    max: 5 },
+  ],
 };
 
 const PALETTE = {
   movie:   { primary: '#e8c97a', fill: 'rgba(232,201,122,0.20)', glow: 'rgba(232,201,122,0.18)', grid: 'rgba(232,201,122,0.13)' },
   tv_show: { primary: '#a07de8', fill: 'rgba(160,125,232,0.20)', glow: 'rgba(160,125,232,0.18)', grid: 'rgba(160,125,232,0.13)' },
   book:    { primary: '#5db88a', fill: 'rgba(93,184,138,0.20)',  glow: 'rgba(93,184,138,0.18)',  grid: 'rgba(93,184,138,0.13)'  },
+  manga:   { primary: '#e85a7a', fill: 'rgba(232,90,122,0.20)',  glow: 'rgba(232,90,122,0.18)',  grid: 'rgba(232,90,122,0.13)'  },
 };
 
 export function computeNormalizedScore(mediaType, scores) {

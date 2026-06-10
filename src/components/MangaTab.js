@@ -1,25 +1,57 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { searchManga, getPopular, getMangaChapters, getChapterPages } from '../utils/mangadexApi';
+import { SOURCES, searchBySource, popularBySource, chaptersBySource, pagesBySource } from '../utils/mangaSources';
+import RatingInput from './RatingInput';
+import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 
-// ─── MangaReader (image-based, vertical scroll) ───────────────
-function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
-  const chapter  = chapters[index];
-  const hasPrev  = index > 0;
-  const hasNext  = index < chapters.length - 1;
+// ─── Manga localStorage storage ───────────────────────────────
+const LS_LIST    = 'manga_reading_list';
+const LS_RATINGS = 'manga_ratings';
 
-  const [pages, setPages]       = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState('');
+function getLS(key)     { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch { return {}; } }
+function setLS(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+
+export function getMangaListItem(id)        { return getLS(LS_LIST)[id]    || null; }
+export function getMangaRating(id)          { return getLS(LS_RATINGS)[id] || null; }
+
+function upsertMangaListItem(manga, status) {
+  const list = getLS(LS_LIST);
+  list[manga.id] = { id: manga.id, title: manga.title, cover: manga.cover, status, savedAt: Date.now() };
+  setLS(LS_LIST, list);
+  return list[manga.id];
+}
+function removeMangaListItem(id) { const l = getLS(LS_LIST); delete l[id]; setLS(LS_LIST, l); }
+function saveMangaRating(id, scores) { const r = getLS(LS_RATINGS); r[id] = scores; setLS(LS_RATINGS, r); return scores; }
+
+const MANGA_STATUSES = [
+  { value: 'plan_to_read',  label: 'Plan to Read' },
+  { value: 'reading',       label: 'Currently Reading' },
+  { value: 'completed',     label: 'Completed' },
+  { value: 'on_hold',       label: 'On Hold' },
+  { value: 'dropped',       label: 'Dropped' },
+];
+
+// ─── MangaReader ──────────────────────────────────────────────
+function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }) {
+  const chapter = chapters[index];
+  const hasPrev = index > 0;
+  const hasNext = index < chapters.length - 1;
+
+  const [pages, setPages]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
   const [dataSaver, setDataSaver] = useState(false);
   const topRef = useRef(null);
+
+  const isExternal = Boolean(chapter?.externalUrl);
 
   useEffect(() => {
     if (!chapter) return;
     setLoading(true);
     setError('');
     setPages([]);
+    if (isExternal) { setLoading(false); return; }
     const ctrl = new AbortController();
-    getChapterPages(chapter.id, ctrl.signal)
+    pagesBySource(source, chapter.id, ctrl.signal)
       .then(({ pages: p, dataSaverPages: dp }) => {
         setPages(dataSaver ? dp : p);
         topRef.current?.scrollTo({ top: 0 });
@@ -27,7 +59,7 @@ function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
       .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [chapter, dataSaver]);
+  }, [chapter, dataSaver, isExternal, source]);
 
   useEffect(() => {
     function onKey(e) {
@@ -45,6 +77,11 @@ function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
     ? `Chapter ${chapter.number}${chapter.title ? ' — ' + chapter.title : ''}`
     : chapter?.title || 'Chapter';
 
+  let hostname = '';
+  if (isExternal) {
+    try { hostname = new URL(chapter.externalUrl).hostname.replace('www.', ''); } catch {}
+  }
+
   return (
     <div className="manga-reader-overlay">
       <div className="manga-reader-header">
@@ -55,65 +92,107 @@ function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
         </div>
         <div className="manga-reader-controls">
           <button className="manga-reader-nav" onClick={onPrev} disabled={!hasPrev}>‹ Prev</button>
-          <button
-            className={`manga-reader-nav${dataSaver ? ' manga-reader-nav--active' : ''}`}
-            onClick={() => setDataSaver(v => !v)}
-            title="Toggle data saver (lower quality)"
-          >
-            {dataSaver ? 'HQ' : 'LQ'}
-          </button>
+          {!isExternal && (
+            <button
+              className={`manga-reader-nav${dataSaver ? ' manga-reader-nav--active' : ''}`}
+              onClick={() => setDataSaver(v => !v)}
+            >
+              {dataSaver ? 'HQ' : 'LQ'}
+            </button>
+          )}
           <button className="manga-reader-nav" onClick={onNext} disabled={!hasNext}>Next ›</button>
         </div>
       </div>
 
-      <div className="manga-reader-body vertical" ref={topRef}>
-        {loading && (
-          <div className="manga-reader-loading">
-            <div className="manga-reader-spinner" />
-            <p>Loading pages…</p>
+      {/* External chapter: full-height iframe embed */}
+      {isExternal ? (
+        <div className="manga-reader-external">
+          <div className="manga-external-banner">
+            <span>Hosted by <strong>{hostname}</strong></span>
+            <a href={chapter.externalUrl} target="_blank" rel="noopener noreferrer"
+              className="manga-external-newtab">
+              Open in new tab ↗
+            </a>
           </div>
-        )}
-        {error && (
-          <div className="manga-reader-loading">
-            <p style={{ fontSize: '2rem', margin: 0 }}>⚠️</p>
-            <p style={{ color: '#f87171' }}>{error}</p>
-          </div>
-        )}
-        {!loading && !error && pages.map((url, i) => (
-          <img
-            key={url}
-            src={url}
-            alt={`Page ${i + 1}`}
-            className="manga-page-img"
-            loading={i < 3 ? 'eager' : 'lazy'}
-            decoding="async"
-            referrerPolicy="no-referrer"
+          <iframe
+            src={chapter.externalUrl}
+            className="manga-external-iframe"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-modals"
+            allow="fullscreen; autoplay"
+            title={chapterLabel}
           />
-        ))}
-      </div>
+        </div>
+      ) : (
+        /* MangaDex-hosted pages */
+        <div className="manga-reader-body vertical" ref={topRef}>
+          {loading && (
+            <div className="manga-reader-loading">
+              <div className="manga-reader-spinner" />
+              <p>Loading pages…</p>
+            </div>
+          )}
+          {error && (
+            <div className="manga-reader-loading">
+              <p style={{ fontSize: '2rem', margin: 0 }}>⚠️</p>
+              <p style={{ color: '#f87171' }}>{error}</p>
+            </div>
+          )}
+          {!loading && !error && pages.length === 0 && (
+            <div className="manga-reader-loading">
+              <p style={{ fontSize: '2rem', margin: 0 }}>📭</p>
+              <p style={{ color: '#888' }}>No pages available for this chapter.</p>
+            </div>
+          )}
+          {!loading && !error && pages.map((url, i) => (
+            <img
+              key={url}
+              src={url}
+              alt={`Page ${i + 1}`}
+              className="manga-page-img"
+              loading={i < 3 ? 'eager' : 'lazy'}
+              decoding="async"
+              referrerPolicy="no-referrer"
+            />
+          ))}
+        </div>
+      )}
 
       <div className="manga-reader-footer">
         <button onClick={onPrev} disabled={!hasPrev} className="manga-reader-nav">‹ Prev Chapter</button>
-        <span className="manga-reader-page-count">{pages.length} pages</span>
+        <span className="manga-reader-page-count">{pages.length > 0 ? `${pages.length} pages` : ''}</span>
         <button onClick={onNext} disabled={!hasNext} className="manga-reader-nav">Next Chapter ›</button>
       </div>
     </div>
   );
 }
 
-// ─── ChapterModal ─────────────────────────────────────────────
+// ─── ChapterModal (full book-style detail view) ───────────────
 function ChapterModal({ comic, onClose, onRead }) {
-  const [chapters, setChapters] = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState('');
-  const [showAll, setShowAll]   = useState(false);
+  const [chapters, setChapters]     = useState([]);
+  const [chapLoading, setChapLoading] = useState(true);
+  const [chapError, setChapError]   = useState('');
+  const [showAll, setShowAll]       = useState(false);
+
+  // Library state
+  const [saved, setSaved]           = useState(() => getMangaListItem(comic.id));
+  const [listOpen, setListOpen]     = useState(false);
+  const listRef                     = useRef(null);
+
+  // Rating state
+  const [draftScores, setDraftScores] = useState(() => getMangaRating(comic.id) || {});
+  const [isSaving, setIsSaving]     = useState(false);
+  const [ratingMsg, setRatingMsg]   = useState('');
+
+  const cats = RATING_CATEGORIES.manga;
+  const canSave = cats.every(cat => draftScores[cat.key] >= 1);
+  const displayScore = computeNormalizedScore('manga', draftScores);
 
   useEffect(() => {
     const ctrl = new AbortController();
     getMangaChapters(comic.id, ctrl.signal)
       .then(setChapters)
-      .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
-      .finally(() => setLoading(false));
+      .catch(e => { if (e.name !== 'AbortError') setChapError(e.message); })
+      .finally(() => setChapLoading(false));
     return () => ctrl.abort();
   }, [comic.id]);
 
@@ -125,59 +204,141 @@ function ChapterModal({ comic, onClose, onRead }) {
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [onClose]);
 
+  // Close library dropdown on outside click
+  useEffect(() => {
+    function onOut(e) { if (listRef.current && !listRef.current.contains(e.target)) setListOpen(false); }
+    document.addEventListener('mousedown', onOut);
+    return () => document.removeEventListener('mousedown', onOut);
+  }, []);
+
+  function selectStatus(status) {
+    const item = upsertMangaListItem(comic, status);
+    setSaved(item);
+    setListOpen(false);
+  }
+  function removeFromLibrary() { removeMangaListItem(comic.id); setSaved(null); setListOpen(false); }
+
+  function handleSaveRating() {
+    if (!canSave || isSaving) return;
+    setIsSaving(true);
+    saveMangaRating(comic.id, draftScores);
+    setRatingMsg('Rating saved!');
+    setIsSaving(false);
+    setTimeout(() => setRatingMsg(''), 2500);
+  }
+
   const displayed = showAll ? chapters : chapters.slice(0, 20);
 
   return (
     <div className="manga-detail-overlay" onClick={onClose}>
-      <div className="manga-detail-modal" onClick={e => e.stopPropagation()}>
+      <div className="manga-detail-modal manga-detail-modal--wide" onClick={e => e.stopPropagation()}>
         <button className="manga-detail-close" onClick={onClose}>✕</button>
 
+        {/* ── Top section: cover + info ── */}
         <div className="manga-detail-top">
           {comic.cover && (
             <div className="manga-detail-cover">
               <img src={comic.cover} alt={comic.title} referrerPolicy="no-referrer"
                 onError={e => { e.target.style.display = 'none'; }} />
+              {/* Rating artifact below cover */}
+              <div className="manga-detail-artifact">
+                <RatingArtifact mediaType="manga" scores={draftScores} size={160} />
+                {displayScore !== null && (
+                  <p className="manga-detail-score">{displayScore}<span>/10</span></p>
+                )}
+              </div>
             </div>
           )}
+
           <div className="manga-detail-info">
             <h2 className="manga-detail-title">{comic.title}</h2>
             {comic.author && <p className="manga-detail-author">{comic.author}</p>}
-            {comic.status && <p className="manga-detail-year" style={{ textTransform: 'capitalize' }}>{comic.status}</p>}
-            {comic.latestChapter && (
-              <p className="manga-detail-year">Latest: Ch. {comic.latestChapter}</p>
-            )}
+            <div className="manga-detail-chips">
+              {comic.status && <span className="manga-tag" style={{ textTransform: 'capitalize' }}>{comic.status}</span>}
+              {comic.year   && <span className="manga-tag">{comic.year}</span>}
+              {comic.contentRating && comic.contentRating !== 'safe' &&
+                <span className="manga-tag">{comic.contentRating}</span>}
+            </div>
             {comic.tags?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.5rem' }}>
-                {comic.tags.map(tag => (
-                  <span key={tag} className="manga-tag">{tag}</span>
-                ))}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.4rem' }}>
+                {comic.tags.map(tag => <span key={tag} className="manga-tag">{tag}</span>)}
               </div>
             )}
-            {chapters.length > 0 && (
-              <button className="btn-watch manga-read-first-btn"
-                onClick={() => onRead(chapters[0], chapters)}>
-                Read Chapter {chapters[0]?.number || '1'}
-              </button>
-            )}
+
+            {/* ── Rating input ── */}
+            <div className="manga-detail-rating-section">
+              <p className="manga-detail-section-label">Your Rating</p>
+              <RatingInput mediaType="manga" value={draftScores} onChange={setDraftScores} />
+              <div className="manga-detail-rating-actions">
+                <button
+                  type="button"
+                  className={`btn-primary${canSave ? '' : ' btn-disabled'}`}
+                  onClick={handleSaveRating}
+                  disabled={!canSave || isSaving}
+                >
+                  {isSaving ? 'Saving…' : getMangaRating(comic.id) ? 'Update Rating' : 'Save Rating'}
+                </button>
+                {!canSave && <span className="rating-incomplete-hint">Rate all categories to save</span>}
+                {ratingMsg && <span className="rating-incomplete-hint" style={{ color: '#5db88a' }}>{ratingMsg}</span>}
+              </div>
+            </div>
+
+            {/* ── Library + Read buttons ── */}
+            <div className="manga-detail-actions">
+              {/* Library button with dropdown */}
+              <div style={{ position: 'relative' }} ref={listRef}>
+                <button
+                  className={`btn-primary book-detail-library-btn${saved ? ' is-saved' : ''}`}
+                  onClick={() => setListOpen(v => !v)}
+                >
+                  {saved
+                    ? `✓ ${MANGA_STATUSES.find(s => s.value === saved.status)?.label || 'In Library'}`
+                    : '+ Add to Library'}
+                </button>
+                {listOpen && (
+                  <div className="manga-list-dropdown">
+                    {MANGA_STATUSES.map(s => (
+                      <button key={s.value}
+                        className={`manga-list-dropdown-item${saved?.status === s.value ? ' active' : ''}`}
+                        onClick={() => selectStatus(s.value)}>
+                        {s.label}
+                      </button>
+                    ))}
+                    {saved && (
+                      <button className="manga-list-dropdown-item manga-list-dropdown-remove"
+                        onClick={removeFromLibrary}>
+                        Remove from Library
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {chapters.length > 0 && (
+                <button className="btn-watch"
+                  onClick={() => onRead(chapters[0], chapters)}>
+                  Read Chapter {chapters[0]?.number || '1'}
+                </button>
+              )}
+              {chapLoading && <span style={{ color: '#666', fontSize: '0.82rem' }}>Loading chapters…</span>}
+            </div>
           </div>
         </div>
 
-        {comic.description && (
-          <p className="manga-detail-desc">{comic.description}</p>
-        )}
+        {/* ── Description ── */}
+        {comic.description && <p className="manga-detail-desc">{comic.description}</p>}
 
+        {/* ── Chapter list ── */}
         <div className="manga-chapter-list">
           <h3 className="manga-chapter-list-title">
             Chapters
-            {!loading && <span className="manga-chapter-count">{chapters.length}</span>}
+            {!chapLoading && <span className="manga-chapter-count">{chapters.length}</span>}
           </h3>
-
-          {loading && <p className="manga-chapter-loading">Loading chapters…</p>}
-          {error   && <p className="manga-chapter-error">⚠️ {error}</p>}
-          {!loading && chapters.length === 0 && !error && (
+          {chapLoading && <p className="manga-chapter-loading">Loading chapters…</p>}
+          {chapError   && <p className="manga-chapter-error">⚠️ {chapError}</p>}
+          {!chapLoading && chapters.length === 0 && !chapError && (
             <p className="manga-chapter-empty">No English chapters found.</p>
           )}
-
           <div className="manga-chapter-grid">
             {displayed.map(ch => (
               <button key={ch.id} type="button"
@@ -186,11 +347,13 @@ function ChapterModal({ comic, onClose, onRead }) {
                   {ch.number ? `Ch. ${ch.number}` : 'Oneshot'}
                 </span>
                 {ch.title && <span className="manga-chapter-name">{ch.title}</span>}
-                {ch.group  && <span className="manga-chapter-pages">{ch.group}</span>}
+                {ch.externalUrl
+                  ? <span className="manga-chapter-pages">↗ External</span>
+                  : ch.group && <span className="manga-chapter-pages">{ch.group}</span>
+                }
               </button>
             ))}
           </div>
-
           {chapters.length > 20 && (
             <button className="btn-ghost btn-sm manga-show-all-btn"
               onClick={() => setShowAll(v => !v)}>
@@ -206,7 +369,6 @@ function ChapterModal({ comic, onClose, onRead }) {
 // ─── MangaCard ────────────────────────────────────────────────
 function MangaCard({ manga, onClick }) {
   const [imgErr, setImgErr] = useState(false);
-
   return (
     <button type="button" className="manga-card" onClick={() => onClick(manga)}>
       <div className="manga-card-cover">
@@ -230,20 +392,19 @@ function MangaCard({ manga, onClick }) {
   );
 }
 
-// ─── MangaTab (main export) ───────────────────────────────────
+// ─── MangaTab ─────────────────────────────────────────────────
 export default function MangaTab() {
-  const [query, setQuery]         = useState('');
+  const [query, setQuery]           = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
-  const [results, setResults]     = useState([]);
-  const [popular, setPopular]     = useState([]);
-  const [loading, setLoading]     = useState(false);
+  const [results, setResults]       = useState([]);
+  const [popular, setPopular]       = useState([]);
+  const [loading, setLoading]       = useState(false);
   const [popularLoading, setPopularLoading] = useState(true);
-  const [error, setError]         = useState('');
-  const [selected, setSelected]   = useState(null);
-  const [reader, setReader]       = useState(null);  // { comic, chapters, index }
+  const [error, setError]           = useState('');
+  const [selected, setSelected]     = useState(null);
+  const [reader, setReader]         = useState(null);
   const abortRef = useRef(null);
 
-  // Load popular on mount
   useEffect(() => {
     const ctrl = new AbortController();
     getPopular(ctrl.signal)
@@ -253,13 +414,11 @@ export default function MangaTab() {
     return () => ctrl.abort();
   }, []);
 
-  // Debounce
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(query.trim()), 350);
     return () => clearTimeout(t);
   }, [query]);
 
-  // Search
   useEffect(() => {
     if (!debouncedQ) { setResults([]); setError(''); return; }
     abortRef.current?.abort();
@@ -267,12 +426,10 @@ export default function MangaTab() {
     abortRef.current = ctrl;
     setLoading(true);
     setError('');
-
     searchManga(debouncedQ, ctrl.signal)
       .then(setResults)
       .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
-
     return () => ctrl.abort();
   }, [debouncedQ]);
 
@@ -310,7 +467,6 @@ export default function MangaTab() {
             </p>
           </div>
         </div>
-
         <div className="filter-bar">
           <input
             className="search-input"
@@ -347,9 +503,7 @@ export default function MangaTab() {
 
         {!showSkeleton && displayList.length > 0 && (
           <>
-            {!isSearching && (
-              <h3 className="manga-section-heading">Popular Right Now</h3>
-            )}
+            {!isSearching && <h3 className="manga-section-heading">Popular Right Now</h3>}
             <div className="manga-grid">
               {displayList.map((manga, i) => (
                 <MangaCard key={manga.id || i} manga={manga} onClick={setSelected} />

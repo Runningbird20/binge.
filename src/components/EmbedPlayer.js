@@ -124,9 +124,10 @@ function getEmbeddedId(item) {
 
 function buildUrl(providerId, externalId, mediaType, season, episode) {
   const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[4];
-  if (!provider || !externalId) return null;
+  if (!provider) return null;
+  if (!externalId) return null;
   try {
-    return provider.buildUrl(externalId, mediaType, season, episode);
+    return provider.buildUrl(externalId, mediaType, season, episode, null);
   } catch {
     return null;
   }
@@ -148,7 +149,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const [markingWatched, setMarkingWatched] = useState(false);
   const [realSeasonCount, setRealSeasonCount] = useState(null);
   const [lsControlsOpen, setLsControlsOpen] = useState(false);
-
   const modalRef = useRef(null);
   const iframeRef = useRef(null);
   const watchTimerRef = useRef(null);
@@ -600,7 +600,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           {lookupState === 'error' && (
             <div className="mp-status mp-status--err">{lookupError || `Could not find stream for "${item.title}".`}</div>
           )}
-
           {isTV && (
             <>
               {/* Season */}
@@ -733,7 +732,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
             {metadataWarning}
           </div>
         )}
-
         {isTV && (
           <div className="player-tv-controls">
             <div className="player-control-group">
@@ -852,7 +850,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           ))}
         </div>
         <p className="player-anime-hint">
-          For anime try <strong>2Embed</strong> or <strong>AutoEmbed</strong> — they have the best anime coverage.
+          For anime try <strong>2Embed</strong> or <strong>AutoEmbed</strong>.
         </p>
         <p className="player-kb-hint">
           {isTV
