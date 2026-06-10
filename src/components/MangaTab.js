@@ -401,7 +401,7 @@ export default function MangaTab() {
   const [loading, setLoading]       = useState(false);
   const [popularLoading, setPopularLoading] = useState(true);
   const [error, setError]           = useState('');
-  const [source, setSource]         = useState(SOURCES[0].key);
+  const source = SOURCES[0].key;
   const [selected, setSelected]     = useState(null);
   const [reader, setReader]         = useState(null);
   const abortRef = useRef(null);
