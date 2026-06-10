@@ -167,7 +167,7 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
 }
 
 // ─── ChapterModal (full book-style detail view) ───────────────
-function ChapterModal({ comic, onClose, onRead }) {
+function ChapterModal({ comic, source, onClose, onRead }) {
   const [chapters, setChapters]     = useState([]);
   const [chapLoading, setChapLoading] = useState(true);
   const [chapError, setChapError]   = useState('');
@@ -189,12 +189,12 @@ function ChapterModal({ comic, onClose, onRead }) {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    getMangaChapters(comic.id, ctrl.signal)
+    chaptersBySource(source, comic.id, ctrl.signal)
       .then(setChapters)
       .catch(e => { if (e.name !== 'AbortError') setChapError(e.message); })
       .finally(() => setChapLoading(false));
     return () => ctrl.abort();
-  }, [comic.id]);
+  }, [source, comic.id]);
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -401,18 +401,19 @@ export default function MangaTab() {
   const [loading, setLoading]       = useState(false);
   const [popularLoading, setPopularLoading] = useState(true);
   const [error, setError]           = useState('');
+  const [source, setSource]         = useState(SOURCES[0].key);
   const [selected, setSelected]     = useState(null);
   const [reader, setReader]         = useState(null);
   const abortRef = useRef(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    getPopular(ctrl.signal)
+    popularBySource(source, ctrl.signal)
       .then(setPopular)
       .catch(() => {})
       .finally(() => setPopularLoading(false));
     return () => ctrl.abort();
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(query.trim()), 350);
@@ -426,12 +427,12 @@ export default function MangaTab() {
     abortRef.current = ctrl;
     setLoading(true);
     setError('');
-    searchManga(debouncedQ, ctrl.signal)
+    searchBySource(source, debouncedQ, ctrl.signal)
       .then(setResults)
       .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [debouncedQ]);
+  }, [debouncedQ, source]);
 
   const openReader = useCallback((ch, chapters) => {
     const idx = chapters.findIndex(c => c.id === ch.id);
@@ -445,6 +446,7 @@ export default function MangaTab() {
         comic={reader.comic}
         chapters={reader.chapters}
         index={reader.index}
+        source={source}
         onPrev={() => setReader(r => ({ ...r, index: r.index - 1 }))}
         onNext={() => setReader(r => ({ ...r, index: r.index + 1 }))}
         onClose={() => setReader(null)}
@@ -516,6 +518,7 @@ export default function MangaTab() {
       {selected && (
         <ChapterModal
           comic={selected}
+          source={source}
           onClose={() => setSelected(null)}
           onRead={openReader}
         />
