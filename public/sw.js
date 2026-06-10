@@ -1,5 +1,26 @@
 const CACHE_NAME = 'binge-shell-v1';
 const SHELL_ASSETS = ['/', '/index.html', '/manifest.json'];
+const BLOCKED_AD_HOST_PARTS = [
+  'doubleclick.net',
+  'googlesyndication.com',
+  'googleadservices.com',
+  'adservice.google.',
+  'adnxs.com',
+  'taboola.com',
+  'outbrain.com',
+  'popads.net',
+  'propellerads.com',
+];
+const BLOCKED_AD_PATH_PARTS = ['/ads/', '/adserver', '/advert', '/banner', '/popunder', '/popup'];
+
+function isBlockedAdRequest(url) {
+  const host = url.hostname.toLowerCase();
+  const path = `${url.pathname}${url.search}`.toLowerCase();
+  return (
+    BLOCKED_AD_HOST_PARTS.some((part) => host.includes(part)) ||
+    BLOCKED_AD_PATH_PARTS.some((part) => path.includes(part))
+  );
+}
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -20,6 +41,11 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  if (isBlockedAdRequest(url)) {
+    event.respondWith(new Response(null, { status: 204, statusText: 'Blocked by Binge ad blocker' }));
+    return;
+  }
 
   // Never intercept Supabase, API, or cross-origin requests
   if (url.origin !== self.location.origin) return;

@@ -20,6 +20,7 @@ import {
   fetchSupabaseBookById,
   fetchSupabaseBooksPage,
 } from '../utils/supabaseMovieCatalog';
+import { EMBED_SANDBOX } from '../utils/embedSecurity';
 import {
   buildMediaGenreFacets,
   filterBooksCatalog,
@@ -463,11 +464,11 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
           ) : (
             <iframe
               ref={iframeRef}
-              src={embedUrl}
+              src={embedUrl || ''}
               className="player-frame"
               allowFullScreen
-              allow="fullscreen; autoplay"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
+              allow="fullscreen"
+              sandbox={EMBED_SANDBOX}
               title={`Read ${book.title}`}
               style={{ minHeight: '600px' }}
             />
