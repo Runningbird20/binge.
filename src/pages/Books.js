@@ -27,6 +27,7 @@ import {
 } from '../catalogFallback';
 
 const BOOKS_PAGE_SIZE = 24;
+const EMBED_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-modals';
 
 function getCoverUrl(book) {
   const rawUrl = book.cover_url || book.coverUrl || '';
