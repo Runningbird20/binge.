@@ -1,6 +1,6 @@
 name: Sync TMDB Catalog
 
-# Runs every 6 hours on GitHub's servers — not on your machine.
+# Runs twice a week (Mon/Thu) on GitHub's servers — not on your machine.
 # Each run downloads TMDB's bulk export files, finds new content,
 # fetches full details, and upserts them directly into Supabase.
 #
@@ -13,7 +13,7 @@ name: Sync TMDB Catalog
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # 00:00, 06:00, 12:00, 18:00 UTC daily
+    - cron: '0 0 * * 1,4'   # Monday and Thursday at 00:00 UTC
   workflow_dispatch:          # run manually from the Actions tab any time
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: scripts/package.json
 
