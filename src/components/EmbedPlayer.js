@@ -7,7 +7,6 @@ import {
   updateWatchlistProgress,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
-import { EMBED_SANDBOX } from '../utils/embedSecurity';
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
@@ -504,7 +503,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
-              sandbox={EMBED_SANDBOX}
               title={`Watch ${item.title}`}
             />
           ) : (
@@ -872,7 +870,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
-              sandbox={EMBED_SANDBOX}
               title={`Watch ${item.title}`}
             />
           ) : (
