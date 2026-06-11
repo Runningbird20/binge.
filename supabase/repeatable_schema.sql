@@ -207,6 +207,7 @@ create table if not exists public.movies (
   imdb_id text,
   vote_average numeric,
   popularity numeric,
+  original_language text,
   rotten_tomatoes_score integer,
   imdb_rating numeric,
   metacritic_score integer,
@@ -230,6 +231,7 @@ alter table public.movies
   add column if not exists imdb_id text,
   add column if not exists vote_average numeric,
   add column if not exists popularity numeric,
+  add column if not exists original_language text,
   add column if not exists rotten_tomatoes_score integer,
   add column if not exists imdb_rating numeric,
   add column if not exists metacritic_score integer,
@@ -250,6 +252,7 @@ create table if not exists public.tv_shows (
   poster_url text,
   seasons integer,
   source_key text,
+  original_language text,
   created_at timestamptz not null default now()
 );
 
@@ -266,6 +269,7 @@ alter table public.tv_shows
   add column if not exists poster_url text,
   add column if not exists seasons integer,
   add column if not exists source_key text,
+  add column if not exists original_language text,
   add column if not exists created_at timestamptz not null default now();
 
 create table if not exists public.books (

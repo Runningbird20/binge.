@@ -60,8 +60,7 @@ export default function MobileBookDetail({
     : null;
   const isOl    = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
   const archiveId = rawId && !isOl ? rawId : null;
-  const itemUrl   = book?.item_url || book?.itemUrl || null;
-  const canRead   = Boolean(archiveId || itemUrl);
+  const canRead   = Boolean(book?.title);
 
   const canSave    = allCategoriesFilled(draftScores);
   const displayScore = computeNormalizedScore('book', draftScores);
