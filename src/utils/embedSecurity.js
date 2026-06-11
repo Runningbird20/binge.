@@ -1,6 +1,3 @@
-export const EMBED_SANDBOX =
-  'allow-scripts allow-same-origin allow-forms allow-presentation allow-fullscreen';
-
 const BLOCKED_HOST_PARTS = [
   'doubleclick.net',
   'googlesyndication.com',

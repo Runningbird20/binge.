@@ -20,7 +20,6 @@ import {
   fetchSupabaseBookById,
   fetchSupabaseBooksPage,
 } from '../utils/supabaseMovieCatalog';
-import { EMBED_SANDBOX } from '../utils/embedSecurity';
 import {
   buildMediaGenreFacets,
   filterBooksCatalog,
@@ -408,7 +407,6 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
             className="player-frame"
             allowFullScreen
             allow="fullscreen"
-            sandbox={EMBED_SANDBOX}
             title={`Read ${book.title}`}
             style={{ minHeight: '600px' }}
           />

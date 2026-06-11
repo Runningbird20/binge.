@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import { FALLBACK_CHANNELS, fetchClientLiveTvChannels } from '../utils/liveTvCatalog';
-import { EMBED_SANDBOX } from '../utils/embedSecurity';
 
 const CATEGORY_ICONS = {
   'News': '📰', 'Movies': '🎬', 'Comedy': '😂', 'Drama': '🎭',
@@ -185,7 +184,6 @@ export default function LiveTV() {
                   allowFullScreen
                   allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                   referrerPolicy="no-referrer-when-downgrade"
-                  sandbox={EMBED_SANDBOX}
                   title={`Watch ${selected.name} live`}
                 />
               </div>
