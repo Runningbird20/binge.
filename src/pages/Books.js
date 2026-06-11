@@ -95,7 +95,7 @@ function BookDetailsModal({
   const isOlRecord = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
   const archiveId = rawId && !isOlRecord ? rawId : null;
   const itemUrl = book?.item_url || book?.itemUrl || null;
-  const canRead = Boolean(archiveId || itemUrl);
+  const canRead = Boolean(book?.title); // Reader searches Gutenberg if no direct source
 
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
@@ -354,14 +354,48 @@ function BookDetailsModal({
 
 function BookReader({ book, archiveId, itemUrl, onClose }) {
   const iframeRef = useRef(null);
-  const modalRef = useRef(null);
+  const modalRef  = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Resolved reading source
+  const [embedUrl,  setEmbedUrl]  = useState(archiveId ? `https://archive.org/embed/${archiveId}` : null);
+  const [source,    setSource]    = useState(archiveId ? 'archive' : null);
+  const [searching, setSearching] = useState(!archiveId);
+  const [notFound,  setNotFound]  = useState(false);
+
   useEffect(() => {
-    function onFsChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+    if (archiveId) return; // Archive.org already resolved
+
+    // Try Gutenberg URL in itemUrl first (fast path)
+    if (itemUrl) {
+      const gutMatch = itemUrl.match(/gutenberg\.org\/(?:ebooks\/|files\/)(\d+)/);
+      if (gutMatch) {
+        setEmbedUrl(`/api/books/gutenberg/read/${gutMatch[1]}`);
+        setSource('gutenberg');
+        setSearching(false);
+        return;
+      }
     }
 
+    // Search Gutenberg by title + author
+    const q = encodeURIComponent(`${book.title}${book.author ? ' ' + book.author : ''}`.trim());
+    fetch(`/api/books/gutenberg/search?q=${q}`)
+      .then(r => r.json())
+      .then(data => {
+        const htmlBook = (data.books || []).find(b => b.hasHtml);
+        if (htmlBook) {
+          setEmbedUrl(`/api/books/gutenberg/read/${htmlBook.id}`);
+          setSource('gutenberg');
+        } else {
+          setNotFound(true);
+        }
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setSearching(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    function onFsChange() { setIsFullscreen(Boolean(document.fullscreenElement)); }
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
@@ -374,9 +408,11 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
     }
   }
 
-  const embedUrl = archiveId
-    ? `https://archive.org/embed/${archiveId}`
-    : itemUrl || null;
+  const noteText = source === 'archive'
+    ? 'Powered by Internet Archive. Some books may require a free borrow.'
+    : source === 'gutenberg'
+    ? 'Powered by Project Gutenberg — free public domain reading.'
+    : '';
 
   return (
     <div className="player-overlay" onClick={onClose}>
@@ -390,30 +426,57 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button
-              className="player-close"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            >
-              {isFullscreen ? '<' : '>'}
-            </button>
-            <button className="player-close" onClick={onClose} title="Close">X</button>
+            {embedUrl && (
+              <button className="player-close" onClick={toggleFullscreen}
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+                {isFullscreen ? '⊠' : '⊞'}
+              </button>
+            )}
+            <button className="player-close" onClick={onClose} title="Close">✕</button>
           </div>
         </div>
+
         <div className="player-frame-wrap">
-          <iframe
-            ref={iframeRef}
-            src={embedUrl || ''}
-            className="player-frame"
-            allowFullScreen
-            allow="fullscreen"
-            title={`Read ${book.title}`}
-            style={{ minHeight: '600px' }}
-          />
+          {searching ? (
+            <div className="book-reader-state">
+              <div className="manga-reader-spinner" />
+              <p>Finding a readable version of <em>{book.title}</em>…</p>
+            </div>
+          ) : notFound ? (
+            <div className="book-reader-state">
+              <p style={{ fontSize: '2.5rem', margin: 0 }}>📚</p>
+              <p style={{ fontWeight: 600, marginTop: '0.75rem' }}>
+                No free online version found
+              </p>
+              <p style={{ color: '#888', fontSize: '0.87rem', maxWidth: '340px', textAlign: 'center' }}>
+                <strong>{book.title}</strong> may be under copyright or not yet
+                digitized by Project Gutenberg or the Internet Archive.
+              </p>
+              {itemUrl && (
+                <a href={itemUrl} target="_blank" rel="noopener noreferrer"
+                  className="btn-watch"
+                  style={{ display: 'inline-block', marginTop: '1.25rem' }}>
+                  View on Goodreads ↗
+                </a>
+              )}
+            </div>
+          ) : (
+            <iframe
+              ref={iframeRef}
+              src={embedUrl || ''}
+              className="player-frame"
+              allowFullScreen
+              allow="fullscreen"
+              sandbox={EMBED_SANDBOX}
+              title={`Read ${book.title}`}
+              style={{ minHeight: '600px' }}
+            />
+          )}
         </div>
-        <p className="player-note">
-          Powered by Internet Archive. Some books may require borrowing.
-        </p>
+
+        {noteText && !searching && !notFound && (
+          <p className="player-note">{noteText}</p>
+        )}
       </div>
     </div>
   );

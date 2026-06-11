@@ -5,6 +5,28 @@ import useDeviceType from '../hooks/useDeviceType';
 const POLL_MS = 60_000;
 const PPV_API = 'https://api.ppv.to/api/streams';
 
+const PPV_PROVIDERS = [
+  { id: 'ppv.to',  label: 'PPV.to'  },
+  { id: 'ppv.st',  label: 'PPV.st'  },
+  { id: 'ppv.cx',  label: 'PPV.cx'  },
+  { id: 'ppv.is',  label: 'PPV.is'  },
+  { id: 'ppv.lc',  label: 'PPV.lc'  },
+];
+
+function buildStreamUrl(stream, providerDomain) {
+  if (!stream.iframeSrc && !stream.uriName) return null;
+  if (providerDomain === 'ppv.to') return stream.iframeSrc || null;
+  if (stream.iframeSrc) {
+    try {
+      const url = new URL(stream.iframeSrc);
+      url.hostname = providerDomain;
+      return url.toString();
+    } catch { /* fall through */ }
+  }
+  if (stream.uriName) return `https://${providerDomain}/embed/${stream.uriName}`;
+  return null;
+}
+
 function truthy(v) { return v === 1 || v === true || v === '1'; }
 
 function parsePpvResponse(data) {
@@ -116,14 +138,15 @@ function getStatus(s, nowMs) {
 
 export default function Sports() {
   const { isMobile } = useDeviceType();
-  const [streams, setStreams]       = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState('');
-  const [selected, setSelected]     = useState(null);
-  const [category, setCategory]     = useState('All');
-  const [sidebarOpen, setSidebar]   = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [nowMs, setNowMs]           = useState(Date.now());
+  const [streams, setStreams]           = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState('');
+  const [selected, setSelected]         = useState(null);
+  const [category, setCategory]         = useState('All');
+  const [sidebarOpen, setSidebar]       = useState(true);
+  const [fullscreen, setFullscreen]     = useState(false);
+  const [nowMs, setNowMs]               = useState(Date.now());
+  const [sportsProvider, setSportsProvider] = useState('ppv.to');
   const iframeRef = useRef(null);
   const playerRef = useRef(null);
 
@@ -193,11 +216,11 @@ export default function Sports() {
 
           {/* Video */}
           <div className="sp-video-wrap" ref={playerRef}>
-            {selected.iframeSrc ? (
+            {buildStreamUrl(selected, sportsProvider) ? (
               <iframe
-                key={selected.id}
+                key={`${selected.id}-${sportsProvider}`}
                 ref={iframeRef}
-                src={selected.iframeSrc}
+                src={buildStreamUrl(selected, sportsProvider)}
                 className="mp-iframe"
                 allowFullScreen
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
@@ -225,6 +248,16 @@ export default function Sports() {
               {status === 'upcoming' && (
                 <span className="sp-upcoming-time">{fmtDate(selected.startsAt)} {fmtTime(selected.startsAt)}</span>
               )}
+            </div>
+            <div className="sp-provider-row">
+              {PPV_PROVIDERS.map(p => (
+                <button
+                  key={p.id}
+                  className={`sp-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
+                  onClick={() => setSportsProvider(p.id)}
+                  type="button"
+                >{p.label}</button>
+              ))}
             </div>
             <p className="sp-section-label">More Streams</p>
             {filtered.filter(s => s.id !== selected.id).slice(0, 8).map(s => {
@@ -444,6 +477,16 @@ export default function Sports() {
                     {catIcon(selected.category)} {selected.category}
                   </span>
                 </div>
+                <div className="sports-provider-row">
+                  {PPV_PROVIDERS.map(p => (
+                    <button
+                      key={p.id}
+                      className={`sports-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
+                      onClick={() => setSportsProvider(p.id)}
+                      type="button"
+                    >{p.label}</button>
+                  ))}
+                </div>
                 <button className="sports-fullscreen-btn" onClick={toggleFs}
                   title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
                   {fullscreen ? '↙' : '↗'}
@@ -451,11 +494,11 @@ export default function Sports() {
               </div>
 
               <div className="sports-frame-wrap">
-                {selected.iframeSrc ? (
+                {buildStreamUrl(selected, sportsProvider) ? (
                   <iframe
-                    key={selected.id}
+                    key={`${selected.id}-${sportsProvider}`}
                     ref={iframeRef}
-                    src={selected.iframeSrc}
+                    src={buildStreamUrl(selected, sportsProvider)}
                     className="sports-frame"
                     allowFullScreen
                     allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"

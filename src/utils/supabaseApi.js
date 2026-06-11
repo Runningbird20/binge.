@@ -639,6 +639,25 @@ async function fetchTmdbShow(searchParams) {
   };
 }
 
+async function fetchAniListId(title) {
+  const gql = `query ($title: String) {
+    Media(search: $title, type: ANIME) { id title { romaji english } }
+  }`;
+  const response = await fetch('https://graphql.anilist.co', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ query: gql, variables: { title } }),
+  });
+  if (!response.ok) throw new Error(`AniList error ${response.status}`);
+  const data = await response.json();
+  const media = data?.data?.Media;
+  if (!media?.id) throw new Error('Not found on AniList');
+  return {
+    id: String(media.id),
+    title: media.title?.english || media.title?.romaji || null,
+  };
+}
+
 async function handleMediaGet(pathname, searchParams) {
   if (
     pathname === '/media/popular-titles' ||
@@ -709,6 +728,12 @@ async function handleMediaGet(pathname, searchParams) {
     const book = await fetchSupabaseBookById(decodeURIComponent(bookMatch[1]));
     if (!book) throw new Error('Book not found.');
     return book;
+  }
+
+  if (pathname === '/media/anilist-id') {
+    const title = searchParams.get('title') || '';
+    if (!title) throw new Error('title required');
+    return fetchAniListId(title);
   }
 
   if (pathname === '/media/embed-id') {

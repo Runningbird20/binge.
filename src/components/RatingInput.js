@@ -13,6 +13,11 @@ const CATEGORY_DESCRIPTIONS = {
   // Book-only
   prose:         'Quality of the writing craft itself',
   plot:          'Story structure and narrative engagement',
+  // Manga-only
+  art:           'Quality of the artwork and panel composition',
+  story:         'Narrative strength and plot engagement',
+  enjoyment:     'Overall fun and satisfaction while reading',
+  // Shared
   characters:    'Depth, development, and memorability',
 };
 

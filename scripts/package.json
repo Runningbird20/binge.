@@ -1,0 +1,10 @@
+{
+  "name": "binge-catalog-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal dependencies for the TMDB → Supabase catalog sync script",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "dotenv": "^16.0.0"
+  }
+}

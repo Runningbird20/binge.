@@ -4,28 +4,53 @@ const https   = require('https');
 const http    = require('http');
 const { URL } = require('url');
 
-// Injected before </head> in every proxied HTML page.
-// Blocks automatic popups and top-frame navigation attempts from embed pages.
-const GUARD_SCRIPT = `<script>(function(){
-  // Block window.open() — kills popup ads; player UI popups opened on direct user
-  // tap are still blocked, but that's an acceptable trade-off vs. auto-popup ads.
+// Build the guard + base-href + SPA-route-fix injection for a proxied HTML page.
+// Injected right after <head> (or prepended) so the base tag is parsed before any assets.
+function buildHeadInjection(origin, originalPath, originalSearch) {
+  const safeOrigin = origin.replace(/'/g, "\\'");
+  const safePath   = (originalPath + originalSearch).replace(/'/g, "\\'");
+
+  return `<script>(function(){
+  // Set <base> so relative asset paths resolve against the original host.
+  var b = document.createElement('base');
+  b.href = '${safeOrigin}/';
+  var h = document.head || document.getElementsByTagName('head')[0];
+  if (h) h.insertBefore(b, h.firstChild);
+
+  // Fix the URL so SPA routers see the original path, not the proxy path.
+  try { history.replaceState(null, '', '${safePath}'); } catch(e) {}
+
+  // Block window.open() — kills popup ads.
   var _open = window.open;
   window.open = function(url, name, features) {
     if (!url || url === 'about:blank') return _open.apply(this, arguments);
     return null;
   };
 
-  // Block automatic top-frame navigation (popunder redirects).
-  // User-initiated anchor clicks are unaffected — only script-driven changes are caught.
+  // Block ALL navigation from inside the iframe so the proxied SPA can't
+  // escape to our origin. location.assign/replace/reload are patched; we
+  // also shadow location.href via the prototype to stop direct assignment.
   try {
-    var _assign   = window.location.assign.bind(window.location);
-    var _replace  = window.location.replace.bind(window.location);
-    window.location.assign  = function(u){ if (window === window.top) _assign(u); };
-    window.location.replace = function(u){ if (window === window.top) _replace(u); };
+    var noop = function(){};
+    window.location.assign  = noop;
+    window.location.replace = noop;
+    window.location.reload  = noop;
+
+    // Intercept href property assignment on the Location prototype.
+    var locProto = Object.getPrototypeOf(window.location);
+    var hrefDesc = Object.getOwnPropertyDescriptor(locProto, 'href');
+    if (hrefDesc && hrefDesc.set) {
+      Object.defineProperty(locProto, 'href', {
+        get: hrefDesc.get,
+        set: noop,
+        configurable: true,
+      });
+    }
   } catch(e) {}
 }());</script>`;
+}
 
-// Fetches an embed page, strips framing-denial headers, and injects popup guard.
+// Fetches an embed page, strips framing-denial headers, injects base-href + SPA fix.
 router.get('/', (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url query param required' });
@@ -40,6 +65,9 @@ router.get('/', (req, res) => {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return res.status(400).json({ error: 'Only http/https allowed' });
   }
+
+  const origin = `${parsed.protocol}//${parsed.hostname}${parsed.port ? ':' + parsed.port : ''}`;
+  const injection = buildHeadInjection(origin, parsed.pathname, parsed.search);
 
   const lib = parsed.protocol === 'https:' ? https : http;
   const proxyReq = lib.request(
@@ -71,17 +99,20 @@ router.get('/', (req, res) => {
         return;
       }
 
-      // Buffer HTML so we can inject the guard script
+      // Buffer HTML so we can inject the head script
       res.status(upstream.statusCode);
       let body = '';
       upstream.setEncoding('utf8');
       upstream.on('data', chunk => { body += chunk; });
       upstream.on('end', () => {
-        // Inject guard just before </head>; fall back to prepending if no </head>
-        if (body.includes('</head>')) {
-          body = body.replace('</head>', GUARD_SCRIPT + '</head>');
+        // Inject right after <head> so base href is set before any assets load.
+        // Fall back to before </head>, then to prepend.
+        if (body.includes('<head>')) {
+          body = body.replace('<head>', '<head>' + injection);
+        } else if (body.includes('</head>')) {
+          body = body.replace('</head>', injection + '</head>');
         } else {
-          body = GUARD_SCRIPT + body;
+          body = injection + body;
         }
         res.send(body);
       });
