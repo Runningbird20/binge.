@@ -114,11 +114,12 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
               Open in new tab ↗
             </a>
           </div>
+          {/* sandbox intentionally omitted — the embedded reader detects sandbox attributes and stops working if one is present */}
           <iframe
             src={chapter.externalUrl}
             className="manga-external-iframe"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-modals"
             allow="fullscreen; autoplay"
+            allowFullScreen
             title={chapterLabel}
           />
         </div>

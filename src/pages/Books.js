@@ -27,7 +27,7 @@ import {
 } from '../catalogFallback';
 
 const BOOKS_PAGE_SIZE = 24;
-const EMBED_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-modals';
+// sandbox intentionally omitted — the embedded reader detects sandbox attributes and stops working if one is present
 
 function getCoverUrl(book) {
   const rawUrl = book.cover_url || book.coverUrl || '';
@@ -468,7 +468,6 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
               className="player-frame"
               allowFullScreen
               allow="fullscreen"
-              sandbox={EMBED_SANDBOX}
               title={`Read ${book.title}`}
               style={{ minHeight: '600px' }}
             />
