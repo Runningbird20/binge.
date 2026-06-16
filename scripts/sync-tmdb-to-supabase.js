@@ -70,7 +70,10 @@ async function downloadExport(type) {
     const url  = `https://files.tmdb.org/p/exports/${file}`;
     console.log(`  Downloading ${url}`);
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(180_000) });
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(180_000),
+      headers: { Authorization: `Bearer ${TMDB_KEY}` },
+    });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Export HTTP ${res.status}`);
     return res;
