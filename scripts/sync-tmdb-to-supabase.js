@@ -33,19 +33,20 @@ const { createClient } = require('@supabase/supabase-js');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const TMDB_KEY    = process.env.TMDB_API_KEY;
-const SUP_URL     = process.env.SUPABASE_URL;
-const SUP_KEY     = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const TYPE        = process.env.TYPE || 'both';
-const MAX_PER_RUN = parseInt(process.env.MAX_DETAILS_PER_RUN || '5000', 10);
-const MIN_POP     = parseFloat(process.env.MIN_POPULARITY || '1');
-const UPSERT_SIZE = 500;
-const API_DELAY   = 260; // ms between TMDB requests — keeps us under 4 req/s (limit: 40/10s)
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w500';
-const TMDB_BASE   = 'https://api.themoviedb.org/3';
+const TMDB_KEY        = process.env.TMDB_API_KEY;       // v3 key — used for ?api_key= calls
+const TMDB_READ_TOKEN = process.env.TMDB_READ_TOKEN;    // v4 Read Access Token — used for Bearer auth on exports
+const SUP_URL         = process.env.SUPABASE_URL;
+const SUP_KEY         = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const TYPE            = process.env.TYPE || 'both';
+const MAX_PER_RUN     = parseInt(process.env.MAX_DETAILS_PER_RUN || '5000', 10);
+const MIN_POP         = parseFloat(process.env.MIN_POPULARITY || '1');
+const UPSERT_SIZE     = 500;
+const API_DELAY       = 260; // ms between TMDB requests — keeps us under 4 req/s (limit: 40/10s)
+const POSTER_BASE     = 'https://image.tmdb.org/t/p/w500';
+const TMDB_BASE       = 'https://api.themoviedb.org/3';
 
-if (!TMDB_KEY || !SUP_URL || !SUP_KEY) {
-  console.error('❌  Missing env vars: TMDB_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+if (!TMDB_KEY || !TMDB_READ_TOKEN || !SUP_URL || !SUP_KEY) {
+  console.error('❌  Missing env vars: TMDB_API_KEY, TMDB_READ_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
   process.exit(1);
 }
 
@@ -72,7 +73,7 @@ async function downloadExport(type) {
 
     const res = await fetch(url, {
       signal: AbortSignal.timeout(180_000),
-      headers: { Authorization: `Bearer ${TMDB_KEY}` },
+      headers: { Authorization: `Bearer ${TMDB_READ_TOKEN}` },
     });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Export HTTP ${res.status}`);
