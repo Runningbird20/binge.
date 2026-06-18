@@ -7,7 +7,8 @@ name: Sync TMDB Catalog
 # First-time setup — add these secrets in your repo settings:
 #   Settings → Secrets and variables → Actions → New repository secret
 #
-#   TMDB_API_KEY              https://www.themoviedb.org/settings/api
+#   TMDB_API_KEY              v3 API key  — themoviedb.org/settings/api
+#   TMDB_READ_TOKEN           v4 Read Access Token (the long eyJ… JWT on the same page)
 #   SUPABASE_URL              your Supabase project URL  (Settings → API)
 #   SUPABASE_SERVICE_ROLE_KEY your service_role key      (Settings → API)
 
@@ -41,6 +42,7 @@ jobs:
         run: node scripts/sync-tmdb-to-supabase.js
         env:
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
+          TMDB_READ_TOKEN:           ${{ secrets.TMDB_READ_TOKEN }}
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TYPE:                      movie
@@ -52,6 +54,7 @@ jobs:
         run: node scripts/sync-tmdb-to-supabase.js
         env:
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
+          TMDB_READ_TOKEN:           ${{ secrets.TMDB_READ_TOKEN }}
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TYPE:                      tv
