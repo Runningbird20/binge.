@@ -19,10 +19,12 @@ function buildStreamUrl(stream, providerDomain) {
     try {
       const url = new URL(stream.iframeSrc);
       url.hostname = providerDomain;
+      url.pathname = url.pathname.replace('/embed/', '/live/');
+      url.searchParams.delete('gid');
       return url.toString();
     } catch { /* fall through */ }
   }
-  if (stream.uriName) return `https://${providerDomain}/embed/${stream.uriName}`;
+  if (stream.uriName) return `https://${providerDomain}/live/${stream.uriName}`;
   return null;
 }
 
@@ -88,7 +90,7 @@ async function fetchStreams() {
 }
 
 const CAT_ICONS = {
-  Basketball: '🏀', Soccer: '⚽', Football: '🏈', Baseball: '⚾',
+  Basketball: '🏀', Soccer: '⚽', Football: '⚽', Baseball: '⚾',
   Hockey: '🏒', Boxing: '🥊', MMA: '🥊', 'Combat Sports': '🥊',
   Wrestling: '🤼', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
   Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Olympics: '🏅',
@@ -248,16 +250,6 @@ export default function Sports() {
                 <span className="sp-upcoming-time">{fmtDate(selected.startsAt)} {fmtTime(selected.startsAt)}</span>
               )}
             </div>
-            <div className="sp-provider-row">
-              {PPV_PROVIDERS.map(p => (
-                <button
-                  key={p.id}
-                  className={`sp-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
-                  onClick={() => setSportsProvider(p.id)}
-                  type="button"
-                >{p.label}</button>
-              ))}
-            </div>
             <p className="sp-section-label">More Streams</p>
             {filtered.filter(s => s.id !== selected.id).slice(0, 8).map(s => {
               const st = getStatus(s, nowMs);
@@ -293,6 +285,18 @@ export default function Sports() {
               >
                 {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
               </button>
+            ))}
+          </div>
+
+          {/* Provider selector */}
+          <div className="sp-provider-row">
+            {PPV_PROVIDERS.map(p => (
+              <button
+                key={p.id}
+                className={`sp-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
+                onClick={() => setSportsProvider(p.id)}
+                type="button"
+              >{p.label}</button>
             ))}
           </div>
 
@@ -450,7 +454,16 @@ export default function Sports() {
           </div>
 
           <div className="sports-sidebar-footer">
-            <span>Powered by PPV</span>
+            <div className="sports-provider-row">
+              {PPV_PROVIDERS.map(p => (
+                <button
+                  key={p.id}
+                  className={`sports-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
+                  onClick={() => setSportsProvider(p.id)}
+                  type="button"
+                >{p.label}</button>
+              ))}
+            </div>
             <button className="sports-refresh-btn" onClick={load} title="Refresh">↻</button>
           </div>
         </aside>
@@ -475,16 +488,6 @@ export default function Sports() {
                   <span className="sports-now-cat">
                     {catIcon(selected.category)} {selected.category}
                   </span>
-                </div>
-                <div className="sports-provider-row">
-                  {PPV_PROVIDERS.map(p => (
-                    <button
-                      key={p.id}
-                      className={`sports-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
-                      onClick={() => setSportsProvider(p.id)}
-                      type="button"
-                    >{p.label}</button>
-                  ))}
                 </div>
                 <button className="sports-fullscreen-btn" onClick={toggleFs}
                   title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
