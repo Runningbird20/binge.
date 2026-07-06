@@ -428,7 +428,6 @@ export default function UserProfile() {
   const profile        = data?.profile || null;
   const publicRatings  = data?.ratings  || [];
   const publicWatchlist= data?.watchlist || [];
-  const posts          = data?.posts    || [];
   const followers      = data?.followers || 0;
   const followingCount = data?.following || 0;
   const isPrivate      = data?.isPrivate || false;
@@ -463,7 +462,6 @@ export default function UserProfile() {
   const tabs = [
     { id: 'watchlist', label: `📋 Watchlist (${displayWatchlist.length})` },
     { id: 'ratings',   label: `⭐ Ratings (${displayRatings.length})` },
-    { id: 'posts',     label: '📝 Forum Posts' },
   ];
 
   return (
@@ -646,26 +644,6 @@ export default function UserProfile() {
                   </div>
                 )}
               </>
-            )}
-
-            {/* ── Posts tab ── */}
-            {tab === 'posts' && (
-              <div className="profile-posts-list">
-                {!posts?.length && <div className="empty-state"><p>No forum posts yet.</p></div>}
-                {posts?.map(post => (
-                  <Link key={post.id} to={`/forum/${post.forums?.slug}/post/${post.id}`} className="profile-post-card">
-                    <div className="profile-post-meta">
-                      <span className="forum-community-pill">{post.forums?.icon} {post.forums?.name}</span>
-                      {post.flair && <span className="forum-flair" style={{ background: '#4a9eff22', color: '#4a9eff', border: '1px solid #4a9eff44' }}>{post.flair}</span>}
-                    </div>
-                    <p className="profile-post-title">{post.title}</p>
-                    <div className="profile-post-stats">
-                      <span>▲ {post.score}</span>
-                      <span>💬 {post.comment_count}</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
             )}
           </>
         )}

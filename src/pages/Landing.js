@@ -236,7 +236,7 @@ export default function Landing() {
               <div className="feature-icon">♦</div>
               <h3>Discover New Titles</h3>
             </div>
-            <p>Get recommendations based on your taste and see what&apos;s trending in the community.</p>
+            <p>Get personalized picks matched to your taste from everything you&apos;ve rated.</p>
           </div>
           <div className="feature-card">
             <div className="feature-card-header">
