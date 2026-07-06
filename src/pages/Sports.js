@@ -3,11 +3,9 @@ import Navbar from '../components/Navbar';
 import useDeviceType from '../hooks/useDeviceType';
 
 const POLL_MS = 60_000;
-const PPV_API = 'https://api.ppv.to/api/streams';
+const PPV_API = 'https://api.ppv.st/api/streams';
 
 const PPV_PROVIDERS = [
-  { id: 'ppv.to',  label: 'PPV.to'  },
-  { id: 'ppv.st',  label: 'PPV.st'  },
   { id: 'ppv.cx',  label: 'PPV.cx'  },
   { id: 'ppv.is',  label: 'PPV.is'  },
   { id: 'ppv.lc',  label: 'PPV.lc'  },
