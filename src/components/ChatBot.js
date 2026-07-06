@@ -1,53 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import MediaDetailsModal from './MediaDetailsModal';
 import ThemedSelect from './ThemedSelect';
-import { isSupabaseConfigured, supabase } from '../utils/supabase';
-import { checkChatbotStatus, sendChatbotMessage } from '../utils/chatbotApi';
 import { submitSupabaseRequest } from '../utils/supabaseData';
+import { generateSupabaseRecommendations } from '../utils/recommendations';
 
-const INTENT_LABELS = {
-  recommendation: '🎯 Recommendation',
-  thematic: '🎭 Analysis',
-  factual: '📋 Factual',
-  general: '💬 General',
-};
-
-const MAX_CATALOG_LINKS = 5;
-const TITLE_STOP_WORDS = new Set([
-  'a',
-  'an',
-  'and',
-  'answer',
-  'best',
-  'book',
-  'books',
-  'here',
-  'heres',
-  'i',
-  'it',
-  'movie',
-  'movies',
-  'show',
-  'shows',
-  'some',
-  'that',
-  'the',
-  'these',
-  'this',
-  'tv',
-  'what',
-  'you',
-]);
-
-const SUGGESTED_PROMPTS = [
-  'Recommend something based on my ratings',
-  'What are the best drama TV shows?',
-  'Who directed The Dark Knight?',
-  'What themes does Dune explore?',
-  'Best sci-fi movies of all time?',
-  'What should I read if I like mystery?',
-];
+const MEDIA_ICONS = { movie: '🎬', tv_show: '📺', book: '📚' };
+const MEDIA_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 
 // ─── Request Modal ─────────────────────────────────────────────────────────────
 
@@ -159,447 +117,68 @@ function RequestModal({ prefill, onClose }) {
   );
 }
 
-// ─── Utility function to extract titles from text ──────────────────────────────
+// ─── Recommendation card ───────────────────────────────────────────────────────
 
-function normalizeTitleKey(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-function buildCatalogSearchPattern(value) {
-  const normalized = String(value || '')
-    .replace(/[,%_"']/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter(Boolean)
-    .join('%');
-
-  return normalized ? `%${normalized}%` : '';
-}
-
-function buildSiteUrl(mediaType, id) {
-  if (mediaType === 'movie') return `/movies?open=${id}`;
-  if (mediaType === 'tv_show') return `/tv-shows?open=${id}`;
-  return `/books?open=${id}`;
-}
-
-function sanitizeExtractedTitle(value) {
-  return String(value || '')
-    .replace(/^\s*(?:[-*]|\d+\.)\s+/, '')
-    .replace(/\s+\(\d{4}\)\s*$/, '')
-    .replace(/[.,:;!?]+$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function addUniqueTitle(titles, seenTitles, candidate) {
-  const title = sanitizeExtractedTitle(candidate);
-  const key = normalizeTitleKey(title);
-
-  if (!key || key.length < 2 || TITLE_STOP_WORDS.has(key) || seenTitles.has(key)) {
-    return;
-  }
-
-  titles.push(title);
-  seenTitles.add(key);
-}
-
-function extractTitlesFromText(text) {
-  const titles = [];
-  const seenTitles = new Set();
-  const quotedPattern = /"([^"\n]{2,120})"/g;
-  const boldPattern = /\*\*([^*\n]{2,120})\*\*/g;
-  let match;
-
-  while ((match = quotedPattern.exec(text || '')) !== null) {
-    addUniqueTitle(titles, seenTitles, match[1]);
-  }
-
-  while ((match = boldPattern.exec(text || '')) !== null) {
-    addUniqueTitle(titles, seenTitles, match[1]);
-  }
-
-  String(text || '')
-    .split(/\r?\n/)
-    .forEach((line) => {
-      const bulletMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/);
-      if (!bulletMatch) return;
-
-      const candidate = bulletMatch[1]
-        .split(/\s+-\s+/)[0]
-        .split(/\s+by\s+/i)[0]
-        .trim();
-
-      addUniqueTitle(titles, seenTitles, candidate);
-    });
-
-  return titles.slice(0, MAX_CATALOG_LINKS);
-}
-
-function scoreCatalogMatch(candidateTitle, requestedTitle) {
-  const candidateKey = normalizeTitleKey(candidateTitle);
-  const requestedKey = normalizeTitleKey(requestedTitle);
-
-  if (!candidateKey || !requestedKey) {
-    return 0;
-  }
-
-  if (candidateKey === requestedKey) {
-    return 100;
-  }
-
-  if (candidateKey.startsWith(`${requestedKey} `) || candidateKey.startsWith(`${requestedKey}:`)) {
-    return 90;
-  }
-
-  if (requestedKey.startsWith(`${candidateKey} `) || candidateKey.includes(requestedKey)) {
-    return 75;
-  }
-
-  return 0;
-}
-
-function mapCatalogRowToSource(row, mediaType) {
-  return {
-    id: row.id,
-    title: row.title,
-    year: row.year || null,
-    media_type: mediaType,
-    siteUrl: buildSiteUrl(mediaType, row.id),
-  };
-}
-
-async function searchCatalogByTitle(title) {
-  if (!isSupabaseConfigured || !supabase) {
-    return null;
-  }
-
-  const pattern = buildCatalogSearchPattern(title);
-  if (!pattern) {
-    return null;
-  }
-
-  const queries = [
-    supabase.from('movies').select('id, title, year').ilike('title', pattern).limit(3),
-    supabase.from('tv_shows').select('id, title, year').ilike('title', pattern).limit(3),
-    supabase.from('books').select('id, title, year').ilike('title', pattern).limit(3),
-  ];
-
-  const [movieResult, tvResult, bookResult] = await Promise.allSettled(queries);
-  const candidates = [];
-
-  if (movieResult.status === 'fulfilled' && !movieResult.value.error) {
-    candidates.push(...(movieResult.value.data || []).map((row) => mapCatalogRowToSource(row, 'movie')));
-  }
-
-  if (tvResult.status === 'fulfilled' && !tvResult.value.error) {
-    candidates.push(...(tvResult.value.data || []).map((row) => mapCatalogRowToSource(row, 'tv_show')));
-  }
-
-  if (bookResult.status === 'fulfilled' && !bookResult.value.error) {
-    candidates.push(...(bookResult.value.data || []).map((row) => mapCatalogRowToSource(row, 'book')));
-  }
-
-  return candidates
-    .map((candidate) => ({
-      ...candidate,
-      score: scoreCatalogMatch(candidate.title, title),
-    }))
-    .filter((candidate) => candidate.score > 0)
-    .sort((left, right) => right.score - left.score || (Number(right.year) || 0) - (Number(left.year) || 0))[0] || null;
-}
-
-function mergeSiteSources(...groups) {
-  const merged = [];
-  const seenSources = new Set();
-
-  groups.flat().filter(Boolean).forEach((source) => {
-    const key = `${source.media_type}:${source.id}`;
-    if (seenSources.has(key)) {
-      return;
-    }
-
-    seenSources.add(key);
-    merged.push(source);
-  });
-
-  return merged.slice(0, MAX_CATALOG_LINKS);
-}
-
-function stripLinkedTitleList(text, siteSources) {
-  if (!text || !(siteSources || []).length) {
-    return text;
-  }
-
-  const sourceTitleKeys = new Set(siteSources.map((source) => normalizeTitleKey(source.title)));
-  const lines = String(text).split(/\r?\n/);
-  const filteredLines = lines.filter((line) => {
-    const candidate = sanitizeExtractedTitle(line);
-    const normalizedCandidate = normalizeTitleKey(candidate);
-    const looksLikeListItem = /^\s*(?:[-*]|\d+\.)\s+/.test(line);
-
-    if (!looksLikeListItem || !normalizedCandidate) {
-      return true;
-    }
-
-    return !sourceTitleKeys.has(normalizedCandidate);
-  });
-
-  const cleaned = filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  return cleaned || text;
-}
-
-function humanizeAssistantText(text) {
-  return String(text || '')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-// ─── Search Supabase for media matching extracted titles ──────────────────────
-
-async function searchMediaByTitles(titles) {
-  const uniqueTitles = [...new Set((titles || []).map((title) => sanitizeExtractedTitle(title)).filter(Boolean))]
-    .slice(0, MAX_CATALOG_LINKS);
-
-  const results = await Promise.all(uniqueTitles.map((title) => searchCatalogByTitle(title)));
-  const seenSources = new Set();
-
-  return results
-    .filter(Boolean)
-    .filter((source) => {
-      const key = `${source.media_type}:${source.id}`;
-      if (seenSources.has(key)) {
-        return false;
-      }
-
-      seenSources.add(key);
-      return true;
-    });
-}
-
-// ─── Source badges ─────────────────────────────────────────────────────────────
-
-function SiteBadge({ source }) {
-  const icon = source.media_type === 'movie' ? '🎬' : source.media_type === 'tv_show' ? '📺' : '📚';
+function RecommendationCard({ rec }) {
   return (
-    <a href={source.siteUrl} className="chat-source-badge chat-source-badge--site"
-       title={`View on binge.: ${source.title}${source.year ? ` (${source.year})` : ''}`}>
-      {icon} {source.title}
-    </a>
-  );
-}
-
-function WebBadge({ source }) {
-  return (
-    <a href={source.url} target="_blank" rel="noreferrer"
-       className="chat-source-badge chat-source-badge--web"
-       title={source.snippet || source.title}>
-      🌐 {source.source || 'Web'}
-    </a>
-  );
-}
-
-// ─── Message ───────────────────────────────────────────────────────────────────
-
-function Message({ msg }) {
-  return (
-    <div className={`chat-message chat-message--${msg.role}`}>
-      {msg.role === 'assistant' && (
-        <div className="chat-message-header">
-          <span className="chat-avatar">🦉</span>
-          {msg.intent && <span className="chat-intent-badge">{INTENT_LABELS[msg.intent] || msg.intent}</span>}
-          {msg.latency && <span className="chat-latency">{(msg.latency / 1000).toFixed(1)}s</span>}
-        </div>
-      )}
-      {msg.role === 'user' && (
-        <div className="chat-message-header">
-          <span className="chat-avatar chat-avatar--user">👤</span>
-        </div>
-      )}
-      <div className="chat-message-body">
-        <p className="chat-message-text">{msg.content}</p>
-
-        {(msg.siteSources?.length > 0 || msg.webSources?.length > 0) && (
-          <div className="chat-sources-row">
-            {msg.siteSources?.length > 0 && (
-              <div className="chat-sources">
-                <span className="chat-sources-label">Open on binge.</span>
-                <div className="chat-sources-list">
-                  {msg.siteSources.map(s => <SiteBadge key={`${s.media_type}:${s.id}`} source={s} />)}
-                </div>
-              </div>
-            )}
-            {msg.webSources?.length > 0 && (
-              <div className="chat-sources">
-                <span className="chat-sources-label">Sources</span>
-                <div className="chat-sources-list">
-                  {msg.webSources.map((s, i) => <WebBadge key={i} source={s} />)}
-                </div>
-              </div>
-            )}
+    <a href={rec.siteUrl} className="foryou-card">
+      <div className="foryou-card-poster">
+        {rec.posterUrl ? (
+          <img src={rec.posterUrl} alt={rec.title} />
+        ) : (
+          <div className="foryou-card-placeholder">
+            {MEDIA_ICONS[rec.media_type]}
           </div>
         )}
       </div>
-    </div>
+      <div className="foryou-card-body">
+        <div className="foryou-card-type">
+          {MEDIA_ICONS[rec.media_type]} {MEDIA_LABELS[rec.media_type]}
+          {rec.year && <span className="foryou-card-year">{rec.year}</span>}
+        </div>
+        <h4 className="foryou-card-title">{rec.title}</h4>
+        {rec.genre && <p className="foryou-card-genre">{rec.genre.split(',')[0].trim()}</p>}
+        <p className="foryou-card-reason">✨ {rec.reason}</p>
+      </div>
+    </a>
   );
 }
 
-// ─── Main ChatBot ──────────────────────────────────────────────────────────────
+// ─── Recommender panel ─────────────────────────────────────────────────────────
 
 export default function ChatBot() {
   const { user } = useAuth();
   const [isOpen, setIsOpen]             = useState(false);
   const [isMinimized, setIsMinimized]   = useState(false);
-  const [messages, setMessages]         = useState([]);
-  const [input, setInput]               = useState('');
-  const [loading, setLoading]           = useState(false);
-  const [apiStatus, setApiStatus]       = useState(null);
-  const [apiError, setApiError]         = useState('');
+  const [state, setState]               = useState('idle'); // idle | loading | done | empty | error
+  const [data, setData]                 = useState(null);
+  const [error, setError]               = useState('');
   const [requestModal, setRequestModal] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
 
-  const runStatusCheck = useCallback(async () => {
+  const fetchRecommendations = useCallback(async () => {
+    setState('loading');
+    setError('');
     try {
-      await checkChatbotStatus();
-      setApiStatus(true);
-      setApiError('');
-      if (messages.length === 0) {
-        setMessages([{
-          id: 'welcome',
-          role: 'assistant',
-          content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it.`,
-        }]);
-      }
-    } catch (error) {
-      setApiStatus(false);
-      setApiError(String(error?.message || '').trim() || 'The AI assistant is unavailable right now.');
+      const result = await generateSupabaseRecommendations();
+      setData(result);
+      setState(result.recommendations?.length ? 'done' : 'empty');
+    } catch (err) {
+      setError(String(err?.message || '').trim() || 'Something went wrong.');
+      setState('error');
     }
-  }, [messages.length, user?.username]);
+  }, []);
 
+  // Fetch the first time the panel is opened.
   useEffect(() => {
-    if (!isOpen || apiStatus !== null) return;
-    runStatusCheck();
-  }, [isOpen, apiStatus, runStatusCheck]);
+    if (isOpen && state === 'idle') fetchRecommendations();
+  }, [isOpen, state, fetchRecommendations]);
 
-  // Allow the mobile bottom nav AI tab to open the chatbot
+  // Allow the mobile bottom nav "For You" tab to open the recommender.
   useEffect(() => {
     const handler = () => { setIsOpen(true); setIsMinimized(false); };
     window.addEventListener('binge:openAI', handler);
     return () => window.removeEventListener('binge:openAI', handler);
   }, []);
-
-  async function checkStatus() {
-    try {
-      await checkChatbotStatus();
-      setApiStatus(true);
-      setApiError('');
-      if (messages.length === 0) {
-        setMessages([{
-          id: 'welcome',
-          role: 'assistant',
-          content: `Hey ${user?.username || 'there'}! 🦉 Ask me anything about movies, TV shows, or books — reviews, themes, cast, recommendations, you name it.`,
-        }]);
-      }
-    } catch (error) {
-      setApiStatus(false);
-      setApiError(String(error?.message || '').trim() || 'The AI assistant is unavailable right now.');
-    }
-  }
-
-  useEffect(() => {
-    if (isOpen && !isMinimized) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isOpen, isMinimized]);
-
-  useEffect(() => {
-    if (isOpen && !isMinimized && apiStatus) inputRef.current?.focus();
-  }, [isOpen, isMinimized, apiStatus]);
-
-  const sendMessage = useCallback(async (text) => {
-    const trimmed = (text || input).trim();
-    if (!trimmed || loading) return;
-    setInput('');
-
-    const userMsg = { id: Date.now(), role: 'user', content: trimmed };
-    setMessages(prev => [...prev, userMsg]);
-    setLoading(true);
-
-    const conversationHistory = messages
-      .filter(m => m.id !== 'welcome')
-      .map(m => ({ role: m.role, content: m.content }));
-
-    const startTime = Date.now();
-    try {
-      const data = await sendChatbotMessage({
-        message: trimmed,
-        conversationHistory,
-      });
-      setApiStatus(true);
-      setApiError('');
-
-      const latencyMs = Date.now() - startTime;
-      const rawAssistantContent = data?.content || data?.choices?.[0]?.message?.content || data?.response || 'No response.';
-      const extractedTitles = extractTitlesFromText(rawAssistantContent);
-      const resolvedSiteSources = mergeSiteSources(
-        Array.isArray(data?.siteSources) ? data.siteSources : [],
-        await searchMediaByTitles(extractedTitles)
-      );
-      const assistantContent = humanizeAssistantText(
-        stripLinkedTitleList(rawAssistantContent, resolvedSiteSources) || 'I found these on binge.'
-      );
-
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: assistantContent,
-        intent: data?.intent || null,
-        siteSources: resolvedSiteSources,
-        webSources: data?.webSources || [],
-      }]);
-
-      if (supabase && user?.id) {
-        supabase.from('chat_logs').insert({
-          user_id: user.id,
-          query: trimmed.slice(0, 500),
-          intent: data?.intent || null,
-          response_length: rawAssistantContent.length,
-          sources_count: resolvedSiteSources.length + (data?.webSources?.length || 0),
-          latency_ms: latencyMs,
-        }).then(() => {}).catch(() => {});
-      }
-    } catch (err) {
-      setApiError(String(err?.message || '').trim() || 'Something went wrong. Please try again.');
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: `⚠️ ${err?.message || 'Something went wrong. Please try again.'}`,
-      }]);
-    } finally {
-      setLoading(false);
-    }
-  }, [input, loading, messages, user?.id]);
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  }
-
-  function clearChat() { setMessages([]); setApiStatus(null); setApiError(''); }
-
-  function handleOpenModal(item) {
-    setSelectedItem(item);
-  }
-
-  function handleCloseModal() {
-    setSelectedItem(null);
-  }
 
   if (!user) return null;
 
@@ -609,10 +188,10 @@ export default function ChatBot() {
       <button
         className={`chatbot-fab ${isOpen ? 'chatbot-fab--open' : ''}`}
         onClick={() => { setIsOpen(o => !o); setIsMinimized(false); }}
-        aria-label="Open AI media assistant"
+        aria-label="Open your recommendations"
       >
-        {isOpen ? '✕' : '🦉'}
-        {!isOpen && <span className="chatbot-fab-label">Ask AI</span>}
+        {isOpen ? '✕' : '🍿'}
+        {!isOpen && <span className="chatbot-fab-label">For You</span>}
       </button>
 
       {/* Panel */}
@@ -622,10 +201,9 @@ export default function ChatBot() {
           {/* Header */}
           <div className="chatbot-header">
             <div className="chatbot-header-title">
-              <span className="chatbot-header-owl">🦉</span>
+              <span className="chatbot-header-owl">🍿</span>
               <div>
-                <strong>Media Assistant</strong>
-                <span className={`chatbot-status-dot chatbot-status-dot--${apiStatus ? 'online' : apiStatus === false ? 'offline' : 'checking'}`} />
+                <strong>For You</strong>
               </div>
             </div>
             <div className="chatbot-header-actions">
@@ -636,81 +214,64 @@ export default function ChatBot() {
               >
                 + Request
               </button>
-              <button onClick={clearChat} title="Clear chat" className="chatbot-icon-btn">🗑</button>
+              {state === 'done' && (
+                <button onClick={fetchRecommendations} title="Refresh recommendations" className="chatbot-icon-btn">↻</button>
+              )}
               <button onClick={() => setIsMinimized(m => !m)} className="chatbot-icon-btn">{isMinimized ? '▲' : '▼'}</button>
               <button onClick={() => setIsOpen(false)} className="chatbot-icon-btn">✕</button>
             </div>
           </div>
 
           {!isMinimized && (
-            <>
-              {apiStatus === false && (
-                <div className="chatbot-offline-banner">
-                  <strong>⚠️ AI not available.</strong>
-                  <p>{apiError || 'The chatbot could not reach either the Supabase edge function or the /api/chat backend.'}</p>
-                  <p>Supported backends are the Supabase <code>ai-chatbot</code> function and the server <code>/api/chat</code> route.</p>
-                  <button className="chatbot-retry-btn" onClick={() => { setApiStatus(null); checkStatus(); }}>Retry</button>
+            <div className="chatbot-messages">
+              {state === 'loading' && (
+                <div className="foryou-loading">
+                  <div className="foryou-loading-owl">🍿</div>
+                  <p>Matching your taste...</p>
+                  <div className="foryou-loading-dots"><span /><span /><span /></div>
                 </div>
               )}
 
-              <div className="chatbot-messages">
-                {messages.map(msg => <Message key={msg.id} msg={msg} onOpenModal={handleOpenModal} />)}
-                {loading && (
-                  <div className="chat-message chat-message--assistant">
-                    <div className="chat-message-header"><span className="chat-avatar">🦉</span></div>
-                    <div className="chat-message-body">
-                      <div className="chat-typing-indicator"><span /><span /><span /></div>
+              {state === 'error' && (
+                <div className="foryou-error">
+                  <p>⚠️ {error}</p>
+                  <button type="button" className="foryou-generate-btn" onClick={fetchRecommendations}>Try again</button>
+                </div>
+              )}
+
+              {state === 'empty' && (
+                <div className="foryou-idle">
+                  <p className="foryou-idle-text">
+                    {data?.message || 'Rate some movies, TV shows, or books first to unlock personalized recommendations!'}
+                  </p>
+                  <a href="/movies" className="foryou-generate-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                    Browse & Rate Media
+                  </a>
+                </div>
+              )}
+
+              {state === 'done' && data && (
+                <>
+                  {data.tasteProfile && (
+                    <div className="foryou-taste-profile">
+                      <span className="foryou-taste-label">Your taste</span>
+                      <p>{data.tasteProfile}</p>
                     </div>
+                  )}
+                  <div className="foryou-grid">
+                    {data.recommendations.map(rec => (
+                      <RecommendationCard key={`${rec.media_type}:${rec.id}`} rec={rec} />
+                    ))}
                   </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {messages.length <= 1 && !loading && apiStatus && (
-                <div className="chatbot-suggestions">
-                  {SUGGESTED_PROMPTS.map(p => (
-                    <button key={p} className="chatbot-suggestion-chip" onClick={() => sendMessage(p)}>{p}</button>
-                  ))}
-                </div>
+                </>
               )}
-
-              <div className="chatbot-input-row">
-                <textarea
-                  ref={inputRef}
-                  className="chatbot-input"
-                  placeholder="Ask anything about movies, books, TV..."
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  disabled={loading || !apiStatus}
-                  rows={1}
-                />
-                <button
-                  className="chatbot-send-btn"
-                  onClick={() => sendMessage()}
-                  disabled={loading || !input.trim() || !apiStatus}
-                >
-                  {loading ? '⏳' : '➤'}
-                </button>
-              </div>
-              <p className="chatbot-footer-note">Web search enabled · binge. catalog cross-referenced</p>
-            </>
+            </div>
           )}
         </div>
       )}
 
       {requestModal && (
         <RequestModal prefill={requestModal} onClose={() => setRequestModal(null)} />
-      )}
-
-      {selectedItem && (
-        <MediaDetailsModal
-          item={selectedItem}
-          mediaType={selectedItem.mediaType}
-          onClose={handleCloseModal}
-          allowActions={false}
-          browseOnlyMessage="Chat preview mode - view only"
-        />
       )}
     </>
   );

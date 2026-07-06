@@ -1,12 +1,12 @@
 import { canAccessUserType, getDefaultRouteForUserType } from './userAccess';
 
 describe('user access helpers', () => {
-  test('routes dev users to the developer lab when only the dev flag is present', () => {
+  test('routes dev users to home when only the dev flag is present', () => {
     expect(getDefaultRouteForUserType({
       userType: '',
       isAdmin: false,
       isDev: true,
-    })).toBe('/__ops/dev-lab');
+    })).toBe('/home');
   });
 
   test('lets dev users access dev-only routes when the role comes from flags', () => {
@@ -22,7 +22,7 @@ describe('user access helpers', () => {
       user_type: null,
       is_admin: false,
       is_dev: true,
-    })).toBe('/__ops/dev-lab');
+    })).toBe('/home');
 
     expect(canAccessUserType({
       user_type: null,

@@ -968,54 +968,10 @@ function buildBookRows() {
   return rows.filter(r => r.items.length > 0);
 }
 
-// ─── Groq-powered popular titles cache ────────────────────────────────────────
-
-const GROQ_API_KEY  = process.env.GROQ_API_KEY;
-const GROQ_MODEL    = 'llama-3.3-70b-versatile';
-const GROQ_API_URL  = 'https://api.groq.com/openai/v1/chat/completions';
+// ─── Popular titles cache (Trakt relevance) ───────────────────────────────────
 
 const popularTitlesCache = new Map(); // key → { titles, expiresAt }
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
-
-async function fetchPopularTitlesFromGroq(mediaType) {
-  const cached = popularTitlesCache.get(mediaType);
-  if (cached && Date.now() < cached.expiresAt) return cached.titles;
-
-  if (!GROQ_API_KEY) return null;
-
-  const isTV = mediaType === 'tv';
-  const prompt = isTV
-    ? `List 80 of the most widely watched and recognized TV shows of all time, spanning different genres and decades. Include prestige dramas, popular comedies, iconic sci-fi, crime shows, and animated hits. Return ONLY a valid JSON array of title strings, no explanation, no numbering, no markdown. Example: ["Breaking Bad","Game of Thrones"]`
-    : `List 80 of the most widely watched and recognized movies of all time, spanning different genres and decades. Include blockbusters, acclaimed dramas, beloved comedies, iconic action films, and animated classics. Return ONLY a valid JSON array of title strings, no explanation, no numbering, no markdown. Example: ["The Dark Knight","Inception"]`;
-
-  try {
-    const response = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: 1024,
-      }),
-    });
-
-    const data = await response.json();
-    const text = data?.choices?.[0]?.message?.content || '';
-
-    // Extract JSON array from the response
-    const match = text.match(/\[[\s\S]*?\]/);
-    if (!match) return null;
-
-    const titles = JSON.parse(match[0]);
-    if (!Array.isArray(titles) || titles.length === 0) return null;
-
-    popularTitlesCache.set(mediaType, { titles, expiresAt: Date.now() + CACHE_TTL_MS });
-    return titles;
-  } catch {
-    return null;
-  }
-}
 
 async function fetchPopularTitlesFromTrakt(mediaType) {
   const type = mediaType === 'tv' ? 'tv' : 'movie';
@@ -1051,7 +1007,7 @@ router.get('/popular-titles', requireAuth, async (req, res) => {
   }
 
   try {
-    const titles = await fetchPopularTitlesFromTrakt(type) || await fetchPopularTitlesFromGroq(type);
+    const titles = await fetchPopularTitlesFromTrakt(type);
     res.json({ titles: titles || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });

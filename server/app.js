@@ -90,24 +90,16 @@ const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 10, message: 'Too ma
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
 
-// Chat and forum: 30 posts / minute per IP
-const writeLimiter = rateLimit({ windowMs: 60_000, max: 30 });
-app.use('/api/chat', writeLimiter);
-app.use('/api/forum', writeLimiter);
-
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/lists', require('./routes/lists'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/watchlist', require('./routes/watchlist'));
 app.use('/api/ratings', require('./routes/ratings'));
-app.use('/api/chat', require('./routes/chat'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/livetv',      require('./routes/livetv'));
 app.use('/api/sports',      require('./routes/sports'));
 app.use('/api/proxy',      require('./routes/proxy'));
 app.use('/api/embed-proxy', require('./routes/embedProxy'));
-app.use('/api/forum', require('./routes/forum'));
-app.use('/api/dev-lab', require('./routes/devLab'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/manga',       require('./routes/manga'));
