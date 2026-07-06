@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const PPV_API = 'https://api.ppv.to/api/streams';
+const PPV_API = 'https://api.ppv.st/api/streams';
 const CACHE_TTL = 60 * 1000;
 
 let cache = null;
@@ -24,13 +24,13 @@ async function fetchStreams() {
 
   if (!res.ok) {
     if (cache) return cache;
-    throw new Error(`ppv.to ${res.status}`);
+    throw new Error(`ppv.st ${res.status}`);
   }
 
   const data = await res.json();
   if (!data.success || !Array.isArray(data.streams)) {
     if (cache) return cache;
-    throw new Error('Unexpected ppv.to response');
+    throw new Error('Unexpected ppv.st response');
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -47,7 +47,7 @@ async function fetchStreams() {
 
       if (ended && !isTruthy(s.allowpaststreams)) continue;
 
-      // iframe field from ppv.to is a plain URL
+      // iframe field from ppv.st is a plain URL
       const iframeSrc = s.iframe || null;
 
       streams.push({
