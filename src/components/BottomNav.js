@@ -2,7 +2,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   House,
   MagnifyingGlass,
-  ChatCircleText,
   Sparkle,
 } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,16 +33,8 @@ const TABS = [
     icon: null, // rendered separately as avatar
   },
   {
-    id: 'community',
-    label: 'Community',
-    path: '/forum',
-    icon: (active) => (
-      <ChatCircleText size={SIZE} weight={active ? 'fill' : 'regular'} />
-    ),
-  },
-  {
     id: 'ai',
-    label: 'AI',
+    label: 'For You',
     action: 'ai',
     icon: () => <Sparkle size={SIZE} weight="duotone" />,
   },

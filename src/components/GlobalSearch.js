@@ -84,18 +84,6 @@ export default function GlobalSearch() {
       _sub: `Book · ${r.author || ''}`,
       _url: `/books?open=${r.id}`,
     })),
-    ...results.forums.map(r => ({
-      ...r, _type: 'forum',
-      _label: r.name,
-      _sub: `Community · ${(r.member_count||0).toLocaleString()} members`,
-      _url: `/forum/${r.slug}`,
-    })),
-    ...results.posts.map(r => ({
-      ...r, _type: 'post',
-      _label: r.title,
-      _sub: `Post in ${r.forums?.name}`,
-      _url: `/forum/${r.forums?.slug}/post/${r.id}`,
-    })),
     ...(results.people || []).map(r => ({
       ...r, _type: 'person',
       _label: r.username,
@@ -124,7 +112,7 @@ export default function GlobalSearch() {
 
   useEffect(() => { setSelected(0); }, [results]);
 
-  const TYPE_ICONS = { movie: '🎬', tv: '📺', book: '📖', forum: '💬', post: '📝', person: '👤' };
+  const TYPE_ICONS = { movie: '🎬', tv: '📺', book: '📖', person: '👤' };
 
   return (
     <>
@@ -136,7 +124,7 @@ export default function GlobalSearch() {
         title="Search (⌘K)"
       >
         <span className="global-search-icon">🔍</span>
-        <span className="global-search-placeholder">Search movies, shows, books, communities…</span>
+        <span className="global-search-placeholder">Search movies, shows, books, people…</span>
         <kbd className="global-search-kbd">⌘K</kbd>
       </button>
 
@@ -148,7 +136,7 @@ export default function GlobalSearch() {
               <input
                 ref={inputRef}
                 className="global-search-input"
-                placeholder="Search movies, shows, books, communities, people..."
+                placeholder="Search movies, shows, books, people..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -162,7 +150,7 @@ export default function GlobalSearch() {
 
             {!query && (
               <div className="global-search-hint">
-                <p>Search across movies, TV shows, books, communities, posts, and users</p>
+                <p>Search across movies, TV shows, books, and users</p>
                 <div className="global-search-shortcuts">
                   <span><kbd>↑↓</kbd> navigate</span>
                   <span><kbd>↵</kbd> open</span>
@@ -177,12 +165,12 @@ export default function GlobalSearch() {
 
             {flat.length > 0 && (
               <div className="global-search-results">
-                {['movie', 'tv', 'book', 'forum', 'post', 'person'].map(type => {
+                {['movie', 'tv', 'book', 'person'].map(type => {
                   const items = flat.filter(r => r._type === type);
                   if (!items.length) return null;
                   const sectionLabels = {
                     movie: '🎬 Movies', tv: '📺 TV Shows', book: '📖 Books',
-                    forum: '💬 Communities', post: '📝 Posts', person: '👤 People',
+                    person: '👤 People',
                   };
                   return (
                     <div key={type} className="global-search-section">

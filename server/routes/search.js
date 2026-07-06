@@ -29,13 +29,13 @@ function buildSqlitePattern(raw) {
   return `%${raw.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '%')}%`;
 }
 
-// GET /search?q=query&types=movies,tv,books,forums,people
+// GET /search?q=query&types=movies,tv,books,people
 router.get('/', async (req, res) => {
-  const { q = '', types = 'movies,tv,books,forums,people' } = req.query;
-  if (!q.trim() || q.length < 2) return res.json({ movies: [], tv: [], books: [], forums: [], posts: [], people: [] });
+  const { q = '', types = 'movies,tv,books,people' } = req.query;
+  if (!q.trim() || q.length < 2) return res.json({ movies: [], tv: [], books: [], people: [] });
 
   const typeArr    = types.split(',');
-  const results    = { movies: [], tv: [], books: [], forums: [], posts: [], people: [] };
+  const results    = { movies: [], tv: [], books: [], people: [] };
   const exactPat   = `%${q.trim()}%`;           // original (case-insensitive via SQLite)
   const fuzzyPat   = buildSqlitePattern(q);     // punctuation-stripped
   const limit      = 8;
@@ -69,19 +69,9 @@ router.get('/', async (req, res) => {
       ).all(exactPat, fuzzyPat, exactPat, fuzzyPat, limit);
     }
 
-    // Supabase: forums, posts, people
+    // Supabase: people
     const sb = getSb();
     if (sb) {
-      if (typeArr.includes('forums')) {
-        const { data: forums } = await sb.from('forums').select('id, name, slug, icon, description, member_count')
-          .ilike('name', exactPat).limit(limit);
-        results.forums = forums || [];
-      }
-      if (typeArr.includes('forums')) {
-        const { data: posts } = await sb.from('posts').select('id, title, flair, score, comment_count, created_at, forums(name, slug, icon)')
-          .ilike('title', exactPat).eq('is_removed', false).order('score', { ascending: false }).limit(limit);
-        results.posts = posts || [];
-      }
       if (typeArr.includes('people')) {
         const { data: people } = await sb.from('profiles').select('id, username, avatar_url, bio')
           .ilike('username', exactPat).limit(limit);

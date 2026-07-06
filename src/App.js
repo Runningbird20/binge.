@@ -27,17 +27,13 @@ const SharedList     = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminRequests  = lazy(() => import('./pages/AdminRequests'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
-const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'));
 const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const LiveTV         = lazy(() => import('./pages/LiveTV'));
 const Sports         = lazy(() => import('./pages/Sports'));
 const Ratings        = lazy(() => import('./pages/Ratings'));
 const Watchlist      = lazy(() => import('./pages/Watchlist'));
-const Forum          = lazy(() => import('./pages/Forum'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
-const Trending       = lazy(() => import('./pages/Trending'));
-const DeveloperLab   = lazy(() => import('./pages/DeveloperLab'));
 const YearInReview   = lazy(() => import('./pages/YearInReview'));
 
 // Routes where we never show the bottom nav
@@ -101,19 +97,13 @@ export default function App() {
                 <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
                 <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
-                <Route path="/forum"                    element={<ProtectedRoute><Forum /></ProtectedRoute>} />
-                <Route path="/forum/:slug"              element={<ProtectedRoute><Forum /></ProtectedRoute>} />
-                <Route path="/forum/:slug/post/:postId" element={<ProtectedRoute><Forum /></ProtectedRoute>} />
                 <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
                 <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
-                <Route path="/trending"                 element={<ProtectedRoute><Trending /></ProtectedRoute>} />
                 <Route path="/year-in-review"           element={<ProtectedRoute><YearInReview /></ProtectedRoute>} />
                 <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
                 <Route path="/admin/requests"  element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
-                <Route path="/admin/analytics" element={<ProtectedRoute allowedUserTypes={['admin']}><AdminAnalytics /></ProtectedRoute>} />
                 <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
                 <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
-                <Route path="/__ops/dev-lab" element={<ProtectedRoute allowedUserTypes={['dev', 'admin']}><DeveloperLab /></ProtectedRoute>} />
                 <Route path="*" element={
                   <div className="app-layout">
                     <div className="page-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',gap:'1rem'}}>

@@ -66,7 +66,7 @@ export default function ForYou() {
       {state === 'idle' && (
         <div className="foryou-idle">
           <p className="foryou-idle-text">
-            Get personalized picks based on everything you've rated — our AI owl will analyze your taste and find hidden gems just for you.
+            Get personalized picks based on everything you've rated — we'll match your taste against the catalog and surface hidden gems just for you.
           </p>
           <button type="button" className="foryou-generate-btn" onClick={e => { e.preventDefault(); e.stopPropagation(); fetchRecommendations(); }}>
             Generate My Recommendations
