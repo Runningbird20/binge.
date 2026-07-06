@@ -85,10 +85,6 @@ export function getDefaultRouteForUserType(userOrType) {
     return '/admin';
   }
 
-  if (normalized === 'dev') {
-    return '/__ops/dev-lab';
-  }
-
   return '/home';
 }
 

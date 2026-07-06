@@ -67,8 +67,7 @@ export default function NotificationBell() {
       setCount(c => Math.max(0, c - 1));
     }
     // Navigate to the relevant content
-    if (notif.post_id) navigate(`/forum/post/${notif.post_id}`);
-    else if (notif.actor?.username) navigate(`/profile/${notif.actor.username}`);
+    if (notif.actor?.username) navigate(`/profile/${notif.actor.username}`);
     setOpen(false);
   }
 

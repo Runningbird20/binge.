@@ -10,7 +10,6 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [panelOpen, setPanelOpen] = useState(false);
   const isAdmin = user?.isAdmin || user?.userType === 'admin';
-  const isDev   = user?.isDev   || user?.userType === 'dev';
 
   function close() { setPanelOpen(false); }
 
@@ -42,18 +41,11 @@ export default function Navbar() {
 
         {user ? (
           <>
-            {(isAdmin || isDev) && (
+            {isAdmin && (
               <div className="navbar-role-btns">
-                {isAdmin && (
-                  <NavLink to="/admin" className={({ isActive }) => `navbar-role-btn navbar-role-btn--admin${isActive ? ' active' : ''}`}>
-                    Admin
-                  </NavLink>
-                )}
-                {(isAdmin || isDev) && (
-                  <NavLink to="/__ops/dev-lab" className={({ isActive }) => `navbar-role-btn navbar-role-btn--dev${isActive ? ' active' : ''}`}>
-                    Dev
-                  </NavLink>
-                )}
+                <NavLink to="/admin" className={({ isActive }) => `navbar-role-btn navbar-role-btn--admin${isActive ? ' active' : ''}`}>
+                  Admin
+                </NavLink>
               </div>
             )}
 
@@ -142,10 +134,8 @@ export default function Navbar() {
               <div className="nav-panel-section">
                 <p className="nav-panel-section-label">Social</p>
                 <nav className="nav-panel-nav">
-                  <NavLink to="/forum"      className={link} onClick={close}>💬 Forum</NavLink>
                   <NavLink to="/watch-room" className={link} onClick={close}>🎬 Watch Together</NavLink>
                   <NavLink to="/following"  className={link} onClick={close}>👥 Following</NavLink>
-                  <NavLink to="/trending"   className={link} onClick={close}>🔥 Trending</NavLink>
                 </nav>
               </div>
 
@@ -155,7 +145,6 @@ export default function Navbar() {
                 <nav className="nav-panel-nav">
                   <NavLink to="/account-settings"  className={link} onClick={close}>⚙️ Settings</NavLink>
                   {isAdmin && <NavLink to="/admin"          className={link} onClick={close}>🛡️ Admin Panel</NavLink>}
-                  {(isAdmin || isDev) && <NavLink to="/__ops/dev-lab" className={link} onClick={close}>🔧 Dev Lab</NavLink>}
                 </nav>
               </div>
             </>
