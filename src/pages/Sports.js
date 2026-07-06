@@ -6,6 +6,7 @@ const POLL_MS = 60_000;
 const PPV_API = 'https://api.ppv.st/api/streams';
 
 const PPV_PROVIDERS = [
+  { id: 'ppv.st',  label: 'PPV.st'  },
   { id: 'ppv.cx',  label: 'PPV.cx'  },
   { id: 'ppv.is',  label: 'PPV.is'  },
   { id: 'ppv.lc',  label: 'PPV.lc'  },
@@ -13,7 +14,7 @@ const PPV_PROVIDERS = [
 
 function buildStreamUrl(stream, providerDomain) {
   if (!stream.iframeSrc && !stream.uriName) return null;
-  if (providerDomain === 'ppv.to') return stream.iframeSrc || null;
+  if (providerDomain === 'ppv.st') return stream.iframeSrc || null;
   if (stream.iframeSrc) {
     try {
       const url = new URL(stream.iframeSrc);
@@ -75,14 +76,14 @@ async function fetchStreams() {
     }
   } catch { /* fall through */ }
 
-  // 2. Direct browser call — ppv.to allows Access-Control-Allow-Origin: *
+  // 2. Direct browser call — ppv.st allows Access-Control-Allow-Origin: *
   const res = await fetch(PPV_API, {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(10000),
   });
-  if (!res.ok) throw new Error(`ppv.to ${res.status}`);
+  if (!res.ok) throw new Error(`ppv.st ${res.status}`);
   const data = await res.json();
-  if (!data.success) throw new Error('ppv.to error');
+  if (!data.success) throw new Error('ppv.st error');
   return parsePpvResponse(data);
 }
 
@@ -144,7 +145,7 @@ export default function Sports() {
   const [sidebarOpen, setSidebar]       = useState(true);
   const [fullscreen, setFullscreen]     = useState(false);
   const [nowMs, setNowMs]               = useState(Date.now());
-  const [sportsProvider, setSportsProvider] = useState('ppv.to');
+  const [sportsProvider, setSportsProvider] = useState('ppv.st');
   const iframeRef = useRef(null);
   const playerRef = useRef(null);
 
@@ -449,7 +450,7 @@ export default function Sports() {
           </div>
 
           <div className="sports-sidebar-footer">
-            <span>Powered by ppv.to</span>
+            <span>Powered by PPV</span>
             <button className="sports-refresh-btn" onClick={load} title="Refresh">↻</button>
           </div>
         </aside>
