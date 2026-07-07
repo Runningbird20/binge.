@@ -27,7 +27,7 @@ const FEATURES = [
   { icon: '⭐', title: 'Rate & Review', desc: 'Multi-dimensional scores for movies, TV, and books.' },
   { icon: '📋', title: 'Track & Watch', desc: 'Watchlist, progress tracking, and status per title.' },
   { icon: '🤝', title: 'Collaborate', desc: 'Shared lists with friends and vibe voting.' },
-  { icon: '💬', title: 'Discuss', desc: 'Community forum with spoiler tags and AI moderation.' },
+  { icon: '🎬', title: 'Watch Together', desc: 'Sync playback and chat live with friends in a watch room.' },
 ];
 
 export default function Onboarding({ onComplete }) {

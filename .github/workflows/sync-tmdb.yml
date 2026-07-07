@@ -1,6 +1,6 @@
 name: Sync TMDB Catalog
 
-# Runs twice a week (Mon/Thu) on GitHub's servers — not on your machine.
+# Runs twice a week (Mon/Thu) on GitHub's servers
 # Each run downloads TMDB's bulk export files, finds new content,
 # fetches full details, and upserts them directly into Supabase.
 #

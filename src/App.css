@@ -5225,6 +5225,36 @@ body {
 }
 .chatbot-icon-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
 
+/* Type tabs (Movies / TV / Books) */
+.chatbot-tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem 0;
+  flex-shrink: 0;
+}
+.chatbot-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.5rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.chatbot-tab:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.chatbot-tab--active {
+  background: rgba(124,111,205,0.18);
+  border-color: rgba(124,111,205,0.5);
+  color: #fff;
+}
+
 /* Offline banner */
 .chatbot-offline-banner {
   margin: 0.75rem;
