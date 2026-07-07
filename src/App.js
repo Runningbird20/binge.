@@ -8,7 +8,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
 import GlobalSearch from './components/GlobalSearch';
 import AdBlocker from './components/AdBlocker';
-import PopupShield from './components/PopupShield';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -75,7 +74,6 @@ function AppRouteFallback() {
 export default function App() {
   return (
     <AuthProvider>
-      <PopupShield />
       <ToastProvider>
         <BrowserRouter>
           <Suspense fallback={<AppRouteFallback />}>
