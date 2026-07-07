@@ -75,7 +75,10 @@ async function downloadExport(type) {
       signal: AbortSignal.timeout(180_000),
       headers: { Authorization: `Bearer ${TMDB_READ_TOKEN}` },
     });
-    if (res.status === 404) return null;
+    // TMDB's export bucket has no public ListBucket permission, so a file that
+    // doesn't exist yet (not published) or has aged out (>~3mo) comes back as
+    // 403 Forbidden, not 404 Not Found. Treat both as "not available".
+    if (res.status === 404 || res.status === 403) return null;
     if (!res.ok) throw new Error(`Export HTTP ${res.status}`);
     return res;
   };
@@ -84,6 +87,10 @@ async function downloadExport(type) {
   if (!res) {
     console.log('  Today\'s export not yet available — falling back to yesterday\'s');
     res = await tryDate(1);
+  }
+  if (!res) {
+    console.log('  Yesterday\'s export not available either — falling back to 2 days ago');
+    res = await tryDate(2);
   }
   if (!res) throw new Error(`Could not download export for type=${type}`);
 
