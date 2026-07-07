@@ -4,6 +4,10 @@ name: Sync TMDB Catalog
 # Each run downloads TMDB's bulk export files, finds new content,
 # fetches full details, and upserts them directly into Supabase.
 #
+# TMDB publishes each day's export around 08:00 UTC, so this is scheduled
+# for 09:00 UTC to give it an hour of buffer (the script also falls back to
+# prior days' exports if today's isn't up yet).
+#
 # First-time setup — add these secrets in your repo settings:
 #   Settings → Secrets and variables → Actions → New repository secret
 #
@@ -14,7 +18,7 @@ name: Sync TMDB Catalog
 
 on:
   schedule:
-    - cron: '0 0 * * 1,4'   # Monday and Thursday at 00:00 UTC
+    - cron: '0 9 * * 1,4'   # Monday and Thursday at 09:00 UTC
   workflow_dispatch:          # run manually from the Actions tab any time
 
 jobs:
