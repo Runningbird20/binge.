@@ -50,19 +50,18 @@ router.get('/:username', async (req, res) => {
       .single();
     if (error || !profile) return res.status(404).json({ error: 'User not found' });
 
-    if (!profile.is_public) return res.json({ profile, ratings: [], watchlist: [], posts: [], isPrivate: true });
+    if (!profile.is_public) return res.json({ profile, ratings: [], watchlist: [], isPrivate: true });
 
     // Get public data
     const [
       { data: movieRatings }, { data: tvRatings }, { data: bookRatings },
-      { data: watchlist }, { data: posts },
+      { data: watchlist },
       { count: followers }, { count: following },
     ] = await Promise.all([
       sb.from('movie_ratings').select('media_id, created_at, review, acting, writing, originality, pacing, cinematography').eq('user_id', profile.id).limit(50),
       sb.from('tv_show_ratings').select('media_id, created_at, review, premise, originality, acting, cinematography, writing, pacing, resonance').eq('user_id', profile.id).limit(50),
       sb.from('book_ratings').select('media_id, created_at, review, prose, plot, characters, originality, pacing, resonance').eq('user_id', profile.id).limit(50),
       sb.from('watchlist').select('id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter').eq('user_id', profile.id).order('added_at', { ascending: false }),
-      sb.from('posts').select('id, title, flair, score, comment_count, created_at, forums(name, slug, icon)').eq('user_id', profile.id).eq('is_removed', false).order('created_at', { ascending: false }).limit(10),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id),
     ]);
@@ -126,7 +125,7 @@ router.get('/:username', async (req, res) => {
       return { ...item, title: meta?.title, year: meta?.year, poster_url: meta?.image_url };
     });
 
-    res.json({ profile, ratings, watchlist: enrichedWatchlist, posts: posts || [], followers: followers || 0, following: following || 0 });
+    res.json({ profile, ratings, watchlist: enrichedWatchlist, followers: followers || 0, following: following || 0 });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

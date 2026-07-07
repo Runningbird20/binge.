@@ -1,11 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import ThemedSelect from './ThemedSelect';
 import { submitSupabaseRequest } from '../utils/supabaseData';
-import { generateSupabaseRecommendations } from '../utils/recommendations';
+import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 
 const MEDIA_ICONS = { movie: '🎬', tv_show: '📺', book: '📚' };
 const MEDIA_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
+
+// The FAB floats over video content, so keep it off pages built around a video player.
+const HIDDEN_PATHS = ['/sports', '/live-tv'];
+
+const TYPE_TABS = [
+  { id: 'movie', label: 'Movies', icon: '🎬' },
+  { id: 'tv_show', label: 'TV', icon: '📺' },
+  { id: 'book', label: 'Books', icon: '📚' },
+];
 
 // ─── Request Modal ─────────────────────────────────────────────────────────────
 
@@ -146,32 +156,36 @@ function RecommendationCard({ rec }) {
 
 // ─── Recommender panel ─────────────────────────────────────────────────────────
 
+const IDLE_TAB_STATE = { movie: 'idle', tv_show: 'idle', book: 'idle' };
+
 export default function ChatBot() {
   const { user } = useAuth();
+  const location = useLocation();
   const [isOpen, setIsOpen]             = useState(false);
   const [isMinimized, setIsMinimized]   = useState(false);
-  const [state, setState]               = useState('idle'); // idle | loading | done | empty | error
-  const [data, setData]                 = useState(null);
-  const [error, setError]               = useState('');
+  const [activeType, setActiveType]     = useState('movie');
+  const [tabState, setTabState]         = useState(IDLE_TAB_STATE); // idle | loading | done | empty | error
+  const [tabData, setTabData]           = useState({});
+  const [tabError, setTabError]         = useState({});
   const [requestModal, setRequestModal] = useState(null);
 
-  const fetchRecommendations = useCallback(async () => {
-    setState('loading');
-    setError('');
+  const fetchType = useCallback(async (mediaType) => {
+    setTabState((prev) => ({ ...prev, [mediaType]: 'loading' }));
+    setTabError((prev) => ({ ...prev, [mediaType]: '' }));
     try {
-      const result = await generateSupabaseRecommendations();
-      setData(result);
-      setState(result.recommendations?.length ? 'done' : 'empty');
+      const result = await generateSupabaseTypeRecommendations(mediaType);
+      setTabData((prev) => ({ ...prev, [mediaType]: result }));
+      setTabState((prev) => ({ ...prev, [mediaType]: result.recommendations?.length ? 'done' : 'empty' }));
     } catch (err) {
-      setError(String(err?.message || '').trim() || 'Something went wrong.');
-      setState('error');
+      setTabError((prev) => ({ ...prev, [mediaType]: String(err?.message || '').trim() || 'Something went wrong.' }));
+      setTabState((prev) => ({ ...prev, [mediaType]: 'error' }));
     }
   }, []);
 
-  // Fetch the first time the panel is opened.
+  // Fetch a tab's recommendations the first time it's viewed.
   useEffect(() => {
-    if (isOpen && state === 'idle') fetchRecommendations();
-  }, [isOpen, state, fetchRecommendations]);
+    if (isOpen && tabState[activeType] === 'idle') fetchType(activeType);
+  }, [isOpen, activeType, tabState, fetchType]);
 
   // Allow the mobile bottom nav "For You" tab to open the recommender.
   useEffect(() => {
@@ -180,7 +194,11 @@ export default function ChatBot() {
     return () => window.removeEventListener('binge:openAI', handler);
   }, []);
 
-  if (!user) return null;
+  if (!user || HIDDEN_PATHS.includes(location.pathname)) return null;
+
+  const state = tabState[activeType];
+  const data = tabData[activeType];
+  const error = tabError[activeType];
 
   return (
     <>
@@ -215,12 +233,27 @@ export default function ChatBot() {
                 + Request
               </button>
               {state === 'done' && (
-                <button onClick={fetchRecommendations} title="Refresh recommendations" className="chatbot-icon-btn">↻</button>
+                <button onClick={() => fetchType(activeType)} title="Refresh recommendations" className="chatbot-icon-btn">↻</button>
               )}
               <button onClick={() => setIsMinimized(m => !m)} className="chatbot-icon-btn">{isMinimized ? '▲' : '▼'}</button>
               <button onClick={() => setIsOpen(false)} className="chatbot-icon-btn">✕</button>
             </div>
           </div>
+
+          {!isMinimized && (
+            <div className="chatbot-tabs">
+              {TYPE_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`chatbot-tab ${activeType === tab.id ? 'chatbot-tab--active' : ''}`}
+                  onClick={() => setActiveType(tab.id)}
+                >
+                  <span>{tab.icon}</span> {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {!isMinimized && (
             <div className="chatbot-messages">
@@ -235,7 +268,7 @@ export default function ChatBot() {
               {state === 'error' && (
                 <div className="foryou-error">
                   <p>⚠️ {error}</p>
-                  <button type="button" className="foryou-generate-btn" onClick={fetchRecommendations}>Try again</button>
+                  <button type="button" className="foryou-generate-btn" onClick={() => fetchType(activeType)}>Try again</button>
                 </div>
               )}
 
