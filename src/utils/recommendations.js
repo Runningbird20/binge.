@@ -39,30 +39,39 @@ function watchlistStrength(status) {
   return 3.0;
 }
 
-// Recent activity should outweigh old activity so recs track taste as it changes,
-// but old signals still count a little (floor) rather than dropping off a cliff.
-function decayWeight(dateStr, halfLifeDays = 120) {
+// Calendar-time backstop: a signal that's genuinely ancient counts for less,
+// but this alone doesn't stop a large pile of old signals from outvoting a few
+// new ones — that's what rankWeight below is for.
+function decayWeight(dateStr, halfLifeDays = 200) {
   if (!dateStr) return 0.6;
   const days = (Date.now() - new Date(dateStr).getTime()) / 86400000;
   if (!Number.isFinite(days) || days < 0) return 1;
   return Math.max(0.25, Math.pow(0.5, days / halfLifeDays));
 }
 
+// Recency-by-order: ratings/watchlist arrives sorted newest-first, so index doubles
+// as rank. Falls off fast so the last handful of things you did dominates taste
+// signals no matter how large your older history is — a user with 200 old ratings
+// and 3 new ones should get picks driven by the 3 new ones, not drowned out by volume.
+function rankWeight(rank) {
+  return Math.max(0.08, Math.pow(0.72, rank));
+}
+
 function buildSignals(ratings, watchlist) {
-  const ratingSignals = ratings.map((rating) => ({
+  const ratingSignals = ratings.map((rating, rank) => ({
     mediaType: rating.media_type,
     title: rating.title,
     genre: rating.genre,
     rawStrength: getRatingStrength(rating),
-    weight: decayWeight(rating.created_at),
+    weight: rankWeight(rank) * decayWeight(rating.created_at),
   }));
 
-  const watchlistSignals = watchlist.map((item) => ({
+  const watchlistSignals = watchlist.map((item, rank) => ({
     mediaType: item.media_type,
     title: item.title,
     genre: item.genre,
     rawStrength: watchlistStrength(item.status),
-    weight: decayWeight(item.updated_at || item.added_at, 200),
+    weight: rankWeight(rank) * decayWeight(item.updated_at || item.added_at, 260),
   }));
 
   return [...ratingSignals, ...watchlistSignals];
