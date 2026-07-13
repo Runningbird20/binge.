@@ -183,36 +183,6 @@ body {
 /* Search: compact round trigger like a streaming app */
 .navbar-search-wrap { width: auto; flex: 0 0 auto; }
 
-.global-search-trigger {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid transparent;
-  color: var(--exp-text-dim);
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.global-search-trigger:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--exp-text);
-  border-color: var(--exp-border);
-}
-.global-search-placeholder,
-.global-search-kbd { display: none; }
-.global-search-icon { display: inline-flex; font-size: 0; }
-
-.global-search-modal {
-  background: #151923;
-  border: 1px solid var(--exp-border);
-  border-radius: var(--exp-radius-lg);
-  box-shadow: var(--exp-shadow);
-}
-
 /* ── Home hero ──────────────────────────────────────────────── */
 
 .stream-hero {
@@ -362,27 +332,17 @@ body {
   backdrop-filter: blur(8px);
 }
 
-/* ── Continue Watching: landscape cards + accent bar ────────── */
+/* ── Continue Watching: same poster tile used site-wide ──────── */
 
 .continue-watching-row { gap: 1rem; }
-.continue-card { flex: 0 0 240px; }
+.continue-card { flex: 0 0 160px; }
 
 .continue-card-poster {
-  aspect-ratio: 16 / 9;
+  width: 100%;
+  aspect-ratio: 2 / 3;
   height: auto;
   position: relative;
   background: var(--exp-surface-2);
-}
-
-.continue-card-poster::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 34%;
-  bottom: 0;
-  height: 3px;
-  background: #3aa0ff;
-  border-radius: 0 3px 3px 0;
 }
 
 .continue-card-title { font-size: 0.9rem; color: var(--exp-text); }

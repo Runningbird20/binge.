@@ -6,6 +6,7 @@ import {
   FilmSlate,
   MonitorPlay,
   BookOpen,
+  Trophy,
 } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
@@ -14,6 +15,7 @@ import GlobalSearch from './GlobalSearch';
 const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
   { to: '/live-tv',   label: 'Live',      Icon: Broadcast },
+  { to: '/sports',    label: 'Sports',    Icon: Trophy },
   { to: '/watchlist', label: 'Watchlist', Icon: PlusSquare },
   { to: '/movies',    label: 'Movies',    Icon: FilmSlate },
   { to: '/tv-shows',  label: 'Series',    Icon: MonitorPlay },
