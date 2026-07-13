@@ -196,7 +196,6 @@ function ForYouCard({ rec }) {
         </div>
         <h4 className="foryou-card-title">{rec.title}</h4>
         {rec.genre && <p className="foryou-card-genre">{rec.genre.split(',')[0].trim()}</p>}
-        <p className="foryou-card-reason">✨ {rec.reason}</p>
       </div>
     </a>
   );
@@ -236,12 +235,12 @@ function ForYouSection({ ready }) {
         <h2>For You</h2>
       </div>
 
-      <div className="tabs">
+      <div className="books-tab-bar">
         {FOR_YOU_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
-            className={`tab-btn ${activeType === tab.id ? 'active' : ''}`}
+            className={`books-tab ${activeType === tab.id ? 'active' : ''}`}
             onClick={() => setActiveType(tab.id)}
           >
             {tab.icon} {tab.label}
