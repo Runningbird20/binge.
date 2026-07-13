@@ -97,7 +97,7 @@ export default function App() {
                       <p style={{fontSize:'3rem'}}>🔍</p>
                       <h2 style={{color:'#e0e0e0',margin:0}}>Page not found</h2>
                       <p style={{color:'#555',margin:0}}>The page you're looking for doesn't exist.</p>
-                      <a href="/home" style={{color:'#e8c97a',fontSize:'0.9rem'}}>← Go home</a>
+                      <a href="/home" style={{color:'#f4f6f8',fontSize:'0.9rem'}}>← Go home</a>
                     </div>
                   </div>
                 } />

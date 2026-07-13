@@ -14,8 +14,8 @@ const STATUS_LABELS = {
 };
 
 const STATUS_COLORS = {
-  watching: '#e8c97a',
-  reading: '#e8c97a',
+  watching: '#f4f6f8',
+  reading: '#f4f6f8',
   watched: '#4caf82',
   read: '#4caf82',
   plan_to_watch: '#7ab8e8',

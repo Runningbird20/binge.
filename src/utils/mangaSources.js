@@ -5,7 +5,7 @@
 import { searchManga as mdxSearch, getPopular as mdxPopular, getMangaChapters as mdxChapters, getChapterPages as mdxPages } from './mangadexApi';
 
 export const SOURCES = [
-  { key: 'mangadex',    label: 'MangaDex',    color: '#e8c97a' },
+  { key: 'mangadex',    label: 'MangaDex',    color: '#c7c7c7' },
   { key: 'weebcentral', label: 'WeebCentral', color: '#7ab4e8' },
   { key: 'bato',        label: 'Bato.to',     color: '#e87a9b' },
 ];

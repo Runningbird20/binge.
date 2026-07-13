@@ -33,7 +33,7 @@ export const RATING_CATEGORIES = {
 };
 
 const PALETTE = {
-  movie:   { primary: '#e8c97a', fill: 'rgba(232,201,122,0.20)', glow: 'rgba(232,201,122,0.18)', grid: 'rgba(232,201,122,0.13)' },
+  movie:   { primary: '#c7c7c7', fill: 'rgba(199,199,199,0.20)', glow: 'rgba(199,199,199,0.18)', grid: 'rgba(199,199,199,0.13)' },
   tv_show: { primary: '#a07de8', fill: 'rgba(160,125,232,0.20)', glow: 'rgba(160,125,232,0.18)', grid: 'rgba(160,125,232,0.13)' },
   book:    { primary: '#5db88a', fill: 'rgba(93,184,138,0.20)',  glow: 'rgba(93,184,138,0.18)',  grid: 'rgba(93,184,138,0.13)'  },
   manga:   { primary: '#e85a7a', fill: 'rgba(232,90,122,0.20)',  glow: 'rgba(232,90,122,0.18)',  grid: 'rgba(232,90,122,0.13)'  },
