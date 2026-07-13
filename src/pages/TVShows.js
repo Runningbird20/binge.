@@ -408,14 +408,6 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
             </button>
           ))}
         </div>
-        <input
-          className="genre-bar-search"
-          type="search"
-          placeholder="Search series…"
-          aria-label="Search series"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
       </div>
 
       {loading ? (
