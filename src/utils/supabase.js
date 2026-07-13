@@ -66,7 +66,16 @@ export function getSessionlessSupabaseClient() {
 
   if (!sessionlessClient) {
     sessionlessClient = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      auth: {
+        // A distinct storageKey gives this client its own Navigator LockManager
+        // lock name — without it, GoTrueClient derives the lock from the project
+        // URL alone, so this client fights the main `supabase` client for the
+        // same lock ("Lock ... was released because another request stole it").
+        storageKey: 'sb-admin-signup-auth-token',
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
     });
   }
 
