@@ -143,7 +143,9 @@ function ContinueWatching({ items, onRemove }) {
       <div className="section-header">
         <h2>Continue Watching</h2>
       </div>
-      <div className="continue-watching-row">
+      {/* Reuses the Library's card classes (.profile-wl-*) so both rows
+          follow the same poster/badge/title treatment. */}
+      <div className="profile-watchlist-row">
         {items.map(item => {
           const poster = resolvePosterUrl(item.image_url || item.poster_url);
           const url = resumeUrl(item);
@@ -153,35 +155,27 @@ function ContinueWatching({ items, onRemove }) {
           const ch = item.current_chapter;
           const pg = item.current_page;
 
-          let badge = null;
-          let sub   = null;
-          if (item.media_type === 'tv_show' && (s || e)) {
-            badge = `S${s || 1} E${e || 1}`;
-            sub   = `Season ${s || 1}, Ep ${e || 1}`;
-          } else if (item.media_type === 'book' && (ch || pg)) {
-            badge = ch ? `Ch ${ch}` : `Pg ${pg}`;
-            sub   = [ch ? `Chapter ${ch}` : null, pg ? `Page ${pg}` : null].filter(Boolean).join(', ');
-          } else {
-            sub = item.media_type === 'book' ? 'Reading' : 'Watching';
-          }
+          const progressBadge = item.media_type === 'tv_show' && (s || e)
+            ? `S${s || 1} E${e || 1}`
+            : item.media_type === 'book' && (ch || pg)
+            ? (ch ? `Ch ${ch}` : `Pg ${pg}`)
+            : null;
 
           return (
-            <div key={item.id} className="continue-card-wrap">
-              <Link to={url} className="continue-card" state={{ backgroundLocation: location }}>
-                <div className="continue-card-poster">
+            <div key={item.id} className="cw-card-wrap">
+              <Link to={url} className="profile-wl-card profile-wl-card--own" state={{ backgroundLocation: location }}>
+                <div className="profile-wl-poster">
                   {poster
                     ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-                    : <div className="continue-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
+                    : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>
                   }
-                  <div className="continue-card-play">▶</div>
-                  {badge && <div className="continue-card-badge">{badge}</div>}
+                  {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
                 </div>
-                <p className="continue-card-title">{item.title}</p>
-                <p className="continue-card-sub">{sub}</p>
+                <p className="profile-wl-title">{item.title}</p>
               </Link>
               <button
                 type="button"
-                className="continue-card-remove"
+                className="cw-remove-btn"
                 title="Remove from Continue Watching"
                 aria-label={`Remove ${item.title} from Continue Watching`}
                 onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
@@ -588,6 +582,8 @@ export default function Home() {
         <StreamHero user={user} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
+          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
+
           <DashboardLibrarySection
             user={user}
             watchlist={watchlistItems}
@@ -596,8 +592,6 @@ export default function Home() {
           />
 
           <ForYouSection ready={!authLoading && !!user} />
-
-          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
         </div>
         </>
         )}
