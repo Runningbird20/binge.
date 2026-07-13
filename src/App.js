@@ -26,7 +26,6 @@ const LiveTV         = lazy(() => import('./pages/LiveTV'));
 const Sports         = lazy(() => import('./pages/Sports'));
 const Ratings        = lazy(() => import('./pages/Ratings'));
 const Watchlist      = lazy(() => import('./pages/Watchlist'));
-const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -81,7 +80,6 @@ function AppRoutes() {
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
-        <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
         {/* TEMP (UI preview only — do not commit) */}
         <Route path="/ui-preview" element={<UIPreview />} />
         <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />

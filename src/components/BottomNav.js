@@ -55,8 +55,7 @@ export default function BottomNav() {
       return;
     }
     if (tab.action === 'profile') {
-      if (user?.username) navigate(`/profile/${user.username}`);
-      else navigate('/account-settings');
+      navigate('/account-settings');
       return;
     }
   }
