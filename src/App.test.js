@@ -9,6 +9,7 @@ import TVShows from './pages/TVShows';
 import { AuthProvider } from './contexts/AuthContext';
 
 const mockNavigate = jest.fn();
+let mockSearchParams = new URLSearchParams();
 
 function mockResponse({ ok = true, status = 200, body = '', contentType = 'application/json' }) {
   return {
@@ -37,7 +38,7 @@ jest.mock(
     ),
     Navigate: ({ to }) => <div data-testid="navigate" data-to={to} />,
     useNavigate: () => mockNavigate,
-    useSearchParams: () => [new URLSearchParams(), jest.fn()],
+    useSearchParams: () => [mockSearchParams, jest.fn()],
   }),
   { virtual: true }
 );
@@ -69,6 +70,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockNavigate.mockReset();
+  mockSearchParams = new URLSearchParams();
   global.fetch = jest.fn();
 });
 
@@ -731,6 +733,73 @@ test('uses a movie-style filter bar on the books page', async () => {
       'Open details for Dune',
     ]);
   });
+});
+
+test('ignores a page-level search query on the movies page', async () => {
+  mockSearchParams = new URLSearchParams('?search=arrival');
+
+  const allMovies = [
+    {
+      id: 1,
+      title: 'Arrival',
+      year: 2016,
+      genre: 'Science Fiction, Drama',
+      synopsis: 'A linguist works to communicate with visitors from space.',
+      poster_url: 'https://example.com/arrival.jpg',
+    },
+    {
+      id: 2,
+      title: 'Heat',
+      year: 1995,
+      genre: 'Crime, Drama',
+      synopsis: 'A meticulous detective closes in on a career thief.',
+      poster_url: 'https://example.com/heat.jpg',
+    },
+  ];
+
+  global.fetch.mockImplementation((url) => {
+    if (String(url).startsWith('/api/media/movies?')) {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      expect(parsedUrl.searchParams.get('search')).toBe(null);
+
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify({
+            items: allMovies,
+            total: allMovies.length,
+            totalPages: 1,
+            facets: {
+              genres: ['Crime', 'Drama', 'Science Fiction'],
+            },
+          }),
+        })
+      );
+    }
+
+    if (url === '/api/ratings/my?media_type=movie') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
+  renderWithAuth(
+    <Movies />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  expect(await screen.findByText('Arrival')).toBeInTheDocument();
+  expect(screen.getByText('Heat')).toBeInTheDocument();
 });
 
 test('uses a genre dropdown on the movies page', async () => {
