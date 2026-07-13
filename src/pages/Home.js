@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ThemedSelect from '../components/ThemedSelect';
-import UserAvatar from '../components/UserAvatar';
 import ForYou from '../components/ForYou';
 import Onboarding from '../components/Onboarding';
 import { useAuth } from '../contexts/AuthContext';
@@ -131,6 +130,83 @@ function BadgeIcon({ iconKey, label, toneKey }) {
   );
 }
 
+const HERO_TYPE_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
+
+function heroDetailsUrl(item) {
+  if (item.media_type === 'movie') return `/movies?open=${item.media_id}`;
+  if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}`;
+  if (item.media_type === 'book') return `/books?open=${item.media_id}`;
+  return '/watchlist';
+}
+
+function StreamHero({ user, watchlistItems }) {
+  const withPoster = watchlistItems.filter(
+    (item) => resolvePosterUrl(item.image_url || item.poster_url)
+  );
+  const heroItem =
+    withPoster.find((item) => item.status === 'watching' || item.status === 'reading') ||
+    withPoster[0] ||
+    null;
+  const poster = heroItem ? resolvePosterUrl(heroItem.image_url || heroItem.poster_url) : null;
+  const inProgress = heroItem && (heroItem.status === 'watching' || heroItem.status === 'reading');
+
+  return (
+    <section className="stream-hero">
+      {poster && (
+        <div
+          className="stream-hero-backdrop"
+          style={{ backgroundImage: `url(${poster})` }}
+          aria-hidden="true"
+        />
+      )}
+      <div className="stream-hero-scrim" aria-hidden="true" />
+      <div className="stream-hero-content">
+        <p className="stream-hero-kicker">Welcome back, {user.username}</p>
+        <h1 className="stream-hero-title">
+          {heroItem ? heroItem.title : 'What will you binge tonight?'}
+        </h1>
+        <div className="stream-hero-meta">
+          {heroItem ? (
+            <>
+              <span className="stream-hero-chip">
+                {HERO_TYPE_LABELS[heroItem.media_type] || 'Title'}
+              </span>
+              {heroItem.year && <span>{heroItem.year}</span>}
+              <span className="stream-hero-dot">•</span>
+              <span>{inProgress ? 'Continue where you left off' : 'From your watchlist'}</span>
+            </>
+          ) : (
+            <span>Pick up where you left off or discover something new.</span>
+          )}
+        </div>
+        <div className="stream-hero-actions">
+          {heroItem ? (
+            <>
+              <Link className="btn-primary" to={heroDetailsUrl(heroItem)}>
+                {inProgress ? 'Resume' : 'Details'}
+              </Link>
+              <Link className="btn-secondary" to="/watchlist">My Watchlist</Link>
+            </>
+          ) : (
+            <>
+              <Link className="btn-primary" to="/movies">Browse Movies</Link>
+              <Link className="btn-secondary" to="/tv-shows">Browse Series</Link>
+            </>
+          )}
+        </div>
+      </div>
+      {poster && (
+        <img
+          className="stream-hero-poster"
+          src={poster}
+          alt={heroItem.title}
+          referrerPolicy="no-referrer"
+        />
+      )}
+    </section>
+  );
+}
+
 function ContinueWatching({ items }) {
   const inProgress = items.filter(
     i => i.status === 'watching' || i.status === 'reading'
@@ -140,7 +216,7 @@ function ContinueWatching({ items }) {
   return (
     <section className="home-section">
       <div className="section-header">
-        <h2>▶ Continue Watching</h2>
+        <h2>Continue Watching</h2>
       </div>
       <div className="continue-watching-row">
         {inProgress.map(item => {
@@ -358,36 +434,36 @@ export default function Home() {
           <div className="loading-state">Loading dashboard...</div>
         ) : (
         <>
-        <div className="page-header home-header">
-          <p className="page-kicker">Dashboard</p>
-          <div className="home-profile">
-            <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
-            <div>
-              <h1>Welcome back, {user.username}.</h1>
-              <p className="page-subtitle home-subtitle">
-                Track what you finish, jump back into your library, and plan the next pick with friends.
-              </p>
-              {user.bio && <p className="home-bio">{user.bio}</p>}
-            </div>
-          </div>
-        </div>
-
-        <div className="stats-row">
-          <div className="stat-card">
-            <div className="stat-number">{stats.ratings}</div>
-            <div className="stat-label">Ratings</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-number">{stats.watchlist}</div>
-            <div className="stat-label">Saved Titles</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-number">{insights.earnedBadgeCount}</div>
-            <div className="stat-label">Badges Complete</div>
-          </div>
-        </div>
+        <StreamHero user={user} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
+          <ForYou />
+
+          <ContinueWatching items={watchlistItems} />
+
+          <section className="home-section">
+            <div className="section-header">
+              <h2>Your Watchlist</h2>
+              <Link to="/watchlist" className="section-link">View all →</Link>
+            </div>
+            <WatchlistGallery items={watchlistItems} loading={loading} />
+          </section>
+
+          <div className="stats-row">
+            <div className="stat-card">
+              <div className="stat-number">{stats.ratings}</div>
+              <div className="stat-label">Ratings</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-number">{stats.watchlist}</div>
+              <div className="stat-label">Saved Titles</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-number">{insights.earnedBadgeCount}</div>
+              <div className="stat-label">Badges Complete</div>
+            </div>
+          </div>
+
           <section className="home-section surface-panel">
             <div className="section-header home-insights-header">
               <div>
@@ -526,18 +602,6 @@ export default function Home() {
                 <p>Build collaborative watchlists and book-club queues with vibe voting.</p>
               </Link>
             </div>
-          </section>
-
-          <ForYou />
-
-          <ContinueWatching items={watchlistItems} />
-
-          <section className="home-section">
-            <div className="section-header">
-              <h2>Your Watchlist</h2>
-              <Link to="/watchlist" className="section-link">View all →</Link>
-            </div>
-            <WatchlistGallery items={watchlistItems} loading={loading} />
           </section>
 
           <section className="home-section surface-panel">

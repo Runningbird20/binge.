@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import './App.css';
 import './mobile.css';
+import './theme-experiment.css';
 
 const ChatBot        = lazy(() => import('./components/ChatBot'));
 const Home           = lazy(() => import('./pages/Home'));

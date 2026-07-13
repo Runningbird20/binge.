@@ -55,7 +55,7 @@ export default function ForYou() {
   return (
     <section className="home-section foryou-section">
       <div className="section-header">
-        <h2>🦉 For You</h2>
+        <h2>Recommended For You</h2>
         {state === 'done' && (
           <button className="foryou-refresh-btn" onClick={fetchRecommendations}>
             Refresh

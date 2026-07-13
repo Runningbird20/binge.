@@ -1,9 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
+import {
+  House,
+  Broadcast,
+  PlusSquare,
+  FilmSlate,
+  MonitorPlay,
+  BookOpen,
+} from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
 import NotificationBell from './NotificationBell';
+
+const NAV_LINKS = [
+  { to: '/home',      label: 'Home',      Icon: House },
+  { to: '/live-tv',   label: 'Live',      Icon: Broadcast },
+  { to: '/watchlist', label: 'Watchlist', Icon: PlusSquare },
+  { to: '/movies',    label: 'Movies',    Icon: FilmSlate },
+  { to: '/tv-shows',  label: 'Series',    Icon: MonitorPlay },
+  { to: '/books',     label: 'Books',     Icon: BookOpen },
+];
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -36,11 +53,20 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="navbar">
+      <nav className={`navbar${user ? ' navbar--stream' : ''}`}>
         <Link to={user ? '/home' : '/'} className="navbar-logo">binge.</Link>
 
         {user ? (
           <>
+            <NavLink
+              to={`/profile/${user.username || 'me'}`}
+              className="navbar-profile"
+              title="My Profile"
+            >
+              <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
+              <span className="navbar-profile-name">{user.username}</span>
+            </NavLink>
+
             {isAdmin && (
               <div className="navbar-role-btns">
                 <NavLink to="/admin" className={({ isActive }) => `navbar-role-btn navbar-role-btn--admin${isActive ? ' active' : ''}`}>
@@ -49,23 +75,24 @@ export default function Navbar() {
               </div>
             )}
 
-            <div className="navbar-search-wrap">
-              <GlobalSearch />
-            </div>
-
-            <div className="navbar-links navbar-links--desktop">
-              <NavLink to="/live-tv"  className={({ isActive }) => isActive ? 'active' : ''}>Live TV</NavLink>
-              <NavLink to="/sports"   className={({ isActive }) => isActive ? 'active' : ''}>Sports</NavLink>
-              <NavLink to="/movies"   className={({ isActive }) => isActive ? 'active' : ''}>Movies</NavLink>
-              <NavLink to="/tv-shows" className={({ isActive }) => isActive ? 'active' : ''}>TV</NavLink>
-              <NavLink to="/books"    className={({ isActive }) => isActive ? 'active' : ''}>Books</NavLink>
+            <div className="navbar-center navbar-links--desktop">
+              {NAV_LINKS.map(({ to, label, Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) => `navbar-icon-link${isActive ? ' active' : ''}`}
+                >
+                  <Icon size={20} weight="bold" aria-hidden="true" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
             </div>
 
             <div className="navbar-right">
+              <div className="navbar-search-wrap">
+                <GlobalSearch />
+              </div>
               <NotificationBell />
-              <NavLink to={`/profile/${user.username || 'me'}`} className="navbar-avatar-link" title="My Profile" aria-label="My Profile">
-                <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
-              </NavLink>
               <button
                 className={`nav-panel-trigger${panelOpen ? ' is-open' : ''}`}
                 onClick={() => setPanelOpen(v => !v)}
