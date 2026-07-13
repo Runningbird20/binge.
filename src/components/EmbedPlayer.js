@@ -133,11 +133,16 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
   }
 }
 
-export default function EmbedPlayer({ item, mediaType, onClose }) {
+function normalizeStartAt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
   const { isMobile, isLandscape } = useDeviceType();
   const [provider, setProvider] = useState(PROVIDERS[4].id);
-  const [season, setSeason] = useState(1);
-  const [episode, setEpisode] = useState(1);
+  const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
+  const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
   const [lookupState, setLookupState] = useState(() => (getEmbeddedId(item) ? 'done' : 'loading'));
   const [lookupError, setLookupError] = useState('');
@@ -163,13 +168,13 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
   useEffect(() => {
     setProvider(PROVIDERS[4].id);
-    setSeason(1);
-    setEpisode(1);
+    setSeason(normalizeStartAt(initialSeason));
+    setEpisode(normalizeStartAt(initialEpisode));
     setSeasonEpisodeCounts({});
     setRealSeasonCount(null);
     setWatched(new Set());
     setMetadataWarning('');
-  }, [item?.id, item?.title, mediaType]);
+  }, [item?.id, item?.title, mediaType, initialSeason, initialEpisode]);
 
   useEffect(() => {
     function onFsChange() {

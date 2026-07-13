@@ -52,7 +52,12 @@ function detailsUrl(item) {
 
 function resumeUrl(item) {
   if (item.media_type === 'movie') return `/movie/${item.media_id}?play=1`;
-  if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}?play=1`;
+  if (item.media_type === 'tv_show') {
+    const params = new URLSearchParams({ play: '1' });
+    if (item.current_season) params.set('season', item.current_season);
+    if (item.current_episode) params.set('episode', item.current_episode);
+    return `/tv-show/${item.media_id}?${params.toString()}`;
+  }
   return detailsUrl(item);
 }
 
@@ -312,10 +317,12 @@ function LibraryCard({ item, ratingScore }) {
   const location = useLocation();
   const status = item.status;
 
+  // Library always opens the media card (details view) — auto-play is
+  // reserved for the Continue Watching row, which resumes at the saved point.
   const mediaUrl = item.media_type === 'movie'
-    ? (status === 'watching' ? `/movie/${item.media_id}?play=1` : `/movie/${item.media_id}`)
+    ? `/movie/${item.media_id}`
     : item.media_type === 'tv_show'
-    ? (status === 'watching' ? `/tv-show/${item.media_id}?play=1` : `/tv-show/${item.media_id}`)
+    ? `/tv-show/${item.media_id}`
     : `/book/${item.media_id}`;
 
   const poster = resolvePosterUrl(item.poster_url || item.image_url);

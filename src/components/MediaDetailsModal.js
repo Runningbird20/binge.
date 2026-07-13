@@ -47,6 +47,8 @@ export default function MediaDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
   autoPlay = false,
+  initialSeason,
+  initialEpisode,
 }) {
   const isMobile = useIsMobile();
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
@@ -98,6 +100,8 @@ export default function MediaDetailsModal({
         allowActions={allowActions}
         browseOnlyMessage={browseOnlyMessage}
         autoPlay={autoPlay}
+        initialSeason={initialSeason}
+        initialEpisode={initialEpisode}
       />
     );
   }
@@ -261,6 +265,8 @@ export default function MediaDetailsModal({
           item={item}
           mediaType={mediaType}
           onClose={() => setShowPlayer(false)}
+          initialSeason={initialSeason}
+          initialEpisode={initialEpisode}
         />
       )}
     </>
