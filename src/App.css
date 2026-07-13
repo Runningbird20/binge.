@@ -1621,6 +1621,8 @@ body {
   box-shadow: 0 20px 36px rgba(0, 0, 0, 0.36);
 }
 
+.book-detail-watch-now { margin-top: 0.9rem; }
+
 .book-detail-content {
   display: flex;
   flex-direction: column;
@@ -2440,6 +2442,30 @@ body {
   font-weight: 400;
 }
 
+/* ─── Star rating (movie/TV/book ratings — out of 5, half-star) ─────────── */
+
+.star-rating { display: inline-flex; gap: 3px; }
+
+.star-rating-star {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+}
+.star-rating-star-bg { color: rgba(255,255,255,0.18); }
+.star-rating-star-fill {
+  position: absolute;
+  top: 0; left: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: #f4f6f8;
+}
+
+.star-rating-interactive .star-rating-star { cursor: pointer; }
+
+.star-rating-sm .star-rating-star { font-size: 0.8rem; }
+.star-rating-md .star-rating-star { font-size: 1.2rem; }
+.star-rating-lg .star-rating-star { font-size: 1.85rem; }
+
 /* ─── Rating section inside modals ──────────────────────────────────────── */
 
 .rating-section {
@@ -2457,12 +2483,24 @@ body {
   margin: 0 0 0.75rem;
 }
 
+.rating-section-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .rating-section-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   margin-top: 0.85rem;
   flex-wrap: wrap;
+}
+
+.rating-saving-hint {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.35);
 }
 
 .btn-disabled {
@@ -2485,6 +2523,9 @@ body {
 }
 
 .media-card-user-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.78rem;
   color: #f4f6f8;
   font-weight: 600;
@@ -2509,22 +2550,16 @@ body {
 
 .media-card-artifact-badge {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 72px;
-  height: 72px;
+  bottom: 6px;
+  right: 6px;
+  padding: 0.2rem 0.4rem;
   background: rgba(10,10,10,0.75);
-  border-radius: 50%;
-  overflow: visible;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.15);
   display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(4px);
-}
-
-.media-card-artifact-badge .rating-artifact {
-  width: 68px;
-  height: 68px;
 }
 
 /* ─── Wide modal variant ─────────────────────────────────────────────────── */
@@ -2621,22 +2656,8 @@ body {
   color: #666;
 }
 
-.ratings-page-score {
-  margin: 0.2rem 0 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #f4f6f8;
-  line-height: 1;
-}
-.ratings-page-score span {
-  font-size: 0.85rem;
-  color: rgba(255,255,255,0.35);
-  font-weight: 400;
-}
-
-.ratings-page-artifact {
-  margin: 0.5rem auto 0;
-  width: 100%;
+.ratings-page-stars {
+  margin: 0.4rem 0 0;
 }
 
 /* ─── Watchlist page ─────────────────────────────────────────────────────── */
@@ -4671,7 +4692,7 @@ body {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(11, 13, 18, 0.55) 0%, rgba(11, 13, 18, 0.8) 60%, rgba(11, 13, 18, 0.96) 100%),
+    linear-gradient(180deg, rgba(11, 13, 18, 0.3) 0%, rgba(11, 13, 18, 0.3) 75%, rgba(11, 13, 18, 0.92) 100%),
     linear-gradient(90deg, rgba(11, 13, 18, 0.55) 0%, rgba(11, 13, 18, 0.15) 45%, rgba(11, 13, 18, 0.55) 100%);
 }
 
@@ -6188,12 +6209,12 @@ body {
 .mr-fade {
   position: absolute;
   top: 0; bottom: 0;
-  width: 60px;
+  width: 120px;
   pointer-events: none;
   z-index: 3;
 }
-.mr-fade-left  { left: 0;  background: linear-gradient(to right, #0a0a0a, transparent); }
-.mr-fade-right { right: 0; background: linear-gradient(to left,  #0a0a0a, transparent); }
+.mr-fade-left  { left: 0;  background: linear-gradient(to right, #0a0a0a 0%, #0a0a0a 25%, transparent 100%); }
+.mr-fade-right { right: 0; background: linear-gradient(to left,  #0a0a0a 0%, #0a0a0a 25%, transparent 100%); }
 
 /* Arrow buttons */
 .mr-arrow {
@@ -7824,22 +7845,16 @@ body {
   z-index: 1;
 }
 
-/* Status indicator chip — bottom-right of the poster; only shown on hover. */
+/* Status indicator — bottom-right of the poster; only shown on hover. */
 .profile-wl-status-ind {
   position: absolute;
   bottom: 6px;
   right: 6px;
   z-index: 1;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
   display: flex;
   align-items: baseline;
   justify-content: center;
-  border-radius: 999px;
   line-height: 1;
-  background: rgba(0,0,0,0.72);
-  backdrop-filter: blur(4px);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.18s;
@@ -7849,9 +7864,8 @@ body {
 }
 .profile-wl-status-ind--rated {
   color: #f4f6f8;
-  border: 1px solid rgba(255,255,255,0.4);
-  padding: 0 6px;
   gap: 1px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7);
 }
 .profile-wl-status-ind-num { font-size: 0.88rem; font-weight: 800; }
 .profile-wl-status-ind-den { font-size: 0.52rem; font-weight: 600; opacity: 0.8; }
@@ -9104,16 +9118,6 @@ select.filter-input,
     flex-shrink: 0;
   }
 
-  /* Smaller artifact rating badge */
-  .media-card-artifact-badge {
-    width: 48px;
-    height: 48px;
-  }
-  .media-card-artifact-badge .rating-artifact {
-    width: 44px;
-    height: 44px;
-  }
-
   /* mc-list panel: keep it in viewport on small cards */
   .mc-list-panel {
     left: auto;
@@ -9200,15 +9204,6 @@ select.filter-input,
     padding-top: 0.4rem;
   }
 
-  .media-card-artifact-badge {
-    width: 40px;
-    height: 40px;
-  }
-  .media-card-artifact-badge .rating-artifact {
-    width: 36px;
-    height: 36px;
-  }
-
   /* Player: even more compact */
   .player-tv-controls { padding: 0.5rem 0.65rem; }
   .player-providers   { padding: 0.4rem 0.65rem; }
@@ -9260,16 +9255,16 @@ select.filter-input,
 }
 .mob-card-badge {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  bottom: 4px;
+  right: 4px;
+  padding: 0.1rem 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.15);
   background: rgba(10,10,10,0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  color: #f4f6f8;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 /* Body */
@@ -9551,36 +9546,10 @@ select.filter-input,
 }
 
 /* Rate tab */
-.mob-detail-artifact-row {
+.mob-detail-star-row {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-.mob-detail-artifact-score {
-  font-size: 2rem;
-  font-weight: 800;
-  color: #f4f6f8;
-  margin: 0;
-}
-.mob-detail-artifact-score span { font-size: 1rem; color: #555; }
-.mob-detail-save-btn {
-  display: block;
-  width: 100%;
-  margin-top: 0.85rem;
-  padding: 0.8rem;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f4f6f8 0%, #c7c7c7 100%);
-  color: #0f0f0f;
-  font-size: 0.95rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-.mob-detail-save-btn.btn-disabled {
-  background: #2a2a2a;
-  color: #555;
-  cursor: default;
+  justify-content: center;
+  padding: 1.5rem 0;
 }
 .mob-detail-rate-hint {
   font-size: 0.75rem;

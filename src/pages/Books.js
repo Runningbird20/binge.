@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MangaTab from '../components/MangaTab';
-import RatingInput from '../components/RatingInput';
-import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
+import { computeStarRating, buildUniformCategories } from '../components/RatingArtifact';
+import StarRating from '../components/StarRating';
 import MobileBookDetail from '../components/MobileBookDetail';
 import useIsMobile from '../hooks/useIsMobile';
 import { api } from '../api';
@@ -136,7 +136,7 @@ export function BookDetailsModal({
   const [showReader, setShowReader] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
-  const [draftScores, setDraftScores] = useState({});
+  const [draftStars, setDraftStars] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
 
   const rawId = book?.source_key?.startsWith('internet-archive:')
@@ -148,11 +148,7 @@ export function BookDetailsModal({
   const canRead = Boolean(book?.title); // Reader searches Gutenberg if no direct source
 
   useEffect(() => {
-    if (userRating && typeof userRating === 'object') {
-      setDraftScores(userRating);
-    } else {
-      setDraftScores({});
-    }
+    setDraftStars(computeStarRating('book', userRating) || 0);
   }, [userRating, book]);
 
   useEffect(() => {
@@ -215,16 +211,12 @@ export function BookDetailsModal({
     }
   }
 
-  const cats = RATING_CATEGORIES.book;
-  const canSave = cats.every((cat) => draftScores[cat.key] >= 1);
-  const displayScore = computeNormalizedScore('book', draftScores);
-
-  async function handleSave() {
-    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
-
+  async function handleStarChange(nextValue) {
+    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
+    setDraftStars(nextValue);
     setIsSaving(true);
     try {
-      await onRate(book, draftScores);
+      await onRate(book, buildUniformCategories('book', nextValue));
     } finally {
       setIsSaving(false);
     }
@@ -286,12 +278,15 @@ export function BookDetailsModal({
                 placeholderClassName="book-detail-cover-placeholder"
               />
             </div>
-            <div className="artifact-panel">
-              <RatingArtifact mediaType="book" scores={draftScores} size={220} />
-              {displayScore !== null && (
-                <p className="artifact-score">{displayScore}<span>/10</span></p>
-              )}
-            </div>
+            {canRead && (
+              <button
+                type="button"
+                className="btn-watch book-detail-watch-now"
+                onClick={() => setShowReader(true)}
+              >
+                Read Now
+              </button>
+            )}
           </div>
 
           <div className="book-detail-content">
@@ -319,51 +314,33 @@ export function BookDetailsModal({
 
             <div className="rating-section">
               <p className="rating-section-title">Your Rating</p>
-              <RatingInput
-                mediaType="book"
-                value={draftScores}
-                onChange={allowActions ? setDraftScores : () => {}}
-              />
-              <div className="rating-section-actions">
-                <button
-                  type="button"
-                  className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
-                  onClick={handleSave}
-                  disabled={!allowActions || !canSave || isSaving}
-                >
-                  {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
-                </button>
-                {allowActions && !canSave && (
-                  <span className="rating-incomplete-hint">Rate all categories to save</span>
+              <div className="rating-section-row">
+                <StarRating
+                  value={draftStars}
+                  onChange={allowActions ? handleStarChange : undefined}
+                  readOnly={!allowActions}
+                  size="lg"
+                />
+                {allowActions && (
+                  <button
+                    type="button"
+                    className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
+                    onClick={() => onAddToLibrary(book)}
+                    disabled={isInLibrary || isAddingToLibrary}
+                  >
+                    {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
+                  </button>
                 )}
               </div>
-            </div>
-
-            <div className="book-detail-actions">
-              {allowActions && (
-                <button
-                  type="button"
-                  className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
-                  onClick={() => onAddToLibrary(book)}
-                  disabled={isInLibrary || isAddingToLibrary}
-                >
-                  {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
-                </button>
-              )}
+              {isSaving && <span className="rating-saving-hint">Saving...</span>}
               {!allowActions && browseOnlyMessage && (
                 <p className="book-detail-status">{browseOnlyMessage}</p>
               )}
               {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
-              {canRead && (
-                <button
-                  type="button"
-                  className="btn-watch"
-                  onClick={() => setShowReader(true)}
-                >
-                  Read Now
-                </button>
-              )}
-              {archiveId && (
+            </div>
+
+            {archiveId && (
+              <div className="book-detail-actions">
                 <div className="book-download-row">
                   <span className="book-download-label">Download:</span>
                   {['pdf', 'epub', 'txt'].map((fmt) => (
@@ -378,11 +355,11 @@ export function BookDetailsModal({
                     </button>
                   ))}
                 </div>
-              )}
-              {downloadError && (
-                <p className="book-download-error">{downloadError}</p>
-              )}
-            </div>
+                {downloadError && (
+                  <p className="book-download-error">{downloadError}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

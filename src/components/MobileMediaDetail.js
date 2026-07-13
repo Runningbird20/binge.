@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
-import RatingInput from './RatingInput';
-import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
+import StarRating from './StarRating';
+import { computeStarRating, buildUniformCategories } from './RatingArtifact';
 
 function getImageUrl(item) {
   const raw = item.poster_url || item.cover_url || item.image_url || '';
@@ -22,11 +22,6 @@ function getCreatorLabel(item) {
   return 'Created by';
 }
 
-function allCategoriesFilled(mediaType, scores) {
-  const cats = RATING_CATEGORIES[mediaType] || [];
-  return cats.every((cat) => scores[cat.key] >= 1);
-}
-
 export default function MobileMediaDetail({
   item,
   mediaType,
@@ -43,7 +38,7 @@ export default function MobileMediaDetail({
   initialEpisode,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
-  const [draftScores, setDraftScores] = useState({});
+  const [draftStars, setDraftStars] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [tab, setTab] = useState('info');
 
@@ -52,12 +47,8 @@ export default function MobileMediaDetail({
   }, [autoPlay, item?.id]);
 
   useEffect(() => {
-    if (userRating && typeof userRating === 'object') {
-      setDraftScores(userRating);
-    } else {
-      setDraftScores({});
-    }
-  }, [userRating, item]);
+    setDraftStars(computeStarRating(mediaType, userRating) || 0);
+  }, [userRating, item, mediaType]);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -77,13 +68,12 @@ export default function MobileMediaDetail({
   const subtitle = item.director || item.creator || item.author || item.studio || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
   const canWatch = mediaType === 'movie' || mediaType === 'tv_show';
-  const canSave = allCategoriesFilled(mediaType, draftScores);
-  const displayScore = computeNormalizedScore(mediaType, draftScores);
 
-  async function handleSave() {
-    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+  async function handleStarChange(nextValue) {
+    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
+    setDraftStars(nextValue);
     setIsSaving(true);
-    try { await onRate(item, draftScores); }
+    try { await onRate(item, buildUniformCategories(mediaType, nextValue)); }
     finally { setIsSaving(false); }
   }
 
@@ -125,8 +115,8 @@ export default function MobileMediaDetail({
                   <span className="mob-detail-count"> ({item.rating_count})</span>
                 </span>
               )}
-              {displayScore !== null && (
-                <span className="mob-detail-your-score">Your score: {displayScore}/10</span>
+              {draftStars > 0 && (
+                <StarRating value={draftStars} readOnly size="sm" />
               )}
             </div>
           </div>
@@ -186,27 +176,17 @@ export default function MobileMediaDetail({
           {/* Rate tab */}
           {tab === 'rate' && (
             <div className="mob-detail-tab-content">
-              <div className="mob-detail-artifact-row">
-                <RatingArtifact mediaType={mediaType} scores={draftScores} size={120} />
-                {displayScore !== null && (
-                  <p className="mob-detail-artifact-score">{displayScore}<span>/10</span></p>
-                )}
+              <div className="mob-detail-star-row">
+                <StarRating
+                  value={draftStars}
+                  onChange={allowActions ? handleStarChange : undefined}
+                  readOnly={!allowActions}
+                  size="lg"
+                />
               </div>
-              <RatingInput
-                mediaType={mediaType}
-                value={draftScores}
-                onChange={allowActions ? setDraftScores : () => {}}
-              />
-              <button
-                type="button"
-                className={`mob-detail-save-btn${allowActions && canSave ? '' : ' btn-disabled'}`}
-                onClick={handleSave}
-                disabled={!allowActions || !canSave || isSaving}
-              >
-                {!allowActions ? 'Browse Only' : isSaving ? 'Saving…' : userRating ? 'Update Rating' : 'Save Rating'}
-              </button>
-              {allowActions && !canSave && (
-                <p className="mob-detail-rate-hint">Rate all categories to save</p>
+              {isSaving && <p className="mob-detail-rate-hint">Saving…</p>}
+              {!allowActions && (
+                <p className="mob-detail-rate-hint">Browse only — sign in to rate.</p>
               )}
             </div>
           )}
