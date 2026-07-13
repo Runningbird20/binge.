@@ -574,7 +574,7 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, joinDate, 
   ];
 
   return (
-    <section className="home-section surface-panel dashboard-section">
+    <section className="home-section dashboard-section">
       <div className="profile-header">
         <div className="profile-avatar-wrap">
           <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
@@ -599,9 +599,9 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, joinDate, 
 
       <DashboardStatsCard watchlist={watchlist} ratings={ratings} joinDate={joinDate} />
 
-      <div className="profile-tabs">
+      <div className="books-tab-bar">
         {tabs.map(t => (
-          <button key={t.id} className={`profile-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)} type="button">
+          <button key={t.id} className={`books-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)} type="button">
             {t.label}
           </button>
         ))}
@@ -610,6 +610,18 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, joinDate, 
       {tab === 'watchlist' && (
         <>
           <div className="profile-wl-filters">
+            <div className="books-tab-bar books-tab-bar--inline">
+              {[
+                { value: '', label: 'All' },
+                { value: 'movie', label: '🎬 Movies' },
+                { value: 'tv_show', label: '📺 TV' },
+                { value: 'book', label: '📖 Books' },
+              ].map(t => (
+                <button key={t.value} className={`books-tab ${wlTypeFilter === t.value ? 'active' : ''}`} onClick={() => setWlTypeFilter(t.value)} type="button">
+                  {t.label}
+                </button>
+              ))}
+            </div>
             <ThemedSelect
               className="admin-select"
               aria-label="Filter watchlist by status"
@@ -624,18 +636,6 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, joinDate, 
                 { value: 'read', label: 'Read' },
               ]}
               onChange={e => setWlFilter(e.target.value)}
-            />
-            <ThemedSelect
-              className="admin-select"
-              aria-label="Filter watchlist by type"
-              value={wlTypeFilter}
-              options={[
-                { value: '', label: 'All Types' },
-                { value: 'movie', label: 'Movies' },
-                { value: 'tv_show', label: 'TV Shows' },
-                { value: 'book', label: 'Books' },
-              ]}
-              onChange={e => setWlTypeFilter(e.target.value)}
             />
             <span className="profile-filter-count">{filteredWatchlist.length} items</span>
           </div>
@@ -667,14 +667,14 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, joinDate, 
           <RatingStats ratings={ratings} />
 
           <div className="profile-ratings-controls">
-            <div className="tabs" style={{ margin: 0 }}>
+            <div className="books-tab-bar books-tab-bar--inline">
               {[
                 { key: 'all', label: 'All' },
                 { key: 'movie', label: '🎬 Movies' },
                 { key: 'tv_show', label: '📺 TV' },
                 { key: 'book', label: '📖 Books' },
               ].map(t => (
-                <button key={t.key} className={`tab-btn ${ratingsTab === t.key ? 'active' : ''}`} onClick={() => setRatingsTab(t.key)} type="button">
+                <button key={t.key} className={`books-tab ${ratingsTab === t.key ? 'active' : ''}`} onClick={() => setRatingsTab(t.key)} type="button">
                   {t.label}
                 </button>
               ))}
@@ -851,10 +851,6 @@ export default function Home() {
         <StreamHero user={user} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
-          <ForYouSection ready={!authLoading && !!user} />
-
-          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
-
           <DashboardLibrarySection
             user={user}
             watchlist={watchlistItems}
@@ -864,6 +860,10 @@ export default function Home() {
             onWatchlistUpdate={handleWatchlistItemUpdate}
             onWatchlistRemove={handleWatchlistItemRemove}
           />
+
+          <ForYouSection ready={!authLoading && !!user} />
+
+          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
         </div>
         </>
         )}
