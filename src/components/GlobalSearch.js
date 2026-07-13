@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MagnifyingGlass } from '@phosphor-icons/react';
 import { api } from '../api';
 
 function useDebounce(value, delay) {
@@ -122,10 +123,11 @@ export default function GlobalSearch() {
         onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
         type="button"
         title="Search (⌘K)"
+        aria-label="Search"
       >
-        <span className="global-search-icon">🔍</span>
-        <span className="global-search-placeholder">Search movies, shows, books, people…</span>
-        <kbd className="global-search-kbd">⌘K</kbd>
+        <span className="global-search-icon">
+          <MagnifyingGlass size={20} weight="bold" aria-hidden="true" />
+        </span>
       </button>
 
       {open && (
