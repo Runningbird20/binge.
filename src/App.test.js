@@ -41,6 +41,7 @@ jest.mock(
     Navigate: ({ to }) => <div data-testid="navigate" data-to={to} />,
     useNavigate: () => mockNavigate,
     useSearchParams: () => [mockSearchParams, jest.fn()],
+    useLocation: () => ({ pathname: '', search: '', hash: '', state: null, key: 'test' }),
   }),
   { virtual: true }
 );

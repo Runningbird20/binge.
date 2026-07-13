@@ -30,8 +30,6 @@
   /* ── Navbar → minimal mobile header ────────────────────── */
   /* Keep navbar in DOM (GlobalSearch lives inside it), but strip
      it down to logo + hamburger only */
-  .chatbot-fab         { display: none !important; }
-
   .navbar {
     position: fixed !important;
     top: 0;

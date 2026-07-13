@@ -15,7 +15,6 @@ import './App.css';
 import './mobile.css';
 import './theme-experiment.css';
 
-const ChatBot        = lazy(() => import('./components/ChatBot'));
 const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
@@ -103,7 +102,6 @@ export default function App() {
                   </div>
                 } />
               </Routes>
-              <ChatBot />
             </AppShell>
           </Suspense>
 
