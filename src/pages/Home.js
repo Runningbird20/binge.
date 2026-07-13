@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
-import RequestModal from '../components/RequestModal';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
+import {
+  fetchSupabaseRatings,
+  fetchSupabaseWatchlist,
+  fetchSupabaseContinueWatching,
+  removeSupabaseContinueWatching,
+} from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 
 const MEDIA_ICONS = {
@@ -38,28 +42,29 @@ function resolvePosterUrl(url) {
 const HERO_TYPE_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
 
 function detailsUrl(item) {
-  if (item.media_type === 'movie') return `/movies?open=${item.media_id}`;
-  if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}`;
-  if (item.media_type === 'book') return `/books?open=${item.media_id}`;
+  if (item.media_type === 'movie') return `/movie/${item.media_id}`;
+  if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}`;
+  if (item.media_type === 'book') return `/book/${item.media_id}`;
   return '/watchlist';
 }
 
 function resumeUrl(item) {
-  if (item.media_type === 'movie') return `/movies?open=${item.media_id}&play=1`;
-  if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}&play=1`;
+  if (item.media_type === 'movie') return `/movie/${item.media_id}?play=1`;
+  if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}?play=1`;
   return detailsUrl(item);
 }
 
-function StreamHero({ user, watchlistItems }) {
-  const withPoster = watchlistItems.filter(
+function StreamHero({ user, continueWatchingItems, watchlistItems }) {
+  const location = useLocation();
+  const inProgressItem = continueWatchingItems.find(
     (item) => resolvePosterUrl(item.image_url || item.poster_url)
-  );
-  const heroItem =
-    withPoster.find((item) => item.status === 'watching' || item.status === 'reading') ||
-    withPoster[0] ||
-    null;
+  ) || null;
+  const libraryItem = watchlistItems.find(
+    (item) => resolvePosterUrl(item.image_url || item.poster_url)
+  ) || null;
+  const heroItem = inProgressItem || libraryItem;
   const poster = heroItem ? resolvePosterUrl(heroItem.image_url || heroItem.poster_url) : null;
-  const inProgress = heroItem && (heroItem.status === 'watching' || heroItem.status === 'reading');
+  const inProgress = Boolean(inProgressItem) && heroItem === inProgressItem;
 
   return (
     <section className="stream-hero">
@@ -93,7 +98,11 @@ function StreamHero({ user, watchlistItems }) {
         <div className="stream-hero-actions">
           {heroItem ? (
             <>
-              <Link className="btn-primary" to={inProgress ? resumeUrl(heroItem) : detailsUrl(heroItem)}>
+              <Link
+                className="btn-primary"
+                to={inProgress ? resumeUrl(heroItem) : detailsUrl(heroItem)}
+                state={{ backgroundLocation: location }}
+              >
                 {inProgress ? 'Resume' : 'Details'}
               </Link>
               <Link className="btn-secondary" to="/watchlist">My Library</Link>
@@ -118,11 +127,9 @@ function StreamHero({ user, watchlistItems }) {
   );
 }
 
-function ContinueWatching({ items }) {
-  const inProgress = items.filter(
-    i => i.status === 'watching' || i.status === 'reading'
-  );
-  if (!inProgress.length) return null;
+function ContinueWatching({ items, onRemove }) {
+  const location = useLocation();
+  if (!items.length) return null;
 
   return (
     <section className="home-section">
@@ -130,7 +137,7 @@ function ContinueWatching({ items }) {
         <h2>Continue Watching</h2>
       </div>
       <div className="continue-watching-row">
-        {inProgress.map(item => {
+        {items.map(item => {
           const poster = resolvePosterUrl(item.image_url || item.poster_url);
           const url = resumeUrl(item);
 
@@ -152,18 +159,29 @@ function ContinueWatching({ items }) {
           }
 
           return (
-            <Link key={item.id} to={url} className="continue-card">
-              <div className="continue-card-poster">
-                {poster
-                  ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-                  : <div className="continue-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
-                }
-                <div className="continue-card-play">▶</div>
-                {badge && <div className="continue-card-badge">{badge}</div>}
-              </div>
-              <p className="continue-card-title">{item.title}</p>
-              <p className="continue-card-sub">{sub}</p>
-            </Link>
+            <div key={item.id} className="continue-card-wrap">
+              <Link to={url} className="continue-card" state={{ backgroundLocation: location }}>
+                <div className="continue-card-poster">
+                  {poster
+                    ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+                    : <div className="continue-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
+                  }
+                  <div className="continue-card-play">▶</div>
+                  {badge && <div className="continue-card-badge">{badge}</div>}
+                </div>
+                <p className="continue-card-title">{item.title}</p>
+                <p className="continue-card-sub">{sub}</p>
+              </Link>
+              <button
+                type="button"
+                className="continue-card-remove"
+                title="Remove from Continue Watching"
+                aria-label={`Remove ${item.title} from Continue Watching`}
+                onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
+              >
+                ✕
+              </button>
+            </div>
           );
         })}
       </div>
@@ -180,8 +198,9 @@ const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const FOR_YOU_IDLE_STATE = { movie: 'idle', tv_show: 'idle', book: 'idle' };
 
 function ForYouCard({ rec }) {
+  const location = useLocation();
   return (
-    <a href={rec.siteUrl} className="foryou-card">
+    <Link to={rec.siteUrl} className="foryou-card" state={{ backgroundLocation: location }}>
       <div className="foryou-card-poster">
         {rec.posterUrl ? (
           <img src={rec.posterUrl} alt={rec.title} />
@@ -197,7 +216,7 @@ function ForYouCard({ rec }) {
         <h4 className="foryou-card-title">{rec.title}</h4>
         {rec.genre && <p className="foryou-card-genre">{rec.genre.split(',')[0].trim()}</p>}
       </div>
-    </a>
+    </Link>
   );
 }
 
@@ -206,7 +225,6 @@ function ForYouSection({ ready }) {
   const [tabState, setTabState]         = useState(FOR_YOU_IDLE_STATE);
   const [tabData, setTabData]           = useState({});
   const [tabError, setTabError]         = useState({});
-  const [showRequestModal, setShowRequestModal] = useState(false);
 
   const fetchType = useCallback(async (mediaType) => {
     setTabState((prev) => ({ ...prev, [mediaType]: 'loading' }));
@@ -285,14 +303,6 @@ function ForYouSection({ ready }) {
           </>
         )}
       </div>
-
-      <button type="button" className="btn-ghost" onClick={() => setShowRequestModal(true)}>
-        Can't find it? Request media →
-      </button>
-
-      {showRequestModal && (
-        <RequestModal onClose={() => setShowRequestModal(false)} />
-      )}
     </section>
   );
 }
@@ -302,6 +312,7 @@ export default function Home() {
   const location = useLocation();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [watchlistItems, setWatchlistItems] = useState([]);
+  const [continueWatchingItems, setContinueWatchingItems] = useState([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
@@ -317,18 +328,22 @@ export default function Home() {
 
     async function fetchStats() {
       try {
-        const [ratingsResult, watchlistResult] = await Promise.allSettled([
+        const [ratingsResult, watchlistResult, continueWatchingResult] = await Promise.allSettled([
           fetchSupabaseRatings(),
           fetchSupabaseWatchlist(),
+          fetchSupabaseContinueWatching(),
         ]);
 
         if (cancelled) return;
 
         const ratingsData = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
         const watchlistData = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
+        const continueWatchingData = continueWatchingResult.status === 'fulfilled' ? continueWatchingResult.value : [];
         const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
         const nextWatchlist = Array.isArray(watchlistData) ? watchlistData : [];
+        const nextContinueWatching = Array.isArray(continueWatchingData) ? continueWatchingData : [];
         setWatchlistItems(nextWatchlist);
+        setContinueWatchingItems(nextContinueWatching);
         setStats({ ratings: nextRatings.length, watchlist: nextWatchlist.length });
         if (nextRatings.length === 0 && !localStorage.getItem(onboardingKey)) {
           setShowOnboarding(true);
@@ -336,6 +351,7 @@ export default function Home() {
       } catch {
         if (cancelled) return;
         setWatchlistItems([]);
+        setContinueWatchingItems([]);
         setStats({ ratings: 0, watchlist: 0 });
         // Still show onboarding for fresh accounts even if the data fetch failed
         if (!localStorage.getItem(onboardingKey)) {
@@ -356,6 +372,15 @@ export default function Home() {
     setShowOnboarding(false);
   }
 
+  async function handleRemoveContinueWatching(id) {
+    setContinueWatchingItems(prev => prev.filter(item => item.id !== id));
+    try {
+      await removeSupabaseContinueWatching(id);
+    } catch {
+      // Re-fetching on next visit will reconcile if the delete failed.
+    }
+  }
+
   // Bottom-nav "For You" tab links to /home#for-you — scroll it into view
   // once the section has actually mounted (gated behind authLoading below).
   useEffect(() => {
@@ -373,12 +398,12 @@ export default function Home() {
           <div className="loading-state">Loading dashboard...</div>
         ) : (
         <>
-        <StreamHero user={user} watchlistItems={watchlistItems} />
+        <StreamHero user={user} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
           <ForYouSection ready={!authLoading && !!user} />
 
-          <ContinueWatching items={watchlistItems} />
+          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
 
           <div className="stats-row">
             <div className="stat-card">

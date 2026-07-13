@@ -51,7 +51,6 @@ export default function MediaDetailsModal({
   const isMobile = useIsMobile();
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [draftScores, setDraftScores] = useState({});
-  const [draftReview, setDraftReview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -61,10 +60,8 @@ export default function MediaDetailsModal({
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
       setDraftScores(userRating);
-      setDraftReview(userRating.review || '');
     } else {
       setDraftScores({});
-      setDraftReview('');
     }
   }, [userRating, item]);
 
@@ -117,7 +114,7 @@ export default function MediaDetailsModal({
     if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
     setIsSaving(true);
     try {
-      await onRate(item, draftScores, draftReview);
+      await onRate(item, draftScores);
     } finally {
       setIsSaving(false);
     }
@@ -214,15 +211,6 @@ export default function MediaDetailsModal({
                 mediaType={mediaType}
                 value={draftScores}
                 onChange={allowActions ? setDraftScores : () => {}}
-              />
-              <textarea
-                className="review-textarea"
-                placeholder="Write a review (optional)..."
-                value={draftReview}
-                onChange={(event) => setDraftReview(event.target.value)}
-                rows={3}
-                maxLength={2000}
-                disabled={!allowActions}
               />
               <div className="rating-section-actions">
                 <button

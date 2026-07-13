@@ -36,7 +36,7 @@ export default function Ratings() {
           <p className="page-kicker">Your Library</p>
           <h1>My Ratings</h1>
           <p className="page-subtitle">
-            Every title you've rated, with your scores, radar charts, and reviews.
+            Every title you've rated, with your scores and radar charts.
           </p>
         </div>
 
@@ -109,10 +109,6 @@ export default function Ratings() {
                           size={160}
                         />
                       </div>
-
-                      {rating.review && (
-                        <p className="ratings-page-review">{rating.review}</p>
-                      )}
                     </div>
                   </div>
                 );

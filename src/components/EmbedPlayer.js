@@ -4,7 +4,7 @@ import {
   fetchEpisodeProgress,
   markEpisodeWatched,
   unmarkEpisodeWatched,
-  updateWatchlistProgress,
+  upsertSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 
@@ -375,6 +375,19 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       .catch(() => {});
   }, [item?.id, isTV]);
 
+  // Starting playback records/updates Continue Watching — independent of
+  // whether this title is in the library. Adding to the library stays a
+  // separate, explicit action (the "Add to Watchlist" button).
+  useEffect(() => {
+    if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode)) return;
+
+    upsertSupabaseContinueWatching({
+      mediaType,
+      mediaId: item.id,
+      ...(isTV ? { currentSeason: season, currentEpisode: episode } : {}),
+    }).catch(() => {});
+  }, [item?.id, mediaType, isTV, season, episode, provider, externalId]);
+
   function toggleFullscreen() {
     if (isMobile) {
       // On mobile, use Screen Orientation API to rotate to landscape.
@@ -423,14 +436,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           episode: selectedEpisode,
         });
         setWatched((previous) => new Set([...previous, key]));
-        // Auto-add to watchlist and update progress
-        updateWatchlistProgress({
-          mediaType: 'tv_show',
-          mediaId: item.id,
-          currentSeason: selectedSeason,
-          currentEpisode: selectedEpisode,
-          status: 'watching',
-        }).catch(() => {});
       }
     } catch {
       // Keep playback usable even if watch tracking fails.

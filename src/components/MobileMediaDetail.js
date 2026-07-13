@@ -42,7 +42,6 @@ export default function MobileMediaDetail({
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [draftScores, setDraftScores] = useState({});
-  const [draftReview, setDraftReview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [tab, setTab] = useState('info');
 
@@ -53,10 +52,8 @@ export default function MobileMediaDetail({
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
       setDraftScores(userRating);
-      setDraftReview(userRating.review || '');
     } else {
       setDraftScores({});
-      setDraftReview('');
     }
   }, [userRating, item]);
 
@@ -84,7 +81,7 @@ export default function MobileMediaDetail({
   async function handleSave() {
     if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
     setIsSaving(true);
-    try { await onRate(item, draftScores, draftReview); }
+    try { await onRate(item, draftScores); }
     finally { setIsSaving(false); }
   }
 
@@ -197,15 +194,6 @@ export default function MobileMediaDetail({
                 mediaType={mediaType}
                 value={draftScores}
                 onChange={allowActions ? setDraftScores : () => {}}
-              />
-              <textarea
-                className="review-textarea"
-                placeholder="Write a review (optional)..."
-                value={draftReview}
-                onChange={(e) => setDraftReview(e.target.value)}
-                rows={3}
-                maxLength={2000}
-                disabled={!allowActions}
               />
               <button
                 type="button"

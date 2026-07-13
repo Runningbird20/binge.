@@ -305,10 +305,10 @@ function toRecommendation(candidate, signals) {
     posterUrl: candidate.poster_url || candidate.cover_url || null,
     siteUrl:
       candidate.media_type === 'movie'
-        ? `/movies?open=${candidate.id}`
+        ? `/movie/${candidate.id}`
         : candidate.media_type === 'tv_show'
-          ? `/tv-shows?open=${candidate.id}`
-          : `/books?open=${candidate.id}`,
+          ? `/tv-show/${candidate.id}`
+          : `/book/${candidate.id}`,
     reason: buildRecommendationReason(candidate, signals),
   };
 }
