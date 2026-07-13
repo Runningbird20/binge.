@@ -117,22 +117,26 @@ export default function GlobalSearch() {
 
   return (
     <>
-      {/* Trigger — shown in the search bar area below navbar */}
-      <button
-        className="global-search-trigger"
-        onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-        type="button"
-        title="Search (⌘K)"
-        aria-label="Search"
-      >
-        <span className="global-search-icon">
-          <MagnifyingGlass size={20} weight="bold" aria-hidden="true" />
-        </span>
-      </button>
+      {/* Trigger — a compact icon button that rolls out into the search pill */}
+      {!open && (
+        <button
+          className="global-search-trigger"
+          onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+          type="button"
+          title="Search (⌘K)"
+          aria-label="Search"
+        >
+          <span className="global-search-icon">
+            <MagnifyingGlass size={20} weight="bold" aria-hidden="true" />
+          </span>
+        </button>
+      )}
 
       {open && (
-        <div className="global-search-overlay" onClick={close}>
-          <div className="global-search-modal" onClick={e => e.stopPropagation()}>
+        <>
+          <button className="global-search-scrim" onClick={close} type="button" aria-label="Close search" tabIndex={-1} />
+          <div className="global-search-overlay" onClick={close}>
+            <div className="global-search-modal" onClick={e => e.stopPropagation()}>
             <div className="global-search-input-wrap">
               <span className="global-search-input-icon">🔍</span>
               <input
@@ -207,7 +211,8 @@ export default function GlobalSearch() {
               </div>
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
     </>
   );

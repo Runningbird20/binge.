@@ -85,6 +85,7 @@ const PROVIDERS = [
 ];
 
 const AUTO_WATCH_SECONDS = 5 * 60;
+const CONTINUE_WATCHING_SECONDS = 5;
 
 function normalizeExternalId(kind, value) {
   if (value == null) return null;
@@ -153,6 +154,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
   const iframeRef = useRef(null);
   const watchTimerRef = useRef(null);
   const watchSecondsRef = useRef(0);
+  const continueWatchingAddedRef = useRef(false);
 
   const isTV = mediaType === 'tv_show';
   const tmdbId = externalId?.kind === 'tmdb' ? externalId.value : null;
@@ -223,6 +225,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     if (!isTV || !item?.id) return undefined;
 
     watchSecondsRef.current = 0;
+    continueWatchingAddedRef.current = false;
     if (watchTimerRef.current) {
       clearInterval(watchTimerRef.current);
       watchTimerRef.current = null;
@@ -233,20 +236,25 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
     watchTimerRef.current = setInterval(() => {
       watchSecondsRef.current += 1;
+
+      // Add/update continue-watching entry as soon as the episode has genuinely started playing.
+      if (!continueWatchingAddedRef.current && watchSecondsRef.current >= CONTINUE_WATCHING_SECONDS) {
+        continueWatchingAddedRef.current = true;
+        updateWatchlistProgress({
+          mediaType: 'tv_show',
+          mediaId: item.id,
+          currentSeason: season,
+          currentEpisode: episode,
+          status: 'watching',
+        }).catch(() => {});
+      }
+
       if (watchSecondsRef.current >= AUTO_WATCH_SECONDS) {
         clearInterval(watchTimerRef.current);
         watchTimerRef.current = null;
         markEpisodeWatched({ mediaId: item.id, season, episode })
           .then(() => {
             setWatched((previous) => new Set([...previous, key]));
-            // Auto-add to watchlist and update current progress
-            updateWatchlistProgress({
-              mediaType: 'tv_show',
-              mediaId: item.id,
-              currentSeason: season,
-              currentEpisode: episode,
-              status: 'watching',
-            }).catch(() => {});
           })
           .catch(() => {});
       }
@@ -260,7 +268,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
     };
   }, [episode, isTV, item?.id, season, watched]);
 
-  // Auto-add movies to watchlist after 2 minutes of watching
+  // Auto-add movies to continue watching once playback has genuinely started
   useEffect(() => {
     if (isTV || !item?.id || autoAddedRef.current) return;
     const timer = setTimeout(() => {
@@ -271,7 +279,7 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
         mediaId: item.id,
         status: 'watching',
       }).catch(() => {});
-    }, 2 * 60 * 1000); // 2 minutes
+    }, CONTINUE_WATCHING_SECONDS * 1000);
     return () => clearTimeout(timer);
   }, [isTV, item?.id]);
 
