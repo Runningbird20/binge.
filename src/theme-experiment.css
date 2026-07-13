@@ -921,3 +921,79 @@ body {
 .feature-icon { color: var(--exp-accent); }
 .feature-card h3 { color: var(--exp-text); }
 .feature-card p { color: var(--exp-text-dim); }
+
+/* ══════════════════════════════════════════════════════════════
+   LOGIN / SIGNUP — reskinned to match the streaming theme
+   ══════════════════════════════════════════════════════════════ */
+
+.auth-page {
+  background:
+    radial-gradient(120% 60% at 50% -10%, #1c2333 0%, rgba(28, 35, 51, 0) 60%),
+    linear-gradient(180deg, #11141d 0%, var(--exp-bg-0) 900px);
+}
+
+.auth-card {
+  background: var(--exp-surface);
+  border: 1px solid var(--exp-border);
+  border-radius: var(--exp-radius-lg);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--exp-shadow);
+}
+
+.auth-card h1 { color: var(--exp-text); }
+.auth-subtitle { color: var(--exp-text-dim); }
+
+.auth-form label { color: var(--exp-text-dim); }
+
+.auth-form input,
+.auth-form textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--exp-border);
+  border-radius: 10px;
+  color: var(--exp-text);
+}
+.auth-form input:focus,
+.auth-form textarea:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.auth-form input::placeholder,
+.auth-form textarea::placeholder { color: var(--exp-text-faint); }
+
+.auth-label-title { color: var(--exp-text-dim); }
+.auth-field-hint { color: var(--exp-text-faint); }
+.auth-field-count { color: var(--exp-text-faint); }
+
+.avatar-field-frame {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--exp-border);
+  border-radius: var(--exp-radius);
+}
+.avatar-field:focus-within .avatar-field-frame {
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: none;
+}
+
+.avatar-field-actions { border-top: 1px solid var(--exp-border); }
+
+.avatar-upload-trigger {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--exp-border);
+  color: var(--exp-text);
+}
+.avatar-upload-trigger:hover {
+  border-color: var(--exp-border-strong);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.avatar-upload-note,
+.avatar-upload-status { color: var(--exp-text-faint); }
+
+.avatar-upload-chip {
+  background: var(--exp-surface-2);
+  border: 1px solid var(--exp-border);
+  color: var(--exp-text-dim);
+}
+
+.auth-switch { color: var(--exp-text-faint); }
+.auth-switch a { color: var(--exp-text-dim); text-decoration: none; }
+.auth-switch a:hover { color: var(--exp-text); text-decoration: underline; }
