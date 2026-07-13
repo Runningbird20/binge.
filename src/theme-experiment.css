@@ -386,7 +386,7 @@ body {
 
 .foryou-card {
   position: relative;
-  flex: 0 0 210px;
+  flex: 0 0 160px;
   aspect-ratio: 2 / 3;
   display: block;
   background: var(--exp-surface-2);
