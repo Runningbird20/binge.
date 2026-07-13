@@ -21,8 +21,6 @@ const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
 const Books          = lazy(() => import('./pages/Books'));
-const Lists          = lazy(() => import('./pages/Lists'));
-const SharedList     = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminRequests  = lazy(() => import('./pages/AdminRequests'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
@@ -89,8 +87,6 @@ export default function App() {
                 <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
                 <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
                 <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
-                <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
-                <Route path="/lists/:shareCode" element={<SharedList />} />
                 <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
                 <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />

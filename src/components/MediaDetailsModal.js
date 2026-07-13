@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
-import ListSaveControls from './ListSaveControls';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 import useIsMobile from '../hooks/useIsMobile';
@@ -250,9 +249,6 @@ export default function MediaDetailsModal({
                 >
                   {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
                 </button>
-              )}
-              {allowActions && (
-                <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
               )}
               {!allowActions && browseOnlyMessage && (
                 <p className="book-detail-status">{browseOnlyMessage}</p>

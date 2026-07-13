@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import ListSaveControls from './ListSaveControls';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 
@@ -187,12 +186,6 @@ export default function MobileBookDetail({
                 </div>
               )}
             </div>
-
-            {allowActions && (
-              <div className="mob-detail-list-section">
-                <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
-              </div>
-            )}
 
             {archiveId && (
               <div className="mob-book-download-row">

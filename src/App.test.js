@@ -375,14 +375,6 @@ test('shows seeded books as clickable covers and adds a book to the library', as
       );
     }
 
-    if (url === '/api/lists' && (!options.method || options.method === 'GET')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
 

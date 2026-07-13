@@ -10,7 +10,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
-import NotificationBell from './NotificationBell';
 
 const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
@@ -101,7 +100,6 @@ export default function Navbar() {
               <div className="navbar-search-wrap">
                 <GlobalSearch />
               </div>
-              <NotificationBell />
             </div>
           </>
         ) : (

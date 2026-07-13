@@ -15,7 +15,6 @@ import {
   fetchSupabaseTvShowCuratedRows,
   fetchSupabaseTvShowsPage,
 } from './supabaseMovieCatalog';
-import { resolveUserType } from './userAccess';
 
 const SEARCH_LIMIT = 8;
 const TMDB_API_KEY = (
@@ -79,30 +78,6 @@ function buildFuzzyIlikePatterns(value) {
   return [...patterns];
 }
 
-function uniqueIds(values = []) {
-  return [...new Set(values.filter(Boolean))];
-}
-
-function buildProfileMap(profiles = []) {
-  return Object.fromEntries((profiles || []).map((profile) => [profile.id, profile]));
-}
-
-async function requireAuthenticatedUser() {
-  const { data, error } = await getSupabaseUser();
-
-  if (error) {
-    throw toSupabaseError(error, 'Unable to read your Supabase auth session.', {
-      resourceName: 'auth session',
-    });
-  }
-
-  if (!data?.user) {
-    throw new Error('Failed auth session. Please sign in again.');
-  }
-
-  return data.user;
-}
-
 async function getAuthenticatedUserOrNull() {
   const { data, error } = await getSupabaseUser();
 
@@ -113,63 +88,6 @@ async function getAuthenticatedUserOrNull() {
   }
 
   return data?.user || null;
-}
-
-async function requireViewerProfile() {
-  const client = requireSupabaseClient();
-  const user = await requireAuthenticatedUser();
-  const { data, error } = await client
-    .from('profiles')
-    .select('id, username, is_admin, is_dev, bio, avatar_url')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (error) {
-    throw toSupabaseError(error, 'Unable to load your profile.', {
-      resourceName: 'profiles',
-    });
-  }
-
-  const userType = resolveUserType(data || user.user_metadata || {});
-
-  return {
-    ...data,
-    id: user.id,
-    user_type: userType,
-    is_admin: userType === 'admin',
-    is_dev: userType === 'dev',
-  };
-}
-
-async function requireAdminProfile() {
-  const profile = await requireViewerProfile();
-
-  if (profile.user_type !== 'admin') {
-    throw new Error('Failed auth session. Admin access is required.');
-  }
-
-  return profile;
-}
-
-async function fetchProfilesMap(userIds = []) {
-  const ids = uniqueIds(userIds);
-  if (!ids.length) {
-    return {};
-  }
-
-  const client = requireSupabaseClient();
-  const { data, error } = await client
-    .from('profiles')
-    .select('id, username, avatar_url, bio')
-    .in('id', ids);
-
-  if (error) {
-    throw toSupabaseError(error, 'Unable to load profile details.', {
-      resourceName: 'profiles',
-    });
-  }
-
-  return buildProfileMap(data || []);
 }
 
 async function fetchTmdbSeason(searchParams) {
@@ -511,96 +429,6 @@ async function handleSearch(searchParams) {
   return payload;
 }
 
-async function handleNotifications(pathname) {
-  const client = requireSupabaseClient();
-
-  if (pathname === '/notifications/unread-count') {
-    const user = await getAuthenticatedUserOrNull();
-    if (!user) {
-      return { count: 0 };
-    }
-
-    const { count, error } = await client
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('read', false);
-
-    if (error) {
-      throw toSupabaseError(error, 'Unable to load unread notifications.', {
-        resourceName: 'notifications',
-      });
-    }
-
-    return { count: count || 0 };
-  }
-
-  const user = await requireAuthenticatedUser();
-
-  if (pathname === '/notifications') {
-    const { data, error } = await client
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) {
-      throw toSupabaseError(error, 'Unable to load notifications.', {
-        resourceName: 'notifications',
-      });
-    }
-
-    const actorMap = await fetchProfilesMap((data || []).map((notification) => notification.actor_id));
-    return (data || []).map((notification) => ({
-      ...notification,
-      actor: notification.actor_id ? actorMap[notification.actor_id] || null : null,
-    }));
-  }
-
-  throw new Error(`Unsupported notifications route: ${pathname}`);
-}
-
-async function handleNotificationMutation(method, pathname) {
-  const client = requireSupabaseClient();
-  const user = await requireAuthenticatedUser();
-
-  if (method === 'POST' && pathname === '/notifications/read-all') {
-    const { error } = await client
-      .from('notifications')
-      .update({ read: true })
-      .eq('user_id', user.id)
-      .eq('read', false);
-
-    if (error) {
-      throw toSupabaseError(error, 'Unable to mark notifications as read.', {
-        resourceName: 'notifications',
-      });
-    }
-
-    return { success: true };
-  }
-
-  const singleReadMatch = pathname.match(/^\/notifications\/read\/(\d+)$/);
-  if (method === 'POST' && singleReadMatch) {
-    const { error } = await client
-      .from('notifications')
-      .update({ read: true })
-      .eq('id', Number(singleReadMatch[1]))
-      .eq('user_id', user.id);
-
-    if (error) {
-      throw toSupabaseError(error, 'Unable to mark that notification as read.', {
-        resourceName: 'notifications',
-      });
-    }
-
-    return { success: true };
-  }
-
-  throw new Error(`Unsupported notifications route: ${pathname}`);
-}
-
 async function loadProfileByRouteParam(client, rawUsername, viewer = null) {
   const username = decodeURIComponent(rawUsername || '').trim();
   let query = client
@@ -668,61 +496,6 @@ async function handleProfileGet(pathname) {
   };
 }
 
-async function handleAdminMutation(pathname, _body) {
-  await requireAdminProfile();
-  const client = requireSupabaseClient();
-
-  const toggleMatch = pathname.match(/^\/admin\/users\/([^/]+)\/toggle-admin$/);
-  if (toggleMatch) {
-    const userId = toggleMatch[1];
-    const { data: profile, error: fetchError } = await client
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', userId)
-      .single();
-
-    if (fetchError || !profile) {
-      throw toSupabaseError(fetchError, 'User not found.', { resourceName: 'profiles' });
-    }
-
-    const { data, error } = await client
-      .from('profiles')
-      .update({ is_admin: !profile.is_admin })
-      .eq('id', userId)
-      .select('id, username, is_admin')
-      .single();
-
-    if (error) {
-      throw toSupabaseError(error, 'Unable to update admin status.', { resourceName: 'profiles' });
-    }
-
-    return data;
-  }
-
-  throw new Error(`Unsupported admin route: ${pathname}`);
-}
-
-async function handleAdminGet(pathname, searchParams) {
-  await requireAdminProfile();
-  const client = requireSupabaseClient();
-
-  if (pathname === '/admin/users') {
-    const { data, error } = await client
-      .from('profiles')
-      .select('id, username, email, created_at, is_admin')
-      .order('created_at', { ascending: false })
-      .limit(200);
-
-    if (error) {
-      throw toSupabaseError(error, 'Unable to load users.', { resourceName: 'profiles' });
-    }
-
-    return data || [];
-  }
-
-  throw new Error(`Unsupported admin route: ${pathname}`);
-}
-
 export async function executeSupabaseRoute(method, path, body) {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const { pathname, searchParams } = parseApiPath(path);
@@ -737,14 +510,6 @@ export async function executeSupabaseRoute(method, path, body) {
 
   if (pathname === '/search') {
     return handleSearch(searchParams);
-  }
-
-  if (pathname.startsWith('/notifications')) {
-    if (normalizedMethod === 'GET') {
-      return handleNotifications(pathname);
-    }
-
-    return handleNotificationMutation(normalizedMethod, pathname);
   }
 
   if (pathname.startsWith('/media')) {
@@ -764,17 +529,8 @@ export async function executeSupabaseRoute(method, path, body) {
     }
   }
 
-  if (pathname.startsWith('/admin')) {
-    if (normalizedMethod === 'GET') {
-      return handleAdminGet(pathname, searchParams);
-    }
-
-    if (normalizedMethod === 'PATCH') {
-      return handleAdminMutation(pathname, body);
-    }
-
-    throw new Error(`Unsupported admin route: ${pathname}`);
-  }
-
+  // Admin user management (list w/ last-login, create, toggle-admin, delete)
+  // needs the Supabase service-role key for auth.admin.* calls, which only
+  // the Express backend has — fall through to it for all /admin/users routes.
   return null;
 }
