@@ -302,30 +302,38 @@ body {
   .stream-hero-content { padding: 2rem 1.5rem; }
 }
 
-/* ── Shared card language (Disney+-style hover ring) ────────── */
+/* ── Shared card language: every media-poster card shares the
+   same hover as .media-card-full (Movies/TV/Books pages) ──── */
 
 .mr-poster,
 .wl-gallery-poster,
 .continue-card-poster,
 .foryou-card,
-.media-card-poster {
+.media-card-poster,
+.profile-wl-poster,
+.manga-card-cover {
   border-radius: var(--exp-radius);
   border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
-.mr-card:hover .mr-poster,
-.wl-gallery-card:hover .wl-gallery-poster,
 .continue-card:hover .continue-card-poster,
-.foryou-card:hover {
+.foryou-card:hover,
+.profile-wl-card--own:hover .profile-wl-poster,
+.manga-card:hover .manga-card-cover {
+  border-color: var(--exp-border-strong);
+  box-shadow: var(--exp-shadow);
+  transform: translateY(-3px);
+}
+
+.mr-card:hover .mr-poster,
+.wl-gallery-card:hover .wl-gallery-poster {
   box-shadow: var(--exp-ring), var(--exp-shadow);
   border-color: transparent;
 }
-
 .mr-card:hover { transform: translateY(-4px) scale(1.03); }
 .wl-gallery-card:hover { transform: translateY(-4px); }
-.continue-card:hover .continue-card-poster { transform: scale(1.04); }
 
 /* Row headings + see-all */
 .mr-see-all,
@@ -390,7 +398,7 @@ body {
   text-decoration: none;
   transform: none;
 }
-.foryou-card:hover { transform: translateY(-4px); }
+.foryou-card:hover { transform: translateY(-3px); }
 
 .foryou-card-poster {
   position: absolute;
