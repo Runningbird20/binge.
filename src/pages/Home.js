@@ -249,7 +249,7 @@ function ForYouSection({ ready }) {
   const error = tabError[activeType];
 
   return (
-    <section className="home-section surface-panel" id="for-you">
+    <section className="home-section" id="for-you">
       <div className="foryou-header">
         <h2>For You</h2>
         <div className="books-tab-bar foryou-tab-bar">
