@@ -599,7 +599,6 @@ body {
   top: calc(64px + env(safe-area-inset-top, 0px));
   z-index: 15;
   padding: 0.6rem 1.5rem 0.9rem;
-  background: linear-gradient(180deg, rgba(11, 13, 18, 0.96) 75%, rgba(11, 13, 18, 0));
 }
 
 .genre-bar {
