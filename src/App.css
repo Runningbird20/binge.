@@ -7255,6 +7255,13 @@ body {
 .profile-private { text-align: center; padding: 3rem; font-size: 0.9rem; color: #555; }
 .profile-empty { color: #444; font-size: 0.85rem; padding: 2rem 0; }
 .profile-watchlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.75rem; }
+.profile-watchlist-row {
+  display: flex; gap: 0.75rem; overflow-x: auto; overflow-y: visible; padding-bottom: 0.5rem;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.profile-watchlist-row::-webkit-scrollbar { height: 3px; }
+.profile-watchlist-row::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+.profile-watchlist-row .profile-wl-card { flex: 0 0 130px; }
 .profile-wl-card { cursor: default; }
 .profile-wl-poster { position: relative; width: 100%; aspect-ratio: 2/3; border-radius: 8px; overflow: hidden; background: #1a1a1a; margin-bottom: 0.4rem; }
 .profile-wl-poster img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
@@ -7643,6 +7650,25 @@ body {
 /* ══════════════════════════════════════════════════════════════
    PROFILE PAGE — UPDATED
    ══════════════════════════════════════════════════════════════ */
+.profile-minutes { margin: 0.4rem 0 0; font-size: 0.85rem; color: #666; }
+.profile-minutes-num { font-size: 1.5rem; font-weight: 800; color: #f4f6f8; margin-right: 0.35rem; }
+
+.profile-actions--stacked { flex-direction: column; align-items: flex-end; gap: 0.75rem; }
+.profile-stat-squares { display: flex; gap: 0.6rem; }
+.profile-stat-square {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
+  width: 74px; height: 74px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px;
+}
+.profile-stat-square-num { font-size: 1.25rem; font-weight: 800; color: #f4f6f8; line-height: 1; }
+.profile-stat-square-label { font-size: 0.55rem; color: #555; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; text-align: center; }
+
+@media (max-width: 768px) {
+  .profile-actions--stacked { align-items: center; width: 100%; }
+  .profile-stat-squares { justify-content: center; flex-wrap: wrap; }
+}
+
 .profile-stat-cards { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .profile-stat-card {
   display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
@@ -7804,6 +7830,34 @@ body {
   pointer-events: none;
   z-index: 1;
 }
+
+/* Status indicator chip — bottom-right of the poster; fades out when the
+   hover edit-overlay opens so it never sits on top of the controls. */
+.profile-wl-status-ind {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 1;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  transition: opacity 0.18s;
+}
+.profile-wl-status-ind--rated    { color: #ffd166; border: 1px solid rgba(255,209,102,0.5); }
+.profile-wl-status-ind--done     { color: #4caf82; border: 1px solid rgba(76,175,130,0.55); }
+.profile-wl-status-ind--progress { color: #ffd166; border: 1px solid rgba(255,209,102,0.5); font-size: 0.78rem; }
+.profile-wl-status-ind--new      { width: 20px; min-width: 20px; padding: 0; border: 2px solid #777; background: rgba(0,0,0,0.45); }
+.profile-wl-card--own:hover .profile-wl-status-ind { opacity: 0; }
 
 .profile-wl-overlay {
   position: absolute;

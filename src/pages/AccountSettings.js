@@ -175,8 +175,11 @@ export default function AccountSettings() {
   }
 
   async function handleLogout() {
-    await logout();
-    navigate('/');
+    try {
+      await logout();
+    } finally {
+      navigate('/');
+    }
   }
 
   async function handlePasswordSubmit(e) {

@@ -2,7 +2,6 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
   House,
   Broadcast,
-  PlusSquare,
   FilmSlate,
   MonitorPlay,
   BookOpen,
@@ -16,7 +15,6 @@ const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
   { to: '/live-tv',   label: 'Live',      Icon: Broadcast },
   { to: '/sports',    label: 'Sports',    Icon: Trophy },
-  { to: '/watchlist', label: 'Library',   Icon: PlusSquare },
   { to: '/movies',    label: 'Movies',    Icon: FilmSlate },
   { to: '/tv-shows',  label: 'Series',    Icon: MonitorPlay },
   { to: '/books',     label: 'Books',     Icon: BookOpen },
@@ -28,8 +26,11 @@ export default function Navbar() {
   const isAdmin = user?.isAdmin || user?.userType === 'admin';
 
   async function handleLogout() {
-    await logout();
-    navigate('/');
+    try {
+      await logout();
+    } finally {
+      navigate('/');
+    }
   }
 
   const profileDrawerLink = ({ isActive }) => isActive ? 'profile-hover-link active' : 'profile-hover-link';

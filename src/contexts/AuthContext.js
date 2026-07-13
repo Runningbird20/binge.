@@ -200,7 +200,14 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await signOutFromSupabase();
+    try {
+      await signOutFromSupabase();
+    } catch {
+      // Still clear local state below even if the remote sign-out call
+      // fails (e.g. an already-expired/stale session) — otherwise the
+      // user is stuck looking logged in with no way to leave that state.
+    }
+    clearTokenCache();
     setUser(null);
     try {
       window.localStorage.removeItem('token');
