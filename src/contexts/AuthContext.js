@@ -16,6 +16,16 @@ const AuthContext = createContext(null);
 // TEMP (UI preview only — do not commit): raw context export for the mock preview route
 export { AuthContext as __AuthContextForPreview };
 
+function readStoredUser() {
+  try {
+    const raw = window.localStorage.getItem('user');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function getRolePriority(userType) {
   const normalized = normalizeUserType(userType);
 
@@ -48,8 +58,9 @@ function mergeResolvedUser(currentUser, nextUser) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const storedUser = readStoredUser();
+  const [user, setUser] = useState(storedUser);
+  const [authLoading, setAuthLoading] = useState(!storedUser);
   const commitUser = useCallback((nextUser) => {
     setUser((currentUser) => mergeResolvedUser(currentUser, nextUser));
     return nextUser;
@@ -57,6 +68,12 @@ export function AuthProvider({ children }) {
 
   const refreshUser = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
+      const storedUser = readStoredUser();
+      if (storedUser) {
+        commitUser(storedUser);
+        setAuthLoading(false);
+        return storedUser;
+      }
       setUser(null);
       setAuthLoading(false);
       return null;
@@ -69,15 +86,27 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
+    const storedUser = readStoredUser();
 
-    try {
-      window.localStorage.removeItem('token');
-      window.localStorage.removeItem('user');
-    } catch {}
+    if (storedUser) {
+      commitUser(storedUser);
+      setAuthLoading(false);
+
+      if (isSupabaseConfigured && supabase) {
+        void refreshUser().catch(() => {});
+      }
+
+      return () => {
+        active = false;
+      };
+    }
 
     async function bootstrapAuth() {
       try {
-        await refreshUser();
+        const restoredUser = await refreshUser();
+        if (active && !restoredUser) {
+          setUser(null);
+        }
       } catch {
         if (active) {
           setUser(null);
