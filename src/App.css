@@ -7973,7 +7973,8 @@ body {
 
 .navbar { flex-wrap: nowrap; gap: 0.75rem; }
 .navbar-search-wrap { flex: 0 0 auto; }
-.navbar-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.navbar-left { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.navbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; flex-shrink: 0; }
 .navbar-avatar-link { display: flex; align-items: center; border-radius: 50%; transition: opacity 0.15s; }
 .navbar-avatar-link:hover { opacity: 0.8; }
 .navbar-logout { font-size: 0.78rem; }
