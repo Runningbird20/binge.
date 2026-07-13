@@ -35,6 +35,8 @@ const Watchlist      = lazy(() => import('./pages/Watchlist'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
 const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
 const YearInReview   = lazy(() => import('./pages/YearInReview'));
+// TEMP (UI preview only — do not commit)
+const UIPreview      = lazy(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
 const NO_NAV_PATHS = ['/', '/login', '/signup'];
@@ -101,6 +103,8 @@ export default function App() {
                 <Route path="/year-in-review"           element={<ProtectedRoute><YearInReview /></ProtectedRoute>} />
                 <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
                 <Route path="/admin/requests"  element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
+                {/* TEMP (UI preview only — do not commit) */}
+                <Route path="/ui-preview" element={<UIPreview />} />
                 <Route path="/live-tv" element={<ProtectedRoute><LiveTV /></ProtectedRoute>} />
                 <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
                 <Route path="*" element={

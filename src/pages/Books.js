@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MangaTab from '../components/MangaTab';
@@ -7,7 +7,6 @@ import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import MobileBookDetail from '../components/MobileBookDetail';
 import useIsMobile from '../hooks/useIsMobile';
-import ThemedSelect from '../components/ThemedSelect';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import {
@@ -25,8 +24,16 @@ import {
   filterBooksCatalog,
   loadFallbackBooks,
 } from '../catalogFallback';
+import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
 
-const BOOKS_PAGE_SIZE = 24;
+// Random-window sampling (same technique as Movies/Series): jump to random
+// pages across the catalog instead of paging alphabetically, so the shelf
+// mixes titles with no obvious order.
+const SAMPLE_WINDOW = 60;
+const WINDOWS_PER_BATCH = 3;
+const VISIBLE_BATCH_SIZE = 60;
+const MAX_EMPTY_BATCHES = 3;
+const API_PAGE_SIZE = 48;
 // sandbox intentionally omitted — the embedded reader detects sandbox attributes and stops working if one is present
 
 function getCoverUrl(book) {
@@ -35,6 +42,27 @@ function getCoverUrl(book) {
   if (rawUrl.startsWith('//')) return `https:${rawUrl}`;
   if (rawUrl.startsWith('http://')) return rawUrl.replace(/^http:\/\//i, 'https://');
   return rawUrl;
+}
+
+function shuffleItems(items) {
+  const next = [...items];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+// Shuffle a batch, floating items that actually have cover art to the front
+// so the shelf stays visual while remaining unordered.
+function orderBatch(items) {
+  const shuffled = shuffleItems(items);
+  return [...shuffled.filter((book) => Boolean(getCoverUrl(book))), ...shuffled.filter((book) => !getCoverUrl(book))];
+}
+
+function appendUniqueBooks(currentItems, nextItems) {
+  const seenIds = new Set(currentItems.map((item) => item.id));
+  return [...currentItems, ...nextItems.filter((item) => !seenIds.has(item.id))];
 }
 
 const ARCHIVE_DOWNLOAD_EXTENSIONS = {
@@ -68,6 +96,28 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
       referrerPolicy="no-referrer"
       onError={() => setCoverUrl('')}
     />
+  );
+}
+
+function BookPosterTile({ book, onClick }) {
+  return (
+    <button
+      type="button"
+      className="poster-tile"
+      onClick={onClick}
+      title={book.title}
+      aria-label={`Open details for ${book.title}`}
+    >
+      <div className="poster-tile-frame">
+        <BookCoverImage
+          book={book}
+          imageClassName=""
+          placeholderClassName="poster-tile-placeholder"
+        />
+      </div>
+      <p className="poster-tile-title">{book.title}</p>
+      {book.author && <p className="poster-tile-year">{book.author}</p>}
+    </button>
   );
 }
 
@@ -488,15 +538,13 @@ export default function Books() {
   const [activeTab, setActiveTab] = useState('books');
 
   const [books, setBooks] = useState([]);
-  const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [genre, setGenre] = useState('');
-  const [sortOrder, setSortOrder] = useState('title-asc');
-  const [page, setPage] = useState(1);
-  const [totalBooks, setTotalBooks] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [facets, setFacets] = useState({ genres: [] });
+  const [activeLabel, setActiveLabel] = useState('');
+  const [allGenres, setAllGenres] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
+  const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
   const [libraryIds, setLibraryIds] = useState({});
   const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
@@ -504,18 +552,21 @@ export default function Books() {
   const [addingBookId, setAddingBookId] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
+  const requestTokenRef = useRef(0);
+  const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
+  const emptyBatchesRef = useRef(0);
   const loadMoreRef = useRef(null);
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 250);
+  const genreGroups = useMemo(
+    () => buildGenreGroups(BOOK_GENRE_GROUPS, allGenres),
+    [allGenres]
+  );
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [search]);
+  const genreValues = useMemo(() => {
+    if (!activeLabel) return [];
+    const activeGroup = genreGroups.find((group) => group.label === activeLabel);
+    return activeGroup ? activeGroup.values : [activeLabel];
+  }, [genreGroups, activeLabel]);
 
   useEffect(() => {
     function handleScroll() {
@@ -530,126 +581,236 @@ export default function Books() {
     };
   }, []);
 
+  const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
+    const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
+    const totalWindowPages = Math.max(1, Math.ceil(totalCount / windowSize));
+    const pages = Array.from({ length: WINDOWS_PER_BATCH }, () => (
+      1 + Math.floor(Math.random() * totalWindowPages)
+    ));
+
+    const results = await Promise.all(pages.map((page) => (
+      fetchSupabaseBooksPage({
+        page,
+        pageSize: windowSize,
+        genre: genreValues,
+        sortOrder: 'title-asc',
+      }).catch(() => null)
+    )));
+
+    return orderBatch(results.flatMap((result) => (Array.isArray(result?.items) ? result.items : [])));
+  }, [genreValues]);
+
+  const fetchApiPage = useCallback(async (pageNum) => {
+    const params = new URLSearchParams({
+      page: String(pageNum),
+      page_size: String(API_PAGE_SIZE),
+      sort: 'year-desc',
+    });
+
+    // The legacy API only supports a single genre substring; this tier only
+    // runs when Supabase is unreachable, so an approximate match is fine.
+    if (genreValues[0]) params.set('genre', genreValues[0]);
+
+    const data = await api.get(`/media/books?${params.toString()}`);
+    return {
+      items: Array.isArray(data?.items) ? data.items : [],
+      total: Number(data?.total) || 0,
+      totalPages: Number(data?.totalPages) || 1,
+      facets: {
+        genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
+      },
+    };
+  }, [genreValues]);
+
   useEffect(() => {
     let cancelled = false;
+    const requestToken = requestTokenRef.current + 1;
+    requestTokenRef.current = requestToken;
+    emptyBatchesRef.current = 0;
+    const fetchHadGenreFilter = genreValues.length > 0;
 
-    async function fetchBooks() {
-      setLoading(true);
+    setLoading(true);
+    setLoadingMore(false);
+    setBooks([]);
+    setTotal(0);
+    setUsingFallbackCatalog(false);
+    setRenderedCount(VISIBLE_BATCH_SIZE);
+
+    function adoptGenres(fetchedGenres) {
+      if (!Array.isArray(fetchedGenres) || fetchedGenres.length === 0) return;
+      setAllGenres((current) => {
+        if (fetchHadGenreFilter && current.length > 0) return current;
+        // Bail out on an equal-content array so this doesn't retrigger the
+        // fetch effect below (genreValues derives from allGenres via genreGroups).
+        return sameGenreList(current, fetchedGenres) ? current : fetchedGenres;
+      });
+    }
+
+    async function loadCatalog() {
+      try {
+        const probe = await fetchSupabaseBooksPage({
+          page: 1,
+          pageSize: 1,
+          genre: genreValues,
+          sortOrder: 'title-asc',
+        });
+        const totalCount = Number(probe?.total) || 0;
+        if (totalCount === 0 && !fetchHadGenreFilter) {
+          throw new Error('Book catalog is empty');
+        }
+
+        if (cancelled || requestTokenRef.current !== requestToken) return;
+
+        adoptGenres(probe?.facets?.genres);
+        sourceRef.current = { mode: 'supabase' };
+        setTotal(totalCount);
+
+        if (totalCount === 0) {
+          setBooks([]);
+          setLoading(false);
+          return;
+        }
+
+        const firstBatch = await fetchSupabaseWindows({ totalCount });
+        if (cancelled || requestTokenRef.current !== requestToken) return;
+
+        setBooks(appendUniqueBooks([], firstBatch));
+        setLoading(false);
+        return;
+      } catch {
+        // Fall through to the legacy API, then the bundled snapshot.
+      }
 
       try {
-        const data = await fetchSupabaseBooksPage({
-          page,
-          pageSize: BOOKS_PAGE_SIZE,
-          search: debouncedSearch,
-          genre,
-          sortOrder,
+        const data = await fetchApiPage(1);
+        if (data.items.length === 0 && !fetchHadGenreFilter) {
+          throw new Error('Book catalog is empty');
+        }
+
+        if (cancelled || requestTokenRef.current !== requestToken) return;
+
+        adoptGenres(data.facets.genres);
+        sourceRef.current = { mode: 'api', totalPages: data.totalPages, nextPage: 2 };
+        setTotal(data.total || data.items.length);
+        setBooks(orderBatch(data.items));
+        setLoading(false);
+        return;
+      } catch {
+        // Fall through to the bundled snapshot.
+      }
+
+      try {
+        const fallbackItems = await loadFallbackBooks();
+        if (cancelled || requestTokenRef.current !== requestToken) return;
+
+        const pool = filterBooksCatalog(fallbackItems, {
+          genre: genreValues,
+          sortOrder: 'year-desc',
+          page: 1,
+          pageSize: fallbackItems.length,
         });
 
-        if (!cancelled) {
-          const nextItems = Array.isArray(data?.items) ? data.items : [];
-          if (nextItems.length === 0 && page === 1 && !debouncedSearch && !genre) {
-            throw new Error('Book catalog is empty');
-          }
-
-          setBooks((current) => {
-            if (page === 1) {
-              return nextItems;
-            }
-
-            const seenIds = new Set(current.map((book) => book.id));
-            const appendedItems = nextItems.filter((book) => !seenIds.has(book.id));
-            return [...current, ...appendedItems];
-          });
-          setTotalBooks(Number(data?.total) || 0);
-          setTotalPages(Number(data?.totalPages) || 1);
-          setFacets({
-            genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
-          });
-          setUsingFallbackCatalog(false);
-        }
+        adoptGenres(buildMediaGenreFacets(fallbackItems));
+        sourceRef.current = { mode: 'fallback' };
+        setTotal(pool.total);
+        setBooks(orderBatch(pool.items));
+        setUsingFallbackCatalog(true);
+        setLoading(false);
       } catch {
-        if (!cancelled) {
-          try {
-            const params = new URLSearchParams({
-              page: String(page),
-              page_size: String(BOOKS_PAGE_SIZE),
-              sort: sortOrder,
-            });
-
-            if (debouncedSearch) params.set('search', debouncedSearch);
-            if (genre) params.set('genre', genre);
-
-            const data = await api.get(`/media/books?${params.toString()}`);
-            const nextItems = Array.isArray(data?.items) ? data.items : [];
-            if (nextItems.length === 0 && page === 1 && !debouncedSearch && !genre) {
-              throw new Error('Book catalog is empty');
-            }
-
-            setBooks((current) => {
-              if (page === 1) {
-                return nextItems;
-              }
-
-              const seenIds = new Set(current.map((book) => book.id));
-              const appendedItems = nextItems.filter((book) => !seenIds.has(book.id));
-              return [...current, ...appendedItems];
-            });
-            setTotalBooks(Number(data?.total) || nextItems.length);
-            setTotalPages(Number(data?.totalPages) || 1);
-            setFacets({
-              genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
-            });
-            setUsingFallbackCatalog(false);
-          } catch {
-            try {
-              const fallbackItems = await loadFallbackBooks();
-              const result = filterBooksCatalog(fallbackItems, {
-                search: debouncedSearch,
-                genre,
-                sortOrder,
-                page,
-                pageSize: BOOKS_PAGE_SIZE,
-              });
-
-              setBooks((current) => {
-                if (page === 1) {
-                  return result.items;
-                }
-
-                const seenIds = new Set(current.map((book) => book.id));
-                const appendedItems = result.items.filter((book) => !seenIds.has(book.id));
-                return [...current, ...appendedItems];
-              });
-              setTotalBooks(result.total);
-              setTotalPages(result.totalPages);
-              setFacets({
-                genres: buildMediaGenreFacets(fallbackItems),
-              });
-              setUsingFallbackCatalog(true);
-            } catch {
-              if (page === 1) {
-                setBooks([]);
-                setFacets({ genres: [] });
-              }
-              setTotalBooks(0);
-              setTotalPages(1);
-              setUsingFallbackCatalog(false);
-            }
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (cancelled || requestTokenRef.current !== requestToken) return;
+        setBooks([]);
+        setTotal(0);
+        setLoading(false);
       }
     }
 
-    fetchBooks();
+    loadCatalog();
 
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, sortOrder, page]);
+  }, [genreValues, fetchSupabaseWindows, fetchApiPage]);
+
+  const loadMore = useCallback(async () => {
+    const requestToken = requestTokenRef.current;
+    const source = sourceRef.current;
+    setLoadingMore(true);
+
+    try {
+      if (source.mode === 'supabase') {
+        const batch = await fetchSupabaseWindows({ totalCount: total });
+        if (requestTokenRef.current !== requestToken) return;
+
+        setBooks((current) => {
+          const next = appendUniqueBooks(current, batch);
+          emptyBatchesRef.current = next.length === current.length
+            ? emptyBatchesRef.current + 1
+            : 0;
+          return next;
+        });
+        return;
+      }
+
+      if (source.mode === 'api') {
+        const data = await fetchApiPage(source.nextPage);
+        if (requestTokenRef.current !== requestToken) return;
+
+        sourceRef.current = { ...source, nextPage: source.nextPage + 1 };
+        setBooks((current) => appendUniqueBooks(current, orderBatch(data.items)));
+      }
+      // Fallback mode already holds the full pool; nothing to fetch.
+    } catch {
+      emptyBatchesRef.current += 1;
+    } finally {
+      if (requestTokenRef.current === requestToken) {
+        setLoadingMore(false);
+      }
+    }
+  }, [total, fetchSupabaseWindows, fetchApiPage]);
+
+  const visibleBooks = books.slice(0, renderedCount);
+  const canFetchMore = !usingFallbackCatalog
+    && books.length < total
+    && emptyBatchesRef.current < MAX_EMPTY_BATCHES
+    && (sourceRef.current.mode !== 'api' || sourceRef.current.nextPage <= sourceRef.current.totalPages);
+  const hasMore = renderedCount < books.length || canFetchMore;
+
+  useEffect(() => {
+    if (typeof window.IntersectionObserver !== 'function') {
+      return undefined;
+    }
+
+    const node = loadMoreRef.current;
+    if (!node || loading || loadingMore || !hasMore) {
+      return undefined;
+    }
+
+    let triggered = false;
+    const observer = new window.IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting || triggered) {
+          return;
+        }
+
+        triggered = true;
+        if (renderedCount < books.length) {
+          setRenderedCount((current) => Math.min(current + VISIBLE_BATCH_SIZE, books.length + VISIBLE_BATCH_SIZE));
+        }
+        if (books.length - renderedCount < VISIBLE_BATCH_SIZE && canFetchMore) {
+          loadMore();
+        }
+      },
+      {
+        rootMargin: '480px 0px',
+      }
+    );
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [loading, loadingMore, hasMore, renderedCount, books.length, canFetchMore, loadMore]);
 
   useEffect(() => {
     if (!openId) return undefined;
@@ -726,43 +887,6 @@ export default function Books() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, genre, sortOrder]);
-
-  useEffect(() => {
-    if (typeof window.IntersectionObserver !== 'function') {
-      return undefined;
-    }
-
-    const node = loadMoreRef.current;
-    if (!node || loading || page >= totalPages) {
-      return undefined;
-    }
-
-    let queuedNextPage = false;
-    const observer = new window.IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (!entry?.isIntersecting || queuedNextPage) {
-          return;
-        }
-
-        queuedNextPage = true;
-        setPage((current) => (current < totalPages ? current + 1 : current));
-      },
-      {
-        rootMargin: '260px 0px',
-      }
-    );
-
-    observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [loading, page, totalPages]);
-
   function openBookDetails(book, { browseOnly = false } = {}) {
     setSelectedBook(book);
     setSelectedBookBrowseOnly(browseOnly);
@@ -812,16 +936,6 @@ export default function Books() {
     }
   }
 
-  const hasActiveFilters = Boolean(search || genre || sortOrder !== 'title-asc');
-
-  function clearFilters() {
-    setSearch('');
-    setDebouncedSearch('');
-    setGenre('');
-    setSortOrder('title-asc');
-    setPage(1);
-  }
-
   function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -829,20 +943,11 @@ export default function Books() {
   return (
     <div className="app-layout">
       <Navbar />
-      <main className="page-content">
-        <div className="page-header books-page-header">
-          <div>
-            <p className="page-kicker">Browse</p>
-            <h1>{activeTab === 'manga' ? 'Manga & Comics' : 'Books'}</h1>
-            <p className="page-subtitle books-page-subtitle">
-              {activeTab === 'manga'
-                ? 'Browse and read manga, manhwa, manhua, and comics in-site — powered by MangaDex.'
-                : 'Search the shelf, open richer book details, and save future reads to your library or shared lists.'}
-            </p>
-          </div>
+      <main className="page-content curated-page">
+        <div className="catalog-header">
+          <h1 className="catalog-title">{activeTab === 'manga' ? 'Manga & Comics' : 'Books'}</h1>
         </div>
 
-        {/* Tab bar */}
         <div className="books-tab-bar">
           <button
             type="button"
@@ -860,127 +965,68 @@ export default function Books() {
           </button>
         </div>
 
-        {/* Manga tab */}
         {activeTab === 'manga' && <MangaTab />}
 
-        {/* Books tab */}
-        {activeTab === 'books' && <><section className="surface-panel">
-          <div className="surface-panel-header">
-            <div>
-              <h2>Filter the Shelf</h2>
-              <p className="surface-panel-copy">
-                Search by title or author, narrow by genre, and sort the shelf without leaving the page.
-              </p>
-              {usingFallbackCatalog && (
-                <p className="surface-panel-copy">Showing the bundled book catalog snapshot.</p>
-              )}
-            </div>
-            <p className="surface-panel-meta">
-              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
-            </p>
-          </div>
-
-          <div className="filter-bar">
-            <input
-              className="search-input"
-              type="text"
-              aria-label="Search books"
-              placeholder="Search books..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <ThemedSelect
-              className="filter-input"
-              aria-label="Genre"
-              value={genre}
-              options={[
-                { value: '', label: 'All Genres' },
-                ...facets.genres.map((option) => ({ value: option, label: option })),
-              ]}
-              onChange={(event) => setGenre(event.target.value)}
-            />
-            <ThemedSelect
-              className="filter-input"
-              aria-label="Sort by"
-              value={sortOrder}
-              options={[
-                { value: 'title-asc', label: 'Title A-Z' },
-                { value: 'year-desc', label: 'Newest First' },
-                { value: 'year-asc', label: 'Oldest First' },
-              ]}
-              onChange={(event) => setSortOrder(event.target.value)}
-            />
-            {hasActiveFilters && (
-              <button type="button" className="btn-ghost btn-sm" onClick={clearFilters}>
-                Clear
-              </button>
-            )}
-          </div>
-
-          {hasActiveFilters && !loading && (
-            <p className="surface-panel-copy">Showing results for your active filters.</p>
-          )}
-        </section>
-
-        <section className="surface-panel surface-panel-spacious books-results-panel">
-          <div className="books-results-header">
-            <p className="books-results-count">
-              {loading ? 'Loading books...' : `${totalBooks} book${totalBooks === 1 ? '' : 's'} found`}
-            </p>
-            {hasActiveFilters && !loading && (
-              <p className="books-results-summary">
-                Showing results for your active filters.
-              </p>
-            )}
-          </div>
-
-          {loading ? (
-            <SkeletonGrid count={18} />
-          ) : books.length === 0 ? (
-            <div className="empty-state">
-              <p style={{ fontSize: '2rem', margin: 0 }}>📖</p>
-              <p>No books match those filters.</p>
-              <p className="empty-hint">Try a different search or clear the filters.</p>
-            </div>
-          ) : (
-            <>
-              <div className="book-library-grid">
-                {books.map((book) => (
+        {activeTab === 'books' && (
+          <div className="catalog-view">
+            <div className="genre-bar-wrap">
+              <div className="genre-bar" role="tablist" aria-label="Book genres">
+                <button
+                  type="button"
+                  className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+                  onClick={() => setActiveLabel('')}
+                >
+                  Featured
+                </button>
+                {genreGroups.map((group) => (
                   <button
-                    key={book.id}
+                    key={group.label}
                     type="button"
-                    className="book-shelf-card"
-                    onClick={() => openBookDetails(book, { browseOnly: usingFallbackCatalog })}
-                    aria-label={`Open details for ${book.title}`}
+                    className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+                    onClick={() => setActiveLabel(group.label)}
                   >
-                    <div className="book-shelf-cover-frame">
-                      <BookCoverImage
-                        book={book}
-                        imageClassName="book-shelf-cover-image"
-                        placeholderClassName="book-shelf-cover-placeholder"
-                      />
-                    </div>
-                    <div className="book-shelf-copy">
-                      <h3>{book.title}</h3>
-                      <p>{book.author}</p>
-                    </div>
+                    {group.label}
                   </button>
                 ))}
               </div>
+            </div>
 
-              <div className="books-infinite-footer">
-                {loading && page > 1 && (
-                  <p className="books-pagination-copy">Loading more books...</p>
-                )}
-                {!loading && page >= totalPages && (
-                  <p className="books-pagination-copy">You have reached the end of the shelf.</p>
-                )}
-                {page < totalPages && <div ref={loadMoreRef} className="books-load-trigger" aria-hidden="true" />}
+            {loading ? (
+              <SkeletonGrid count={20} />
+            ) : books.length === 0 ? (
+              <div className="empty-state">
+                <p style={{ fontSize: '2rem', margin: 0 }}>📖</p>
+                <p>No books match this genre.</p>
+                <p className="empty-hint">Try a different genre.</p>
               </div>
-            </>
-          )}
-        </section>
-        </>}
+            ) : (
+              <>
+                <div className="poster-grid">
+                  {visibleBooks.map((book) => (
+                    <BookPosterTile
+                      key={book.id}
+                      book={book}
+                      onClick={() => openBookDetails(book, { browseOnly: usingFallbackCatalog })}
+                    />
+                  ))}
+                </div>
+                <div className="infinite-scroll-footer">
+                  {loadingMore ? (
+                    <span>Loading more books…</span>
+                  ) : hasMore ? (
+                    <span>Scroll for more</span>
+                  ) : (
+                    <span>
+                      {total.toLocaleString()} book{total === 1 ? '' : 's'}
+                      {usingFallbackCatalog ? ' (offline snapshot)' : ''}
+                    </span>
+                  )}
+                  {hasMore && <div ref={loadMoreRef} style={{ height: 1 }} />}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </main>
 
       {selectedBook && (
