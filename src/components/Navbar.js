@@ -62,14 +62,6 @@ export default function Navbar() {
                   </Link>
 
                   <div className="profile-hover-section">
-                    <p className="profile-hover-section-label">Social</p>
-                    <nav className="profile-hover-nav">
-                      <NavLink to="/watch-room" className={profileDrawerLink}>🎬 Watch Together</NavLink>
-                      <NavLink to="/following" className={profileDrawerLink}>👥 Following</NavLink>
-                    </nav>
-                  </div>
-
-                  <div className="profile-hover-section">
                     <p className="profile-hover-section-label">Account</p>
                     <nav className="profile-hover-nav">
                       <NavLink to="/account-settings" className={profileDrawerLink}>⚙️ Account Settings</NavLink>

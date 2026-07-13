@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
 import ThemedSelect from '../components/ThemedSelect';
@@ -327,12 +327,9 @@ function RatingStats({ ratings }) {
 export default function UserProfile() {
   const { username } = useParams();
   const { user: currentUser } = useAuth();
-  const navigate = useNavigate();
   const [data, setData]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
-  const [following, setFollowing] = useState(false);
-  const [followLoading, setFollowLoading] = useState(false);
   const [searchParams] = useSearchParams();
   const [tab, setTab]             = useState(searchParams.get('tab') || 'watchlist');
 
@@ -355,15 +352,10 @@ export default function UserProfile() {
   useEffect(() => {
     setLoading(true);
     setError('');
-    Promise.all([
-      api.get(`/profile/${username}`),
-      api.get(`/profile/${username}/follow-status`).catch(() => ({ following: false })),
-    ]).then(([profileData, followStatus]) => {
+    api.get(`/profile/${username}`).then((profileData) => {
       setData(profileData);
-      setFollowing(followStatus.following);
     }).catch((err) => {
       setData(null);
-      setFollowing(false);
       setError(err?.message || 'Unable to load this profile from Supabase.');
     }).finally(() => setLoading(false));
   }, [username]);
@@ -380,23 +372,6 @@ export default function UserProfile() {
       setOwnRatings(rt.status === 'fulfilled' && Array.isArray(rt.value) ? rt.value : []);
     }).finally(() => setOwnDataLoading(false));
   }, [isOwn]);
-
-  async function handleFollow() {
-    if (!currentUser) return navigate('/login');
-    setFollowLoading(true);
-    try {
-      if (following) {
-        await api.delete(`/profile/${username}/follow`);
-        setFollowing(false);
-        setData(d => d ? { ...d, followers: Math.max(0, (d.followers || 0) - 1) } : d);
-      } else {
-        await api.post(`/profile/${username}/follow`);
-        setFollowing(true);
-        setData(d => d ? { ...d, followers: (d.followers || 0) + 1 } : d);
-      }
-    } catch (err) { alert(err.message); }
-    finally { setFollowLoading(false); }
-  }
 
   const toast = useToast();
 
@@ -428,8 +403,6 @@ export default function UserProfile() {
   const profile        = data?.profile || null;
   const publicRatings  = data?.ratings  || [];
   const publicWatchlist= data?.watchlist || [];
-  const followers      = data?.followers || 0;
-  const followingCount = data?.following || 0;
   const isPrivate      = data?.isPrivate || false;
 
   const displayWatchlist = isOwn && ownWatchlist != null ? ownWatchlist : publicWatchlist;
@@ -478,21 +451,14 @@ export default function UserProfile() {
             }
           </div>
           <div className="profile-info">
-            <h1 className="profile-username">u/{profile.username}</h1>
+            <h1 className="profile-username">{profile.username}</h1>
             {profile.bio && <p className="profile-bio">{profile.bio}</p>}
             <div className="profile-stat-cards">
-              <StatCard value={followers || 0}      label="Followers" />
-              <StatCard value={followingCount || 0} label="Following" />
               <StatCard value={displayRatings.length}   label="Ratings" />
               <StatCard value={displayWatchlist.length} label="Watchlist" />
             </div>
           </div>
           <div className="profile-actions">
-            {!isOwn && currentUser && (
-              <button className={following ? 'btn-ghost' : 'btn-primary'} onClick={handleFollow} disabled={followLoading} type="button">
-                {followLoading ? '...' : following ? '✓ Following' : '+ Follow'}
-              </button>
-            )}
             {isOwn && <Link to="/account-settings" className="btn-ghost">Edit Profile</Link>}
           </div>
         </div>
