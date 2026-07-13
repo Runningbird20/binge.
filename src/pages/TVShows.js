@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
@@ -18,6 +18,7 @@ import {
   filterMediaItems,
   loadFallbackTvShows,
 } from '../catalogFallback';
+import { TV_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
 
 const PAGE_SIZE = 48;
 // Random-window sampling (borrowed from the recommendation engine): instead of
@@ -108,11 +109,9 @@ function PosterTile({ item, onClick }) {
   );
 }
 
-function CatalogView({ onItemClick, initialGenre, initialSearch }) {
+function CatalogView({ onItemClick, initialGenre }) {
   const [items, setItems] = useState([]);
-  const [search, setSearch] = useState(initialSearch || '');
-  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch || '');
-  const [genre, setGenre] = useState(initialGenre || '');
+  const [activeLabel, setActiveLabel] = useState(initialGenre || '');
   const [allGenres, setAllGenres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -123,33 +122,36 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
   const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
   const loadMoreRef = useRef(null);
+  const pendingInitialGenreRef = useRef(initialGenre || '');
 
+  const genreGroups = useMemo(
+    () => buildGenreGroups(TV_GENRE_GROUPS, allGenres),
+    [allGenres]
+  );
+
+  // A deep link like ?genre=Adventure carries a raw facet value, not a group
+  // label. Once the real groups are known, fold it into whichever chip owns it
+  // so the right chip highlights and the query covers the whole group.
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 300);
+    const pending = pendingInitialGenreRef.current;
+    if (!pending || genreGroups.length === 0) return;
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [search]);
-
-  const fetchSupabaseWindows = useCallback(async ({ totalCount, existingCount }) => {
-    if (debouncedSearch) {
-      // Search results should stay deterministic: page through them in order.
-      const data = await fetchSupabaseTvShowCatalogSegment({
-        offset: existingCount,
-        limit: SAMPLE_WINDOW * WINDOWS_PER_BATCH,
-        search: debouncedSearch,
-        genre,
-        sortOrder: 'title-asc',
-        includeCount: false,
-        includeFacets: false,
-        includeUpcoming: false,
-      });
-      return normalizeMediaItems(data);
+    const match = genreGroups.find((group) => (
+      group.values.some((value) => value.toLowerCase() === pending.toLowerCase())
+    ));
+    if (match) {
+      setActiveLabel(match.label);
     }
+    pendingInitialGenreRef.current = '';
+  }, [genreGroups]);
 
+  const genreValues = useMemo(() => {
+    if (!activeLabel) return [];
+    const activeGroup = genreGroups.find((group) => group.label === activeLabel);
+    return activeGroup ? activeGroup.values : [activeLabel];
+  }, [genreGroups, activeLabel]);
+
+  const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const maxOffset = Math.max(0, totalCount - windowSize);
     const offsets = Array.from({ length: WINDOWS_PER_BATCH }, () => (
@@ -161,7 +163,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         offset,
         limit: windowSize,
         search: '',
-        genre,
+        genre: genreValues,
         sortOrder: 'title-asc',
         includeCount: false,
         includeFacets: false,
@@ -170,7 +172,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
     )));
 
     return orderBatch(results.flatMap((result) => normalizeMediaItems(result)));
-  }, [debouncedSearch, genre]);
+  }, [genreValues]);
 
   const fetchApiPage = useCallback(async (pageNum) => {
     const params = new URLSearchParams({
@@ -179,8 +181,9 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
       sort: 'year-desc',
     });
 
-    if (debouncedSearch) params.set('search', debouncedSearch);
-    if (genre) params.set('genre', genre);
+    // The legacy API only supports a single genre substring; this tier only
+    // runs when Supabase is unreachable, so an approximate match is fine.
+    if (genreValues[0]) params.set('genre', genreValues[0]);
 
     const data = await api.get(`/media/tv-shows?${params.toString()}`);
     return {
@@ -191,15 +194,14 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
       },
     };
-  }, [debouncedSearch, genre]);
+  }, [genreValues]);
 
   useEffect(() => {
     let cancelled = false;
     const requestToken = requestTokenRef.current + 1;
     requestTokenRef.current = requestToken;
     emptyBatchesRef.current = 0;
-    const fetchHadGenreFilter = Boolean(genre);
-    const searching = Boolean(debouncedSearch);
+    const fetchHadGenreFilter = genreValues.length > 0;
 
     setLoading(true);
     setLoadingMore(false);
@@ -210,9 +212,12 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
 
     function adoptGenres(fetchedGenres) {
       if (!Array.isArray(fetchedGenres) || fetchedGenres.length === 0) return;
-      setAllGenres((current) => (
-        (!fetchHadGenreFilter && !searching) || current.length === 0 ? fetchedGenres : current
-      ));
+      setAllGenres((current) => {
+        if (fetchHadGenreFilter && current.length > 0) return current;
+        // Bail out on an equal-content array so this doesn't retrigger the
+        // fetch effect below (genreValues derives from allGenres via genreGroups).
+        return sameGenreList(current, fetchedGenres) ? current : fetchedGenres;
+      });
     }
 
     async function loadCatalog() {
@@ -220,15 +225,15 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         const probe = await fetchSupabaseTvShowCatalogSegment({
           offset: 0,
           limit: 1,
-          search: debouncedSearch,
-          genre,
+          search: '',
+          genre: genreValues,
           sortOrder: 'title-asc',
           includeCount: true,
           includeFacets: true,
           includeUpcoming: false,
         });
         const totalCount = Number(probe?.total) || 0;
-        if (totalCount === 0 && !debouncedSearch && !genre) {
+        if (totalCount === 0 && !fetchHadGenreFilter) {
           throw new Error('TV catalog is empty');
         }
 
@@ -256,7 +261,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
 
       try {
         const data = await fetchApiPage(1);
-        if (data.items.length === 0 && !debouncedSearch && !genre) {
+        if (data.items.length === 0 && !fetchHadGenreFilter) {
           throw new Error('TV catalog is empty');
         }
 
@@ -265,7 +270,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         adoptGenres(data.facets.genres);
         sourceRef.current = { mode: 'api', totalPages: data.totalPages, nextPage: 2 };
         setTotal(data.total || data.items.length);
-        setItems(searching ? data.items : orderBatch(data.items));
+        setItems(orderBatch(data.items));
         setLoading(false);
         return;
       } catch {
@@ -277,15 +282,14 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         const pool = filterMediaItems(fallbackItems, {
-          search: debouncedSearch,
-          genre,
-          sortOrder: searching ? 'title-asc' : 'year-desc',
+          genre: genreValues,
+          sortOrder: 'year-desc',
         });
 
         adoptGenres(buildMediaGenreFacets(fallbackItems));
         sourceRef.current = { mode: 'fallback' };
         setTotal(pool.length);
-        setItems(searching ? pool : orderBatch(pool));
+        setItems(orderBatch(pool));
         setUsingFallbackCatalog(true);
         setLoading(false);
       } catch {
@@ -301,7 +305,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, genre, fetchSupabaseWindows, fetchApiPage]);
+  }, [genreValues, fetchSupabaseWindows, fetchApiPage]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -328,9 +332,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         if (requestTokenRef.current !== requestToken) return;
 
         sourceRef.current = { ...source, nextPage: source.nextPage + 1 };
-        setItems((current) => (
-          appendUniqueItems(current, debouncedSearch ? data.items : orderBatch(data.items))
-        ));
+        setItems((current) => appendUniqueItems(current, orderBatch(data.items)));
       }
       // Fallback mode already holds the full pool; nothing to fetch.
     } catch {
@@ -340,7 +342,7 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         setLoadingMore(false);
       }
     }
-  }, [debouncedSearch, items.length, total, fetchSupabaseWindows, fetchApiPage]);
+  }, [items.length, total, fetchSupabaseWindows, fetchApiPage]);
 
   const visibleItems = items.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -392,19 +394,19 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
         <div className="genre-bar" role="tablist" aria-label="Series genres">
           <button
             type="button"
-            className={`genre-chip${genre === '' ? ' active' : ''}`}
-            onClick={() => setGenre('')}
+            className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+            onClick={() => setActiveLabel('')}
           >
             Featured
           </button>
-          {allGenres.map((option) => (
+          {genreGroups.map((group) => (
             <button
-              key={option}
+              key={group.label}
               type="button"
-              className={`genre-chip${genre === option ? ' active' : ''}`}
-              onClick={() => setGenre(option)}
+              className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+              onClick={() => setActiveLabel(group.label)}
             >
-              {option}
+              {group.label}
             </button>
           ))}
         </div>
@@ -415,8 +417,8 @@ function CatalogView({ onItemClick, initialGenre, initialSearch }) {
       ) : items.length === 0 ? (
         <div className="empty-state">
           <p style={{ fontSize: '2rem', margin: 0 }}>📺</p>
-          <p>No series match {debouncedSearch ? 'that search' : 'this genre'}.</p>
-          <p className="empty-hint">Try a different genre or clear your search.</p>
+          <p>No series match this genre.</p>
+          <p className="empty-hint">Try a different genre.</p>
         </div>
       ) : (
         <>
@@ -448,7 +450,6 @@ export default function TVShows() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
   const initialGenre = searchParams.get('genre') || '';
-  const initialSearch = searchParams.get('search') || '';
 
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemBrowseOnly, setSelectedItemBrowseOnly] = useState(false);
@@ -591,7 +592,6 @@ export default function TVShows() {
         <CatalogView
           onItemClick={openItemDetails}
           initialGenre={initialGenre}
-          initialSearch={initialSearch}
         />
       </main>
 

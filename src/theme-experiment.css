@@ -598,9 +598,6 @@ body {
   position: sticky;
   top: calc(64px + env(safe-area-inset-top, 0px));
   z-index: 15;
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
   padding: 0.6rem 1.5rem 0.9rem;
   background: linear-gradient(180deg, rgba(11, 13, 18, 0.96) 75%, rgba(11, 13, 18, 0));
 }
@@ -611,7 +608,6 @@ body {
   gap: 0.6rem;
   overflow-x: auto;
   scrollbar-width: none;
-  flex: 1 1 auto;
   min-width: 0;
   padding: 0.25rem 0;
 }
@@ -641,29 +637,10 @@ body {
   color: #0c0e13;
 }
 
-.genre-bar-search {
-  flex: 0 0 auto;
-  width: 200px;
-  padding: 0.55rem 0.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--exp-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--exp-text);
-  font-size: 0.88rem;
-}
-.genre-bar-search:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.35);
-}
-.genre-bar-search::placeholder { color: var(--exp-text-faint); }
-
 @media (max-width: 768px) {
   .genre-bar-wrap {
-    flex-wrap: wrap;
     top: calc(52px + env(safe-area-inset-top, 0px));
   }
-  .genre-bar { order: 2; flex-basis: 100%; }
-  .genre-bar-search { order: 1; width: 100%; }
 }
 
 .poster-grid {
@@ -755,6 +732,32 @@ body {
   font-size: 0.82rem;
   text-align: center;
   padding: 0.5rem 0 2rem;
+}
+
+/* Books/Manga tab switcher — matches the Featured/Browse pill toggle */
+.books-tab-bar {
+  display: flex;
+  width: fit-content;
+  gap: 2px;
+  border-bottom: none;
+  margin: 0 auto 1.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--exp-border);
+  border-radius: 999px;
+  padding: 0.25rem;
+}
+.books-tab {
+  border-radius: 999px;
+  padding: 0.5rem 1.3rem;
+  margin-bottom: 0;
+  border-bottom: none;
+  color: var(--exp-text-dim);
+}
+.books-tab:hover { color: var(--exp-text); }
+.books-tab.active {
+  background: #f4f6f8;
+  color: #0c0e13;
+  border-bottom-color: transparent;
 }
 
 /* ── Media grid cards (Browse view) ─────────────────────────── */

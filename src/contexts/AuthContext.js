@@ -13,6 +13,8 @@ import {
 import { normalizeUserType } from '../utils/userAccess';
 
 const AuthContext = createContext(null);
+// TEMP (UI preview only — do not commit): raw context export for the mock preview route
+export { AuthContext as __AuthContextForPreview };
 
 function getRolePriority(userType) {
   const normalized = normalizeUserType(userType);
