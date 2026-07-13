@@ -7800,12 +7800,19 @@ body {
 }
 
 .profile-wl-filters { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+/* Pull the toggle's own button padding back so its text lines up with the
+   section heading directly above it instead of sitting indented. */
+.profile-wl-filters .books-tab-bar--inline { margin-left: -0.9rem; }
 .profile-filter-count { font-size: 0.78rem; color: #444; margin-left: auto; }
 .profile-wl-year { margin: 0; font-size: 0.68rem; color: #444; }
 
-/* Own-profile editable watchlist card — hover overlay */
-.profile-wl-card--own { cursor: default; }
-.profile-wl-card--saving { opacity: 0.6; }
+/* Own-profile watchlist card — plain link through to media details */
+.profile-wl-card--own {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
 
 .profile-wl-card--own .profile-wl-poster {
   overflow: visible;
@@ -7831,8 +7838,7 @@ body {
   z-index: 1;
 }
 
-/* Status indicator chip — bottom-right of the poster; fades out when the
-   hover edit-overlay opens so it never sits on top of the controls. */
+/* Status indicator chip — bottom-right of the poster. */
 .profile-wl-status-ind {
   position: absolute;
   bottom: 6px;
@@ -7842,120 +7848,42 @@ body {
   height: 20px;
   padding: 0 5px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: center;
   border-radius: 999px;
-  font-size: 0.62rem;
-  font-weight: 800;
   line-height: 1;
   background: rgba(0,0,0,0.72);
   backdrop-filter: blur(4px);
   pointer-events: none;
-  transition: opacity 0.18s;
 }
-.profile-wl-status-ind--rated    { color: #ffd166; border: 1px solid rgba(255,209,102,0.5); }
-.profile-wl-status-ind--done     { color: #4caf82; border: 1px solid rgba(76,175,130,0.55); }
-.profile-wl-status-ind--progress { color: #ffd166; border: 1px solid rgba(255,209,102,0.5); font-size: 0.78rem; }
-.profile-wl-status-ind--new      { width: 20px; min-width: 20px; padding: 0; border: 2px solid #777; background: rgba(0,0,0,0.45); }
-.profile-wl-card--own:hover .profile-wl-status-ind { opacity: 0; }
-
-.profile-wl-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.86);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 0.5rem;
-  border-radius: 8px;
-  opacity: 0;
-  transition: opacity 0.18s;
-  pointer-events: none;
-  z-index: 2;
+.profile-wl-status-ind--rated {
+  color: #f4f6f8;
+  border: 1px solid rgba(255,255,255,0.4);
+  padding: 0 6px;
+  gap: 1px;
 }
-.profile-wl-card--own:hover .profile-wl-overlay {
-  opacity: 1;
-  pointer-events: auto;
+.profile-wl-status-ind-num { font-size: 0.88rem; font-weight: 800; }
+.profile-wl-status-ind-den { font-size: 0.52rem; font-weight: 600; opacity: 0.8; }
+.profile-wl-status-ind--done {
+  color: #4caf82;
+  font-size: 0.68rem;
+  font-weight: 800;
+  border: 1px solid rgba(76,175,130,0.55);
 }
-.profile-wl-overlay-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.3rem;
-}
-.profile-wl-overlay-open {
-  font-size: 0.58rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.45);
-  text-decoration: none;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.05);
-  transition: color 0.15s, background 0.15s;
-}
-.profile-wl-overlay-open:hover { color: #fff; background: rgba(255,255,255,0.12); }
-.profile-wl-overlay-remove {
-  background: none;
-  border: 1px solid rgba(220,80,80,0.25);
-  color: rgba(220,80,80,0.55);
-  font-size: 0.6rem;
-  font-weight: 700;
+.profile-wl-status-ind--progress {
   width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  min-width: 20px;
   padding: 0;
+  border: 2px solid #ffd166;
+  background: conic-gradient(#ffd166 0deg 130deg, rgba(0,0,0,0.55) 130deg 360deg);
 }
-.profile-wl-overlay-remove:hover {
-  color: #ff6b6b;
-  background: rgba(220,80,80,0.15);
-  border-color: rgba(220,80,80,0.5);
+.profile-wl-status-ind--new {
+  width: 20px;
+  min-width: 20px;
+  padding: 0;
+  border: 2px solid #777;
+  background: rgba(0,0,0,0.45);
 }
-.profile-wl-overlay-controls { display: flex; flex-direction: column; gap: 0.35rem; }
-.profile-wl-overlay-progress { display: flex; gap: 0.3rem; }
-.profile-wl-overlay-field { flex: 1; display: flex; flex-direction: column; gap: 0.18rem; }
-.profile-wl-overlay-label {
-  font-size: 0.5rem;
-  font-weight: 700;
-  color: rgba(255,255,255,0.35);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.profile-wl-overlay-input {
-  width: 100%;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 4px;
-  color: #e8e8e8;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.28rem 0.25rem;
-  text-align: center;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.profile-wl-overlay-input::-webkit-inner-spin-button,
-.profile-wl-overlay-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.profile-wl-overlay-input:focus { outline: none; border-color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.07); }
-.profile-wl-overlay-status {
-  width: 100%;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid;
-  border-radius: 5px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 0.3rem 0.4rem;
-  text-align: center;
-  appearance: none;
-  cursor: pointer;
-}
-.profile-wl-overlay-status:focus { outline: none; }
 
 .profile-ratings-controls { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
 .ratings-stats-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -8214,8 +8142,7 @@ select.filter-input,
 .status-select,
 .admin-select,
 .forum-select,
-.devlab-page select,
-.profile-wl-overlay-status {
+.devlab-page select {
   background-color: #141414;
   background-image:
     linear-gradient(45deg, transparent 50%, #f4f6f8 50%),
@@ -8242,16 +8169,6 @@ select.filter-input,
 
 .forum-select--sm {
   padding-right: 2rem;
-}
-
-.profile-wl-overlay-status {
-  padding-right: 1.75rem;
-  text-align: left;
-}
-
-.profile-wl-overlay-status:focus {
-  border-color: rgba(255,255,255,0.65) !important;
-  box-shadow: 0 0 0 3px rgba(255,255,255,0.12);
 }
 
 .themed-select {
@@ -8416,54 +8333,19 @@ select.filter-input,
 
 .themed-select.admin-select,
 .themed-select.forum-select--sm,
-.themed-select.status-select,
-.themed-select.profile-wl-overlay-status {
+.themed-select.status-select {
   width: auto;
   min-width: 140px;
 }
 
 .themed-select.admin-select .themed-select-control,
 .themed-select.forum-select--sm .themed-select-control,
-.themed-select.status-select .themed-select-control,
-.themed-select.profile-wl-overlay-status .themed-select-control {
+.themed-select.status-select .themed-select-control {
   min-height: 36px;
   border-radius: 10px;
   padding-top: 0.42rem;
   padding-bottom: 0.42rem;
   font-size: 0.82rem;
-}
-
-.themed-select.profile-wl-overlay-status {
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.themed-select.profile-wl-overlay-status .themed-select-control {
-  min-height: 30px;
-  padding: 0.26rem 1.45rem 0.26rem 0.45rem;
-  border-color: currentColor;
-  border-radius: 5px;
-  background: rgba(255,255,255,0.06);
-  color: inherit;
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
-.themed-select.profile-wl-overlay-status .themed-select-chevron {
-  right: 0.5rem;
-  border-left-width: 4px;
-  border-right-width: 4px;
-  border-top-width: 5px;
-}
-
-.themed-select.profile-wl-overlay-status .themed-select-menu {
-  top: auto;
-  bottom: calc(100% + 0.35rem);
-  max-height: 128px;
-  z-index: 20;
 }
 
 .themed-select.list-save-select,
@@ -8526,8 +8408,7 @@ select.filter-input,
 }
 
 .admin-select,
-.forum-select--sm,
-.profile-wl-overlay-status {
+.forum-select--sm {
   border-radius: 10px;
   min-height: 36px;
 }
@@ -9312,23 +9193,6 @@ select.filter-input,
   }
 
   .book-detail-kicker { font-size: 0.7rem; }
-}
-
-/* ── Profile watchlist overlay on touch devices ──────────── */
-@media (hover: none) {
-  /* Always show the overlay on touch — can't hover */
-  .profile-wl-overlay {
-    opacity: 1;
-    transform: translateY(0);
-    background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 60%, transparent 100%);
-  }
-
-  /* Only show top controls (open + remove) — keep it light */
-  .profile-wl-overlay-controls,
-  .profile-wl-overlay-progress,
-  .profile-wl-overlay-status {
-    display: none;
-  }
 }
 
 /* ── Very small phones ≤480px ────────────────────────────── */
