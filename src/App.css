@@ -7261,7 +7261,7 @@ body {
 }
 .profile-watchlist-row::-webkit-scrollbar { height: 3px; }
 .profile-watchlist-row::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
-.profile-watchlist-row .profile-wl-card { flex: 0 0 130px; }
+.profile-watchlist-row .profile-wl-card { flex: 0 0 280px; width: 280px; }
 .profile-wl-card { cursor: default; }
 .profile-wl-poster { position: relative; width: 100%; aspect-ratio: 2/3; border-radius: 8px; overflow: hidden; background: #1a1a1a; margin-bottom: 0.4rem; }
 .profile-wl-poster img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
@@ -7806,16 +7806,26 @@ body {
 .profile-filter-count { font-size: 0.78rem; color: #444; margin-left: auto; }
 .profile-wl-year { margin: 0; font-size: 0.68rem; color: #444; }
 
-/* Own-profile watchlist card — plain link through to media details */
+/* Own-profile watchlist card — plain link through to media details.
+   Hover behavior matches .media-card-full: card lifts with a shadow,
+   and the poster image scales slightly within its clipped corners. */
 .profile-wl-card--own {
   display: block;
   color: inherit;
   text-decoration: none;
   cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+.profile-wl-card--own:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.24);
 }
 
-.profile-wl-card--own .profile-wl-poster {
-  overflow: visible;
+.profile-wl-card--own .profile-wl-poster img {
+  transition: transform 0.25s ease;
+}
+.profile-wl-card--own:hover .profile-wl-poster img {
+  transform: scale(1.03);
 }
 
 .profile-wl-card--own .profile-wl-placeholder {
@@ -7838,7 +7848,7 @@ body {
   z-index: 1;
 }
 
-/* Status indicator chip — bottom-right of the poster. */
+/* Status indicator chip — bottom-right of the poster; only shown on hover. */
 .profile-wl-status-ind {
   position: absolute;
   bottom: 6px;
@@ -7855,6 +7865,11 @@ body {
   background: rgba(0,0,0,0.72);
   backdrop-filter: blur(4px);
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.profile-wl-card--own:hover .profile-wl-status-ind {
+  opacity: 1;
 }
 .profile-wl-status-ind--rated {
   color: #f4f6f8;
