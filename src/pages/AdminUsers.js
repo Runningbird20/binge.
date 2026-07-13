@@ -182,7 +182,7 @@ export default function AdminUsers() {
                       {formatLastLogin(u.last_sign_in_at)}
                     </td>
                     <td>{u.is_public ? <span style={{ color: '#86efac' }}>✓</span> : <span style={{ color: '#555' }}>—</span>}</td>
-                    <td>{u.is_admin ? <span style={{ color: '#e8c97a' }}>🛡️ Admin</span> : <span style={{ color: '#555' }}>—</span>}</td>
+                    <td>{u.is_admin ? <span style={{ color: '#f08080' }}>🛡️ Admin</span> : <span style={{ color: '#555' }}>—</span>}</td>
                     <td>
                       {u.id !== currentUser?.id && (
                         <div style={{ display: 'flex', gap: '0.4rem' }}>

@@ -906,9 +906,9 @@
 }
 
 .mp-chip.active {
-  background: rgba(232,201,122,0.15);
-  border-color: rgba(232,201,122,0.55);
-  color: #e8c97a;
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.55);
+  color: #f4f6f8;
 }
 
 .mp-chip-watched { opacity: 0.3; }
@@ -918,7 +918,7 @@
   color: rgba(74,222,128,0.7);
 }
 
-.mp-chip-partial { border-color: rgba(232,201,122,0.25); }
+.mp-chip-partial { border-color: rgba(74,222,128,0.35); }
 
 .mp-loading {
   color: #555;
@@ -1083,7 +1083,7 @@
   flex-shrink: 0;
   background: none;
   border: none;
-  color: #e8c97a;
+  color: #f4f6f8;
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
@@ -1148,7 +1148,7 @@
 
 .sp-upcoming-time {
   font-size: 0.75rem;
-  color: #e8c97a;
+  color: #6ab0f0;
 }
 
 .sp-provider-row {
@@ -1167,8 +1167,8 @@
   cursor: pointer;
 }
 .sp-provider-btn.active {
-  background: #e8c97a;
-  border-color: #e8c97a;
+  background: #f4f6f8;
+  border-color: #f4f6f8;
   color: #000;
   font-weight: 600;
 }
@@ -1204,7 +1204,7 @@
   flex-shrink: 0;
 }
 .sp-dot.live { background: #ef4444; }
-.sp-dot.upcoming { background: #e8c97a; }
+.sp-dot.upcoming { background: #6ab0f0; }
 .sp-dot.replay { background: #555; }
 
 .sp-mini-name {
@@ -1279,9 +1279,9 @@
 }
 
 .sp-cat-chip.active {
-  background: rgba(232,201,122,0.15);
-  border-color: rgba(232,201,122,0.5);
-  color: #e8c97a;
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.5);
+  color: #f4f6f8;
 }
 
 .sp-feed {
@@ -1359,7 +1359,7 @@
 
 .sp-badge-upcoming {
   font-size: 0.7rem;
-  color: #e8c97a;
+  color: #6ab0f0;
   font-weight: 600;
 }
 

@@ -20,7 +20,7 @@ function resolvePoster(url) {
 }
 
 const STATUS_LABELS = { watching: 'Watching', watched: 'Watched', plan_to_watch: 'Plan to Watch', reading: 'Reading', read: 'Read', plan_to_read: 'Plan to Read' };
-const STATUS_COLORS = { watching: '#e8c97a', watched: '#4caf82', reading: '#e8c97a', read: '#4caf82', plan_to_watch: '#7ab8e8', plan_to_read: '#7ab8e8' };
+const STATUS_COLORS = { watching: '#f4f6f8', watched: '#4caf82', reading: '#f4f6f8', read: '#4caf82', plan_to_watch: '#7ab8e8', plan_to_read: '#7ab8e8' };
 const TYPE_LABELS   = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const MEDIA_ICONS   = { movie: '🎬', tv_show: '📺', book: '📖' };
 
