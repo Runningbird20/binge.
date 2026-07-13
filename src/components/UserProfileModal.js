@@ -61,8 +61,6 @@ export default function UserProfileModal({ profile, onClose }) {
 
   const ratings = data?.ratings || [];
   const watchlist = data?.watchlist || [];
-  const followers = data?.followers || 0;
-  const following = data?.following || 0;
 
   const activeItems = watchlist.filter(
     item => item.status === 'watching' || item.status === 'reading'
@@ -90,11 +88,9 @@ export default function UserProfileModal({ profile, onClose }) {
         <div className="upm-header">
           <UserAvatar avatarUrl={profile.avatar_url} name={profile.username} size="lg" />
           <div className="upm-header-info">
-            <h2 className="upm-username">u/{profile.username}</h2>
+            <h2 className="upm-username">{profile.username}</h2>
             {profile.bio && <p className="upm-bio">{profile.bio}</p>}
             <div className="upm-stats">
-              <span><strong>{followers}</strong> followers</span>
-              <span><strong>{following}</strong> following</span>
               {!loading && <span><strong>{ratings.length}</strong> ratings</span>}
               {!loading && <span><strong>{watchlist.length}</strong> in library</span>}
             </div>

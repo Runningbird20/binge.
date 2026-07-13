@@ -238,13 +238,6 @@ export default function Landing() {
             </div>
             <p>Get personalized picks matched to your taste from everything you&apos;ve rated.</p>
           </div>
-          <div className="feature-card">
-            <div className="feature-card-header">
-              <div className="feature-icon">◈</div>
-              <h3>Follow Friends</h3>
-            </div>
-            <p>See your friends&apos; ratings and reviews. Find out what they loved - and what to skip.</p>
-          </div>
         </div>
           <h3>Join thousands of people who never lose track of what they want to watch or read next.</h3>
           <div className="cta-buttons">

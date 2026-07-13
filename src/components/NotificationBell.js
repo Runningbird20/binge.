@@ -15,7 +15,6 @@ const TYPE_ICONS = {
   comment_reply: '💬',
   post_upvote:   '▲',
   comment_upvote: '▲',
-  follow:        '👤',
   mention:       '@',
 };
 

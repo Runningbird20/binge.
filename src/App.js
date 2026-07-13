@@ -21,7 +21,6 @@ const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
 const Books          = lazy(() => import('./pages/Books'));
-const Following      = lazy(() => import('./pages/Following'));
 const Lists          = lazy(() => import('./pages/Lists'));
 const SharedList     = lazy(() => import('./pages/SharedList'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
@@ -33,8 +32,6 @@ const Sports         = lazy(() => import('./pages/Sports'));
 const Ratings        = lazy(() => import('./pages/Ratings'));
 const Watchlist      = lazy(() => import('./pages/Watchlist'));
 const UserProfile    = lazy(() => import('./pages/UserProfile'));
-const WatchRoom      = lazy(() => import('./pages/WatchRoom'));
-const YearInReview   = lazy(() => import('./pages/YearInReview'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
 
@@ -92,16 +89,12 @@ export default function App() {
                 <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
                 <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
                 <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
-                <Route path="/following" element={<ProtectedRoute><Following /></ProtectedRoute>} />
                 <Route path="/lists"     element={<ProtectedRoute><Lists /></ProtectedRoute>} />
                 <Route path="/lists/:shareCode" element={<SharedList />} />
                 <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
                 <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
                 <Route path="/profile/:username"        element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
-                <Route path="/watch-room"               element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
-                <Route path="/year-in-review"           element={<ProtectedRoute><YearInReview /></ProtectedRoute>} />
-                <Route path="/watch-room/:roomId"       element={<ProtectedRoute><WatchRoom /></ProtectedRoute>} />
                 <Route path="/admin/requests"  element={<ProtectedRoute allowedUserTypes={['admin']}><AdminRequests /></ProtectedRoute>} />
                 {/* TEMP (UI preview only — do not commit) */}
                 <Route path="/ui-preview" element={<UIPreview />} />
