@@ -7490,6 +7490,8 @@ body {
    NEOBINGE — Global Search bar
    ══════════════════════════════════════════════════════════════ */
 
+.global-search-wrap { position: relative; }
+
 .global-search-bar {
   display: flex; align-items: center;
   overflow: hidden;
@@ -7514,6 +7516,66 @@ body {
   padding: 0 0.6rem;
 }
 .global-search-bar-input::placeholder { color: rgba(15,15,15,0.5); }
+.global-search-bar-loading {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid rgba(15,15,15,0.2); border-top-color: #0f0f0f;
+  border-radius: 50%;
+  animation: global-search-spin 0.6s linear infinite;
+}
+@keyframes global-search-spin { to { transform: rotate(360deg); } }
+
+/* Results dropdown */
+.global-search-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(360px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  background: #111;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  z-index: 1100;
+  padding: 0.4rem 0;
+}
+.global-search-dropdown-hint {
+  padding: 1rem 1.1rem;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.4);
+}
+.global-search-dropdown-section { padding: 0.35rem 0; }
+.global-search-dropdown-section + .global-search-dropdown-section {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.global-search-dropdown-label {
+  margin: 0;
+  padding: 0.4rem 1.1rem 0.25rem;
+  font-size: 0.65rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+.global-search-dropdown-item {
+  display: flex; align-items: center; gap: 0.65rem;
+  width: 100%; padding: 0.5rem 1.1rem;
+  background: none; border: none; cursor: pointer; text-align: left;
+  transition: background 0.1s;
+}
+.global-search-dropdown-item:hover { background: rgba(255,255,255,0.06); }
+.global-search-dropdown-item img {
+  width: 32px; height: 44px; object-fit: cover; border-radius: 4px; flex-shrink: 0;
+}
+.global-search-dropdown-item-icon {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06); border-radius: 8px; font-size: 0.95rem;
+}
+.global-search-dropdown-item-text { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+.global-search-dropdown-item-title {
+  font-size: 0.85rem; color: #e8e8e8;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.global-search-dropdown-item-sub { font-size: 0.72rem; color: rgba(255,255,255,0.4); }
 
 /* ══════════════════════════════════════════════════════════════
    BINGE — Notification Bell

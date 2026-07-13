@@ -990,7 +990,9 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
 
-  // Auto-add to watchlist if not present
+  // Only updates an existing entry — titles are added to the library
+  // exclusively through the explicit "Add to Watchlist"/"Add to Library"
+  // actions, never as a side effect of watching/reading progress.
   const { data: existing } = await supabase
     .from('watchlist')
     .select('id')
@@ -998,6 +1000,8 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
     .eq('media_type', mediaType)
     .eq('media_id', mediaId)
     .maybeSingle();
+
+  if (!existing) return;
 
   const update = { updated_at: new Date().toISOString() };
   if (status !== undefined)         update.status = status;
@@ -1008,15 +1012,6 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
   if (notes !== undefined)          update.notes = notes;
   if (status === 'completed' || status === 'watched' || status === 'read') update.completed_at = new Date().toISOString();
 
-  if (existing) {
-    const { error } = await supabase.from('watchlist').update(update).eq('id', existing.id);
-    if (error) throw toFriendlyError(error, 'Failed to update watchlist progress');
-  } else {
-    const { error } = await supabase.from('watchlist').insert({
-      user_id: user.id, media_type: mediaType, media_id: mediaId,
-      status: status || (mediaType === 'book' ? 'reading' : 'watching'),
-      ...update,
-    });
-    if (error) throw toFriendlyError(error, 'Failed to add to watchlist');
-  }
+  const { error } = await supabase.from('watchlist').update(update).eq('id', existing.id);
+  if (error) throw toFriendlyError(error, 'Failed to update watchlist progress');
 }

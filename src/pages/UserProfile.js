@@ -433,7 +433,7 @@ export default function UserProfile() {
   if (!profile) return <div className="app-layout"><Navbar /><main className="page-content"><div className="empty-state">User not found.</div></main></div>;
 
   const tabs = [
-    { id: 'watchlist', label: `📋 Watchlist (${displayWatchlist.length})` },
+    { id: 'watchlist', label: `📋 Library (${displayWatchlist.length})` },
     { id: 'ratings',   label: `⭐ Ratings (${displayRatings.length})` },
   ];
 
@@ -455,7 +455,7 @@ export default function UserProfile() {
             {profile.bio && <p className="profile-bio">{profile.bio}</p>}
             <div className="profile-stat-cards">
               <StatCard value={displayRatings.length}   label="Ratings" />
-              <StatCard value={displayWatchlist.length} label="Watchlist" />
+              <StatCard value={displayWatchlist.length} label="Library" />
             </div>
           </div>
           <div className="profile-actions">

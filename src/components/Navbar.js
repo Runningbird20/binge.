@@ -16,7 +16,7 @@ const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
   { to: '/live-tv',   label: 'Live',      Icon: Broadcast },
   { to: '/sports',    label: 'Sports',    Icon: Trophy },
-  { to: '/watchlist', label: 'Watchlist', Icon: PlusSquare },
+  { to: '/watchlist', label: 'Library',   Icon: PlusSquare },
   { to: '/movies',    label: 'Movies',    Icon: FilmSlate },
   { to: '/tv-shows',  label: 'Series',    Icon: MonitorPlay },
   { to: '/books',     label: 'Books',     Icon: BookOpen },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
@@ -84,7 +84,7 @@ function StreamHero({ user, watchlistItems }) {
               </span>
               {heroItem.year && <span>{heroItem.year}</span>}
               <span className="stream-hero-dot">•</span>
-              <span>{inProgress ? 'Continue where you left off' : 'From your watchlist'}</span>
+              <span>{inProgress ? 'Continue where you left off' : 'From your library'}</span>
             </>
           ) : (
             <span>Pick up where you left off or discover something new.</span>
@@ -96,7 +96,7 @@ function StreamHero({ user, watchlistItems }) {
               <Link className="btn-primary" to={inProgress ? resumeUrl(heroItem) : detailsUrl(heroItem)}>
                 {inProgress ? 'Resume' : 'Details'}
               </Link>
-              <Link className="btn-secondary" to="/watchlist">My Watchlist</Link>
+              <Link className="btn-secondary" to="/watchlist">My Library</Link>
             </>
           ) : (
             <>
@@ -168,89 +168,6 @@ function ContinueWatching({ items }) {
         })}
       </div>
     </section>
-  );
-}
-
-function WatchlistGallery({ items, loading }) {
-  const scrollRef = useRef(null);
-  const watchableItems = items.filter((item) => (
-    item.media_type === 'movie' || item.media_type === 'tv_show'
-  ));
-
-  function scroll(direction) {
-    if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: direction * 220, behavior: 'smooth' });
-    }
-  }
-
-  function getSiteUrl(item) {
-    return detailsUrl(item);
-  }
-
-  if (loading) {
-    return <div className="loading-state" style={{ padding: '2rem' }}>Loading...</div>;
-  }
-
-  if (watchableItems.length === 0) {
-    return (
-      <div className="empty-state">
-        <p>Your movie and TV watchlist is empty.</p>
-        <p className="empty-hint">Add movies or TV shows to keep your next picks ready.</p>
-        <div className="cta-buttons" style={{ marginTop: '1rem' }}>
-          <Link to="/movies" className="btn-secondary">Browse movies</Link>
-          <Link to="/tv-shows" className="btn-secondary">Browse TV shows</Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="wl-gallery-wrap">
-      {watchableItems.length > 4 && (
-        <button
-          className="wl-gallery-arrow wl-gallery-arrow--left"
-          onClick={() => scroll(-1)}
-          type="button"
-        >
-          {'\u2039'}
-        </button>
-      )}
-      <div className="wl-gallery-scroll" ref={scrollRef}>
-        {watchableItems.map((item) => (
-          <Link key={item.id} to={getSiteUrl(item)} className="wl-gallery-card">
-            <div className="wl-gallery-poster">
-              {item.image_url || item.poster_url ? (
-                <img
-                  src={resolvePosterUrl(item.image_url || item.poster_url)}
-                  alt={item.title}
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="wl-gallery-placeholder">
-                  {MEDIA_ICONS[item.media_type] || MEDIA_ICONS.tv_show}
-                </div>
-              )}
-              <div className="wl-gallery-overlay">
-                <span className="wl-gallery-type">{MEDIA_ICONS[item.media_type]}</span>
-              </div>
-            </div>
-            <div className="wl-gallery-info">
-              <p className="wl-gallery-title">{item.title}</p>
-              {item.year && <p className="wl-gallery-year">{item.year}</p>}
-            </div>
-          </Link>
-        ))}
-      </div>
-      {watchableItems.length > 4 && (
-        <button
-          className="wl-gallery-arrow wl-gallery-arrow--right"
-          onClick={() => scroll(1)}
-          type="button"
-        >
-          {'\u203a'}
-        </button>
-      )}
-    </div>
   );
 }
 
@@ -392,7 +309,6 @@ export default function Home() {
   const location = useLocation();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [watchlistItems, setWatchlistItems] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
@@ -401,15 +317,12 @@ export default function Home() {
     let cancelled = false;
 
     if (authLoading || !user) {
-      setLoading(true);
       return () => {
         cancelled = true;
       };
     }
 
     async function fetchStats() {
-      setLoading(true);
-
       try {
         const [ratingsResult, watchlistResult] = await Promise.allSettled([
           fetchSupabaseRatings(),
@@ -434,10 +347,6 @@ export default function Home() {
         // Still show onboarding for fresh accounts even if the data fetch failed
         if (!localStorage.getItem(onboardingKey)) {
           setShowOnboarding(true);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
         }
       }
     }
@@ -477,14 +386,6 @@ export default function Home() {
           <ForYouSection ready={!authLoading && !!user} />
 
           <ContinueWatching items={watchlistItems} />
-
-          <section className="home-section">
-            <div className="section-header">
-              <h2>Your Watchlist</h2>
-              <Link to="/watchlist" className="section-link">View all →</Link>
-            </div>
-            <WatchlistGallery items={watchlistItems} loading={loading} />
-          </section>
 
           <div className="stats-row">
             <div className="stat-card">
