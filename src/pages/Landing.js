@@ -199,52 +199,7 @@ export default function Landing() {
         </div>
       </nav>
 
-      <section className="hero">
-        <div className="hero-content">
-          <h1>Track everything you watch and read.</h1>
-          <p className="hero-subtitle">
-            Rate, review, and discover movies, TV shows, and books. See what your friends are into.
-          </p>
-          <div className="hero-actions">
-            <Link to="/signup" className="btn-primary btn-medium">Get Started - It&apos;s Free</Link>
-          </div>
-          {authLoading && <p className="hero-subtitle">Restoring your session...</p>}
-        </div>
-      </section>
-
       <LandingMovieCarousel items={carouselItems} />
-
-      <section className="features" id="features">
-        <h2>Everything in one place</h2>
-        <div className="features-grid">
-          <div className="feature-card">
-            <div className="feature-card-header">
-              <div className="feature-icon">★</div>
-              <h3>Rate & Review</h3>
-            </div>
-            <p>Give star ratings and write reviews for movies, TV shows, and books all in one place.</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-card-header">
-              <div className="feature-icon">◎</div>
-              <h3>Track Your Progress</h3>
-            </div>
-            <p>Keep a watchlist, mark what you&apos;ve seen, and track books you&apos;re currently reading.</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-card-header">
-              <div className="feature-icon">♦</div>
-              <h3>Discover New Titles</h3>
-            </div>
-            <p>Get personalized picks matched to your taste from everything you&apos;ve rated.</p>
-          </div>
-        </div>
-          <h3>Join thousands of people who never lose track of what they want to watch or read next.</h3>
-          <div className="cta-buttons">
-            <Link to="/signup" className="btn-primary btn-large">Create Free Account</Link>
-            <Link to="/login" className="btn-secondary btn-large">Log In</Link>
-          </div>
-      </section>
     </div>
   );
 }
