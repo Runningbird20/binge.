@@ -480,10 +480,31 @@ body {
 .home-recap-card,
 .home-recap-stat-card,
 .home-highlight-card,
-.badge-card {
+.badge-card,
+.watchlist-item {
   background: var(--exp-surface);
   border: 1px solid var(--exp-border);
   border-radius: var(--exp-radius-lg);
+}
+
+.watchlist-item {
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.watchlist-item:hover {
+  transform: translateY(-2px);
+  border-color: var(--exp-border-strong);
+  background: var(--exp-surface-2);
+}
+
+.watchlist-title { color: var(--exp-text); }
+.watchlist-meta,
+.watchlist-status-label { color: var(--exp-text-dim); }
+.watchlist-placeholder { color: var(--exp-text-faint); }
+
+.type-badge--movie {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--exp-border);
+  color: var(--exp-text-dim);
 }
 
 .surface-panel { padding: 1.75rem; }
