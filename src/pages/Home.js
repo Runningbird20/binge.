@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
+import RequestModal from '../components/RequestModal';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
+import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 
 const MEDIA_ICONS = {
   movie: '\ud83c\udfac',
@@ -252,8 +254,142 @@ function WatchlistGallery({ items, loading }) {
   );
 }
 
+const FOR_YOU_TABS = [
+  { id: 'movie', label: 'Movies', icon: '🎬' },
+  { id: 'tv_show', label: 'TV Shows', icon: '📺' },
+  { id: 'book', label: 'Books', icon: '📚' },
+];
+const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
+const FOR_YOU_IDLE_STATE = { movie: 'idle', tv_show: 'idle', book: 'idle' };
+
+function ForYouCard({ rec }) {
+  return (
+    <a href={rec.siteUrl} className="foryou-card">
+      <div className="foryou-card-poster">
+        {rec.posterUrl ? (
+          <img src={rec.posterUrl} alt={rec.title} />
+        ) : (
+          <div className="foryou-card-placeholder">{MEDIA_ICONS[rec.media_type]}</div>
+        )}
+      </div>
+      <div className="foryou-card-body">
+        <div className="foryou-card-type">
+          {MEDIA_ICONS[rec.media_type]} {FOR_YOU_LABELS[rec.media_type]}
+          {rec.year && <span className="foryou-card-year">{rec.year}</span>}
+        </div>
+        <h4 className="foryou-card-title">{rec.title}</h4>
+        {rec.genre && <p className="foryou-card-genre">{rec.genre.split(',')[0].trim()}</p>}
+        <p className="foryou-card-reason">✨ {rec.reason}</p>
+      </div>
+    </a>
+  );
+}
+
+function ForYouSection({ ready }) {
+  const [activeType, setActiveType]     = useState('movie');
+  const [tabState, setTabState]         = useState(FOR_YOU_IDLE_STATE);
+  const [tabData, setTabData]           = useState({});
+  const [tabError, setTabError]         = useState({});
+  const [showRequestModal, setShowRequestModal] = useState(false);
+
+  const fetchType = useCallback(async (mediaType) => {
+    setTabState((prev) => ({ ...prev, [mediaType]: 'loading' }));
+    setTabError((prev) => ({ ...prev, [mediaType]: '' }));
+    try {
+      const result = await generateSupabaseTypeRecommendations(mediaType);
+      setTabData((prev) => ({ ...prev, [mediaType]: result }));
+      setTabState((prev) => ({ ...prev, [mediaType]: result.recommendations?.length ? 'done' : 'empty' }));
+    } catch (err) {
+      setTabError((prev) => ({ ...prev, [mediaType]: String(err?.message || '').trim() || 'Something went wrong.' }));
+      setTabState((prev) => ({ ...prev, [mediaType]: 'error' }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ready && tabState[activeType] === 'idle') fetchType(activeType);
+  }, [ready, activeType, tabState, fetchType]);
+
+  const state = tabState[activeType];
+  const data = tabData[activeType];
+  const error = tabError[activeType];
+
+  return (
+    <section className="home-section surface-panel" id="for-you">
+      <div className="section-header">
+        <h2>For You</h2>
+      </div>
+
+      <div className="tabs">
+        {FOR_YOU_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-btn ${activeType === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveType(tab.id)}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="foryou-section">
+        {state === 'loading' && (
+          <div className="foryou-loading">
+            <div className="foryou-loading-owl">🍿</div>
+            <p>Matching your taste...</p>
+            <div className="foryou-loading-dots"><span /><span /><span /></div>
+          </div>
+        )}
+
+        {state === 'error' && (
+          <div className="foryou-error">
+            <p>⚠️ {error}</p>
+            <button type="button" className="foryou-generate-btn" onClick={() => fetchType(activeType)}>Try again</button>
+          </div>
+        )}
+
+        {state === 'empty' && (
+          <div className="foryou-idle">
+            <p className="foryou-idle-text">
+              {data?.message || 'Rate some movies, TV shows, or books first to unlock personalized recommendations!'}
+            </p>
+            <Link to="/movies" className="foryou-generate-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+              Browse & Rate Media
+            </Link>
+          </div>
+        )}
+
+        {state === 'done' && data && (
+          <>
+            {data.tasteProfile && (
+              <div className="foryou-taste-profile">
+                <span className="foryou-taste-label">Your taste</span>
+                <p>{data.tasteProfile}</p>
+              </div>
+            )}
+            <div className="foryou-grid">
+              {data.recommendations.map((rec) => (
+                <ForYouCard key={`${rec.media_type}:${rec.id}`} rec={rec} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <button type="button" className="btn-ghost" onClick={() => setShowRequestModal(true)}>
+        Can't find it? Request media →
+      </button>
+
+      {showRequestModal && (
+        <RequestModal onClose={() => setShowRequestModal(false)} />
+      )}
+    </section>
+  );
+}
+
 export default function Home() {
   const { user, authLoading } = useAuth();
+  const location = useLocation();
   const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -318,6 +454,13 @@ export default function Home() {
     setShowOnboarding(false);
   }
 
+  // Bottom-nav "For You" tab links to /home#for-you — scroll it into view
+  // once the section has actually mounted (gated behind authLoading below).
+  useEffect(() => {
+    if (location.hash !== '#for-you' || authLoading || !user) return;
+    document.getElementById('for-you')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash, authLoading, user]);
+
   return (
     <>
     {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
@@ -331,6 +474,8 @@ export default function Home() {
         <StreamHero user={user} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
+          <ForYouSection ready={!authLoading && !!user} />
+
           <ContinueWatching items={watchlistItems} />
 
           <section className="home-section">

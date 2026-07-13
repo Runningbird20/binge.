@@ -35,7 +35,7 @@ const TABS = [
   {
     id: 'ai',
     label: 'For You',
-    action: 'ai',
+    path: '/home#for-you',
     icon: () => <Sparkle size={SIZE} weight="duotone" />,
   },
 ];
@@ -57,10 +57,6 @@ export default function BottomNav() {
     if (tab.action === 'profile') {
       if (user?.username) navigate(`/profile/${user.username}`);
       else navigate('/account-settings');
-      return;
-    }
-    if (tab.action === 'ai') {
-      window.dispatchEvent(new CustomEvent('binge:openAI'));
       return;
     }
   }
