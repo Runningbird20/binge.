@@ -76,132 +76,130 @@ export default function LiveTV() {
       <Navbar />
       <div className="livetv-shell">
 
-        {/* ── Sidebar ── */}
-        <aside className={`livetv-sidebar ${sidebarOpen ? '' : 'livetv-sidebar--hidden'}`}>
-          <div className="livetv-sidebar-header">
-            <div className="livetv-sidebar-title">
-              <span>📡</span>
-              <h2>Live TV</h2>
-              <span className="livetv-count">{channels.length}</span>
-            </div>
-            <button className="livetv-sidebar-toggle" onClick={() => setSidebarOpen(o => !o)}>‹</button>
-          </div>
-
-          <div className="livetv-search-wrap">
-            <input
-              className="livetv-search"
-              placeholder="Search channels..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="livetv-categories">
+        {/* ── Category filter, along the top like the Sports/genre bar ── */}
+        <div className="genre-bar-wrap">
+          <div className="genre-bar" role="tablist" aria-label="Channel categories">
             {categories.map(cat => (
               <button
                 key={cat}
-                className={`livetv-cat-btn ${activeCategory === cat ? 'active' : ''}`}
+                type="button"
+                className={`genre-chip${activeCategory === cat ? ' active' : ''}`}
                 onClick={() => setActiveCategory(cat)}
               >
                 {cat !== 'All' ? getCategoryIcon(cat) + ' ' : ''}{cat}
-                {cat !== 'All' && (
-                  <span className="livetv-cat-count">
-                    {channels.filter(c => c.category === cat).length}
-                  </span>
-                )}
               </button>
             ))}
           </div>
+        </div>
 
-          <div className="livetv-channel-list">
-            {filtered.length === 0 ? (
-              <p className="livetv-empty">No channels found.</p>
-            ) : (
-              filtered.map(ch => (
+        <div className="livetv-main">
+
+          {/* ── Channels, on the left ── */}
+          <aside className={`livetv-sidebar ${sidebarOpen ? '' : 'livetv-sidebar--hidden'}`}>
+            <div className="livetv-sidebar-header">
+              <h2>Channels</h2>
+              <div className="livetv-sidebar-header-actions">
+                <span className="livetv-count">{channels.length}</span>
                 <button
-                  key={ch.id}
-                  className={`livetv-channel-btn ${selected?.id === ch.id ? 'active' : ''}`}
-                  onClick={() => selectChannel(ch)}
-                >
-                  {ch.thumbnail ? (
-                    <img src={ch.thumbnail} alt={ch.name} className="livetv-channel-thumb"
-                      onError={e => { e.target.style.display = 'none'; }} />
-                  ) : (
-                    <span className="livetv-channel-logo">{getCategoryIcon(ch.category)}</span>
-                  )}
-                  <div className="livetv-channel-info">
-                    <span className="livetv-channel-name">{ch.name}</span>
-                    <span className="livetv-channel-cat">
-                      {ch.nowPlaying ? `▶ ${ch.nowPlaying}` : ch.category}
+                  className="livetv-refresh-btn"
+                  onClick={() => {
+                    fetchClientLiveTvChannels().then(list => {
+                      if (list?.length) setChannels(list);
+                    }).catch(() => {});
+                  }}
+                  title="Refresh"
+                  type="button"
+                >↻</button>
+                <button className="livetv-sidebar-toggle" onClick={() => setSidebarOpen(false)} type="button">‹</button>
+              </div>
+            </div>
+
+            <div className="livetv-search-row">
+              <input
+                className="search-input"
+                placeholder="Search channels..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="livetv-sidebar-divider" />
+
+            <div className="livetv-channel-list">
+              {filtered.length === 0 ? (
+                <p className="livetv-empty">No channels found.</p>
+              ) : (
+                filtered.map(ch => (
+                  <button
+                    key={ch.id}
+                    className={`livetv-channel-btn ${selected?.id === ch.id ? 'active' : ''}`}
+                    onClick={() => selectChannel(ch)}
+                    type="button"
+                  >
+                    {ch.thumbnail ? (
+                      <img src={ch.thumbnail} alt={ch.name} className="livetv-channel-poster"
+                        onError={e => { e.target.style.display = 'none'; }} />
+                    ) : (
+                      <div className="livetv-channel-poster livetv-channel-poster--placeholder">
+                        {getCategoryIcon(ch.category)}
+                      </div>
+                    )}
+                    <div className="livetv-channel-info">
+                      <span className="livetv-channel-name">{ch.name}</span>
+                      {ch.nowPlaying ? (
+                        <span className="livetv-channel-tag">▶ {ch.nowPlaying}</span>
+                      ) : (
+                        <span className="livetv-channel-tag">{ch.category}</span>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </aside>
+
+          {/* ── Player, on the right ── */}
+          <main className="livetv-player-area" ref={playerRef}>
+            {!sidebarOpen && (
+              <button className="livetv-sidebar-show-btn" onClick={() => setSidebarOpen(true)} type="button">
+                ☰ Channels
+              </button>
+            )}
+
+            {selected && (
+              <>
+                <div className="livetv-now-playing">
+                  <div className="livetv-now-info">
+                    <span className="livetv-live-badge">● LIVE</span>
+                    <span className="livetv-now-name">{selected.name}</span>
+                    {selected.nowPlaying && <span className="livetv-now-tag">— {selected.nowPlaying}</span>}
+                    <span className="livetv-now-cat">
+                      {getCategoryIcon(selected.category)} {selected.category}
                     </span>
                   </div>
-                  {selected?.id === ch.id && <span className="livetv-live-dot" />}
-                </button>
-              ))
-            )}
-          </div>
-        </aside>
-
-        {/* ── Player ── */}
-        <main className="livetv-player-area" ref={playerRef}>
-          {!sidebarOpen && (
-            <button className="livetv-sidebar-show-btn" onClick={() => setSidebarOpen(true)}>
-              ☰ Channels
-            </button>
-          )}
-
-          {selected && (
-            <>
-              <div className="livetv-now-playing">
-                <div className="livetv-now-info">
-                  <span className="livetv-live-badge">● LIVE</span>
-                  {selected.thumbnail && (
-                    <img src={selected.thumbnail} alt="" className="livetv-now-thumb"
-                      onError={e => { e.target.style.display = 'none'; }} />
-                  )}
-                  <div>
-                    <span className="livetv-now-name">{selected.name}</span>
-                    {selected.nowPlaying && (
-                      <span className="livetv-now-show-bar"> — {selected.nowPlaying}</span>
-                    )}
-                  </div>
-                  <span className="livetv-now-cat-badge">
-                    {getCategoryIcon(selected.category)} {selected.category}
-                  </span>
+                  <button className="livetv-fullscreen-btn" onClick={toggleFullscreen} type="button"
+                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+                    {isFullscreen ? '↙' : '↗'}
+                  </button>
                 </div>
-                <button className="livetv-player-btn" onClick={toggleFullscreen}
-                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                  {isFullscreen ? '↙' : '↗'}
-                </button>
-              </div>
 
-              <div className="livetv-frame-wrap">
-                <iframe
-                  key={selected.id}
-                  ref={iframeRef}
-                  src={selected.embedUrl}
-                  className="livetv-frame"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  title={`Watch ${selected.name} live`}
-                />
-              </div>
+                <div className="livetv-frame-wrap">
+                  <iframe
+                    key={selected.id}
+                    ref={iframeRef}
+                    src={selected.embedUrl}
+                    className="livetv-frame"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title={`Watch ${selected.name} live`}
+                  />
+                </div>
+              </>
+            )}
+          </main>
 
-              <div className="livetv-footer">
-                <p className="livetv-note">
-                  {channels.length} channels · Powered by Pluto TV
-                </p>
-                <button className="livetv-refresh-btn" onClick={() => {
-                  fetchClientLiveTvChannels().then(list => {
-                    if (list?.length) setChannels(list);
-                  }).catch(() => {});
-                }}>↻ Refresh</button>
-              </div>
-            </>
-          )}
-        </main>
-
+        </div>
       </div>
     </div>
   );

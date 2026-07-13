@@ -126,50 +126,11 @@ router.get('/users', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─────────────────────────────────────────────────────────────
-// POST /admin/users — create an account (service role required)
-// ─────────────────────────────────────────────────────────────
-router.post('/users', async (req, res) => {
-  const admin = await requireAdmin(req, res); if (!admin) return;
-  const sb = requireServiceRoleClient(res); if (!sb) return;
-
-  const email    = String(req.body?.email || '').trim().toLowerCase();
-  const username = String(req.body?.username || '').trim();
-  const password = String(req.body?.password || '');
-  const bio      = String(req.body?.bio || '').trim();
-  const makeAdmin = Boolean(req.body?.isAdmin);
-
-  if (!email || !username) {
-    return res.status(400).json({ error: 'Email and username are required.' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
-  }
-
-  try {
-    // The on_auth_user_changed trigger creates the matching profiles row
-    // from this metadata, so no separate insert is needed here.
-    const { data, error } = await sb.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { username, bio, is_admin: makeAdmin },
-    });
-    if (error) throw error;
-
-    res.json({
-      id: data.user.id,
-      email: data.user.email,
-      username,
-      bio,
-      is_admin: makeAdmin,
-      created_at: data.user.created_at,
-      last_sign_in_at: null,
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message || 'Unable to create the account.' });
-  }
-});
+// Account creation goes straight from the client to Supabase's public
+// signUp() (see createSupabaseUserAsAdmin in src/utils/supabaseData.js) —
+// no server route for it. Deletion still has to live here: only the
+// service-role key can remove an auth.users row, and that key must never
+// reach the browser.
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /admin/users/:id/toggle-admin
