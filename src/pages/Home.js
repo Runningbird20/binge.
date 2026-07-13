@@ -1,19 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
 import { computeNormalizedScore } from '../components/RatingArtifact';
-import ThemedSelect from '../components/ThemedSelect';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
 import {
   fetchSupabaseRatings,
   fetchSupabaseWatchlist,
   fetchSupabaseContinueWatching,
   removeSupabaseContinueWatching,
-  updateWatchlistProgress,
-  removeSupabaseWatchlistItem,
 } from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 
@@ -312,24 +308,9 @@ function ForYouSection({ ready }) {
   );
 }
 
-const WL_STATUS_LABELS = { watching: 'Watching', watched: 'Watched', plan_to_watch: 'Plan to Watch', reading: 'Reading', read: 'Read', plan_to_read: 'Plan to Read' };
-const WL_STATUS_COLORS = { watching: '#f4f6f8', watched: '#4caf82', reading: '#f4f6f8', read: '#4caf82', plan_to_watch: '#7ab8e8', plan_to_read: '#7ab8e8' };
-
-const TV_STATUSES   = ['plan_to_watch', 'watching', 'watched'];
-const BOOK_STATUSES = ['plan_to_read', 'reading', 'read'];
-
-function LibraryCard({ item, ratingScore, onUpdate, onRemove }) {
+function LibraryCard({ item, ratingScore }) {
   const location = useLocation();
-  const [status, setStatus]   = useState(item.status);
-  const [season, setSeason]   = useState(item.current_season ?? '');
-  const [episode, setEpisode] = useState(item.current_episode ?? '');
-  const [chapter, setChapter] = useState(item.current_chapter ?? '');
-  const [page, setPage]       = useState(item.current_page ?? '');
-  const [saving, setSaving]   = useState(false);
-  const pendingRef  = useRef({});
-  const debounceRef = useRef(null);
-
-  useEffect(() => () => clearTimeout(debounceRef.current), []);
+  const status = item.status;
 
   const mediaUrl = item.media_type === 'movie'
     ? (status === 'watching' ? `/movie/${item.media_id}?play=1` : `/movie/${item.media_id}`)
@@ -337,124 +318,55 @@ function LibraryCard({ item, ratingScore, onUpdate, onRemove }) {
     ? (status === 'watching' ? `/tv-show/${item.media_id}?play=1` : `/tv-show/${item.media_id}`)
     : `/book/${item.media_id}`;
 
-  async function save(updates) {
-    setSaving(true);
-    try {
-      await updateWatchlistProgress({ mediaType: item.media_type, mediaId: item.media_id, ...updates });
-      onUpdate?.(item.id, updates);
-    } catch {}
-    finally { setSaving(false); }
-  }
+  const poster = resolvePosterUrl(item.poster_url || item.image_url);
 
-  async function handleStatusChange(e) {
-    const val = e.target.value;
-    setStatus(val);
-    await save({ status: val });
-  }
-
-  function scheduleProgressSave(field, value) {
-    pendingRef.current[field] = value;
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const pending = { ...pendingRef.current };
-      pendingRef.current = {};
-      save(pending);
-    }, 750);
-  }
-
-  function handleSeasonChange(e)  { const n = parseInt(e.target.value, 10); setSeason(e.target.value);  if (!isNaN(n) && n > 0) scheduleProgressSave('currentSeason', n); }
-  function handleEpisodeChange(e) { const n = parseInt(e.target.value, 10); setEpisode(e.target.value); if (!isNaN(n) && n > 0) scheduleProgressSave('currentEpisode', n); }
-  function handleChapterChange(e) { const n = parseInt(e.target.value, 10); setChapter(e.target.value); if (!isNaN(n) && n > 0) scheduleProgressSave('currentChapter', n); }
-  function handlePageChange(e)    { const n = parseInt(e.target.value, 10); setPage(e.target.value);    if (!isNaN(n) && n > 0) scheduleProgressSave('currentPage', n); }
-
-  const poster   = resolvePosterUrl(item.poster_url || item.image_url);
-  const color    = WL_STATUS_COLORS[status] || '#555';
-  const statuses = item.media_type === 'book' ? BOOK_STATUSES : TV_STATUSES;
-
-  const progressBadge = item.media_type === 'tv_show' && (season !== '' || episode !== '')
-    ? `S${season || '?'} · E${episode || '?'}`
-    : item.media_type === 'book' && (chapter !== '' || page !== '')
-    ? [chapter ? `Ch ${chapter}` : null, page ? `Pg ${page}` : null].filter(Boolean).join(' · ')
+  const progressBadge = item.media_type === 'tv_show' && (item.current_season || item.current_episode)
+    ? `S${item.current_season || '?'} · E${item.current_episode || '?'}`
+    : item.media_type === 'book' && (item.current_chapter || item.current_page)
+    ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
     : null;
 
-  const indicator = ratingScore != null
-    ? { kind: 'rated',    glyph: `★ ${ratingScore}`, title: `Rated ${ratingScore}/10` }
+  const ratingOutOfFive = ratingScore != null ? (ratingScore / 2).toFixed(1) : null;
+
+  const indicator = ratingOutOfFive != null
+    ? {
+        kind: 'rated',
+        title: `Rated ${ratingOutOfFive}/5`,
+        node: (
+          <>
+            <span className="profile-wl-status-ind-num">{ratingOutOfFive}</span>
+            <span className="profile-wl-status-ind-den">/5</span>
+          </>
+        ),
+      }
     : status === 'watched' || status === 'read'
-    ? { kind: 'done',     glyph: '✓', title: 'Completed' }
+    ? { kind: 'done', title: 'Completed', node: '✓' }
     : status === 'watching' || status === 'reading'
-    ? { kind: 'progress', glyph: '◔', title: 'In progress' }
-    : { kind: 'new',      glyph: '',  title: 'Not started' };
+    ? { kind: 'progress', title: 'In progress', node: null }
+    : { kind: 'new', title: 'Not started', node: null };
 
   return (
-    <div className={`profile-wl-card profile-wl-card--own${saving ? ' profile-wl-card--saving' : ''}`}>
+    <Link
+      to={mediaUrl}
+      className="profile-wl-card profile-wl-card--own"
+      state={{ backgroundLocation: location }}
+    >
       <div className="profile-wl-poster">
         {poster
           ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
           : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>}
         {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
         <span className={`profile-wl-status-ind profile-wl-status-ind--${indicator.kind}`} title={indicator.title}>
-          {indicator.glyph}
+          {indicator.node}
         </span>
-
-        <div className="profile-wl-overlay">
-          <div className="profile-wl-overlay-top">
-            <Link to={mediaUrl} className="profile-wl-overlay-open" state={{ backgroundLocation: location }} onClick={e => e.stopPropagation()}>
-              Open →
-            </Link>
-            <button
-              type="button"
-              className="profile-wl-overlay-remove"
-              title="Remove from library"
-              onClick={e => { e.stopPropagation(); onRemove?.(item); }}
-            >
-              ✕
-            </button>
-          </div>
-          <div className="profile-wl-overlay-controls">
-            {item.media_type === 'tv_show' && (
-              <div className="profile-wl-overlay-progress">
-                <div className="profile-wl-overlay-field">
-                  <span className="profile-wl-overlay-label">Season</span>
-                  <input type="number" min="1" className="profile-wl-overlay-input" value={season} placeholder="—" onChange={handleSeasonChange} onClick={e => e.stopPropagation()} />
-                </div>
-                <div className="profile-wl-overlay-field">
-                  <span className="profile-wl-overlay-label">Episode</span>
-                  <input type="number" min="1" className="profile-wl-overlay-input" value={episode} placeholder="—" onChange={handleEpisodeChange} onClick={e => e.stopPropagation()} />
-                </div>
-              </div>
-            )}
-            {item.media_type === 'book' && (
-              <div className="profile-wl-overlay-progress">
-                <div className="profile-wl-overlay-field">
-                  <span className="profile-wl-overlay-label">Chapter</span>
-                  <input type="number" min="1" className="profile-wl-overlay-input" value={chapter} placeholder="—" onChange={handleChapterChange} onClick={e => e.stopPropagation()} />
-                </div>
-                <div className="profile-wl-overlay-field">
-                  <span className="profile-wl-overlay-label">Page</span>
-                  <input type="number" min="1" className="profile-wl-overlay-input" value={page} placeholder="—" onChange={handlePageChange} onClick={e => e.stopPropagation()} />
-                </div>
-              </div>
-            )}
-            <ThemedSelect
-              className="profile-wl-overlay-status"
-              value={status}
-              aria-label="Watchlist status"
-              options={statuses.map(s => ({ value: s, label: WL_STATUS_LABELS[s] }))}
-              onChange={handleStatusChange}
-              disabled={saving}
-              style={{ color, borderColor: color + '55' }}
-              onClick={e => e.stopPropagation()}
-            />
-          </div>
-        </div>
       </div>
       <p className="profile-wl-title">{item.title || '—'}</p>
       {item.year && <p className="profile-wl-year">{item.year}</p>}
-    </div>
+    </Link>
   );
 }
 
-function DashboardLibrarySection({ user, watchlist, ratings, loading, onWatchlistUpdate, onWatchlistRemove }) {
+function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
   const [wlTypeFilter, setWlTypeFilter] = useState('');
 
   const filteredWatchlist = watchlist.filter(item => {
@@ -562,8 +474,6 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, onWatchlis
               key={item.id ?? i}
               item={item}
               ratingScore={ratingScores.get(`${item.media_type}:${item.media_id}`) ?? null}
-              onUpdate={onWatchlistUpdate}
-              onRemove={onWatchlistRemove}
             />
           ))}
         </div>
@@ -575,7 +485,6 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading, onWatchlis
 export default function Home() {
   const { user, authLoading } = useAuth();
   const location = useLocation();
-  const toast = useToast();
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
@@ -584,10 +493,12 @@ export default function Home() {
 
   const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
 
+  const userId = user?.id;
+
   useEffect(() => {
     let cancelled = false;
 
-    if (authLoading || !user) {
+    if (authLoading || !userId) {
       return () => {
         cancelled = true;
       };
@@ -634,7 +545,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, onboardingKey, user]);
+  }, [authLoading, onboardingKey, userId]);
 
   function completeOnboarding() {
     localStorage.setItem(onboardingKey, '1');
@@ -650,33 +561,12 @@ export default function Home() {
     }
   }
 
-  function handleWatchlistItemUpdate(id, updates) {
-    setWatchlistItems(prev => prev.map(item => item.id === id ? {
-      ...item,
-      ...(updates.status         !== undefined ? { status: updates.status }                  : {}),
-      ...(updates.currentSeason  !== undefined ? { current_season: updates.currentSeason }   : {}),
-      ...(updates.currentEpisode !== undefined ? { current_episode: updates.currentEpisode } : {}),
-      ...(updates.currentChapter !== undefined ? { current_chapter: updates.currentChapter } : {}),
-      ...(updates.currentPage    !== undefined ? { current_page: updates.currentPage }       : {}),
-    } : item));
-  }
-
-  async function handleWatchlistItemRemove(item) {
-    try {
-      await removeSupabaseWatchlistItem(item.id);
-      setWatchlistItems(prev => prev.filter(i => i.id !== item.id));
-      toast(`Removed "${item.title}" from your library`);
-    } catch (err) {
-      toast(err.message || 'Could not remove item', 'error');
-    }
-  }
-
   // Bottom-nav "For You" tab links to /home#for-you — scroll it into view
   // once the section has actually mounted (gated behind authLoading below).
   useEffect(() => {
-    if (location.hash !== '#for-you' || authLoading || !user) return;
+    if (location.hash !== '#for-you' || authLoading || !userId) return;
     document.getElementById('for-you')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [location.hash, authLoading, user]);
+  }, [location.hash, authLoading, userId]);
 
   return (
     <>
@@ -696,8 +586,6 @@ export default function Home() {
             watchlist={watchlistItems}
             ratings={ratingsItems}
             loading={dataLoading}
-            onWatchlistUpdate={handleWatchlistItemUpdate}
-            onWatchlistRemove={handleWatchlistItemRemove}
           />
 
           <ForYouSection ready={!authLoading && !!user} />

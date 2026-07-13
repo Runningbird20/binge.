@@ -372,7 +372,10 @@ body {
   display: flex !important;
   gap: 1.1rem;
   overflow-x: auto;
-  padding: 0.25rem 0.25rem 0.75rem;
+  /* Generous top/bottom buffer — .foryou-card's hover lift + ring/shadow
+     need room to render without being clipped by this scroll container
+     (overflow-x: auto forces the y-axis to clip too, per spec). */
+  padding: 0.75rem 0.25rem 1.1rem;
   scrollbar-width: none;
   grid-template-columns: none !important;
 }
@@ -387,7 +390,7 @@ body {
   text-decoration: none;
   transform: none;
 }
-.foryou-card:hover { transform: translateY(-4px) scale(1.02); }
+.foryou-card:hover { transform: translateY(-4px); }
 
 .foryou-card-poster {
   position: absolute;
