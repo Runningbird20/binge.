@@ -277,12 +277,6 @@ function ForYouSection({ ready }) {
 
         {state === 'done' && data && (
           <>
-            {data.tasteProfile && (
-              <div className="foryou-taste-profile">
-                <span className="foryou-taste-label">Your taste</span>
-                <p>{data.tasteProfile}</p>
-              </div>
-            )}
             <div className="foryou-grid">
               {data.recommendations.map((rec) => (
                 <ForYouCard key={`${rec.media_type}:${rec.id}`} rec={rec} />
