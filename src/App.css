@@ -9712,34 +9712,6 @@ select.filter-input,
   margin-bottom: 1.5rem;
 }
 
-.foryou-header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  margin-bottom: 1.25rem;
-}
-.foryou-header h2 {
-  font-size: 1.3rem;
-  font-weight: 600;
-  color: #fff;
-  margin: 0;
-  grid-column: 1;
-}
-.foryou-tab-bar {
-  grid-column: 2;
-  margin-bottom: 0;
-  border-bottom: none;
-}
-
-@media (max-width: 640px) {
-  .foryou-header {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    gap: 0.6rem;
-    text-align: center;
-  }
-  .foryou-tab-bar { grid-column: 1; }
-}
 
 /* ═══════════════════════════════════════════════════════════════
    MANGA GRID & CARDS
