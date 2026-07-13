@@ -12,9 +12,9 @@ function useDebounce(value, delay) {
   return debounced;
 }
 
-const TYPE_ORDER = ['movie', 'tv', 'book', 'person'];
-const TYPE_ICONS = { movie: '🎬', tv: '📺', book: '📖', person: '👤' };
-const TYPE_LABELS = { movie: 'Movies', tv: 'TV Shows', book: 'Books', person: 'People' };
+const TYPE_ORDER = ['movie', 'tv', 'book'];
+const TYPE_ICONS = { movie: '🎬', tv: '📺', book: '📖' };
+const TYPE_LABELS = { movie: 'Movies', tv: 'TV Shows', book: 'Books' };
 
 export default function GlobalSearch() {
   const [query, setQuery]       = useState('');
@@ -46,7 +46,7 @@ export default function GlobalSearch() {
     }
     let cancelled = false;
     setLoading(true);
-    api.get(`/search?q=${encodeURIComponent(debounced)}`)
+    api.get(`/search?q=${encodeURIComponent(debounced)}&types=movies,tv,books`)
       .then((data) => { if (!cancelled) setResults(data); })
       .catch(() => { if (!cancelled) setResults(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -67,7 +67,6 @@ export default function GlobalSearch() {
     ...results.movies.map((r) => ({ ...r, _type: 'movie', _label: r.title, _sub: r.year ? String(r.year) : 'Movie', _poster: r.poster_url, _url: `/movie/${r.id}`, _overlay: true })),
     ...results.tv.map((r) => ({ ...r, _type: 'tv', _label: r.title, _sub: r.year ? String(r.year) : 'TV Show', _poster: r.poster_url, _url: `/tv-show/${r.id}`, _overlay: true })),
     ...results.books.map((r) => ({ ...r, _type: 'book', _label: r.title, _sub: r.author || 'Book', _poster: r.cover_url, _url: `/book/${r.id}`, _overlay: true })),
-    ...(results.people || []).map((r) => ({ ...r, _type: 'person', _label: r.username, _sub: r.bio || 'User', _poster: r.avatar_url, _url: `/profile/${r.username}`, _overlay: false })),
   ] : [];
 
   function handleSelect(item) {

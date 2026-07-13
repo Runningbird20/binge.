@@ -26,7 +26,6 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.isAdmin || user?.userType === 'admin';
-  const profileLink = `/profile/${user?.username || 'me'}`;
 
   async function handleLogout() {
     await logout();
@@ -45,9 +44,9 @@ export default function Navbar() {
             <div className="navbar-left">
               <div className="navbar-profile-wrap">
                 <NavLink
-                  to={profileLink}
+                  to="/home"
                   className="navbar-profile"
-                  title="My Profile"
+                  title={user.username}
                 >
                   <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
                   <span className="navbar-profile-name">{user.username}</span>
@@ -55,11 +54,11 @@ export default function Navbar() {
 
                 <div className="profile-hover-drawer">
                   <div className="profile-hover-card">
-                    <Link to={profileLink} className="profile-hover-user-link">
+                    <Link to="/account-settings" className="profile-hover-user-link">
                       <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
                       <div className="profile-hover-user-text">
                         <span className="profile-hover-user-name">{user.username}</span>
-                        <span className="profile-hover-user-sub">View your profile →</span>
+                        <span className="profile-hover-user-sub">Edit Profile →</span>
                       </div>
                     </Link>
 

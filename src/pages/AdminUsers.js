@@ -171,10 +171,10 @@ export default function AdminUsers() {
                 {filtered.map(u => (
                   <tr key={u.id}>
                     <td>
-                      <Link to={`/profile/${u.username}`} className="admin-user-link">
+                      <span className="admin-user-link">
                         {u.is_admin && <span className="admin-badge-mini">🛡️</span>}
                         {u.username}
-                      </Link>
+                      </span>
                     </td>
                     <td style={{ color: '#666', fontSize: '0.8rem' }}>{u.email}</td>
                     <td className="admin-td-mono">{new Date(u.created_at).toLocaleDateString()}</td>
