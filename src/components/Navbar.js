@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
   House,
@@ -25,31 +24,15 @@ const NAV_LINKS = [
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [panelOpen, setPanelOpen] = useState(false);
   const isAdmin = user?.isAdmin || user?.userType === 'admin';
-
-  function close() { setPanelOpen(false); }
+  const profileLink = `/profile/${user?.username || 'me'}`;
 
   async function handleLogout() {
     await logout();
     navigate('/');
-    close();
   }
 
-  // Lock body scroll while panel is open
-  useEffect(() => {
-    document.body.style.overflow = panelOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [panelOpen]);
-
-  // Escape key closes panel
-  useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape') close(); }
-    if (panelOpen) window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [panelOpen]);
-
-  const link = ({ isActive }) => isActive ? 'nav-panel-link active' : 'nav-panel-link';
+  const profileDrawerLink = ({ isActive }) => isActive ? 'profile-hover-link active' : 'profile-hover-link';
 
   return (
     <>
@@ -58,14 +41,48 @@ export default function Navbar() {
 
         {user ? (
           <>
-            <NavLink
-              to={`/profile/${user.username || 'me'}`}
-              className="navbar-profile"
-              title="My Profile"
-            >
-              <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
-              <span className="navbar-profile-name">{user.username}</span>
-            </NavLink>
+            <div className="navbar-profile-wrap">
+              <NavLink
+                to={profileLink}
+                className="navbar-profile"
+                title="My Profile"
+              >
+                <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
+                <span className="navbar-profile-name">{user.username}</span>
+              </NavLink>
+
+              <div className="profile-hover-drawer">
+                <div className="profile-hover-card">
+                  <Link to={profileLink} className="profile-hover-user-link">
+                    <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
+                    <div className="profile-hover-user-text">
+                      <span className="profile-hover-user-name">{user.username}</span>
+                      <span className="profile-hover-user-sub">View your profile →</span>
+                    </div>
+                  </Link>
+
+                  <div className="profile-hover-section">
+                    <p className="profile-hover-section-label">Social</p>
+                    <nav className="profile-hover-nav">
+                      <NavLink to="/watch-room" className={profileDrawerLink}>🎬 Watch Together</NavLink>
+                      <NavLink to="/following" className={profileDrawerLink}>👥 Following</NavLink>
+                    </nav>
+                  </div>
+
+                  <div className="profile-hover-section">
+                    <p className="profile-hover-section-label">Account</p>
+                    <nav className="profile-hover-nav">
+                      <NavLink to="/account-settings" className={profileDrawerLink}>⚙️ Account Settings</NavLink>
+                      {isAdmin && <NavLink to="/admin" className={profileDrawerLink}>🛡️ Admin Panel</NavLink>}
+                    </nav>
+                  </div>
+
+                  <button className="profile-hover-logout" onClick={handleLogout} type="button">
+                    Log Out
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {isAdmin && (
               <div className="navbar-role-btns">
@@ -93,17 +110,6 @@ export default function Navbar() {
                 <GlobalSearch />
               </div>
               <NotificationBell />
-              <button
-                className={`nav-panel-trigger${panelOpen ? ' is-open' : ''}`}
-                onClick={() => setPanelOpen(v => !v)}
-                type="button"
-                aria-label={panelOpen ? 'Close menu' : 'Open menu'}
-                aria-expanded={panelOpen}
-              >
-                <span className="nav-panel-trigger-bar" />
-                <span className="nav-panel-trigger-bar" />
-                <span className="nav-panel-trigger-bar" />
-              </button>
             </div>
           </>
         ) : (
@@ -113,87 +119,6 @@ export default function Navbar() {
           </div>
         )}
       </nav>
-
-      {/* Dim overlay */}
-      <div
-        className={`nav-panel-overlay${panelOpen ? ' nav-panel-overlay--visible' : ''}`}
-        onClick={close}
-        aria-hidden="true"
-      />
-
-      {/* Slide-in side panel */}
-      <aside className={`nav-panel${panelOpen ? ' nav-panel--open' : ''}`} aria-label="Site navigation">
-        <div className="nav-panel-header">
-          <Link to={user ? '/home' : '/'} className="nav-panel-brand" onClick={close}>binge.</Link>
-          <button className="nav-panel-close" onClick={close} type="button" aria-label="Close menu">
-            <span className="nav-panel-close-bar" />
-            <span className="nav-panel-close-bar" />
-          </button>
-        </div>
-
-        <div className="nav-panel-body">
-          {user ? (
-            <>
-              {/* Profile card */}
-              <Link to={`/profile/${user.username || 'me'}`} className="nav-panel-user-card" onClick={close}>
-                <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
-                <div className="nav-panel-user-text">
-                  <span className="nav-panel-user-name">{user.username}</span>
-                  <span className="nav-panel-user-sub">View your profile →</span>
-                </div>
-              </Link>
-
-              {/* Browse */}
-              <div className="nav-panel-section">
-                <p className="nav-panel-section-label">Browse</p>
-                <nav className="nav-panel-nav">
-                  <NavLink to="/home"     className={link} onClick={close}>🏠 Home</NavLink>
-                  <NavLink to="/live-tv"  className={link} onClick={close}>📡 Live TV</NavLink>
-                  <NavLink to="/sports"   className={link} onClick={close}>🏆 Sports</NavLink>
-                  <NavLink to="/movies"   className={link} onClick={close}>🎬 Movies</NavLink>
-                  <NavLink to="/tv-shows" className={link} onClick={close}>📺 TV Shows</NavLink>
-                  <NavLink to="/books"    className={link} onClick={close}>📖 Books</NavLink>
-                  <NavLink to="/lists"    className={link} onClick={close}>📋 Lists</NavLink>
-                </nav>
-              </div>
-
-              {/* Social */}
-              <div className="nav-panel-section">
-                <p className="nav-panel-section-label">Social</p>
-                <nav className="nav-panel-nav">
-                  <NavLink to="/watch-room" className={link} onClick={close}>🎬 Watch Together</NavLink>
-                  <NavLink to="/following"  className={link} onClick={close}>👥 Following</NavLink>
-                </nav>
-              </div>
-
-              {/* Account */}
-              <div className="nav-panel-section">
-                <p className="nav-panel-section-label">Account</p>
-                <nav className="nav-panel-nav">
-                  <NavLink to="/account-settings"  className={link} onClick={close}>⚙️ Settings</NavLink>
-                  {isAdmin && <NavLink to="/admin"          className={link} onClick={close}>🛡️ Admin Panel</NavLink>}
-                </nav>
-              </div>
-            </>
-          ) : (
-            <div className="nav-panel-section">
-              <p className="nav-panel-section-label">Get started</p>
-              <nav className="nav-panel-nav">
-                <Link to="/login"  className="nav-panel-link" onClick={close}>🔑 Log in</Link>
-                <Link to="/signup" className="nav-panel-link" onClick={close}>✨ Sign up</Link>
-              </nav>
-            </div>
-          )}
-        </div>
-
-        {user && (
-          <div className="nav-panel-footer">
-            <button className="nav-panel-logout" onClick={handleLogout} type="button">
-              Log Out
-            </button>
-          </div>
-        )}
-      </aside>
 
     </>
   );
