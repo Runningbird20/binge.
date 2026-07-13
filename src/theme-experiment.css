@@ -572,25 +572,34 @@ body {
   padding: 0.6rem 1.5rem 0.9rem;
 }
 
-/* Scroll fade — hints there's more to scroll past the edges of the
-   chip row, fading into the page background (matches --exp-bg-0). */
-.genre-bar-wrap::before,
-.genre-bar-wrap::after {
-  content: '';
-  position: absolute;
-  top: 0.6rem;
-  bottom: 0.9rem;
-  width: calc(1.5rem + 40px);
-  pointer-events: none;
-  z-index: 2;
-}
-.genre-bar-wrap::before {
-  left: 0;
-  background: linear-gradient(to right, var(--exp-bg-0), rgba(11, 13, 18, 0));
-}
-.genre-bar-wrap::after {
-  right: 0;
-  background: linear-gradient(to left, var(--exp-bg-0), rgba(11, 13, 18, 0));
+/* Scroll fade — softly dissolves the chip row into whatever is behind it
+   (page background or scrolled content) instead of painting a hard-edged
+   rectangle on top, using an eased multi-stop mask for a rounder, less
+   "boxy" falloff than a single straight gradient ramp. */
+.genre-bar-wrap {
+  --genre-edge-fade: clamp(48px, 8vw, 96px);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.35) calc(var(--genre-edge-fade) * 0.4),
+    #000 var(--genre-edge-fade),
+    #000 calc(100% - var(--genre-edge-fade)),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--genre-edge-fade) * 0.4),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(0, 0, 0, 0.35) calc(var(--genre-edge-fade) * 0.4),
+    #000 var(--genre-edge-fade),
+    #000 calc(100% - var(--genre-edge-fade)),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--genre-edge-fade) * 0.4),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
 
 .genre-bar {

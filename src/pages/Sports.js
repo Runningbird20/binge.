@@ -388,7 +388,82 @@ export default function Sports() {
 
         <div className="sports-main">
 
-          {/* ── Player ── */}
+          {/* ── Games, on the left ── */}
+          <aside className="sports-games-panel">
+            <div className="sports-games-header">
+              <h2>Games</h2>
+              <button className="sports-refresh-btn" onClick={load} title="Refresh" type="button">↻</button>
+            </div>
+
+            <div className="sports-provider-row">
+              {PPV_PROVIDERS.map(p => (
+                <button
+                  key={p.id}
+                  className={`sports-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
+                  onClick={() => setSportsProvider(p.id)}
+                  type="button"
+                >{p.label}</button>
+              ))}
+            </div>
+
+            <div className="sports-games-divider" />
+
+            <div className="sports-stream-list">
+              {loading ? (
+                <div className="sports-loading">
+                  <div className="sports-loading-dots"><span /><span /><span /></div>
+                  <p>Loading streams...</p>
+                </div>
+              ) : error ? (
+                <div className="sports-error">
+                  <p>⚠️ {error}</p>
+                  <button className="sports-retry-btn" onClick={load}>Retry</button>
+                </div>
+              ) : filtered.length === 0 ? (
+                <p className="sports-empty">No streams in this category.</p>
+              ) : (
+                filtered.map(s => {
+                  const status = getStatus(s, nowMs);
+                  return (
+                    <button
+                      key={s.id}
+                      className={`sports-stream-btn ${selected?.id === s.id ? 'active' : ''}`}
+                      onClick={() => setSelected(s)}
+                    >
+                      {s.poster ? (
+                        <img src={s.poster} alt={s.name} className="sports-stream-poster"
+                          onError={e => { e.target.style.display = 'none'; }} />
+                      ) : (
+                        <div className="sports-stream-poster sports-stream-poster--placeholder">
+                          {catIcon(s.category)}
+                        </div>
+                      )}
+                      <div className="sports-stream-info">
+                        <span className="sports-stream-name">{s.name}</span>
+                        {s.tag && <span className="sports-stream-tag">{s.tag}</span>}
+                        <div className="sports-stream-meta">
+                          {status === 'live' && (
+                            <span className="sports-badge sports-badge--live">● LIVE</span>
+                          )}
+                          {status === 'upcoming' && (
+                            <span className="sports-badge sports-badge--upcoming">
+                              {fmtDate(s.startsAt)} {fmtTime(s.startsAt)}
+                              {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
+                            </span>
+                          )}
+                          {status === 'replay' && (
+                            <span className="sports-badge sports-badge--replay">REPLAY</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
+
+          {/* ── Player, on the right ── */}
           <main className="sports-player-area" ref={playerRef}>
             {selected ? (
               <>
@@ -451,79 +526,6 @@ export default function Sports() {
               </div>
             )}
           </main>
-
-          {/* ── Games, on the right ── */}
-          <aside className="sports-games-panel">
-            <div className="sports-games-header">
-              <h2>Games</h2>
-              <button className="sports-refresh-btn" onClick={load} title="Refresh" type="button">↻</button>
-            </div>
-
-            <div className="sports-provider-row">
-              {PPV_PROVIDERS.map(p => (
-                <button
-                  key={p.id}
-                  className={`sports-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
-                  onClick={() => setSportsProvider(p.id)}
-                  type="button"
-                >{p.label}</button>
-              ))}
-            </div>
-
-            <div className="sports-stream-list">
-              {loading ? (
-                <div className="sports-loading">
-                  <div className="sports-loading-dots"><span /><span /><span /></div>
-                  <p>Loading streams...</p>
-                </div>
-              ) : error ? (
-                <div className="sports-error">
-                  <p>⚠️ {error}</p>
-                  <button className="sports-retry-btn" onClick={load}>Retry</button>
-                </div>
-              ) : filtered.length === 0 ? (
-                <p className="sports-empty">No streams in this category.</p>
-              ) : (
-                filtered.map(s => {
-                  const status = getStatus(s, nowMs);
-                  return (
-                    <button
-                      key={s.id}
-                      className={`sports-stream-btn ${selected?.id === s.id ? 'active' : ''}`}
-                      onClick={() => setSelected(s)}
-                    >
-                      {s.poster ? (
-                        <img src={s.poster} alt={s.name} className="sports-stream-poster"
-                          onError={e => { e.target.style.display = 'none'; }} />
-                      ) : (
-                        <div className="sports-stream-poster sports-stream-poster--placeholder">
-                          {catIcon(s.category)}
-                        </div>
-                      )}
-                      <div className="sports-stream-info">
-                        <span className="sports-stream-name">{s.name}</span>
-                        {s.tag && <span className="sports-stream-tag">{s.tag}</span>}
-                        <div className="sports-stream-meta">
-                          {status === 'live' && (
-                            <span className="sports-badge sports-badge--live">● LIVE</span>
-                          )}
-                          {status === 'upcoming' && (
-                            <span className="sports-badge sports-badge--upcoming">
-                              {fmtDate(s.startsAt)} {fmtTime(s.startsAt)}
-                              {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
-                            </span>
-                          )}
-                          {status === 'replay' && (
-                            <span className="sports-badge sports-badge--replay">REPLAY</span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
 
         </div>
       </div>
