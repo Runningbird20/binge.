@@ -255,21 +255,20 @@ function ForYouSection({ ready }) {
 
   return (
     <section className="home-section surface-panel" id="for-you">
-      <div className="section-header">
+      <div className="foryou-header">
         <h2>For You</h2>
-      </div>
-
-      <div className="books-tab-bar">
-        {FOR_YOU_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`books-tab ${activeType === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveType(tab.id)}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+        <div className="books-tab-bar foryou-tab-bar">
+          {FOR_YOU_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`books-tab ${activeType === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveType(tab.id)}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="foryou-section">
