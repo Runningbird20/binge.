@@ -33,6 +33,8 @@ export default function MediaOverlay({ mediaType }) {
   const location = useLocation();
   const backgroundLocation = location.state?.backgroundLocation;
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
+  const initialSeason = searchParams.get('season') || undefined;
+  const initialEpisode = searchParams.get('episode') || undefined;
   const numericId = Number(id);
   const config = CONFIG[mediaType];
 
@@ -169,6 +171,8 @@ export default function MediaOverlay({ mediaType }) {
       allowActions={!browseOnly}
       browseOnlyMessage="Fallback catalog mode is browse-only."
       autoPlay={playImmediately}
+      initialSeason={initialSeason}
+      initialEpisode={initialEpisode}
     />
   );
 }

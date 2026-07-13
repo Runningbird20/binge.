@@ -39,6 +39,8 @@ export default function MobileMediaDetail({
   allowActions = true,
   browseOnlyMessage = '',
   autoPlay = false,
+  initialSeason,
+  initialEpisode,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [draftScores, setDraftScores] = useState({});
@@ -239,7 +241,13 @@ export default function MobileMediaDetail({
       </div>
 
       {showPlayer && canWatch && (
-        <EmbedPlayer item={item} mediaType={mediaType} onClose={() => setShowPlayer(false)} />
+        <EmbedPlayer
+          item={item}
+          mediaType={mediaType}
+          onClose={() => setShowPlayer(false)}
+          initialSeason={initialSeason}
+          initialEpisode={initialEpisode}
+        />
       )}
     </>
   );
