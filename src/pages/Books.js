@@ -120,7 +120,7 @@ function BookPosterTile({ book, onClick }) {
   );
 }
 
-function BookDetailsModal({
+export function BookDetailsModal({
   book,
   onClose,
   onAddToLibrary,
@@ -896,10 +896,10 @@ export default function Books() {
     setAddingBookId(null);
   }
 
-  async function handleRate(book, categories, review = '') {
+  async function handleRate(book, categories) {
     try {
-      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, review, media: book });
-      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book });
+      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
       setDetailMessage(err.message);

@@ -211,13 +211,13 @@ test('resume links for in-progress movies launch the player instead of the card'
     authLoading: false,
   });
   const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([
     {
       id: 12,
       media_type: 'movie',
       media_id: 42,
       title: 'Interstellar',
-      status: 'watching',
       image_url: 'https://example.com/interstellar.jpg',
     },
   ]);
@@ -225,10 +225,11 @@ test('resume links for in-progress movies launch the player instead of the card'
   render(<Home />);
 
   const resumeLink = await screen.findByRole('link', { name: /^resume$/i });
-  expect(resumeLink).toHaveAttribute('href', '/movies?open=42&play=1');
+  expect(resumeLink).toHaveAttribute('href', '/movie/42?play=1');
 
   ratingsSpy.mockRestore();
   watchlistSpy.mockRestore();
+  continueWatchingSpy.mockRestore();
   useAuthSpy.mockRestore();
 });
 

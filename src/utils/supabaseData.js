@@ -813,7 +813,7 @@ export async function fetchSupabaseRatingMap(mediaType) {
   }, {});
 }
 
-export async function saveSupabaseRating({ mediaType, mediaId, categories, review = '', media = null }) {
+export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const schema = RATING_TABLES[mediaType];
@@ -825,7 +825,6 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, revie
   const payload = {
     user_id: authUser.id,
     media_id: Number(mediaId),
-    review: review || null,
   };
 
   schema.columns.forEach((column) => {
@@ -872,120 +871,6 @@ export async function fetchSupabaseDashboardCounts() {
   return {
     watchlist: Number(watchlistResult.count) || 0,
     ratings: ratingResults.reduce((sum, result) => sum + (Number(result.count) || 0), 0),
-  };
-}
-
-export async function submitSupabaseRequest({ title, media_type, year, reason }) {
-  const client = requireSupabase();
-  const authUser = await getAuthenticatedUser();
-  const normalizedTitle = String(title || '').trim();
-  const normalizedMediaType = String(media_type || '').trim();
-
-  if (!normalizedTitle) {
-    throw new Error('Title is required.');
-  }
-  if (!['movie', 'tv_show', 'book'].includes(normalizedMediaType)) {
-    throw new Error('media_type must be movie, tv_show, or book.');
-  }
-
-  const { data: existing, error: existingError } = await client
-    .from('media_requests')
-    .select('id')
-    .eq('user_id', authUser.id)
-    .eq('media_type', normalizedMediaType)
-    .eq('status', 'pending')
-    .ilike('title', normalizedTitle);
-
-  if (existingError) {
-    throw new Error(toFriendlyError(existingError, 'Unable to verify existing requests.'));
-  }
-  if (existing?.length) {
-    throw new Error('You already have a pending request for this title.');
-  }
-
-  const { data, error } = await client
-    .from('media_requests')
-    .insert([
-      {
-        user_id: authUser.id,
-        title: normalizedTitle,
-        media_type: normalizedMediaType,
-        year: year ? Number(year) : null,
-        reason: String(reason || '').trim() || null,
-      },
-    ])
-    .select()
-    .single();
-
-  if (error || !data) {
-    throw new Error(toFriendlyError(error, 'Unable to submit your request.'));
-  }
-
-  return data;
-}
-
-export async function fetchSupabaseAdminRequests(status) {
-  const client = requireSupabase();
-  const query = client.from('media_requests').select('id,user_id,title,media_type,year,reason,status,admin_note,created_at,updated_at');
-  if (status && status !== 'all') {
-    query.eq('status', status);
-  }
-  query.order('created_at', { ascending: false });
-
-  const { data: requests, error } = await query;
-  if (error) {
-    throw new Error(toFriendlyError(error, 'Unable to load media requests.'));
-  }
-
-  const requestRows = requests || [];
-  if (!requestRows.length) {
-    return [];
-  }
-
-  const userIds = [...new Set(requestRows.map((request) => request.user_id))];
-  const { data: profiles, error: profileError } = await client.from('profiles').select('id,username').in('id', userIds);
-  if (profileError) {
-    throw new Error(toFriendlyError(profileError, 'Unable to load request authors.'));
-  }
-
-  const profileMap = Object.fromEntries((profiles || []).map((profile) => [profile.id, profile.username]));
-
-  return requestRows.map((request) => ({
-    ...request,
-    username: profileMap[request.user_id] || 'Unknown',
-  }));
-}
-
-export async function updateSupabaseRequestStatus(id, status, adminNote) {
-  if (!['pending', 'approved', 'rejected'].includes(status)) {
-    throw new Error('Invalid status.');
-  }
-
-  const client = requireSupabase();
-  const { data, error } = await client
-    .from('media_requests')
-    .update({ status, admin_note: String(adminNote || '').trim() || null, updated_at: new Date().toISOString() })
-    .eq('id', Number(id))
-    .select()
-    .single();
-
-  if (error || !data) {
-    throw new Error(toFriendlyError(error, 'Unable to update the request.'));
-  }
-
-  const { data: profile, error: profileError } = await client
-    .from('profiles')
-    .select('username')
-    .eq('id', data.user_id)
-    .maybeSingle();
-
-  if (profileError) {
-    throw new Error(toFriendlyError(profileError, 'Unable to load request author.'));
-  }
-
-  return {
-    ...data,
-    username: profile?.username || 'Unknown',
   };
 }
 
@@ -1060,4 +945,64 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 
   const { error } = await supabase.from('watchlist').update(update).eq('id', existing.id);
   if (error) throw toFriendlyError(error, 'Failed to update watchlist progress');
+}
+
+// ─── Continue Watching ──────────────────────────────────────────────────────
+// Deliberately its own table, not the watchlist: a title can be in progress
+// without ever being added to the library, and library titles aren't
+// automatically "in progress" just because they were saved. Starting
+// playback writes here only; adding to the library is a separate, explicit
+// action (addSupabaseWatchlistItem).
+
+export async function fetchSupabaseContinueWatching() {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+
+  const { data, error } = await client
+    .from('continue_watching')
+    .select('id, media_type, media_id, current_season, current_episode, current_page, current_chapter, updated_at')
+    .eq('user_id', authUser.id)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load continue watching.'));
+  }
+
+  return enrichMediaRecords(data || []);
+}
+
+export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+
+  const row = {
+    user_id: authUser.id,
+    media_type: mediaType,
+    media_id: Number(mediaId),
+    updated_at: new Date().toISOString(),
+  };
+  if (currentSeason !== undefined)  row.current_season = currentSeason;
+  if (currentEpisode !== undefined) row.current_episode = currentEpisode;
+  if (currentPage !== undefined)    row.current_page = currentPage;
+  if (currentChapter !== undefined) row.current_chapter = currentChapter;
+
+  const { error } = await client
+    .from('continue_watching')
+    .upsert(row, { onConflict: 'user_id,media_type,media_id' });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to update continue watching.'));
+  }
+}
+
+export async function removeSupabaseContinueWatching(id) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('continue_watching')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to remove that from continue watching.'));
+  }
 }

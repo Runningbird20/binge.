@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
 import ThemedSelect from '../components/ThemedSelect';
@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   fetchSupabaseWatchlist,
   fetchSupabaseRatings,
+  fetchSupabaseContinueWatching,
   updateWatchlistProgress,
   removeSupabaseWatchlistItem,
 } from '../utils/supabaseData';
@@ -28,6 +29,7 @@ const TV_STATUSES   = ['plan_to_watch', 'watching', 'watched'];
 const BOOK_STATUSES = ['plan_to_read', 'reading', 'read'];
 
 function WatchlistCard({ item, isOwn, onUpdate, onRemove }) {
+  const location = useLocation();
   const [status, setStatus]   = useState(item.status);
   const [season, setSeason]   = useState(item.current_season ?? '');
   const [episode, setEpisode] = useState(item.current_episode ?? '');
@@ -40,10 +42,10 @@ function WatchlistCard({ item, isOwn, onUpdate, onRemove }) {
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   const mediaUrl = item.media_type === 'movie'
-    ? (status === 'watching' ? `/movies?open=${item.media_id}&play=1` : `/movies?open=${item.media_id}`)
+    ? (status === 'watching' ? `/movie/${item.media_id}?play=1` : `/movie/${item.media_id}`)
     : item.media_type === 'tv_show'
-    ? (status === 'watching' ? `/tv-shows?open=${item.media_id}&play=1` : `/tv-shows?open=${item.media_id}`)
-    : `/books?open=${item.media_id}`;
+    ? (status === 'watching' ? `/tv-show/${item.media_id}?play=1` : `/tv-show/${item.media_id}`)
+    : `/book/${item.media_id}`;
 
   async function save(updates) {
     setSaving(true);
@@ -87,7 +89,7 @@ function WatchlistCard({ item, isOwn, onUpdate, onRemove }) {
 
   if (!isOwn) {
     return (
-      <Link to={mediaUrl} className="profile-wl-card">
+      <Link to={mediaUrl} className="profile-wl-card" state={{ backgroundLocation: location }}>
         <div className="profile-wl-poster">
           {poster
             ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
@@ -113,7 +115,7 @@ function WatchlistCard({ item, isOwn, onUpdate, onRemove }) {
         {/* Hover overlay */}
         <div className="profile-wl-overlay">
           <div className="profile-wl-overlay-top">
-            <Link to={mediaUrl} className="profile-wl-overlay-open" onClick={e => e.stopPropagation()}>
+            <Link to={mediaUrl} className="profile-wl-overlay-open" state={{ backgroundLocation: location }} onClick={e => e.stopPropagation()}>
               Open →
             </Link>
             <button
@@ -241,18 +243,16 @@ function ProfileStatsCard({ watchlist, ratings, joinDate }) {
 }
 
 function CurrentlyWatchingStrip({ items }) {
-  const active = useMemo(
-    () => items.filter(i => i.status === 'watching' || i.status === 'reading'),
-    [items]
-  );
+  const location = useLocation();
+  const active = items;
   if (!active.length) return null;
 
   return (
     <div className="cw-strip">
       <h3 className="cw-heading">
-        {active.some(i => i.status === 'reading') && active.some(i => i.status === 'watching')
+        {active.some(i => i.media_type === 'book') && active.some(i => i.media_type !== 'book')
           ? 'Currently Watching & Reading'
-          : active[0].status === 'reading'
+          : active[0].media_type === 'book'
           ? 'Currently Reading'
           : 'Currently Watching'}
       </h3>
@@ -264,11 +264,11 @@ function CurrentlyWatchingStrip({ items }) {
             : item.media_type === 'book' && (item.current_chapter || item.current_page)
             ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
             : null;
-          const href = item.media_type === 'movie' ? `/movies?open=${item.media_id}&play=1`
-            : item.media_type === 'tv_show' ? `/tv-shows?open=${item.media_id}&play=1`
-            : `/books?open=${item.media_id}`;
+          const href = item.media_type === 'movie' ? `/movie/${item.media_id}?play=1`
+            : item.media_type === 'tv_show' ? `/tv-show/${item.media_id}?play=1`
+            : `/book/${item.media_id}`;
           return (
-            <Link key={item.id ?? i} to={href} className="cw-card" title={item.title}>
+            <Link key={item.id ?? i} to={href} className="cw-card" title={item.title} state={{ backgroundLocation: location }}>
               <div className="cw-poster">
                 {poster
                   ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
@@ -336,6 +336,7 @@ export default function UserProfile() {
   // Own-profile data loaded from Supabase directly
   const [ownWatchlist, setOwnWatchlist]     = useState(null);
   const [ownRatings, setOwnRatings]         = useState(null);
+  const [ownContinueWatching, setOwnContinueWatching] = useState(null);
   const [ownDataLoading, setOwnDataLoading] = useState(false);
 
   // Filters
@@ -360,16 +361,18 @@ export default function UserProfile() {
     }).finally(() => setLoading(false));
   }, [username]);
 
-  // For own profile, load full watchlist + ratings from Supabase
+  // For own profile, load full watchlist + ratings + continue watching from Supabase
   useEffect(() => {
     if (!isOwn) return;
     setOwnDataLoading(true);
     Promise.allSettled([
       fetchSupabaseWatchlist(),
       fetchSupabaseRatings(),
-    ]).then(([wl, rt]) => {
+      fetchSupabaseContinueWatching(),
+    ]).then(([wl, rt, cw]) => {
       setOwnWatchlist(wl.status === 'fulfilled' && Array.isArray(wl.value) ? wl.value : []);
       setOwnRatings(rt.status === 'fulfilled' && Array.isArray(rt.value) ? rt.value : []);
+      setOwnContinueWatching(cw.status === 'fulfilled' && Array.isArray(cw.value) ? cw.value : []);
     }).finally(() => setOwnDataLoading(false));
   }, [isOwn]);
 
@@ -475,7 +478,7 @@ export default function UserProfile() {
           <div className="profile-private"><p>🔒 This profile is private.</p></div>
         ) : (
           <>
-            <CurrentlyWatchingStrip items={displayWatchlist} />
+            <CurrentlyWatchingStrip items={isOwn ? (ownContinueWatching || []) : []} />
 
             <div className="profile-tabs">
               {tabs.map(t => (
@@ -602,7 +605,6 @@ export default function UserProfile() {
                             <div className="ratings-page-artifact">
                               <RatingArtifact mediaType={r.media_type} scores={r} size={140} />
                             </div>
-                            {r.review && <p className="ratings-page-review">"{r.review}"</p>}
                           </div>
                         </div>
                       );

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { api } from '../api';
 
@@ -24,6 +24,7 @@ export default function GlobalSearch() {
   const inputRef = useRef(null);
   const wrapRef  = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const debounced = useDebounce(query, 280);
 
   function open() {
@@ -63,14 +64,14 @@ export default function GlobalSearch() {
   }, [expanded]);
 
   const flat = results ? [
-    ...results.movies.map((r) => ({ ...r, _type: 'movie', _label: r.title, _sub: r.year ? String(r.year) : 'Movie', _poster: r.poster_url, _url: `/movies?open=${r.id}` })),
-    ...results.tv.map((r) => ({ ...r, _type: 'tv', _label: r.title, _sub: r.year ? String(r.year) : 'TV Show', _poster: r.poster_url, _url: `/tv-shows?open=${r.id}` })),
-    ...results.books.map((r) => ({ ...r, _type: 'book', _label: r.title, _sub: r.author || 'Book', _poster: r.cover_url, _url: `/books?open=${r.id}` })),
-    ...(results.people || []).map((r) => ({ ...r, _type: 'person', _label: r.username, _sub: r.bio || 'User', _poster: r.avatar_url, _url: `/profile/${r.username}` })),
+    ...results.movies.map((r) => ({ ...r, _type: 'movie', _label: r.title, _sub: r.year ? String(r.year) : 'Movie', _poster: r.poster_url, _url: `/movie/${r.id}`, _overlay: true })),
+    ...results.tv.map((r) => ({ ...r, _type: 'tv', _label: r.title, _sub: r.year ? String(r.year) : 'TV Show', _poster: r.poster_url, _url: `/tv-show/${r.id}`, _overlay: true })),
+    ...results.books.map((r) => ({ ...r, _type: 'book', _label: r.title, _sub: r.author || 'Book', _poster: r.cover_url, _url: `/book/${r.id}`, _overlay: true })),
+    ...(results.people || []).map((r) => ({ ...r, _type: 'person', _label: r.username, _sub: r.bio || 'User', _poster: r.avatar_url, _url: `/profile/${r.username}`, _overlay: false })),
   ] : [];
 
   function handleSelect(item) {
-    navigate(item._url);
+    navigate(item._url, item._overlay ? { state: { backgroundLocation: location } } : undefined);
     close();
   }
 

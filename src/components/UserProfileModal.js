@@ -151,7 +151,6 @@ export default function UserProfileModal({ profile, onClose }) {
                           <p className="upm-rated-meta">
                             {TYPE_ICONS[item.media_type]} {item.year || ''}
                           </p>
-                          {item.review && <p className="upm-rated-review">"{item.review}"</p>}
                         </div>
                         <span className="upm-rated-score">{item._score}<span>/10</span></span>
                       </div>

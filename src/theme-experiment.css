@@ -517,16 +517,14 @@ body {
 /* ── Inputs / filters / segmented controls ──────────────────── */
 
 .filter-input,
-.search-input,
-.review-textarea {
+.search-input {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--exp-border);
   border-radius: 10px;
   color: var(--exp-text);
 }
 .filter-input:focus,
-.search-input:focus,
-.review-textarea:focus {
+.search-input:focus {
   border-color: rgba(255, 255, 255, 0.35);
   outline: none;
 }
@@ -844,92 +842,6 @@ body {
 
 .nav-links a:not(.btn-primary) { color: var(--exp-text-dim); }
 .nav-links a:not(.btn-primary):hover { color: var(--exp-text); }
-
-.hero {
-  padding: 7rem 4rem 5rem;
-  position: relative;
-}
-
-.hero-content h1 {
-  color: var(--exp-text);
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
-.hero-subtitle {
-  color: var(--exp-text-dim);
-  white-space: normal;
-}
-
-.hero-media-grid .media-card-poster-image,
-.hero-media-grid .media-card-placeholder {
-  border-radius: var(--exp-radius);
-  border: 1px solid var(--exp-border);
-  box-shadow: var(--exp-shadow);
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-}
-
-.hero-media-grid .media-card:hover .media-card-poster-image,
-.hero-media-grid .media-card:hover .media-card-placeholder {
-  transform: translateY(-4px) scale(1.02);
-  border-color: var(--exp-border-strong);
-}
-
-.hero-media-title { color: var(--exp-text); }
-.hero-media-year { color: var(--exp-text-faint); }
-
-/* Carousel — genuinely spins: shorter loop + a per-poster lift so motion reads clearly */
-.landing-carousel-track {
-  animation-duration: 38s;
-}
-
-.landing-carousel-item .media-card-poster-image,
-.landing-carousel-item .media-card-placeholder {
-  border-radius: var(--exp-radius);
-  border: 1px solid var(--exp-border);
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-}
-
-.landing-carousel-item:hover .media-card-poster-image,
-.landing-carousel-item:hover .media-card-placeholder {
-  transform: translateY(-6px) scale(1.05);
-  box-shadow: var(--exp-shadow);
-  border-color: var(--exp-border-strong);
-}
-
-.features {
-  background: none;
-}
-
-.features h2,
-.features h3 {
-  color: var(--exp-text);
-  font-weight: 600;
-}
-
-.features h3 {
-  font-size: 1.4rem;
-  max-width: 640px;
-  margin: 0 auto 2rem;
-}
-
-.feature-card {
-  background: var(--exp-surface);
-  border: 1px solid var(--exp-border);
-  border-radius: var(--exp-radius-lg);
-  backdrop-filter: blur(6px);
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
-}
-
-.feature-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--exp-border-strong);
-  box-shadow: var(--exp-shadow);
-}
-
-.feature-icon { color: var(--exp-accent); }
-.feature-card h3 { color: var(--exp-text); }
-.feature-card p { color: var(--exp-text-dim); }
 
 /* ══════════════════════════════════════════════════════════════
    LOGIN / SIGNUP — reskinned to match the streaming theme
