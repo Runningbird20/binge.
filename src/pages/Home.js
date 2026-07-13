@@ -132,11 +132,17 @@ function BadgeIcon({ iconKey, label, toneKey }) {
 
 const HERO_TYPE_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
 
-function heroDetailsUrl(item) {
+function detailsUrl(item) {
   if (item.media_type === 'movie') return `/movies?open=${item.media_id}`;
   if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}`;
   if (item.media_type === 'book') return `/books?open=${item.media_id}`;
   return '/watchlist';
+}
+
+function resumeUrl(item) {
+  if (item.media_type === 'movie') return `/movies?open=${item.media_id}&play=1`;
+  if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}&play=1`;
+  return detailsUrl(item);
 }
 
 function StreamHero({ user, watchlistItems }) {
@@ -182,7 +188,7 @@ function StreamHero({ user, watchlistItems }) {
         <div className="stream-hero-actions">
           {heroItem ? (
             <>
-              <Link className="btn-primary" to={heroDetailsUrl(heroItem)}>
+              <Link className="btn-primary" to={inProgress ? resumeUrl(heroItem) : detailsUrl(heroItem)}>
                 {inProgress ? 'Resume' : 'Details'}
               </Link>
               <Link className="btn-secondary" to="/watchlist">My Watchlist</Link>
@@ -221,11 +227,7 @@ function ContinueWatching({ items }) {
       <div className="continue-watching-row">
         {inProgress.map(item => {
           const poster = resolvePosterUrl(item.image_url || item.poster_url);
-          const url = item.media_type === 'movie'
-            ? `/movies?open=${item.media_id}`
-            : item.media_type === 'tv_show'
-            ? `/tv-shows?open=${item.media_id}`
-            : `/books?open=${item.media_id}`;
+          const url = resumeUrl(item);
 
           const s  = item.current_season;
           const e  = item.current_episode;
@@ -277,10 +279,7 @@ function WatchlistGallery({ items, loading }) {
   }
 
   function getSiteUrl(item) {
-    if (item.media_type === 'movie') return `/movies?open=${item.media_id}`;
-    if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}`;
-    if (item.media_type === 'book') return `/books?open=${item.media_id}`;
-    return '/watchlist';
+    return detailsUrl(item);
   }
 
   if (loading) {

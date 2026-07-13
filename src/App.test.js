@@ -6,7 +6,9 @@ import AccountSettings from './pages/AccountSettings';
 import Books from './pages/Books';
 import Movies from './pages/Movies';
 import TVShows from './pages/TVShows';
+import * as AuthContextModule from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
+import * as supabaseDataModule from './utils/supabaseData';
 
 const mockNavigate = jest.fn();
 let mockSearchParams = new URLSearchParams();
@@ -326,6 +328,41 @@ test('shows achievement badges and an annual recap on the home page', async () =
   expect(screen.getByText(/you logged 5 titles in 2026\./i)).toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: /choose recap year/i })).toHaveValue('2026');
   expect(screen.getAllByText(/fantasy/i).length).toBeGreaterThan(0);
+});
+
+test('resume links for in-progress movies launch the player instead of the card', async () => {
+  localStorage.setItem('onboarding_done_7', '1');
+
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    },
+    authLoading: false,
+  });
+  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([
+    {
+      id: 12,
+      media_type: 'movie',
+      media_id: 42,
+      title: 'Interstellar',
+      status: 'watching',
+      image_url: 'https://example.com/interstellar.jpg',
+    },
+  ]);
+
+  render(<Home />);
+
+  const resumeLink = await screen.findByRole('link', { name: /^resume$/i });
+  expect(resumeLink).toHaveAttribute('href', '/movies?open=42&play=1');
+
+  ratingsSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  useAuthSpy.mockRestore();
 });
 
 test('shows an account settings gear link for signed-in users', async () => {
