@@ -308,7 +308,6 @@ body {
 
 .mr-poster,
 .wl-gallery-poster,
-.continue-card-poster,
 .foryou-card,
 .media-card-poster,
 .profile-wl-poster,
@@ -321,7 +320,6 @@ body {
 
 .mr-card:hover .mr-poster,
 .wl-gallery-card:hover .wl-gallery-poster,
-.continue-card:hover .continue-card-poster,
 .foryou-card:hover,
 .profile-wl-card--own:hover .profile-wl-poster,
 .manga-card:hover .manga-card-cover {
@@ -344,29 +342,6 @@ body {
   border: 1px solid var(--exp-border);
   color: var(--exp-text);
   backdrop-filter: blur(8px);
-}
-
-/* ── Continue Watching: same poster tile used site-wide ──────── */
-
-.continue-watching-row { gap: 1rem; }
-.continue-card { flex: 0 0 160px; }
-
-.continue-card-poster {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  height: auto;
-  position: relative;
-  background: var(--exp-surface-2);
-}
-
-.continue-card-title { font-size: 0.9rem; color: var(--exp-text); }
-.continue-card-sub { color: var(--exp-text-faint); }
-
-.continue-card-badge {
-  background: rgba(8, 10, 14, 0.8);
-  border: 1px solid var(--exp-border);
-  border-radius: 6px;
-  backdrop-filter: blur(6px);
 }
 
 /* ── Recommended For You: poster-forward overlay cards ──────── */
