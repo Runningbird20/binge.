@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
-import ListSaveControls from './ListSaveControls';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 
@@ -177,12 +176,6 @@ export default function MobileMediaDetail({
                   </div>
                 )}
               </div>
-
-              {allowActions && (
-                <div className="mob-detail-list-section">
-                  <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
-                </div>
-              )}
 
               {!allowActions && browseOnlyMessage && (
                 <p className="mob-detail-notice">{browseOnlyMessage}</p>

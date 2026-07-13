@@ -1,7 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
 import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
-import ThemedSelect from './ThemedSelect';
-import { fetchSupabaseLists, addSupabaseListItem } from '../utils/supabaseData';
 import { useToast } from '../contexts/ToastContext';
 
 function resolvePosterUrl(url) {
@@ -24,81 +21,6 @@ async function shareItem(item) {
   }
   try { await navigator.clipboard.writeText(`${text} — ${url}`); return 'copied'; }
   catch { return null; }
-}
-
-function ListQuickAddMobile({ mediaType, mediaId, itemTitle }) {
-  const [open, setOpen] = useState(false);
-  const [lists, setLists] = useState(null);
-  const [selectedId, setSelectedId] = useState('');
-  const [saving, setSaving] = useState(false);
-  const toast = useToast();
-  const panelRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e) {
-      if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  async function handleOpen(e) {
-    e.stopPropagation();
-    setOpen(o => !o);
-    if (lists === null) {
-      try {
-        const data = await fetchSupabaseLists();
-        const editable = Array.isArray(data) ? data.filter(l => l?.permissions?.canEdit) : [];
-        setLists(editable);
-        setSelectedId(editable[0] ? String(editable[0].id) : '');
-      } catch { setLists([]); }
-    }
-  }
-
-  async function handleAdd(e) {
-    e.stopPropagation();
-    if (!selectedId) return;
-    setSaving(true);
-    try {
-      await addSupabaseListItem(selectedId, { mediaType, mediaId });
-      const name = lists?.find(l => String(l.id) === selectedId)?.name;
-      toast(`Added to ${name || 'list'}`);
-      setTimeout(() => setOpen(false), 300);
-    } catch (err) {
-      toast(err.message || 'Could not add to list', 'error');
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <div className="mob-card-list-wrap" ref={panelRef}>
-      <button type="button" className="mob-card-action-btn" onClick={handleOpen} title="Add to list">
-        + List
-      </button>
-      {open && (
-        <div className="mob-card-list-panel" onClick={e => e.stopPropagation()}>
-          {lists === null ? (
-            <span className="mob-card-list-msg">Loading…</span>
-          ) : lists.length === 0 ? (
-            <span className="mob-card-list-msg">No editable lists</span>
-          ) : (
-            <>
-              <ThemedSelect
-                className="mc-list-select"
-                value={selectedId}
-                aria-label="Choose list"
-                options={lists.map(l => ({ value: l.id, label: l.name }))}
-                onChange={e => setSelectedId(e.target.value)}
-              />
-              <button type="button" className="mob-card-action-btn" onClick={handleAdd} disabled={saving}>
-                {saving ? '…' : 'Add'}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function MobileMediaCard({
@@ -179,7 +101,6 @@ export default function MobileMediaCard({
               + Library
             </button>
           )}
-          <ListQuickAddMobile mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
           {canWatch && (
             <button
               type="button"

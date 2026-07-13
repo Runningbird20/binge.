@@ -351,19 +351,6 @@ export default function Home() {
               <div className="stat-label">Saved Titles</div>
             </div>
           </div>
-
-          <section className="home-section surface-panel">
-            <div className="section-header">
-              <h2>Plan Together</h2>
-               <Link to="/lists" className="section-link">Open lists</Link>
-            </div>
-            <div className="home-action-card">
-              <p className="home-panel-copy">
-                Create public or private lists, invite collaborators, and let anonymous vibe votes surface the group favorite.
-              </p>
-              <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
-            </div>
-          </section>
         </div>
         </>
         )}

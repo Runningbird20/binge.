@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MangaTab from '../components/MangaTab';
-import ListSaveControls from '../components/ListSaveControls';
 import RatingInput from '../components/RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../components/RatingArtifact';
 import MobileBookDetail from '../components/MobileBookDetail';
@@ -350,9 +349,6 @@ function BookDetailsModal({
                 >
                   {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
                 </button>
-              )}
-              {allowActions && (
-                <ListSaveControls mediaType="book" mediaId={book.id} itemTitle={book.title} />
               )}
               {!allowActions && browseOnlyMessage && (
                 <p className="book-detail-status">{browseOnlyMessage}</p>
