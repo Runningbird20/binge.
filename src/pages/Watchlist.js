@@ -133,7 +133,7 @@ export default function Watchlist() {
             <div>
               <h2>Filter Your Saved Titles</h2>
               <p className="surface-panel-copy">
-                Narrow your watchlist by status, media type, or title without losing your place.
+                Narrow your library by status, media type, or title without losing your place.
               </p>
             </div>
             <p className="surface-panel-meta">
@@ -186,9 +186,9 @@ export default function Watchlist() {
             <div className="loading-state">Loading...</div>
           ) : items.length === 0 ? (
             <div className="empty-state">
-              <p>No movies or TV shows in your watchlist yet.</p>
+              <p>No movies or TV shows in your library yet.</p>
               <p className="empty-hint">
-                Add movies and TV shows from the catalog so your full watchlist is ready here.
+                Add movies and TV shows from the catalog so your full library is ready here.
               </p>
               <div className="cta-buttons" style={{ marginTop: '1rem' }}>
                 <Link to="/movies" className="btn-secondary">Browse movies</Link>
