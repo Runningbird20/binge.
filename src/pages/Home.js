@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
@@ -11,13 +11,44 @@ import {
   fetchSupabaseContinueWatching,
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
-import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
+import { generateSupabaseRecommendations, generateSupabaseTypeRecommendations } from '../utils/recommendations';
 
 const MEDIA_ICONS = {
   movie: '🎬',
   tv_show: '📺',
   book: '📚',
 };
+
+// Edge fade — matches the genre-bar scroll fade, but only shown when the
+// row actually has enough items to scroll (checked on mount, on scroll,
+// and whenever the row resizes or its item count changes).
+function useEdgeFade(items) {
+  const ref = useRef(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 8);
+    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    const ro = new ResizeObserver(checkScroll);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      ro.disconnect();
+    };
+  }, [items, checkScroll]);
+
+  return { ref, canLeft, canRight };
+}
 
 function resolvePosterUrl(url) {
   if (!url) return null;
@@ -191,12 +222,13 @@ function ContinueWatching({ items, onRemove }) {
 }
 
 const FOR_YOU_TABS = [
+  { id: 'all', label: 'All', icon: '' },
   { id: 'movie', label: 'Movies', icon: '🎬' },
   { id: 'tv_show', label: 'TV Shows', icon: '📺' },
   { id: 'book', label: 'Books', icon: '📚' },
 ];
 const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
-const FOR_YOU_IDLE_STATE = { movie: 'idle', tv_show: 'idle', book: 'idle' };
+const FOR_YOU_IDLE_STATE = { all: 'idle', movie: 'idle', tv_show: 'idle', book: 'idle' };
 
 function ForYouCard({ rec }) {
   const location = useLocation();
@@ -222,7 +254,7 @@ function ForYouCard({ rec }) {
 }
 
 function ForYouSection({ ready }) {
-  const [activeType, setActiveType]     = useState('movie');
+  const [activeType, setActiveType]     = useState('all');
   const [tabState, setTabState]         = useState(FOR_YOU_IDLE_STATE);
   const [tabData, setTabData]           = useState({});
   const [tabError, setTabError]         = useState({});
@@ -231,7 +263,9 @@ function ForYouSection({ ready }) {
     setTabState((prev) => ({ ...prev, [mediaType]: 'loading' }));
     setTabError((prev) => ({ ...prev, [mediaType]: '' }));
     try {
-      const result = await generateSupabaseTypeRecommendations(mediaType);
+      const result = mediaType === 'all'
+        ? await generateSupabaseRecommendations()
+        : await generateSupabaseTypeRecommendations(mediaType);
       setTabData((prev) => ({ ...prev, [mediaType]: result }));
       setTabState((prev) => ({ ...prev, [mediaType]: result.recommendations?.length ? 'done' : 'empty' }));
     } catch (err) {
@@ -247,12 +281,16 @@ function ForYouSection({ ready }) {
   const state = tabState[activeType];
   const data = tabData[activeType];
   const error = tabError[activeType];
+  const { ref: foryouRowRef, canLeft: foryouCanLeft, canRight: foryouCanRight } = useEdgeFade(data?.recommendations);
 
   return (
     <section className="home-section" id="for-you">
-      <div className="foryou-header">
+      <div className="section-header">
         <h2>For You</h2>
-        <div className="books-tab-bar foryou-tab-bar">
+      </div>
+
+      <div className="profile-wl-filters">
+        <div className="books-tab-bar books-tab-bar--inline">
           {FOR_YOU_TABS.map((tab) => (
             <button
               key={tab.id}
@@ -294,13 +332,15 @@ function ForYouSection({ ready }) {
         )}
 
         {state === 'done' && data && (
-          <>
-            <div className="foryou-grid">
+          <div className="mr-track-wrap">
+            <div className="foryou-grid" ref={foryouRowRef}>
               {data.recommendations.map((rec) => (
                 <ForYouCard key={`${rec.media_type}:${rec.id}`} rec={rec} />
               ))}
             </div>
-          </>
+            {foryouCanLeft && <div className="mr-fade mr-fade-left" />}
+            {foryouCanRight && <div className="mr-fade mr-fade-right" />}
+          </div>
         )}
       </div>
     </section>
@@ -373,6 +413,8 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
   const filteredWatchlist = watchlist.filter(item => {
     return !wlTypeFilter || item.media_type === wlTypeFilter;
   });
+
+  const { ref: libraryRowRef, canLeft: libraryCanLeft, canRight: libraryCanRight } = useEdgeFade(filteredWatchlist);
 
   const ratingScores = useMemo(() => {
     const map = new Map();
@@ -469,14 +511,18 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
           <Link to="/movies" className="btn-secondary" style={{ marginTop: '1rem', display: 'inline-block' }}>Browse the catalog</Link>
         </div>
       ) : (
-        <div className="profile-watchlist-row">
-          {filteredWatchlist.map((item, i) => (
-            <LibraryCard
-              key={item.id ?? i}
-              item={item}
-              ratingScore={ratingScores.get(`${item.media_type}:${item.media_id}`) ?? null}
-            />
-          ))}
+        <div className="mr-track-wrap">
+          <div className="profile-watchlist-row" ref={libraryRowRef}>
+            {filteredWatchlist.map((item, i) => (
+              <LibraryCard
+                key={item.id ?? i}
+                item={item}
+                ratingScore={ratingScores.get(`${item.media_type}:${item.media_id}`) ?? null}
+              />
+            ))}
+          </div>
+          {libraryCanLeft && <div className="mr-fade mr-fade-left" />}
+          {libraryCanRight && <div className="mr-fade mr-fade-right" />}
         </div>
       )}
     </section>
