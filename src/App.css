@@ -9324,25 +9324,51 @@ select.filter-input,
    ══════════════════════════════════════════════════════════════ */
 
 .sports-shell {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px - env(safe-area-inset-top, 0px));
   overflow: hidden;
   background: #0a0a0a;
 }
 
-/* ── Sidebar ── */
-.sports-sidebar {
+/* Sport type filter bar — reuses .genre-bar-wrap/.genre-bar/.genre-chip,
+   same look as the Movies/TV/Books genre row (translucent-dark chips
+   matching the navbar, with edge scroll fade). */
+.sports-shell .genre-bar-wrap { position: static; flex-shrink: 0; }
+.sports-live-pill {
+  flex-shrink: 0;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 20px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f87171;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  animation: pulse-live 2s infinite;
+}
+@keyframes pulse-live { 0%,100%{opacity:1} 50%{opacity:0.65} }
+
+/* Player (left) + games panel (right) */
+.sports-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1px;
+  background: #1e1e1e;
+}
+
+/* ── Games panel ── */
+.sports-games-panel {
   display: flex;
   flex-direction: column;
+  width: 340px;
+  flex-shrink: 0;
   background: #111;
-  border-right: 1px solid #1e1e1e;
   overflow: hidden;
-  transition: width 0.22s ease;
 }
-.sports-sidebar--hidden { width: 0; min-width: 0; border-right: none; }
-
-.sports-sidebar-header {
+.sports-games-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -9350,68 +9376,7 @@ select.filter-input,
   border-bottom: 1px solid #1e1e1e;
   flex-shrink: 0;
 }
-.sports-sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sports-sidebar-title h2 { margin: 0; font-size: 1rem; font-weight: 700; color: #e0e0e0; }
-.sports-live-count {
-  background: #c0392b;
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 20px;
-  letter-spacing: 0.04em;
-  animation: pulse-live 2s infinite;
-}
-@keyframes pulse-live { 0%,100%{opacity:1} 50%{opacity:0.65} }
-
-.sports-sidebar-toggle {
-  background: none; border: none; color: #666; font-size: 1.2rem;
-  cursor: pointer; padding: 4px 8px; border-radius: 4px; line-height: 1;
-}
-.sports-sidebar-toggle:hover { color: #e8c97a; }
-
-/* Category filters */
-.sports-categories {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px;
-  border-bottom: 1px solid #1e1e1e;
-  flex-shrink: 0;
-  max-height: 220px;
-  overflow-y: auto;
-}
-.sports-cat-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  color: #888;
-  font-size: 0.78rem;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s, color 0.15s;
-}
-.sports-cat-btn:hover { background: #1a1a1a; color: #ccc; }
-.sports-cat-btn.active { background: rgba(232,201,122,0.12); color: #e8c97a; font-weight: 600; }
-.sports-cat-count {
-  margin-left: auto;
-  background: #1e1e1e;
-  color: #666;
-  font-size: 0.68rem;
-  padding: 1px 5px;
-  border-radius: 10px;
-  min-width: 18px;
-  text-align: center;
-}
-.sports-cat-btn.active .sports-cat-count { background: rgba(232,201,122,0.15); color: #c9a94e; }
+.sports-games-header h2 { margin: 0; font-size: 1rem; font-weight: 700; color: #e0e0e0; }
 
 /* Stream list */
 .sports-stream-list {
@@ -9510,16 +9475,6 @@ select.filter-input,
   color: #ccc; border-radius: 5px; cursor: pointer; font-size: 0.78rem;
 }
 
-.sports-sidebar-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
-  border-top: 1px solid #1e1e1e;
-  font-size: 0.68rem;
-  color: #444;
-  flex-shrink: 0;
-}
 .sports-refresh-btn {
   background: none; border: none; color: #666; cursor: pointer;
   font-size: 1rem; padding: 2px 4px; border-radius: 4px;
@@ -9530,23 +9485,12 @@ select.filter-input,
 .sports-player-area {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
   background: #000;
   overflow: hidden;
   position: relative;
 }
-.sports-sidebar-show-btn {
-  position: absolute;
-  top: 12px; left: 12px;
-  z-index: 10;
-  background: rgba(0,0,0,0.7);
-  border: 1px solid #333;
-  color: #ccc;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-.sports-sidebar-show-btn:hover { background: rgba(232,201,122,0.15); }
 
 .sports-now-playing {
   display: flex;
@@ -9624,75 +9568,6 @@ select.filter-input,
 .sports-no-selection p, .sports-no-stream p { margin: 0; font-size: 0.9rem; }
 .sports-live-hint  { color: #e8c97a; font-weight: 600; font-size: 0.9rem; }
 .sports-no-stream-note { color: #555; font-size: 0.8rem; }
-
-/* ── Mobile ── */
-@media (max-width: 768px) {
-  /* Full-screen container; sidebar and player stack as overlapping layers */
-  .sports-shell {
-    display: block;
-    position: relative;
-    height: calc(100vh - 56px);
-    overflow: hidden;
-  }
-
-  /* Sidebar fills the screen and slides out when hidden */
-  .sports-sidebar {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    max-height: none;
-    height: 100%;
-    z-index: 2;
-    border-right: none;
-    border-bottom: none;
-    transform: translateX(0);
-    transition: transform 0.25s ease;
-    overflow: hidden;
-  }
-  .sports-sidebar--hidden {
-    transform: translateX(-100%);
-    width: 100%;
-    min-width: 0;
-  }
-
-  /* Categories scroll horizontally */
-  .sports-categories {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    max-height: none;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .sports-categories::-webkit-scrollbar { display: none; }
-
-  /* Hide desktop sidebar toggle — tapping a stream closes sidebar instead */
-  .sports-sidebar-toggle { display: none; }
-
-  /* Player fills screen behind the sidebar */
-  .sports-player-area {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* "☰ Streams" back button — fixed bottom-left above mobile nav */
-  .sports-sidebar-show-btn {
-    position: fixed;
-    bottom: 72px;
-    left: 12px;
-    z-index: 10;
-  }
-
-  /* Player frame fills remaining height */
-  .sports-frame-wrap { flex: 1; }
-  .sports-frame      { height: 100%; }
-}
 
 /* ══════════════════════════════════════════════════════════════
    TOAST NOTIFICATIONS
