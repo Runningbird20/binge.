@@ -40,9 +40,9 @@ function WatchlistCard({ item, isOwn, onUpdate, onRemove }) {
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   const mediaUrl = item.media_type === 'movie'
-    ? `/movies?open=${item.media_id}`
+    ? (status === 'watching' ? `/movies?open=${item.media_id}&play=1` : `/movies?open=${item.media_id}`)
     : item.media_type === 'tv_show'
-    ? `/tv-shows?open=${item.media_id}`
+    ? (status === 'watching' ? `/tv-shows?open=${item.media_id}&play=1` : `/tv-shows?open=${item.media_id}`)
     : `/books?open=${item.media_id}`;
 
   async function save(updates) {
@@ -264,8 +264,8 @@ function CurrentlyWatchingStrip({ items }) {
             : item.media_type === 'book' && (item.current_chapter || item.current_page)
             ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
             : null;
-          const href = item.media_type === 'movie' ? `/movies?open=${item.media_id}`
-            : item.media_type === 'tv_show' ? `/tv-shows?open=${item.media_id}`
+          const href = item.media_type === 'movie' ? `/movies?open=${item.media_id}&play=1`
+            : item.media_type === 'tv_show' ? `/tv-shows?open=${item.media_id}&play=1`
             : `/books?open=${item.media_id}`;
           return (
             <Link key={item.id ?? i} to={href} className="cw-card" title={item.title}>

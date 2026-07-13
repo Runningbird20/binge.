@@ -47,12 +47,17 @@ export default function MediaDetailsModal({
   detailMessage,
   allowActions = true,
   browseOnlyMessage = '',
+  autoPlay = false,
 }) {
   const isMobile = useIsMobile();
-  const [showPlayer, setShowPlayer] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [draftScores, setDraftScores] = useState({});
   const [draftReview, setDraftReview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setShowPlayer(Boolean(autoPlay));
+  }, [autoPlay, item?.id]);
 
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
@@ -96,6 +101,7 @@ export default function MediaDetailsModal({
         detailMessage={detailMessage}
         allowActions={allowActions}
         browseOnlyMessage={browseOnlyMessage}
+        autoPlay={autoPlay}
       />
     );
   }

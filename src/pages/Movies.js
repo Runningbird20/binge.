@@ -450,6 +450,7 @@ export default function Movies() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
   const initialGenre = searchParams.get('genre') || '';
+  const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
 
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemBrowseOnly, setSelectedItemBrowseOnly] = useState(false);
@@ -607,6 +608,7 @@ export default function Movies() {
           detailMessage={detailMessage}
           allowActions={!selectedItemBrowseOnly}
           browseOnlyMessage="Fallback catalog mode is browse-only."
+          autoPlay={playImmediately}
         />
       )}
     </div>

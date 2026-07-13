@@ -39,12 +39,17 @@ export default function MobileMediaDetail({
   detailMessage,
   allowActions = true,
   browseOnlyMessage = '',
+  autoPlay = false,
 }) {
-  const [showPlayer, setShowPlayer] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [draftScores, setDraftScores] = useState({});
   const [draftReview, setDraftReview] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [tab, setTab] = useState('info');
+
+  useEffect(() => {
+    setShowPlayer(Boolean(autoPlay));
+  }, [autoPlay, item?.id]);
 
   useEffect(() => {
     if (userRating && typeof userRating === 'object') {
