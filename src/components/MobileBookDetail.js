@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react';
-import RatingInput from './RatingInput';
-import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
+import StarRating from './StarRating';
+import { computeStarRating, buildUniformCategories } from './RatingArtifact';
 
 const ARCHIVE_DOWNLOAD_EXTENSIONS = {
   pdf:  ['.pdf'],
   epub: ['.epub'],
   txt:  ['.txt', '.text'],
 };
-
-function allCategoriesFilled(scores) {
-  const cats = RATING_CATEGORIES.book || [];
-  return cats.every((cat) => scores[cat.key] >= 1);
-}
 
 export default function MobileBookDetail({
   book,
@@ -26,18 +21,14 @@ export default function MobileBookDetail({
   browseOnlyMessage = '',
   onReadNow,
 }) {
-  const [draftScores, setDraftScores] = useState({});
+  const [draftStars, setDraftStars]   = useState(0);
   const [isSaving, setIsSaving]       = useState(false);
   const [tab, setTab]                 = useState('info');
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
 
   useEffect(() => {
-    if (userRating && typeof userRating === 'object') {
-      setDraftScores(userRating);
-    } else {
-      setDraftScores({});
-    }
+    setDraftStars(computeStarRating('book', userRating) || 0);
   }, [userRating, book]);
 
   useEffect(() => {
@@ -61,15 +52,14 @@ export default function MobileBookDetail({
   const archiveId = rawId && !isOl ? rawId : null;
   const canRead   = Boolean(book?.title);
 
-  const canSave    = allCategoriesFilled(draftScores);
-  const displayScore = computeNormalizedScore('book', draftScores);
   const imageUrl   = book.cover_url || book.cover || book.image_url || '';
   const avgRating  = book.avg_rating ? Number(book.avg_rating).toFixed(1) : null;
 
-  async function handleSave() {
-    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+  async function handleStarChange(nextValue) {
+    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
+    setDraftStars(nextValue);
     setIsSaving(true);
-    try { await onRate(book, draftScores); }
+    try { await onRate(book, buildUniformCategories('book', nextValue)); }
     finally { setIsSaving(false); }
   }
 
@@ -137,8 +127,8 @@ export default function MobileBookDetail({
                 {book.rating_count && <span className="mob-detail-count"> ({book.rating_count})</span>}
               </span>
             )}
-            {displayScore !== null && (
-              <span className="mob-detail-your-score">Your score: {displayScore}/10</span>
+            {draftStars > 0 && (
+              <StarRating value={draftStars} readOnly size="sm" />
             )}
           </div>
         </div>
@@ -217,27 +207,17 @@ export default function MobileBookDetail({
         {/* Rate tab */}
         {tab === 'rate' && (
           <div className="mob-detail-tab-content">
-            <div className="mob-detail-artifact-row">
-              <RatingArtifact mediaType="book" scores={draftScores} size={120} />
-              {displayScore !== null && (
-                <p className="mob-detail-artifact-score">{displayScore}<span>/10</span></p>
-              )}
+            <div className="mob-detail-star-row">
+              <StarRating
+                value={draftStars}
+                onChange={allowActions ? handleStarChange : undefined}
+                readOnly={!allowActions}
+                size="lg"
+              />
             </div>
-            <RatingInput
-              mediaType="book"
-              value={draftScores}
-              onChange={allowActions ? setDraftScores : () => {}}
-            />
-            <button
-              type="button"
-              className={`mob-detail-save-btn${allowActions && canSave ? '' : ' btn-disabled'}`}
-              onClick={handleSave}
-              disabled={!allowActions || !canSave || isSaving}
-            >
-              {!allowActions ? 'Browse Only' : isSaving ? 'Saving…' : userRating ? 'Update Rating' : 'Save Rating'}
-            </button>
-            {allowActions && !canSave && (
-              <p className="mob-detail-rate-hint">Rate all categories to save</p>
+            {isSaving && <p className="mob-detail-rate-hint">Saving…</p>}
+            {!allowActions && (
+              <p className="mob-detail-rate-hint">Browse only — sign in to rate.</p>
             )}
           </div>
         )}

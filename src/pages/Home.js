@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
-import { computeNormalizedScore } from '../components/RatingArtifact';
+import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -39,11 +39,16 @@ function useEdgeFade(items) {
     if (!el) return undefined;
     checkScroll();
     el.addEventListener('scroll', checkScroll, { passive: true });
-    const ro = new ResizeObserver(checkScroll);
-    ro.observe(el);
+
+    // Not every environment has ResizeObserver (e.g. jsdom in tests) —
+    // the scroll listener + the mount/items-change check above still
+    // cover the cases that matter, this just adds live resize tracking.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(checkScroll) : null;
+    ro?.observe(el);
+
     return () => {
       el.removeEventListener('scroll', checkScroll);
-      ro.disconnect();
+      ro?.disconnect();
     };
   }, [items, checkScroll]);
 
@@ -165,8 +170,57 @@ function StreamHero({ user, continueWatchingItems, watchlistItems }) {
   );
 }
 
-function ContinueWatching({ items, onRemove }) {
+function ContinueWatchingCard({ item, onRemove }) {
   const location = useLocation();
+  const poster = resolvePosterUrl(item.image_url || item.poster_url);
+  const url = resumeUrl(item);
+
+  const s  = item.current_season;
+  const e  = item.current_episode;
+  const ch = item.current_chapter;
+  const pg = item.current_page;
+
+  const progressLabel = item.media_type === 'tv_show' && (s || e)
+    ? `S${s || 1} · E${e || 1}`
+    : item.media_type === 'book' && (ch || pg)
+    ? (ch ? `Chapter ${ch}` : `Page ${pg}`)
+    : 'Continue watching';
+
+  return (
+    <div className="cw-card-wrap">
+      <Link to={url} className="foryou-card" state={{ backgroundLocation: location }}>
+        <div className="foryou-card-poster">
+          {poster
+            ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+            : <div className="foryou-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
+          }
+        </div>
+        <div className="foryou-card-body">
+          <div className="foryou-card-type">
+            {MEDIA_ICONS[item.media_type]} {FOR_YOU_LABELS[item.media_type]}
+            {item.year && <span className="foryou-card-year">{item.year}</span>}
+          </div>
+          <h4 className="foryou-card-title">{item.title}</h4>
+          <p className="foryou-card-genre">{progressLabel}</p>
+        </div>
+      </Link>
+      <button
+        type="button"
+        className="cw-remove-btn"
+        title="Remove from Continue Watching"
+        aria-label={`Remove ${item.title} from Continue Watching`}
+        onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+// Mirrors ForYouSection's layout (section-header + mr-track-wrap edge fade
+// over a foryou-grid of foryou-cards) so both rows read as one system.
+function ContinueWatching({ items, onRemove }) {
+  const { ref: cwRowRef, canLeft: cwCanLeft, canRight: cwCanRight } = useEdgeFade(items);
   if (!items.length) return null;
 
   return (
@@ -174,48 +228,14 @@ function ContinueWatching({ items, onRemove }) {
       <div className="section-header">
         <h2>Continue Watching</h2>
       </div>
-      {/* Reuses the Library's card classes (.profile-wl-*) so both rows
-          follow the same poster/badge/title treatment. */}
-      <div className="profile-watchlist-row">
-        {items.map(item => {
-          const poster = resolvePosterUrl(item.image_url || item.poster_url);
-          const url = resumeUrl(item);
-
-          const s  = item.current_season;
-          const e  = item.current_episode;
-          const ch = item.current_chapter;
-          const pg = item.current_page;
-
-          const progressBadge = item.media_type === 'tv_show' && (s || e)
-            ? `S${s || 1} E${e || 1}`
-            : item.media_type === 'book' && (ch || pg)
-            ? (ch ? `Ch ${ch}` : `Pg ${pg}`)
-            : null;
-
-          return (
-            <div key={item.id} className="cw-card-wrap">
-              <Link to={url} className="profile-wl-card profile-wl-card--own" state={{ backgroundLocation: location }}>
-                <div className="profile-wl-poster">
-                  {poster
-                    ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-                    : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>
-                  }
-                  {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
-                </div>
-                <p className="profile-wl-title">{item.title}</p>
-              </Link>
-              <button
-                type="button"
-                className="cw-remove-btn"
-                title="Remove from Continue Watching"
-                aria-label={`Remove ${item.title} from Continue Watching`}
-                onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
-              >
-                ✕
-              </button>
-            </div>
-          );
-        })}
+      <div className="mr-track-wrap">
+        <div className="foryou-grid" ref={cwRowRef}>
+          {items.map(item => (
+            <ContinueWatchingCard key={item.id} item={item} onRemove={onRemove} />
+          ))}
+        </div>
+        {cwCanLeft && <div className="mr-fade mr-fade-left" />}
+        {cwCanRight && <div className="mr-fade mr-fade-right" />}
       </div>
     </section>
   );
@@ -349,7 +369,6 @@ function ForYouSection({ ready }) {
 
 function LibraryCard({ item, ratingScore }) {
   const location = useLocation();
-  const status = item.status;
 
   // Library always opens the media card (details view) — auto-play is
   // reserved for the Continue Watching row, which resumes at the saved point.
@@ -367,24 +386,7 @@ function LibraryCard({ item, ratingScore }) {
     ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
     : null;
 
-  const ratingOutOfFive = ratingScore != null ? (ratingScore / 2).toFixed(1) : null;
-
-  const indicator = ratingOutOfFive != null
-    ? {
-        kind: 'rated',
-        title: `Rated ${ratingOutOfFive}/5`,
-        node: (
-          <>
-            <span className="profile-wl-status-ind-num">{ratingOutOfFive}</span>
-            <span className="profile-wl-status-ind-den">/5</span>
-          </>
-        ),
-      }
-    : status === 'watched' || status === 'read'
-    ? { kind: 'done', title: 'Completed', node: '✓' }
-    : status === 'watching' || status === 'reading'
-    ? { kind: 'progress', title: 'In progress', node: null }
-    : { kind: 'new', title: 'Not started', node: null };
+  const ratingOutOfFive = ratingScore != null ? ratingScore.toFixed(1) : null;
 
   return (
     <Link
@@ -397,9 +399,12 @@ function LibraryCard({ item, ratingScore }) {
           ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
           : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>}
         {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
-        <span className={`profile-wl-status-ind profile-wl-status-ind--${indicator.kind}`} title={indicator.title}>
-          {indicator.node}
-        </span>
+        {ratingOutOfFive != null && (
+          <span className="profile-wl-status-ind profile-wl-status-ind--rated" title={`Rated ${ratingOutOfFive}/5`}>
+            <span className="profile-wl-status-ind-num">{ratingOutOfFive}</span>
+            <span className="profile-wl-status-ind-den">/5</span>
+          </span>
+        )}
       </div>
       <p className="profile-wl-title">{item.title || '—'}</p>
       {item.year && <p className="profile-wl-year">{item.year}</p>}
@@ -419,7 +424,7 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
   const ratingScores = useMemo(() => {
     const map = new Map();
     ratings.forEach(r => {
-      const score = computeNormalizedScore(r.media_type, r);
+      const score = computeStarRating(r.media_type, r);
       if (score != null) map.set(`${r.media_type}:${r.media_id}`, score);
     });
     return map;
@@ -429,7 +434,7 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
     const completed  = watchlist.filter(i => i.status === 'watched' || i.status === 'read').length;
     const inProgress = watchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
 
-    const scores = ratings.map(r => computeNormalizedScore(r.media_type, r)).filter(s => s != null);
+    const scores = ratings.map(r => computeStarRating(r.media_type, r)).filter(s => s != null);
     const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
 
     // The catalog has no per-title runtime data, so estimate: watched

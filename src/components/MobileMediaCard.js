@@ -1,4 +1,5 @@
-import RatingArtifact, { computeNormalizedScore } from './RatingArtifact';
+import StarRating from './StarRating';
+import { computeStarRating } from './RatingArtifact';
 import { useToast } from '../contexts/ToastContext';
 
 function resolvePosterUrl(url) {
@@ -34,7 +35,7 @@ export default function MobileMediaCard({
   const imageUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
   const subtitle = item.director || item.creator || item.author || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
-  const userScore = computeNormalizedScore(mediaType, userRating);
+  const userStars = computeStarRating(mediaType, userRating);
   const canWatch = mediaType === 'movie' || mediaType === 'tv_show';
 
   return (
@@ -57,10 +58,8 @@ export default function MobileMediaCard({
             <span>{item.title?.charAt(0)}</span>
           </div>
         )}
-        {userRating && (
-          <div className="mob-card-badge">
-            <RatingArtifact mediaType={mediaType} scores={userRating} size={44} />
-          </div>
+        {userStars !== null && (
+          <div className="mob-card-badge">★ {userStars}</div>
         )}
       </div>
 
@@ -75,8 +74,10 @@ export default function MobileMediaCard({
         </div>
 
         <div className="mob-card-scores">
-          {userScore !== null && (
-            <span className="mob-card-user-score">You: {userScore}/10</span>
+          {userStars !== null && (
+            <span className="mob-card-user-score">
+              You: <StarRating value={userStars} readOnly size="sm" />
+            </span>
           )}
           {avgRating && (
             <span className="mob-card-avg-score">★ {avgRating}</span>
