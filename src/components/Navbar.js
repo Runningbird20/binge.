@@ -42,48 +42,50 @@ export default function Navbar() {
 
         {user ? (
           <>
-            <div className="navbar-profile-wrap">
-              <NavLink
-                to={profileLink}
-                className="navbar-profile"
-                title="My Profile"
-              >
-                <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
-                <span className="navbar-profile-name">{user.username}</span>
-              </NavLink>
+            <div className="navbar-left">
+              <div className="navbar-profile-wrap">
+                <NavLink
+                  to={profileLink}
+                  className="navbar-profile"
+                  title="My Profile"
+                >
+                  <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
+                  <span className="navbar-profile-name">{user.username}</span>
+                </NavLink>
 
-              <div className="profile-hover-drawer">
-                <div className="profile-hover-card">
-                  <Link to={profileLink} className="profile-hover-user-link">
-                    <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
-                    <div className="profile-hover-user-text">
-                      <span className="profile-hover-user-name">{user.username}</span>
-                      <span className="profile-hover-user-sub">View your profile →</span>
+                <div className="profile-hover-drawer">
+                  <div className="profile-hover-card">
+                    <Link to={profileLink} className="profile-hover-user-link">
+                      <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
+                      <div className="profile-hover-user-text">
+                        <span className="profile-hover-user-name">{user.username}</span>
+                        <span className="profile-hover-user-sub">View your profile →</span>
+                      </div>
+                    </Link>
+
+                    <div className="profile-hover-section">
+                      <p className="profile-hover-section-label">Account</p>
+                      <nav className="profile-hover-nav">
+                        <NavLink to="/account-settings" className={profileDrawerLink}>⚙️ Account Settings</NavLink>
+                        {isAdmin && <NavLink to="/admin" className={profileDrawerLink}>🛡️ Admin Panel</NavLink>}
+                      </nav>
                     </div>
-                  </Link>
 
-                  <div className="profile-hover-section">
-                    <p className="profile-hover-section-label">Account</p>
-                    <nav className="profile-hover-nav">
-                      <NavLink to="/account-settings" className={profileDrawerLink}>⚙️ Account Settings</NavLink>
-                      {isAdmin && <NavLink to="/admin" className={profileDrawerLink}>🛡️ Admin Panel</NavLink>}
-                    </nav>
+                    <button className="profile-hover-logout" onClick={handleLogout} type="button">
+                      Log Out
+                    </button>
                   </div>
-
-                  <button className="profile-hover-logout" onClick={handleLogout} type="button">
-                    Log Out
-                  </button>
                 </div>
               </div>
-            </div>
 
-            {isAdmin && (
-              <div className="navbar-role-btns">
-                <NavLink to="/admin" className={({ isActive }) => `navbar-role-btn navbar-role-btn--admin${isActive ? ' active' : ''}`}>
-                  Admin
-                </NavLink>
-              </div>
-            )}
+              {isAdmin && (
+                <div className="navbar-role-btns">
+                  <NavLink to="/admin" className={({ isActive }) => `navbar-role-btn navbar-role-btn--admin${isActive ? ' active' : ''}`}>
+                    Admin
+                  </NavLink>
+                </div>
+              )}
+            </div>
 
             <div className="navbar-center navbar-links--desktop">
               {NAV_LINKS.map(({ to, label, Icon }) => (
