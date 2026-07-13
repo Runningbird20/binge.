@@ -2548,11 +2548,12 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
 }
 .ratings-page-card:hover {
-  border-color: rgba(255,255,255,0.22);
-  transform: translateY(-3px);
+  border-color: transparent;
+  transform: scale(1.04);
+  box-shadow: 0 0 0 2.5px rgba(249, 249, 249, 0.75), 0 16px 40px rgba(0, 0, 0, 0.55);
 }
 
 .ratings-page-poster-wrap {
@@ -4996,9 +4997,9 @@ body {
   scroll-snap-align: start;
 }
 .foryou-card:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  transform: translateY(-3px);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.24);
+  border-color: transparent;
+  transform: scale(1.04);
+  box-shadow: 0 0 0 2.5px rgba(249, 249, 249, 0.75), 0 16px 40px rgba(0, 0, 0, 0.55);
 }
 
 .foryou-card-poster {
@@ -5008,8 +5009,7 @@ body {
   background: #1a1a1a;
   flex-shrink: 0;
 }
-.foryou-card-poster img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s ease; }
-.foryou-card:hover .foryou-card-poster img { transform: scale(1.03); }
+.foryou-card-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .foryou-card-placeholder {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
@@ -7616,15 +7616,14 @@ body {
 .continue-watching-row::-webkit-scrollbar { height: 3px; }
 .continue-watching-row::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
 .continue-card-wrap { position: relative; flex: 0 0 150px; }
-.continue-card { display: block; text-decoration: none; color: inherit; transition: transform 0.15s; }
-.continue-card:hover { transform: translateY(-3px); }
+.continue-card { display: block; text-decoration: none; color: inherit; }
 .continue-card-poster {
   position: relative; width: 150px; height: 225px;
   border-radius: 10px; overflow: hidden; background: #1a1a1a;
   border: 1px solid rgba(255,255,255,0.08);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
-.continue-card-poster img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s ease; }
+.continue-card-poster img { width: 100%; height: 100%; object-fit: cover; }
 .continue-card-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; }
 .continue-card-play {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -7632,10 +7631,10 @@ body {
 }
 .continue-card:hover .continue-card-play { opacity: 1; }
 .continue-card:hover .continue-card-poster {
-  border-color: rgba(255, 255, 255, 0.22);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.24);
+  transform: scale(1.04);
+  border-color: transparent;
+  box-shadow: 0 0 0 2.5px rgba(249, 249, 249, 0.75), 0 16px 40px rgba(0, 0, 0, 0.55);
 }
-.continue-card:hover .continue-card-poster img { transform: scale(1.03); }
 .continue-card-badge {
   position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.75);
   color: #f4f6f8; font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.4rem;
@@ -7815,32 +7814,23 @@ body {
 .profile-wl-year { margin: 0; font-size: 0.68rem; color: #444; }
 
 /* Own-profile watchlist card — plain link through to media details.
-   Hover behavior matches .media-card-full (Movies/TV/Books pages):
-   card lifts with a shadow, border brightens, poster image zooms. */
+   Hover behavior matches .poster-tile (Movies/TV/Books pages): the
+   poster frame scales up with a glow ring + shadow, border fades out. */
 .profile-wl-card--own {
   display: block;
   color: inherit;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-.profile-wl-card--own:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.24);
 }
 
 .profile-wl-card--own .profile-wl-poster {
-  border: 1px solid #222;
-  transition: border-color 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 .profile-wl-card--own:hover .profile-wl-poster {
-  border-color: rgba(255, 255, 255, 0.22);
-}
-.profile-wl-card--own .profile-wl-poster img {
-  transition: transform 0.25s ease;
-}
-.profile-wl-card--own:hover .profile-wl-poster img {
-  transform: scale(1.03);
+  transform: scale(1.04);
+  border-color: transparent;
+  box-shadow: 0 0 0 2.5px rgba(249, 249, 249, 0.75), 0 16px 40px rgba(0, 0, 0, 0.55);
 }
 
 .profile-wl-card--own .profile-wl-placeholder {
@@ -9809,19 +9799,15 @@ select.filter-input,
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .manga-card:hover .manga-card-cover {
-  transform: translateY(-3px);
-  border-color: rgba(255, 255, 255, 0.22);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.24);
+  transform: scale(1.04);
+  border-color: transparent;
+  box-shadow: 0 0 0 2.5px rgba(249, 249, 249, 0.75), 0 16px 40px rgba(0, 0, 0, 0.55);
 }
 .manga-card-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.25s ease;
-}
-.manga-card:hover .manga-card-cover img {
-  transform: scale(1.03);
 }
 .manga-card-placeholder {
   width: 100%;

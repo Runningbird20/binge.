@@ -303,7 +303,8 @@ body {
 }
 
 /* ── Shared card language: every media-poster card shares the
-   same hover as .media-card-full (Movies/TV/Books pages) ──── */
+   same hover as .poster-tile (Movies/TV/Books pages) — the frame
+   scales up with a glow ring + shadow, its border fades out. ──── */
 
 .mr-poster,
 .wl-gallery-poster,
@@ -318,22 +319,16 @@ body {
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
+.mr-card:hover .mr-poster,
+.wl-gallery-card:hover .wl-gallery-poster,
 .continue-card:hover .continue-card-poster,
 .foryou-card:hover,
 .profile-wl-card--own:hover .profile-wl-poster,
 .manga-card:hover .manga-card-cover {
-  border-color: var(--exp-border-strong);
-  box-shadow: var(--exp-shadow);
-  transform: translateY(-3px);
-}
-
-.mr-card:hover .mr-poster,
-.wl-gallery-card:hover .wl-gallery-poster {
+  transform: scale(1.04);
   box-shadow: var(--exp-ring), var(--exp-shadow);
   border-color: transparent;
 }
-.mr-card:hover { transform: translateY(-4px) scale(1.03); }
-.wl-gallery-card:hover { transform: translateY(-4px); }
 
 /* Row headings + see-all */
 .mr-see-all,
@@ -398,7 +393,7 @@ body {
   text-decoration: none;
   transform: none;
 }
-.foryou-card:hover { transform: translateY(-3px); }
+.foryou-card:hover { transform: scale(1.04); }
 
 .foryou-card-poster {
   position: absolute;
