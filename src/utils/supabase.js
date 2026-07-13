@@ -53,6 +53,26 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
+// A second client with session persistence off, used for one-shot signUp()
+// calls made on someone else's behalf (e.g. an admin creating an account).
+// auth.signUp() logs in as the new user on whatever client it's called on —
+// running it here instead of the main `supabase` client keeps the caller's
+// own session untouched.
+let sessionlessClient = null;
+export function getSessionlessSupabaseClient() {
+  if (!isSupabaseConfigured) {
+    throw new Error(getSupabaseConfigErrorMessage());
+  }
+
+  if (!sessionlessClient) {
+    sessionlessClient = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+  }
+
+  return sessionlessClient;
+}
+
 export function getSupabaseConfigErrorMessage() {
   return [
     'Missing Supabase environment variables.',

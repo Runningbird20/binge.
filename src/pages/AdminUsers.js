@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import { createSupabaseUserAsAdmin } from '../utils/supabaseData';
 
 const NEW_USER_FORM = { username: '', email: '', password: '', bio: '', isAdmin: false };
 
@@ -20,7 +21,17 @@ function CreateUserForm({ onCreated, onCancel }) {
     setError('');
     setSaving(true);
     try {
-      const created = await api.post('/admin/users', form);
+      const created = await createSupabaseUserAsAdmin(form);
+
+      if (form.isAdmin) {
+        const updated = await api.patch(`/admin/users/${created.id}/toggle-admin`, {});
+        created.is_admin = updated.is_admin;
+      }
+
+      if (created.requiresEmailConfirmation) {
+        alert(`Account created for @${created.username}. They'll need to confirm their email before they can log in.`);
+      }
+
       onCreated(created);
       setForm(NEW_USER_FORM);
     } catch (err) {
