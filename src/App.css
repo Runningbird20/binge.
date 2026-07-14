@@ -7278,7 +7278,7 @@ body {
 .profile-empty { color: #444; font-size: 0.85rem; padding: 2rem 0; }
 .profile-watchlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.75rem; }
 .profile-watchlist-row {
-  display: flex; gap: 0.75rem; overflow-x: auto; overflow-y: visible; padding-bottom: 0.5rem;
+  display: flex; gap: 0.75rem; overflow-x: auto; overflow-y: visible; padding: 0.75rem 0 1.5rem;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent;
 }
 .profile-watchlist-row::-webkit-scrollbar { height: 3px; }
@@ -9650,6 +9650,9 @@ select.filter-input,
   margin-bottom: 1.5rem;
 }
 .books-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
@@ -9662,6 +9665,7 @@ select.filter-input,
   transition: color 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
+.books-tab svg { flex: 0 0 auto; }
 .books-tab:hover { color: #ddd; }
 .books-tab.active { color: #f4f6f8; border-bottom-color: #f4f6f8; }
 
