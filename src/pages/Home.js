@@ -187,29 +187,24 @@ function ContinueWatchingCard({ item, onRemove }) {
   const ch = item.current_chapter;
   const pg = item.current_page;
 
-  const progressLabel = item.media_type === 'tv_show' && (s || e)
+  const progressBadge = item.media_type === 'tv_show' && (s || e)
     ? `S${s || 1} · E${e || 1}`
     : item.media_type === 'book' && (ch || pg)
-    ? (ch ? `Chapter ${ch}` : `Page ${pg}`)
-    : 'Continue watching';
+    ? (ch ? `Ch ${ch}` : `Pg ${pg}`)
+    : null;
 
   return (
     <div className="cw-card-wrap">
-      <Link to={url} className="foryou-card" state={{ backgroundLocation: location }}>
-        <div className="foryou-card-poster">
+      <Link to={url} className="profile-wl-card profile-wl-card--own" state={{ backgroundLocation: location }}>
+        <div className="profile-wl-poster">
           {poster
             ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-            : <div className="foryou-card-placeholder"><MediaTypeIcon type={item.media_type} size={28} /></div>
+            : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>
           }
+          {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
         </div>
-        <div className="foryou-card-body">
-          <div className="foryou-card-type">
-            <MediaTypeIcon type={item.media_type} /> {FOR_YOU_LABELS[item.media_type]}
-            {item.year && <span className="foryou-card-year">{item.year}</span>}
-          </div>
-          <h4 className="foryou-card-title">{item.title}</h4>
-          <p className="foryou-card-genre">{progressLabel}</p>
-        </div>
+        <p className="profile-wl-title">{item.title || '—'}</p>
+        {item.year && <p className="profile-wl-year">{item.year}</p>}
       </Link>
       <button
         type="button"
@@ -224,8 +219,10 @@ function ContinueWatchingCard({ item, onRemove }) {
   );
 }
 
-// Mirrors ForYouSection's layout (section-header + mr-track-wrap edge fade
-// over a foryou-grid of foryou-cards) so both rows read as one system.
+// Uses the same card markup as the Library section below it (LibraryCard /
+// .profile-wl-card) rather than ForYouSection's cards, minus the Library
+// section's type filter bar — clicking a card resumes playback directly
+// (see resumeUrl) instead of opening the details view.
 function ContinueWatching({ items, onRemove }) {
   const { ref: cwRowRef, canLeft: cwCanLeft, canRight: cwCanRight } = useEdgeFade(items);
   if (!items.length) return null;
@@ -236,7 +233,7 @@ function ContinueWatching({ items, onRemove }) {
         <h2>Continue Watching</h2>
       </div>
       <div className="mr-track-wrap">
-        <div className="foryou-grid" ref={cwRowRef}>
+        <div className="profile-watchlist-row" ref={cwRowRef}>
           {items.map(item => (
             <ContinueWatchingCard key={item.id} item={item} onRemove={onRemove} />
           ))}
