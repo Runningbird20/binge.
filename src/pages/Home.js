@@ -416,24 +416,7 @@ function LibraryCard({ item, ratingScore }) {
   );
 }
 
-function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
-  const [wlTypeFilter, setWlTypeFilter] = useState('');
-
-  const filteredWatchlist = watchlist.filter(item => {
-    return !wlTypeFilter || item.media_type === wlTypeFilter;
-  });
-
-  const { ref: libraryRowRef, canLeft: libraryCanLeft, canRight: libraryCanRight } = useEdgeFade(filteredWatchlist);
-
-  const ratingScores = useMemo(() => {
-    const map = new Map();
-    ratings.forEach(r => {
-      const score = computeStarRating(r.media_type, r);
-      if (score != null) map.set(`${r.media_type}:${r.media_id}`, score);
-    });
-    return map;
-  }, [ratings]);
-
+function ProfileStatsHeader({ user, watchlist, ratings }) {
   const stats = useMemo(() => {
     const completed  = watchlist.filter(i => i.status === 'watched' || i.status === 'read').length;
     const inProgress = watchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
@@ -491,7 +474,30 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
           </div>
         </div>
       </div>
+    </section>
+  );
+}
 
+function LibrarySection({ watchlist, ratings, loading }) {
+  const [wlTypeFilter, setWlTypeFilter] = useState('');
+
+  const filteredWatchlist = watchlist.filter(item => {
+    return !wlTypeFilter || item.media_type === wlTypeFilter;
+  });
+
+  const { ref: libraryRowRef, canLeft: libraryCanLeft, canRight: libraryCanRight } = useEdgeFade(filteredWatchlist);
+
+  const ratingScores = useMemo(() => {
+    const map = new Map();
+    ratings.forEach(r => {
+      const score = computeStarRating(r.media_type, r);
+      if (score != null) map.set(`${r.media_type}:${r.media_id}`, score);
+    });
+    return map;
+  }, [ratings]);
+
+  return (
+    <section className="home-section">
       <div className="section-header">
         <h2>Library</h2>
       </div>
@@ -637,10 +643,11 @@ export default function Home() {
         <StreamHero user={user} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
+          <ProfileStatsHeader user={user} watchlist={watchlistItems} ratings={ratingsItems} />
+
           <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
 
-          <DashboardLibrarySection
-            user={user}
+          <LibrarySection
             watchlist={watchlistItems}
             ratings={ratingsItems}
             loading={dataLoading}
