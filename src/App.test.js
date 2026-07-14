@@ -9,19 +9,89 @@ import TVShows from './pages/TVShows';
 import * as AuthContextModule from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
 import * as supabaseDataModule from './utils/supabaseData';
+import * as supabaseCatalogModule from './utils/supabaseMovieCatalog';
 
 const mockNavigate = jest.fn();
 let mockSearchParams = new URLSearchParams();
 
-function mockResponse({ ok = true, status = 200, body = '', contentType = 'application/json' }) {
-  return {
-    ok,
-    status,
-    headers: {
-      get: (name) => (name.toLowerCase() === 'content-type' ? contentType : null),
-    },
-    text: jest.fn().mockResolvedValue(body),
-  };
+// The catalog pages (Movies/TVShows/Books) fetch a random-offset "window"
+// of the real catalog several times per load (WINDOWS_PER_BATCH) and rely
+// on the catalog being large enough that those windows rarely collide. A
+// flat mock returning the same fixed list for every call would make every
+// window collide instead, producing duplicate cards. This mimics the real
+// shape (a "probe" call for total/facets, then one batch of items) so a
+// small fixture list behaves like the real thing.
+const WINDOWS_PER_BATCH = 3; // matches the constant in Movies.js/TVShows.js/Books.js
+
+function mockBookCatalog(books) {
+  // Books.js's loadCatalog always does exactly 1 probe call (pageSize: 1)
+  // followed by fetchSupabaseWindows's WINDOWS_PER_BATCH parallel calls —
+  // every single time a load cycle starts, whether from mount, a genre
+  // chip click, or the extra reload genre-discovery triggers (see below).
+  // Track position-in-cycle by raw call count so it's correct regardless
+  // of *why* a new cycle started, rather than trying to infer it from
+  // args that are sometimes ambiguous for tiny fixture catalogs.
+  let callCount = 0;
+  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
+    const positionInCycle = callCount % (WINDOWS_PER_BATCH + 1);
+    callCount += 1;
+
+    const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
+    const filtered = genreValues.length === 0
+      ? books
+      : books.filter((book) => genreValues.includes(book.genre));
+
+    return Promise.resolve({
+      items: positionInCycle === 1 ? filtered : [],
+      total: filtered.length,
+      page: 1,
+      pageSize: pageSize || filtered.length,
+      totalPages: 1,
+      facets: { genres: [...new Set(books.map((b) => b.genre).filter(Boolean))] },
+    });
+  });
+}
+
+function mockMovieCatalog(items, { matchesGenre } = {}) {
+  let sawItemsThisBatch = false;
+  const allGenres = [...new Set(items.flatMap((item) => item.genre.split(',').map((g) => g.trim())))];
+  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseMovieCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
+    const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
+    const filtered = genreValues.length === 0
+      ? items
+      : items.filter((item) => matchesGenre(item, genreValues));
+
+    if (includeCount) {
+      sawItemsThisBatch = false;
+      return Promise.resolve({ items: [], total: filtered.length, facets: { genres: allGenres } });
+    }
+    if (!sawItemsThisBatch) {
+      sawItemsThisBatch = true;
+      return Promise.resolve({ items: filtered, total: null, facets: { genres: [] } });
+    }
+    return Promise.resolve({ items: [], total: null, facets: { genres: [] } });
+  });
+}
+
+function mockTvCatalog(items, { matchesGenre } = {}) {
+  let sawItemsThisBatch = false;
+  const allGenres = [...new Set(items.flatMap((item) => item.genre.split(',').map((g) => g.trim())))];
+  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseTvShowCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
+    const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
+    const filtered = genreValues.length === 0
+      ? items
+      : items.filter((item) => matchesGenre(item, genreValues));
+
+    if (includeCount) {
+      sawItemsThisBatch = false;
+      return Promise.resolve({ items: [], total: filtered.length, facets: { genres: allGenres } });
+    }
+    if (!sawItemsThisBatch) {
+      sawItemsThisBatch = true;
+      return Promise.resolve({ items: filtered, total: null, facets: { genres: [] } });
+    }
+    return Promise.resolve({ items: [], total: null, facets: { genres: [] } });
+  });
 }
 
 jest.mock(
@@ -104,20 +174,25 @@ test('uses an uploaded photo as the avatar preview', async () => {
 });
 
 test('creates an account with bio and avatar details', async () => {
-  global.fetch.mockResolvedValue(
-    mockResponse({
-      body: JSON.stringify({
-        token: 'test-token',
-        user: {
-          id: 7,
-          username: 'mediafan',
-          email: 'mediafan@example.com',
-          bio: 'I keep a short list of everything I finish.',
-          avatarUrl: 'data:image/png;base64,avatar-preview',
-        },
-      }),
-    })
-  );
+  // AuthProvider's mount-time session bootstrap otherwise races real
+  // Supabase network calls in this environment; short-circuit it so it
+  // resolves deterministically instead of potentially clobbering the
+  // profile signUp() writes to localStorage.
+  const sessionProfileSpy = jest.spyOn(supabaseDataModule, 'getSupabaseSessionProfile').mockResolvedValue(null);
+  const signUpSpy = jest.spyOn(supabaseDataModule, 'signUpWithSupabase').mockResolvedValue({
+    user: {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'I keep a short list of everything I finish.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+      createdAt: null,
+      userType: 'user',
+      isAdmin: false,
+      isDev: false,
+    },
+    requiresEmailConfirmation: false,
+  });
 
   renderWithAuth(<Signup />);
 
@@ -133,68 +208,67 @@ test('creates an account with bio and avatar details', async () => {
   await userEvent.click(screen.getByRole('button', { name: /create account/i }));
 
   await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(signUpSpy).toHaveBeenCalledTimes(1);
   });
 
-  expect(global.fetch).toHaveBeenCalledWith(
-    '/api/auth/signup',
-    expect.objectContaining({
-      method: 'POST',
-      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        username: 'mediafan',
-        email: 'mediafan@example.com',
-        password: 'secretpass123',
-        bio: 'I keep a short list of everything I finish.',
-        avatarUrl: 'data:image/png;base64,avatar-preview',
-      }),
-    })
-  );
-
-  expect(mockNavigate).toHaveBeenCalledWith('/home');
-  expect(JSON.parse(localStorage.getItem('user'))).toEqual(
+  expect(signUpSpy).toHaveBeenCalledWith(
     expect.objectContaining({
       username: 'mediafan',
+      email: 'mediafan@example.com',
+      password: 'secretpass123',
       bio: 'I keep a short list of everything I finish.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
     })
   );
-});
 
-test('shows avatar and bio on the signed-in home page', async () => {
-  global.fetch.mockImplementation((url) => {
-    if (url === '/api/ratings/my' || url === '/api/watchlist') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  await waitFor(() => {
+    expect(mockNavigate).toHaveBeenCalledWith('/home');
+  });
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem('user'))).toEqual(
+      expect.objectContaining({
+        username: 'mediafan',
+        bio: 'I keep a short list of everything I finish.',
+        avatarUrl: 'data:image/png;base64,avatar-preview',
+      })
+    );
   });
 
-  renderWithAuth(
-    <Home />,
-    {
+  signUpSpy.mockRestore();
+  sessionProfileSpy.mockRestore();
+});
+
+test('shows avatar and welcome message on the signed-in home page', async () => {
+  localStorage.setItem('onboarding_done_7', '1');
+
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([]);
 
-  expect(
-    screen.getByRole('heading', { name: /welcome back, mediafan\./i })
-  ).toBeInTheDocument();
-  expect(screen.getAllByText(/always logging the next favorite\./i).length).toBeGreaterThan(0);
+  render(<Home />);
+
+  expect(screen.getByText(/welcome back, mediafan/i)).toBeInTheDocument();
 
   await waitFor(() => {
     expect(
       screen.getAllByRole('img', { name: /mediafan avatar/i }).length
     ).toBeGreaterThan(0);
   });
+
+  ratingsSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  continueWatchingSpy.mockRestore();
+  useAuthSpy.mockRestore();
 });
 
 test('resume links for in-progress movies launch the player instead of the card', async () => {
@@ -234,62 +308,62 @@ test('resume links for in-progress movies launch the player instead of the card'
 });
 
 test('shows an account settings gear link for signed-in users', async () => {
-  global.fetch.mockImplementation((url) => {
-    if (url === '/api/ratings/my' || url === '/api/watchlist') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
+  localStorage.setItem('onboarding_done_7', '1');
 
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Home />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([]);
+
+  render(<Home />);
 
   expect(screen.getByRole('link', { name: /account settings/i })).toBeInTheDocument();
 
   await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalled();
+    expect(ratingsSpy).toHaveBeenCalled();
+    expect(watchlistSpy).toHaveBeenCalled();
+    expect(continueWatchingSpy).toHaveBeenCalled();
   });
+
+  ratingsSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  continueWatchingSpy.mockRestore();
+  useAuthSpy.mockRestore();
 });
 
 test('updates username and email from account settings', async () => {
-  global.fetch.mockResolvedValue(
-    mockResponse({
-      body: JSON.stringify({
-        token: 'updated-token',
-        user: {
-          id: 7,
-          username: 'newmediafan',
-          email: 'newmediafan@example.com',
-          bio: 'Always logging the next favorite.',
-          avatarUrl: 'data:image/png;base64,avatar-preview',
-        },
-      }),
-    })
-  );
+  const updateProfileMock = jest.fn().mockResolvedValue({
+    id: 7,
+    username: 'newmediafan',
+    email: 'newmediafan@example.com',
+    bio: 'Always logging the next favorite.',
+    avatarUrl: 'data:image/png;base64,avatar-preview',
+  });
 
-  renderWithAuth(
-    <AccountSettings />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+    updateProfile: updateProfileMock,
+    updatePassword: jest.fn(),
+    logout: jest.fn(),
+  });
+
+  render(<AccountSettings />);
 
   const usernameInput = screen.getByLabelText(/^username$/i);
   const emailInput = screen.getByLabelText(/^email$/i);
@@ -301,95 +375,48 @@ test('updates username and email from account settings', async () => {
   await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
   await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/auth/account',
-      expect.objectContaining({
-        method: 'PATCH',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer test-token',
-        }),
-        body: JSON.stringify({
-          username: 'newmediafan',
-          email: 'newmediafan@example.com',
-        }),
-      })
-    );
+    expect(updateProfileMock).toHaveBeenCalledWith({
+      username: 'newmediafan',
+      email: 'newmediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    });
   });
 
   expect(await screen.findByText(/account details updated\./i)).toBeInTheDocument();
-  expect(JSON.parse(localStorage.getItem('user'))).toEqual(
-    expect.objectContaining({
-      username: 'newmediafan',
-      email: 'newmediafan@example.com',
-    })
-  );
-  expect(localStorage.getItem('token')).toBe('updated-token');
+
+  useAuthSpy.mockRestore();
 });
 
 test('shows seeded books as clickable covers and adds a book to the library', async () => {
   document.body.style.overflow = '';
 
-  global.fetch.mockImplementation((url, options = {}) => {
-    if (String(url).startsWith('/api/media/books?')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items: [
-              {
-                id: 1,
-                title: 'Dune',
-                author: 'Frank Herbert',
-                year: 1965,
-                genre: 'Science Fiction',
-                synopsis: 'Set on the desert planet Arrakis...',
-                cover_url: 'https://covers.openlibrary.org/b/id/11481354-M.jpg',
-              },
-            ],
-            total: 1,
-            page: 1,
-            pageSize: 24,
-            totalPages: 1,
-            facets: {
-              genres: ['Science Fiction'],
-              minYear: 1965,
-              maxYear: 1965,
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/watchlist?media_type=book' && (!options.method || options.method === 'GET')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    if (url === '/api/watchlist' && options.method === 'POST') {
-      return Promise.resolve(
-        mockResponse({
-          status: 201,
-          body: JSON.stringify({ id: 12 }),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Books />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const booksPageSpy = mockBookCatalog([
+    {
+      id: 1,
+      title: 'Dune',
+      author: 'Frank Herbert',
+      year: 1965,
+      genre: 'Science Fiction',
+      synopsis: 'Set on the desert planet Arrakis...',
+      cover_url: 'https://covers.openlibrary.org/b/id/11481354-M.jpg',
+    },
+  ]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const addToLibrarySpy = jest.spyOn(supabaseDataModule, 'addSupabaseWatchlistItem').mockResolvedValue({ id: 12 });
+
+  render(<Books />);
 
   expect(await screen.findByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
   expect(screen.getByText(/frank herbert/i)).toBeInTheDocument();
@@ -404,78 +431,62 @@ test('shows seeded books as clickable covers and adds a book to the library', as
   await userEvent.click(screen.getByRole('button', { name: /add to library/i }));
 
   await waitFor(() => {
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/watchlist',
+    expect(addToLibrarySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer test-token',
-        }),
-        body: JSON.stringify({
-          media_type: 'book',
-          media_id: 1,
-          status: 'plan_to_read',
-        }),
+        mediaType: 'book',
+        mediaId: 1,
+        status: 'plan_to_read',
       })
     );
   });
 
   expect(await screen.findByText(/added to your library\./i)).toBeInTheDocument();
+
+  useAuthSpy.mockRestore();
+  booksPageSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  ratingMapSpy.mockRestore();
+  addToLibrarySpy.mockRestore();
 });
 
 test('falls back to a placeholder when a book cover image fails to load', async () => {
-  global.fetch.mockImplementation((url, options = {}) => {
-    if (String(url).startsWith('/api/media/books?')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items: [
-              {
-                id: 1,
-                title: 'Dune',
-                author: 'Frank Herbert',
-                year: 1965,
-                genre: 'Science Fiction',
-                synopsis: 'Set on the desert planet Arrakis...',
-                cover_url: 'https://covers.openlibrary.org/b/id/missing-cover.jpg',
-              },
-            ],
-            total: 1,
-            page: 1,
-            pageSize: 24,
-            totalPages: 1,
-            facets: {
-              genres: ['Fiction'],
-              minYear: 1965,
-              maxYear: 1965,
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/watchlist?media_type=book' && (!options.method || options.method === 'GET')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Books />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const booksPageSpy = mockBookCatalog([
+    {
+      id: 1,
+      title: 'Dune',
+      author: 'Frank Herbert',
+      year: 1965,
+      genre: 'Science Fiction',
+      synopsis: 'Set on the desert planet Arrakis...',
+      cover_url: 'https://covers.openlibrary.org/b/id/missing-cover.jpg',
+    },
+  ]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+
+  render(<Books />);
+
+  await screen.findByRole('button', { name: /open details for dune/i });
+
+  // Discovering the catalog's genres from the first fetch updates state that
+  // (via a useMemo returning a fresh empty-array literal) re-triggers the
+  // load effect exactly once more, momentarily clearing and rebuilding the
+  // book list — see mockBookCatalog's call count. Wait for that second cycle
+  // to finish before grabbing element references, so they aren't stale by
+  // the time we interact with them.
+  await waitFor(() => {
+    expect(booksPageSpy.mock.calls.length).toBeGreaterThanOrEqual(8);
+  });
 
   const duneButton = await screen.findByRole('button', { name: /open details for dune/i });
   const coverImage = within(duneButton).getByRole('img', { name: /dune/i });
@@ -484,12 +495,20 @@ test('falls back to a placeholder when a book cover image fails to load', async 
 
   await waitFor(() => {
     expect(within(duneButton).queryByRole('img', { name: /dune/i })).not.toBeInTheDocument();
+    expect(within(duneButton).getByText('D')).toBeInTheDocument();
   });
 
-  expect(within(duneButton).getByText('D')).toBeInTheDocument();
+  useAuthSpy.mockRestore();
+  booksPageSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  ratingMapSpy.mockRestore();
 });
 
-test('uses a movie-style filter bar on the books page', async () => {
+test('uses a genre chip filter bar on the books page', async () => {
+  // 'Science Fiction' and 'Fiction' both map into BOOK_GENRE_GROUPS buckets
+  // ("Fantasy & Sci-Fi" and "Fiction & Literature" respectively), which is
+  // what actually renders as chips now — there's no search box, genre
+  // <select>, or sort <select> on this page anymore.
   const allBooks = [
     {
       id: 1,
@@ -505,7 +524,7 @@ test('uses a movie-style filter bar on the books page', async () => {
       title: 'Emma',
       author: 'Jane Austen',
       year: 1815,
-      genre: 'Classic Literature',
+      genre: 'Fiction',
       synopsis: 'A clever and restless matchmaker stirs up trouble.',
       cover_url: 'https://covers.openlibrary.org/b/id/9876543-M.jpg',
     },
@@ -520,94 +539,28 @@ test('uses a movie-style filter bar on the books page', async () => {
     },
   ];
 
-  global.fetch.mockImplementation((url, options = {}) => {
-    if (String(url).startsWith('/api/media/books?')) {
-      const parsedUrl = new URL(String(url), 'http://localhost');
-      const search = (parsedUrl.searchParams.get('search') || '').toLowerCase();
-      const genre = parsedUrl.searchParams.get('genre') || '';
-      const minYear = Number(parsedUrl.searchParams.get('min_year') || '');
-      const sort = parsedUrl.searchParams.get('sort') || 'title-asc';
-      const page = Number(parsedUrl.searchParams.get('page') || '1');
-      const pageSize = Number(parsedUrl.searchParams.get('page_size') || '24');
-
-      let items = allBooks.filter((book) => {
-        const matchesSearch =
-          !search ||
-          book.title.toLowerCase().includes(search) ||
-          book.author.toLowerCase().includes(search);
-        const matchesGenre = !genre || book.genre === genre;
-        const matchesYear = !Number.isFinite(minYear) || minYear <= 0 || !book.year || book.year >= minYear;
-        return matchesSearch && matchesGenre && matchesYear;
-      });
-
-      items = items.sort((left, right) => {
-        if (sort === 'year-desc') return (right.year || 0) - (left.year || 0);
-        if (sort === 'year-asc') return (left.year || 0) - (right.year || 0);
-        return left.title.localeCompare(right.title);
-      });
-
-      const start = (page - 1) * pageSize;
-      const pagedItems = items.slice(start, start + pageSize);
-
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items: pagedItems,
-            total: items.length,
-            page,
-            pageSize,
-            totalPages: Math.max(1, Math.ceil(items.length / pageSize)),
-            facets: {
-              genres: ['Classic Literature', 'Science Fiction'],
-              minYear: 1815,
-              maxYear: 2021,
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/watchlist?media_type=book' && (!options.method || options.method === 'GET')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Books />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const booksPageSpy = mockBookCatalog(allBooks);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
 
-  expect(screen.queryByText(/filter options/i)).not.toBeInTheDocument();
+  render(<Books />);
+
   expect(await screen.findByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /open details for emma/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
 
-  await userEvent.type(screen.getByRole('textbox', { name: /search books/i }), 'Andy');
-
-  await waitFor(() => {
-    expect(screen.queryByRole('button', { name: /open details for dune/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
-  });
-
-  await userEvent.clear(screen.getByRole('textbox', { name: /search books/i }));
-
-  await userEvent.selectOptions(
-    screen.getByRole('combobox', { name: /^genre$/i }),
-    'Science Fiction'
-  );
+  const genreBar = screen.getByRole('tablist', { name: /book genres/i });
+  await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
   await waitFor(() => {
     expect(screen.getByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
@@ -615,24 +568,25 @@ test('uses a movie-style filter bar on the books page', async () => {
     expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument();
   });
 
-  await userEvent.selectOptions(
-    screen.getByRole('combobox', { name: /sort by/i }),
-    'year-desc'
-  );
+  await userEvent.click(within(genreBar).getByRole('button', { name: /^featured$/i }));
 
   await waitFor(() => {
-    const visibleBooks = screen
-      .getAllByRole('button', { name: /open details for/i })
-      .map((button) => button.getAttribute('aria-label'));
-
-    expect(visibleBooks).toEqual([
-      'Open details for Project Hail Mary',
-      'Open details for Dune',
-    ]);
+    expect(screen.getByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open details for emma/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
   });
+
+  useAuthSpy.mockRestore();
+  booksPageSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  ratingMapSpy.mockRestore();
 });
 
 test('ignores a page-level search query on the movies page', async () => {
+  // Movies' catalog view only ever reads a page-level "genre" param from the
+  // URL (for deep-linking a genre chip) — a stray "?search=" has nothing to
+  // be read by, so the catalog should render normally either way. This
+  // guards against a future regression that starts reading it unexpectedly.
   mockSearchParams = new URLSearchParams('?search=arrival');
 
   const allMovies = [
@@ -654,52 +608,33 @@ test('ignores a page-level search query on the movies page', async () => {
     },
   ];
 
-  global.fetch.mockImplementation((url) => {
-    if (String(url).startsWith('/api/media/movies?')) {
-      const parsedUrl = new URL(String(url), 'http://localhost');
-      expect(parsedUrl.searchParams.get('search')).toBe(null);
-
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items: allMovies,
-            total: allMovies.length,
-            totalPages: 1,
-            facets: {
-              genres: ['Crime', 'Drama', 'Science Fiction'],
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/ratings/my?media_type=movie') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Movies />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const movieSegmentSpy = mockMovieCatalog(allMovies, {
+    matchesGenre: (movie, genreValues) =>
+      movie.genre.split(',').map((value) => value.trim()).some((value) => genreValues.includes(value)),
+  });
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+
+  render(<Movies />);
 
   expect(await screen.findByText('Arrival')).toBeInTheDocument();
   expect(screen.getByText('Heat')).toBeInTheDocument();
+
+  useAuthSpy.mockRestore();
+  movieSegmentSpy.mockRestore();
+  ratingMapSpy.mockRestore();
 });
 
-test('uses a genre dropdown on the movies page', async () => {
+test('uses a genre chip filter bar on the movies page', async () => {
   const allMovies = [
     {
       id: 1,
@@ -727,77 +662,43 @@ test('uses a genre dropdown on the movies page', async () => {
     },
   ];
 
-  global.fetch.mockImplementation((url) => {
-    if (String(url).startsWith('/api/media/movies?')) {
-      const parsedUrl = new URL(String(url), 'http://localhost');
-      const search = (parsedUrl.searchParams.get('search') || '').toLowerCase();
-      const genre = parsedUrl.searchParams.get('genre') || '';
-      const sort = parsedUrl.searchParams.get('sort') || 'title-asc';
-
-      let items = allMovies.filter((movie) => {
-        const matchesSearch = !search || movie.title.toLowerCase().includes(search);
-        const matchesGenre =
-          !genre || movie.genre.split(',').map((value) => value.trim()).includes(genre);
-        return matchesSearch && matchesGenre;
-      });
-
-      items = items.sort((left, right) => {
-        if (sort === 'year-desc') return (right.year || 0) - (left.year || 0);
-        if (sort === 'year-asc') return (left.year || 0) - (right.year || 0);
-        if (sort === 'title-desc') return right.title.localeCompare(left.title);
-        return left.title.localeCompare(right.title);
-      });
-
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items,
-            facets: {
-              genres: ['Action', 'Crime', 'Drama', 'Science Fiction'],
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/ratings/my?media_type=movie') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Movies />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const movieSegmentSpy = mockMovieCatalog(allMovies, {
+    matchesGenre: (movie, genreValues) =>
+      movie.genre.split(',').map((value) => value.trim()).some((value) => genreValues.includes(value)),
+  });
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+
+  render(<Movies />);
 
   expect(await screen.findByText('Arrival')).toBeInTheDocument();
   expect(screen.getByText('Heat')).toBeInTheDocument();
   expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
-  expect(screen.getByRole('option', { name: /all genres/i })).toBeInTheDocument();
-  expect(screen.getByRole('option', { name: /^science fiction$/i })).toBeInTheDocument();
 
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^genre$/i }), 'Science Fiction');
+  const genreBar = screen.getByRole('tablist', { name: /movie genres/i });
+  await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
   await waitFor(() => {
     expect(screen.getByText('Arrival')).toBeInTheDocument();
     expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
     expect(screen.queryByText('Heat')).not.toBeInTheDocument();
   });
+
+  useAuthSpy.mockRestore();
+  movieSegmentSpy.mockRestore();
+  ratingMapSpy.mockRestore();
 });
 
-test('uses a genre dropdown on the TV shows page', async () => {
+test('uses a genre chip filter bar on the TV shows page', async () => {
   const allShows = [
     {
       id: 1,
@@ -825,74 +726,42 @@ test('uses a genre dropdown on the TV shows page', async () => {
     },
   ];
 
-  global.fetch.mockImplementation((url) => {
-    if (String(url).startsWith('/api/media/tv-shows?')) {
-      const parsedUrl = new URL(String(url), 'http://localhost');
-      const search = (parsedUrl.searchParams.get('search') || '').toLowerCase();
-      const genre = parsedUrl.searchParams.get('genre') || '';
-      const sort = parsedUrl.searchParams.get('sort') || 'title-asc';
-
-      let items = allShows.filter((show) => {
-        const matchesSearch = !search || show.title.toLowerCase().includes(search);
-        const matchesGenre =
-          !genre || show.genre.split(',').map((value) => value.trim()).includes(genre);
-        return matchesSearch && matchesGenre;
-      });
-
-      items = items.sort((left, right) => {
-        if (sort === 'year-desc') return (right.year || 0) - (left.year || 0);
-        if (sort === 'year-asc') return (left.year || 0) - (right.year || 0);
-        if (sort === 'title-desc') return right.title.localeCompare(left.title);
-        return left.title.localeCompare(right.title);
-      });
-
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items,
-            facets: {
-              genres: ['Action', 'Adventure', 'Animation', 'Comedy', 'Drama', 'Mystery', 'Science Fiction', 'Thriller'],
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/ratings/my?media_type=tv_show') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <TVShows />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const tvSegmentSpy = mockTvCatalog(allShows, {
+    matchesGenre: (show, genreValues) =>
+      show.genre.split(',').map((value) => value.trim()).some((value) => genreValues.includes(value)),
+  });
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+
+  render(<TVShows />);
 
   expect(await screen.findByText('Blue Eye Samurai')).toBeInTheDocument();
   expect(screen.getByText('Dark')).toBeInTheDocument();
   expect(screen.getByText('The Bear')).toBeInTheDocument();
-  expect(screen.getByRole('option', { name: /all genres/i })).toBeInTheDocument();
-  expect(screen.getByRole('option', { name: /^mystery$/i })).toBeInTheDocument();
 
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: /^genre$/i }), 'Mystery');
+  // 'Mystery' and 'Thriller' both fold into the "Crime & Mystery" chip
+  // (TV_GENRE_GROUPS, distinct from movies' "Crime & Thriller" grouping).
+  const genreBar = screen.getByRole('tablist', { name: /series genres/i });
+  await userEvent.click(within(genreBar).getByRole('button', { name: /crime & mystery/i }));
 
   await waitFor(() => {
     expect(screen.getByText('Dark')).toBeInTheDocument();
     expect(screen.queryByText('Blue Eye Samurai')).not.toBeInTheDocument();
     expect(screen.queryByText('The Bear')).not.toBeInTheDocument();
   });
+
+  useAuthSpy.mockRestore();
+  tvSegmentSpy.mockRestore();
+  ratingMapSpy.mockRestore();
 });
 
 test('shows a back to top arrow after scrolling the books page', async () => {
@@ -910,57 +779,31 @@ test('shows a back to top arrow after scrolling the books page', async () => {
     configurable: true,
   });
 
-  global.fetch.mockImplementation((url, options = {}) => {
-    if (String(url).startsWith('/api/media/books?')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify({
-            items: [
-              {
-                id: 1,
-                title: 'Dune',
-                author: 'Frank Herbert',
-                year: 1965,
-                genre: 'Science Fiction',
-                synopsis: 'Set on the desert planet Arrakis...',
-                cover_url: 'https://covers.openlibrary.org/b/id/11481354-M.jpg',
-              },
-            ],
-            total: 1,
-            page: 1,
-            pageSize: 24,
-            totalPages: 1,
-            facets: {
-              genres: ['Science Fiction'],
-              minYear: 1965,
-              maxYear: 1965,
-            },
-          }),
-        })
-      );
-    }
-
-    if (url === '/api/watchlist?media_type=book' && (!options.method || options.method === 'GET')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Books />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const booksPageSpy = mockBookCatalog([
+    {
+      id: 1,
+      title: 'Dune',
+      author: 'Frank Herbert',
+      year: 1965,
+      genre: 'Science Fiction',
+      synopsis: 'Set on the desert planet Arrakis...',
+      cover_url: 'https://covers.openlibrary.org/b/id/11481354-M.jpg',
+    },
+  ]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+
+  render(<Books />);
 
   expect(await screen.findByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /back to top/i })).not.toBeInTheDocument();
@@ -975,4 +818,9 @@ test('shows a back to top arrow after scrolling the books page', async () => {
   await userEvent.click(screen.getByRole('button', { name: /back to top/i }));
 
   expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+
+  useAuthSpy.mockRestore();
+  booksPageSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  ratingMapSpy.mockRestore();
 });
