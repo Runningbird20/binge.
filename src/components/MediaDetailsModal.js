@@ -218,7 +218,7 @@ export default function MediaDetailsModal({
                     onClick={() => onWatchlist(item)}
                     disabled={!allowActions || isAddingWatchlist}
                   >
-                    {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
+                    {isAddingWatchlist ? 'Saving...' : 'Add to Library'}
                   </button>
                 )}
               </div>

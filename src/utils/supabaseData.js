@@ -427,7 +427,11 @@ export async function createSupabaseUserAsAdmin({ username, email, password, bio
 
 export async function signOutFromSupabase() {
   const client = requireSupabase();
-  const { error } = await client.auth.signOut();
+  const { error } = await withTimeout(
+    client.auth.signOut(),
+    AUTH_REQUEST_TIMEOUT_MS,
+    'Signing out timed out.'
+  );
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to log out.'));

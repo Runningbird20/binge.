@@ -26,6 +26,16 @@ function readStoredUser() {
   }
 }
 
+function writeStoredUser(nextUser) {
+  try {
+    if (nextUser) {
+      window.localStorage.setItem('user', JSON.stringify(nextUser));
+    } else {
+      window.localStorage.removeItem('user');
+    }
+  } catch {}
+}
+
 function getRolePriority(userType) {
   const normalized = normalizeUserType(userType);
 
@@ -62,7 +72,11 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(storedUser);
   const [authLoading, setAuthLoading] = useState(!storedUser);
   const commitUser = useCallback((nextUser) => {
-    setUser((currentUser) => mergeResolvedUser(currentUser, nextUser));
+    setUser((currentUser) => {
+      const merged = mergeResolvedUser(currentUser, nextUser);
+      writeStoredUser(merged);
+      return merged;
+    });
     return nextUser;
   }, []);
 
@@ -105,11 +119,24 @@ export function AuthProvider({ children }) {
       try {
         const restoredUser = await refreshUser();
         if (active && !restoredUser) {
+          // getSupabaseSessionProfile() resolved and confirmed there's no
+          // active session — a trustworthy "logged out" signal, not a
+          // failure, so the cache should be cleared too.
+          writeStoredUser(null);
           setUser(null);
         }
       } catch {
+        // The session check itself failed (network hiccup, timeout, cold
+        // start) — we don't actually know whether the user is logged out,
+        // so prefer the last-known cached profile over bouncing them to
+        // the login screen. If there's nothing cached, fall back to null.
         if (active) {
-          setUser(null);
+          const cachedUser = readStoredUser();
+          if (cachedUser) {
+            commitUser(cachedUser);
+          } else {
+            setUser(null);
+          }
         }
       } finally {
         if (active) {
