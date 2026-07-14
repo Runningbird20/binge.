@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
+import AvatarPresetPicker from '../components/AvatarPresetPicker';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadSupabaseAvatar } from '../utils/supabaseData';
 
@@ -134,6 +135,26 @@ export default function AccountSettings() {
     }
   }
 
+  async function handleSelectPreset(url) {
+    setAvatarLoading(true);
+    setAvatarError('');
+    setAvatarSuccess('');
+    try {
+      await updateProfile({
+        username: user?.username || '',
+        email: user?.email || '',
+        bio: user?.bio || '',
+        avatarUrl: url,
+      });
+      setAvatarSuccess('Profile picture updated.');
+      handleCancelAvatar();
+    } catch (err) {
+      setAvatarError(err.message);
+    } finally {
+      setAvatarLoading(false);
+    }
+  }
+
   async function handleRemoveAvatar() {
     setAvatarLoading(true);
     setAvatarError('');
@@ -154,8 +175,11 @@ export default function AccountSettings() {
   }
 
   async function handleLogout() {
-    await logout();
-    navigate('/');
+    try {
+      await logout();
+    } finally {
+      navigate('/');
+    }
   }
 
   async function handlePasswordSubmit(e) {
@@ -210,7 +234,7 @@ export default function AccountSettings() {
           <section className="settings-card settings-card--avatar">
             <div className="settings-card-header">
               <h2>Profile picture</h2>
-              <p>Upload a photo to personalize your profile.</p>
+              <p>Upload a photo or pick a preset to personalize your profile.</p>
             </div>
 
             {avatarError && <div className="auth-error">{avatarError}</div>}
@@ -272,6 +296,15 @@ export default function AccountSettings() {
 
                 <p className="avatar-upload-hint">JPEG, PNG, or WebP · max 5 MB</p>
               </div>
+            </div>
+
+            <div className="avatar-preset-section">
+              <p className="avatar-preset-label">Or pick a preset</p>
+              <AvatarPresetPicker
+                selected={user?.avatarUrl}
+                onSelect={handleSelectPreset}
+                disabled={avatarLoading}
+              />
             </div>
           </section>
 

@@ -33,7 +33,7 @@ export const RATING_CATEGORIES = {
 };
 
 const PALETTE = {
-  movie:   { primary: '#e8c97a', fill: 'rgba(232,201,122,0.20)', glow: 'rgba(232,201,122,0.18)', grid: 'rgba(232,201,122,0.13)' },
+  movie:   { primary: '#c7c7c7', fill: 'rgba(199,199,199,0.20)', glow: 'rgba(199,199,199,0.18)', grid: 'rgba(199,199,199,0.13)' },
   tv_show: { primary: '#a07de8', fill: 'rgba(160,125,232,0.20)', glow: 'rgba(160,125,232,0.18)', grid: 'rgba(160,125,232,0.13)' },
   book:    { primary: '#5db88a', fill: 'rgba(93,184,138,0.20)',  glow: 'rgba(93,184,138,0.18)',  grid: 'rgba(93,184,138,0.13)'  },
   manga:   { primary: '#e85a7a', fill: 'rgba(232,90,122,0.20)',  glow: 'rgba(232,90,122,0.18)',  grid: 'rgba(232,90,122,0.13)'  },
@@ -46,6 +46,28 @@ export function computeNormalizedScore(mediaType, scores) {
   const max   = cats.reduce((sum, cat) => sum + cat.max, 0);
   if (!total) return null;
   return Math.round((total / max) * 100) / 10; // 0-10 with one decimal
+}
+
+// Movie/TV/book ratings are a single 5-star value in the UI, but still
+// stored across the existing per-category columns (all categories are
+// max:5, so they line up 1:1 with stars) — this reads that single value
+// back out by averaging whatever categories are present. Works for both
+// new uniform ratings and any legacy per-category ratings.
+export function computeStarRating(mediaType, scores) {
+  const cats = RATING_CATEGORIES[mediaType];
+  if (!cats || !scores) return null;
+  const values = cats.map((cat) => scores[cat.key]).filter((v) => v != null && v > 0);
+  if (!values.length) return null;
+  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+  return Math.round(avg * 2) / 2; // nearest 0.5
+}
+
+// Inverse of computeStarRating — spreads a single star value across every
+// category column so the existing save path (per-category upsert) keeps
+// working unchanged.
+export function buildUniformCategories(mediaType, starValue) {
+  const cats = RATING_CATEGORIES[mediaType] || [];
+  return Object.fromEntries(cats.map((cat) => [cat.key, starValue]));
 }
 
 export default function RatingArtifact({ mediaType, scores, size = 280 }) {

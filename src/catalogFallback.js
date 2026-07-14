@@ -142,12 +142,19 @@ export function sortMediaItems(items, sortOrder) {
   });
 }
 
+function matchesAnyGenre(itemGenre, genre) {
+  const values = (Array.isArray(genre) ? genre : [genre]).filter(Boolean).map((value) => String(value).toLowerCase());
+  if (values.length === 0) return true;
+
+  const haystack = normalizeText(itemGenre).toLowerCase();
+  return values.some((value) => haystack.includes(value));
+}
+
 export function filterMediaItems(items, { search = '', genre = '', sortOrder = 'title-asc' } = {}) {
   const normalizedSearch = normalizeText(search).toLowerCase();
   const filtered = items.filter((item) => {
     const matchesSearch = !normalizedSearch || normalizeText(item?.title).toLowerCase().includes(normalizedSearch);
-    const matchesGenre = !genre || normalizeText(item?.genre).toLowerCase().includes(String(genre).toLowerCase());
-    return matchesSearch && matchesGenre;
+    return matchesSearch && matchesAnyGenre(item?.genre, genre);
   });
 
   return sortMediaItems(filtered, sortOrder);
@@ -164,7 +171,6 @@ export function filterBooksCatalog(
   } = {}
 ) {
   const normalizedSearch = normalizeText(search).toLowerCase();
-  const normalizedGenre = normalizeText(genre).toLowerCase();
 
   const filtered = items.filter((book) => {
     const haystacks = [book?.title, book?.author]
@@ -172,8 +178,7 @@ export function filterBooksCatalog(
       .filter(Boolean);
 
     const matchesSearch = !normalizedSearch || haystacks.some((value) => value.includes(normalizedSearch));
-    const matchesGenre = !normalizedGenre || normalizeText(book?.genre).toLowerCase().includes(normalizedGenre);
-    return matchesSearch && matchesGenre;
+    return matchesSearch && matchesAnyGenre(book?.genre, genre);
   });
 
   const sorted = sortMediaItems(filtered, sortOrder);

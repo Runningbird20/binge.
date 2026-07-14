@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx react-scripts build *)",
+      "Bash(npx react-scripts test *)",
+      "mcp__Claude_Preview__preview_screenshot",
+      "mcp__Claude_Browser__navigate",
+      "Bash(npm run build *)",
+      "Bash(npm run lint *)",
+      "mcp__Claude_Preview__preview_console_logs",
+      "mcp__Claude_Browser__read_network_requests",
+      "mcp__Claude_Preview__preview_snapshot",
+      "mcp__Claude_Browser__read_page",
+      "Bash(npm run dev)",
+      "mcp__Claude_Preview__preview_logs",
+      "mcp__Claude_Browser__read_console_messages"
+    ]
+  }
+}

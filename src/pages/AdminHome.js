@@ -44,12 +44,6 @@ export default function AdminHome() {
         {/* Nav cards */}
         <div className="admin-nav-grid">
           <AdminNavCard
-            to="/admin/requests"
-            icon="📥"
-            title="Media Requests"
-            description="Review user-submitted requests to add movies, TV shows, and books to the catalog."
-          />
-          <AdminNavCard
             to="/admin/users"
             icon="👥"
             title="User Management"
