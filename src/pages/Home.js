@@ -12,12 +12,19 @@ import {
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import { generateSupabaseRecommendations, generateSupabaseTypeRecommendations } from '../utils/recommendations';
+import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
 
 const MEDIA_ICONS = {
-  movie: '🎬',
-  tv_show: '📺',
-  book: '📚',
+  movie: FilmSlate,
+  tv_show: MonitorPlay,
+  book: BookOpen,
 };
+
+function MediaTypeIcon({ type, size = 16 }) {
+  const Icon = MEDIA_ICONS[type];
+  if (!Icon) return null;
+  return <Icon size={size} weight="bold" aria-hidden="true" />;
+}
 
 // Edge fade — matches the genre-bar scroll fade, but only shown when the
 // row actually has enough items to scroll (checked on mount, on scroll,
@@ -192,12 +199,12 @@ function ContinueWatchingCard({ item, onRemove }) {
         <div className="foryou-card-poster">
           {poster
             ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-            : <div className="foryou-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
+            : <div className="foryou-card-placeholder"><MediaTypeIcon type={item.media_type} size={28} /></div>
           }
         </div>
         <div className="foryou-card-body">
           <div className="foryou-card-type">
-            {MEDIA_ICONS[item.media_type]} {FOR_YOU_LABELS[item.media_type]}
+            <MediaTypeIcon type={item.media_type} /> {FOR_YOU_LABELS[item.media_type]}
             {item.year && <span className="foryou-card-year">{item.year}</span>}
           </div>
           <h4 className="foryou-card-title">{item.title}</h4>
@@ -242,10 +249,10 @@ function ContinueWatching({ items, onRemove }) {
 }
 
 const FOR_YOU_TABS = [
-  { id: 'all', label: 'All', icon: '' },
-  { id: 'movie', label: 'Movies', icon: '🎬' },
-  { id: 'tv_show', label: 'TV Shows', icon: '📺' },
-  { id: 'book', label: 'Books', icon: '📚' },
+  { id: 'all', label: 'All', Icon: null },
+  { id: 'movie', label: 'Movies', Icon: FilmSlate },
+  { id: 'tv_show', label: 'TV Shows', Icon: MonitorPlay },
+  { id: 'book', label: 'Books', Icon: BookOpen },
 ];
 const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const FOR_YOU_IDLE_STATE = { all: 'idle', movie: 'idle', tv_show: 'idle', book: 'idle' };
@@ -258,12 +265,12 @@ function ForYouCard({ rec }) {
         {rec.posterUrl ? (
           <img src={rec.posterUrl} alt={rec.title} />
         ) : (
-          <div className="foryou-card-placeholder">{MEDIA_ICONS[rec.media_type]}</div>
+          <div className="foryou-card-placeholder"><MediaTypeIcon type={rec.media_type} size={28} /></div>
         )}
       </div>
       <div className="foryou-card-body">
         <div className="foryou-card-type">
-          {MEDIA_ICONS[rec.media_type]} {FOR_YOU_LABELS[rec.media_type]}
+          <MediaTypeIcon type={rec.media_type} /> {FOR_YOU_LABELS[rec.media_type]}
           {rec.year && <span className="foryou-card-year">{rec.year}</span>}
         </div>
         <h4 className="foryou-card-title">{rec.title}</h4>
@@ -318,7 +325,7 @@ function ForYouSection({ ready }) {
               className={`books-tab ${activeType === tab.id ? 'active' : ''}`}
               onClick={() => setActiveType(tab.id)}
             >
-              {tab.icon} {tab.label}
+              {tab.Icon && <tab.Icon size={16} weight="bold" aria-hidden="true" />} {tab.label}
             </button>
           ))}
         </div>
@@ -397,7 +404,7 @@ function LibraryCard({ item, ratingScore }) {
       <div className="profile-wl-poster">
         {poster
           ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-          : <div className="profile-wl-placeholder">{MEDIA_ICONS[item.media_type]}</div>}
+          : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>}
         {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
         {ratingOutOfFive != null && (
           <span className="profile-wl-status-ind profile-wl-status-ind--rated" title={`Rated ${ratingOutOfFive}/5`}>
@@ -495,13 +502,13 @@ function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
       <div className="profile-wl-filters">
         <div className="books-tab-bar books-tab-bar--inline">
           {[
-            { value: '', label: 'All' },
-            { value: 'movie', label: '🎬 Movies' },
-            { value: 'tv_show', label: '📺 TV' },
-            { value: 'book', label: '📖 Books' },
+            { value: '', label: 'All', Icon: null },
+            { value: 'movie', label: 'Movies', Icon: FilmSlate },
+            { value: 'tv_show', label: 'TV', Icon: MonitorPlay },
+            { value: 'book', label: 'Books', Icon: BookOpen },
           ].map(t => (
             <button key={t.value} className={`books-tab ${wlTypeFilter === t.value ? 'active' : ''}`} onClick={() => setWlTypeFilter(t.value)} type="button">
-              {t.label}
+              {t.Icon && <t.Icon size={16} weight="bold" aria-hidden="true" />} {t.label}
             </button>
           ))}
         </div>
