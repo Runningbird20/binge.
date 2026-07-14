@@ -43,7 +43,7 @@ async function fetchPlutoChannels() {
         featuredImage:ch.featuredImage?.path || null,
         summary:      ch.summary || ch.description || '',
         nowPlaying:   ch.timelines?.[0]?.title?.name || null,
-        embedUrl:     `https://pluto.tv/en/live-tv/${ch.slug}`,
+        embedUrl:     `https://pluto.tv/live-tv/${ch.slug}`,
         streamUrl:    ch.stitched?.urls?.[0]?.url || null,
         ytEmbedId:    null,
         source:       'pluto',
@@ -63,16 +63,16 @@ async function fetchPlutoChannels() {
 
 function getPlutoFallback() {
   return [
-    { id: 'pluto-action',   name: 'Action Movies',       category: 'Movies',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/action-movies-pluto-tv',   streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-comedy',   name: 'Comedy Central',      category: 'Comedy',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/comedy-central-pluto-tv',  streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-drama',    name: 'Drama Queens',        category: 'Drama',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/drama-queens',              streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-horror',   name: 'Horror 24/7',         category: 'Horror',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/horror-24-7',               streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-anime',    name: 'Anime All Day',       category: 'Anime',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/anime-all-day',             streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-sports',   name: 'Sports Illustrated',  category: 'Sports',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/sports-illustrated-tv',    streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-kids',     name: 'Kids Zone',           category: 'Kids',         thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/kid-zone',                  streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-crime',    name: 'True Crime',          category: 'Documentary',  thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/true-crime-files',          streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-classic',  name: 'Classic TV',          category: 'Entertainment',thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/classic-tv',                streamUrl: null, ytEmbedId: null, source: 'pluto' },
-    { id: 'pluto-music',    name: 'MTV Classic',         category: 'Music',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/en/live-tv/mtv-classic',               streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-action',   name: 'Action Movies',       category: 'Movies',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/action-movies-pluto-tv',   streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-comedy',   name: 'Comedy Central',      category: 'Comedy',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/comedy-central-pluto-tv',  streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-drama',    name: 'Drama Queens',        category: 'Drama',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/drama-queens',              streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-horror',   name: 'Horror 24/7',         category: 'Horror',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/horror-24-7',               streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-anime',    name: 'Anime All Day',       category: 'Anime',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/anime-all-day',             streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-sports',   name: 'Sports Illustrated',  category: 'Sports',       thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/sports-illustrated-tv',    streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-kids',     name: 'Kids Zone',           category: 'Kids',         thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/kid-zone',                  streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-crime',    name: 'True Crime',          category: 'Documentary',  thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/true-crime-files',          streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-classic',  name: 'Classic TV',          category: 'Entertainment',thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/classic-tv',                streamUrl: null, ytEmbedId: null, source: 'pluto' },
+    { id: 'pluto-music',    name: 'MTV Classic',         category: 'Music',        thumbnail: null, nowPlaying: null, embedUrl: 'https://pluto.tv/live-tv/mtv-classic',               streamUrl: null, ytEmbedId: null, source: 'pluto' },
   ];
 }
 
