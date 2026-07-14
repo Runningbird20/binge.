@@ -95,7 +95,6 @@ app.use('/api/lists', require('./routes/lists'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/watchlist', require('./routes/watchlist'));
 app.use('/api/ratings', require('./routes/ratings'));
-app.use('/api/livetv',      require('./routes/livetv'));
 app.use('/api/sports',      require('./routes/sports'));
 app.use('/api/proxy',      require('./routes/proxy'));
 app.use('/api/embed-proxy', require('./routes/embedProxy'));

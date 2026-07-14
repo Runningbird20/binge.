@@ -969,18 +969,15 @@ body {
 .global-search-dropdown-item-title { color: var(--exp-text); }
 
 /* ══════════════════════════════════════════════════════════════
-   LIVE TV / SPORTS — panel coloring matched to the rest of the site
+   SPORTS — panel coloring matched to the rest of the site
    (same surface/border/text tokens; gold swapped for the site's
    white active-state accent, matching .genre-chip.active etc.)
    ══════════════════════════════════════════════════════════════ */
 
-.livetv-shell,
 .sports-shell { background: var(--exp-bg-0); }
 
-.livetv-main,
 .sports-main { background: var(--exp-border); }
 
-.livetv-sidebar,
 .sports-games-panel {
   background: linear-gradient(180deg, rgba(9, 11, 16, 0.92) 0%, rgba(9, 11, 16, 0.78) 100%);
   backdrop-filter: blur(18px) saturate(150%);
@@ -988,51 +985,29 @@ body {
   border-right: 1px solid var(--exp-border);
 }
 
-.livetv-sidebar-header,
 .sports-games-header { border-bottom: 1px solid var(--exp-border); }
-.livetv-sidebar-header h2,
 .sports-games-header h2 { color: var(--exp-text); }
 
-.livetv-count {
-  background: var(--exp-surface-2);
-  border: 1px solid var(--exp-border);
-  color: var(--exp-text-dim);
-}
-
-.livetv-refresh-btn,
 .sports-refresh-btn,
-.livetv-sidebar-toggle,
-.livetv-fullscreen-btn,
 .sports-fullscreen-btn { color: var(--exp-text-faint); }
-.livetv-refresh-btn:hover,
 .sports-refresh-btn:hover,
-.livetv-sidebar-toggle:hover,
-.livetv-fullscreen-btn:hover,
 .sports-fullscreen-btn:hover {
   color: var(--exp-text);
   background: rgba(255, 255, 255, 0.08);
 }
 
-.livetv-sidebar-divider,
 .sports-games-divider { background: var(--exp-border); }
 
-.livetv-channel-btn:hover,
 .sports-stream-btn:hover { background: rgba(255, 255, 255, 0.06); }
-.livetv-channel-btn.active,
 .sports-stream-btn.active {
   background: rgba(255, 255, 255, 0.1);
   outline: 1px solid var(--exp-border-strong);
 }
-.livetv-channel-btn.active .livetv-channel-name,
 .sports-stream-btn.active .sports-stream-name { color: var(--exp-text); }
 
-.livetv-channel-name,
 .sports-stream-name { color: var(--exp-text-dim); }
-.livetv-channel-tag,
 .sports-stream-tag { color: var(--exp-text-faint); }
 
-.livetv-channel-poster,
-.livetv-channel-poster--placeholder,
 .sports-stream-poster,
 .sports-stream-poster--placeholder { background: var(--exp-surface-2); }
 
@@ -1051,26 +1026,14 @@ body {
   color: #0c0e13;
 }
 
-.livetv-now-playing,
 .sports-now-playing {
   background: var(--exp-bg-1);
   border-bottom: 1px solid var(--exp-border);
 }
-.livetv-now-name,
 .sports-now-name { color: var(--exp-text); }
-.livetv-now-tag,
 .sports-now-tag,
-.livetv-now-cat,
 .sports-now-cat { color: var(--exp-text-faint); }
 
-.livetv-sidebar-show-btn {
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid var(--exp-border);
-  color: var(--exp-text);
-}
-.livetv-sidebar-show-btn:hover { background: rgba(255, 255, 255, 0.1); }
-
-.livetv-empty,
 .sports-empty { color: var(--exp-text-faint); }
 
 /* ══════════════════════════════════════════════════════════════

@@ -19,7 +19,6 @@ A media-tracking web app for movies, TV shows, and books. Users build a personal
 
 **Content Browsing**
 - Movies, TV shows, and books with search, filtering, and detail modals
-- Live TV channel browser with embedded player
 - Global search across all media (Cmd+K or S)
 
 **Personal Tracking**
