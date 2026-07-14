@@ -155,6 +155,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [lsControlsOpen, setLsControlsOpen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const modalRef = useRef(null);
+  const frameWrapRef = useRef(null);
   const iframeRef = useRef(null);
   const watchTimerRef = useRef(null);
   const watchSecondsRef = useRef(0);
@@ -426,7 +427,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       return;
     }
     if (!document.fullscreenElement) {
-      const element = iframeRef.current || modalRef.current;
+      // Fullscreen the frame wrapper (iframe + our overlay), not the raw
+      // iframe — requestFullscreen() only renders the target element's own
+      // subtree, so fullscreening the iframe directly would make our
+      // sibling overlay/toggle button impossible to show at all.
+      const element = frameWrapRef.current || modalRef.current;
       element?.requestFullscreen().catch(() => {
         modalRef.current?.requestFullscreen();
       });
@@ -739,6 +744,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         )}
         <div
           className="player-frame-wrap"
+          ref={frameWrapRef}
           onMouseEnter={revealControls}
           onMouseLeave={() => { clearTimeout(hideControlsTimerRef.current); setControlsVisible(false); }}
         >
@@ -774,6 +780,22 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             onMouseEnter={() => clearTimeout(hideControlsTimerRef.current)}
             onMouseLeave={revealControls}
           >
+            {isFullscreen && (
+              <div className="player-overlay-fs-btns">
+                <button
+                  className="player-close"
+                  onClick={toggleFullscreen}
+                  title="Exit fullscreen"
+                  type="button"
+                >
+                  {'<'}
+                </button>
+                <button className="player-close" onClick={onClose} title="Close" type="button">
+                  X
+                </button>
+              </div>
+            )}
+
             <div className="player-controls-top-row">
               <div className="player-providers">
                 {PROVIDERS.map((entry) => (

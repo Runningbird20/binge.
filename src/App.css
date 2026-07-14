@@ -5356,7 +5356,18 @@ body {
   color: #555; font-size: 0.9rem;
 }
 
-/* Fullscreen player */
+/* Fullscreen player — the frame wrap (iframe + our overlay) is what
+   actually goes fullscreen, not the modal, so the overlay stays part of
+   the fullscreen element's own subtree and can still be shown/hidden. */
+.player-frame-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+}
+.player-frame-wrap:fullscreen .player-frame {
+  min-height: 100vh;
+}
+/* Fallback for the rare case frame-wrap fullscreen fails and the whole
+   modal goes fullscreen instead (see toggleFullscreen's .catch). */
 .player-modal:fullscreen {
   width: 100vw;
   max-height: 100vh;
@@ -5365,6 +5376,19 @@ body {
 }
 .player-modal:fullscreen .player-frame {
   min-height: calc(100vh - 160px);
+}
+
+.player-overlay-fs-btns {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 3;
+  display: flex;
+  gap: 0.4rem;
+}
+.player-overlay-fs-btns .player-close {
+  background: rgba(0,0,0,0.5);
+  border-radius: 6px;
 }
 
 /* ── Book download buttons ── */
