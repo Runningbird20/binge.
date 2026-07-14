@@ -5280,31 +5280,6 @@ body {
   pointer-events: auto;
 }
 
-.player-controls-toggle {
-  position: absolute;
-  right: 0.85rem;
-  top: 0.85rem;
-  z-index: 3;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(0,0,0,0.55);
-  color: #ddd;
-  font-size: 1.15rem;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease, background 0.15s ease;
-  backdrop-filter: blur(4px);
-}
-.player-controls-toggle.is-hidden {
-  opacity: 1;
-  pointer-events: auto;
-}
-.player-controls-toggle:hover { background: rgba(0,0,0,0.8); color: #fff; }
-
 .player-note {
   text-align: center;
   font-size: 0.72rem;
@@ -5976,22 +5951,17 @@ body {
   .livetv-frame { min-height: 56vw; }
 }
 
-.player-mark-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding-top: 0.5rem;
-}
 .player-mark-btn {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  padding: 0.35rem 0.9rem;
+  padding: 0.2rem 0.6rem;
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.15);
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.6);
   cursor: pointer;
   transition: all 0.15s;
+  margin-left: 0.5rem;
 }
 .player-mark-btn:hover { border-color: rgba(74,222,128,0.4); color: #4ade80; }
 .player-mark-btn--watched {
@@ -6000,10 +5970,6 @@ body {
   color: #4ade80;
 }
 .player-mark-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.player-mark-hint {
-  font-size: 0.72rem;
-  color: rgba(255,255,255,0.25);
-}
 
 /* ══════════════════════════════════════════════
    WATCHLIST GALLERY
