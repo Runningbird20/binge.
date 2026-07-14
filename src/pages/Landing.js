@@ -17,7 +17,7 @@ export default function Landing() {
       >
         <div className="landing-hero-overlay" aria-hidden="true" />
         <div className="landing-hero-content">
-          <div className="nav-logo">binge.</div>
+          <div className="landing-logo">binge.</div>
           <h1 className="landing-hero-title">Everything you watch and read, in one place.</h1>
           <p className="landing-hero-subtitle">
             Track movies, TV shows, and books, rate what you finish, and get picks tailored to your taste.
