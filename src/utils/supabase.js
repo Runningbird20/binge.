@@ -109,10 +109,41 @@ function runSerializedAuthOperation(operation) {
   return run;
 }
 
+// GoTrueClient serializes its own critical sections (init, token refresh,
+// session save) behind a single Navigator LockManager lock keyed off the
+// project URL. That lock is shared across every caller on the page —
+// our own getSession/getUser/refreshSession calls, the SDK's internal
+// auto-refresh timer, and onAuthStateChange's internal notifications all
+// queue for the same name. If whichever caller is holding it runs long
+// (slow network, a dev-only React Strict Mode double-mount, etc.), a
+// waiting caller times out and force-steals the lock, and the original
+// holder's call rejects with "Lock ... was released because another
+// request stole it". That's transient contention, not a real failure —
+// retrying picks up an uncontended lock a moment later.
+function isLockStolenError(error) {
+  return /lock ".*" was released because another request stole it/i.test(String(error?.message || ''));
+}
+
+async function withLockStealRetry(operation, retries = 2) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isLockStolenError(error) && attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function getSupabaseSession() {
   const client = requireSupabaseClient();
   if (!sessionRequestPromise) {
-    sessionRequestPromise = runSerializedAuthOperation(() => client.auth.getSession()).finally(() => {
+    sessionRequestPromise = runSerializedAuthOperation(() =>
+      withLockStealRetry(() => client.auth.getSession())
+    ).finally(() => {
       sessionRequestPromise = null;
     });
   }
@@ -123,7 +154,9 @@ export async function getSupabaseSession() {
 export async function getSupabaseUser() {
   const client = requireSupabaseClient();
   if (!userRequestPromise) {
-    userRequestPromise = runSerializedAuthOperation(() => client.auth.getUser()).finally(() => {
+    userRequestPromise = runSerializedAuthOperation(() =>
+      withLockStealRetry(() => client.auth.getUser())
+    ).finally(() => {
       userRequestPromise = null;
     });
   }
@@ -134,7 +167,9 @@ export async function getSupabaseUser() {
 export async function refreshSupabaseSession() {
   const client = requireSupabaseClient();
   if (!refreshRequestPromise) {
-    refreshRequestPromise = runSerializedAuthOperation(() => client.auth.refreshSession()).finally(() => {
+    refreshRequestPromise = runSerializedAuthOperation(() =>
+      withLockStealRetry(() => client.auth.refreshSession())
+    ).finally(() => {
       refreshRequestPromise = null;
     });
   }
