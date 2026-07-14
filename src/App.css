@@ -4734,11 +4734,19 @@ body {
 
 .landing-hero-actions {
   display: flex;
+  align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
   justify-content: center;
   margin-top: 0.5rem;
 }
+
+.landing-hero-actions .btn-primary {
+  background-color: transparent;
+  color: #ffffff;
+  border: none;
+}
+.landing-hero-actions .btn-primary:hover { background-color: rgba(255, 255, 255, 0.1); }
 
 .cta-buttons {
   display: flex;
