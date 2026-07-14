@@ -7160,12 +7160,18 @@ body {
   pointer-events: auto;
   transform: translateY(0);
 }
+/* top sits flush against the trigger (no gap) — the 12px visual offset
+   lives in padding-top instead, so the hoverable box is continuous with
+   .navbar-profile-wrap. A real gap here breaks :hover on the way down to
+   the drawer (pointer-events isn't animatable, so it drops the instant the
+   cursor leaves the trigger), making everything inside — including
+   Log Out — effectively unclickable. */
 .profile-hover-drawer {
   position: absolute;
-  top: calc(100% + 12px);
+  top: 100%;
   left: 0;
   width: min(300px, 92vw);
-  padding-top: 0.35rem;
+  padding-top: 12px;
   z-index: 120;
   opacity: 0;
   pointer-events: none;

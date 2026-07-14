@@ -6,6 +6,8 @@ import {
   MonitorPlay,
   BookOpen,
   Trophy,
+  Gear,
+  ShieldCheck,
 } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
@@ -66,8 +68,14 @@ export default function Navbar() {
                     <div className="profile-hover-section">
                       <p className="profile-hover-section-label">Account</p>
                       <nav className="profile-hover-nav">
-                        <NavLink to="/account-settings" className={profileDrawerLink}>⚙️ Account Settings</NavLink>
-                        {isAdmin && <NavLink to="/admin" className={profileDrawerLink}>🛡️ Admin Panel</NavLink>}
+                        <NavLink to="/account-settings" className={profileDrawerLink}>
+                          <Gear size={17} weight="bold" aria-hidden="true" /> Account Settings
+                        </NavLink>
+                        {isAdmin && (
+                          <NavLink to="/admin" className={profileDrawerLink}>
+                            <ShieldCheck size={17} weight="bold" aria-hidden="true" /> Admin Panel
+                          </NavLink>
+                        )}
                       </nav>
                     </div>
 

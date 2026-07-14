@@ -1072,3 +1072,97 @@ body {
 
 .livetv-empty,
 .sports-empty { color: var(--exp-text-faint); }
+
+/* ══════════════════════════════════════════════════════════════
+   ACCOUNT SETTINGS — reskinned to match the streaming theme
+   (glass surface-panel cards instead of flat #141414 cards, same
+   text tokens as everywhere else)
+   ══════════════════════════════════════════════════════════════ */
+
+.settings-eyebrow { color: var(--exp-text-faint); }
+.settings-subtitle { color: var(--exp-text-dim); }
+
+.settings-card {
+  background: var(--exp-surface);
+  border: 1px solid var(--exp-border);
+  border-radius: var(--exp-radius-lg);
+  backdrop-filter: blur(16px);
+}
+
+.settings-card-header h2 { color: var(--exp-text); }
+.settings-card-header p { color: var(--exp-text-dim); }
+
+.settings-success {
+  background: rgba(108, 190, 119, 0.1);
+  border: 1px solid rgba(108, 190, 119, 0.25);
+  border-radius: var(--exp-radius);
+  color: #9be0a3;
+}
+
+.avatar-file-label {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--exp-border);
+  color: var(--exp-text);
+}
+.avatar-file-label:hover {
+  border-color: var(--exp-border-strong);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.avatar-preview-badge {
+  background: #f4f6f8;
+  color: #0c0e13;
+}
+
+.avatar-upload-hint { color: var(--exp-text-faint); }
+.avatar-remove-btn { color: var(--exp-text-dim); }
+
+.btn-danger {
+  background: rgba(220, 60, 60, 0.16);
+  border: 1px solid rgba(220, 60, 60, 0.4);
+  color: #f08080;
+  border-radius: 8px;
+}
+.btn-danger:hover {
+  background: rgba(220, 60, 60, 0.28);
+  color: #ff8080;
+}
+
+/* ── Profile hover drawer — swap the old warm gold gradient for the
+   same cool glass-panel look as .global-search-dropdown ─────────── */
+
+.profile-hover-card {
+  background: #141821;
+  border: 1px solid var(--exp-border);
+  border-radius: var(--exp-radius-lg);
+  box-shadow: var(--exp-shadow);
+}
+
+.profile-hover-user-link {
+  background: var(--exp-surface);
+  border: 1px solid var(--exp-border);
+}
+.profile-hover-user-link:hover {
+  background: var(--exp-surface-2);
+  border-color: var(--exp-border-strong);
+}
+.profile-hover-user-name { color: var(--exp-text); }
+.profile-hover-user-sub { color: var(--exp-text-faint); }
+
+.profile-hover-section-label { color: var(--exp-text-faint); }
+
+.profile-hover-link { color: var(--exp-text-dim); }
+.profile-hover-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--exp-text); }
+.profile-hover-link.active { background: rgba(255, 255, 255, 0.1); color: var(--exp-text); }
+
+.profile-hover-logout {
+  background: rgba(220, 60, 60, 0.16);
+  border: 1px solid rgba(220, 60, 60, 0.4);
+  border-radius: 8px;
+  color: #f08080;
+}
+.profile-hover-logout:hover {
+  background: rgba(220, 60, 60, 0.28);
+  border-color: rgba(220, 60, 60, 0.55);
+  color: #ff8080;
+}
