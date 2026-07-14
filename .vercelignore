@@ -1,7 +1,5 @@
 build
 node_modules
-api
-server
 data
 server-live.stderr.log
 server-live.stdout.log
