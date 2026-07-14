@@ -123,7 +123,7 @@ function getEmbeddedId(item) {
 }
 
 function buildUrl(providerId, externalId, mediaType, season, episode) {
-  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[4];
+  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
   if (!provider) return null;
   if (!externalId) return null;
   try {
@@ -140,7 +140,7 @@ function normalizeStartAt(value) {
 
 export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
   const { isMobile, isLandscape } = useDeviceType();
-  const [provider, setProvider] = useState(PROVIDERS[4].id);
+  const [provider, setProvider] = useState(PROVIDERS[0].id);
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
@@ -154,10 +154,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [markingWatched, setMarkingWatched] = useState(false);
   const [realSeasonCount, setRealSeasonCount] = useState(null);
   const [lsControlsOpen, setLsControlsOpen] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const modalRef = useRef(null);
   const iframeRef = useRef(null);
   const watchTimerRef = useRef(null);
   const watchSecondsRef = useRef(0);
+  const hideControlsTimerRef = useRef(null);
 
   const isTV = mediaType === 'tv_show';
   const tmdbId = externalId?.kind === 'tmdb' ? externalId.value : null;
@@ -167,7 +169,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const canTrackEpisodes = Boolean(item?.id);
 
   useEffect(() => {
-    setProvider(PROVIDERS[4].id);
+    setProvider(PROVIDERS[0].id);
     setSeason(normalizeStartAt(initialSeason));
     setEpisode(normalizeStartAt(initialEpisode));
     setSeasonEpisodeCounts({});
@@ -392,6 +394,27 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       ...(isTV ? { currentSeason: season, currentEpisode: episode } : {}),
     }).catch(() => {});
   }, [item?.id, mediaType, isTV, season, episode, provider, externalId]);
+
+  // Floating controls overlay (desktop only) — auto-hides a few seconds after
+  // the cursor enters the video area, matching Netflix/YouTube-style players.
+  // A cross-origin iframe swallows mousemove events once the cursor is over
+  // its content, so we can only reliably react to entering/leaving the frame
+  // itself, not continuous movement within it — see revealControls/onMouseLeave
+  // below and the always-visible toggle button as a manual fallback.
+  const scheduleHideControls = useCallback(() => {
+    clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 4000);
+  }, []);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    scheduleHideControls();
+  }, [scheduleHideControls]);
+
+  useEffect(() => {
+    revealControls();
+    return () => clearTimeout(hideControlsTimerRef.current);
+  }, [item?.id, season, episode, revealControls]);
 
   function toggleFullscreen() {
     if (isMobile) {
@@ -719,6 +742,43 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             {metadataWarning}
           </div>
         )}
+        <div
+          className="player-frame-wrap"
+          onMouseEnter={revealControls}
+          onMouseLeave={() => { clearTimeout(hideControlsTimerRef.current); setControlsVisible(false); }}
+        >
+          {embedUrl ? (
+            <iframe
+              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
+              ref={iframeRef}
+              src={embedUrl}
+              className="player-frame"
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
+              allowFullScreen
+              referrerPolicy="no-referrer-when-downgrade"
+              title={`Watch ${item.title}`}
+            />
+          ) : (
+            <div className="player-no-url">
+              <p>{lookupState === 'loading' ? 'Preparing stream...' : 'Stream unavailable right now.'}</p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className={`player-controls-toggle ${controlsVisible ? 'is-hidden' : ''}`}
+            onClick={revealControls}
+            title="Show controls"
+            aria-label="Show player controls"
+          >
+            ⋮
+          </button>
+
+          <div
+            className={`player-controls-overlay ${controlsVisible ? 'visible' : ''}`}
+            onMouseEnter={() => clearTimeout(hideControlsTimerRef.current)}
+            onMouseLeave={revealControls}
+          >
         {isTV && (
           <div className="player-tv-controls">
             <div className="player-control-group">
@@ -836,37 +896,15 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </button>
           ))}
         </div>
-        <p className="player-anime-hint">
-          For anime try <strong>2Embed</strong> or <strong>AutoEmbed</strong>.
-        </p>
-        <p className="player-kb-hint">
-          {isTV
-            ? 'Keyboard: F fullscreen · ← prev episode · → next episode · Esc close'
-            : 'Keyboard: F fullscreen · Esc close'}
-        </p>
 
-        <div className="player-frame-wrap">
-          {embedUrl ? (
-            <iframe
-              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
-              ref={iframeRef}
-              src={embedUrl}
-              className="player-frame"
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
-              title={`Watch ${item.title}`}
-            />
-          ) : (
-            <div className="player-no-url">
-              <p>{lookupState === 'loading' ? 'Preparing stream...' : 'Stream unavailable right now.'}</p>
-            </div>
-          )}
+            <p className="player-kb-hint">
+              {isTV
+                ? 'Keyboard: F fullscreen · ← prev episode · → next episode · Esc close'
+                : 'Keyboard: F fullscreen · Esc close'}
+              {' · For anime try '}<strong>2Embed</strong> or <strong>AutoEmbed</strong>.
+            </p>
+          </div>
         </div>
-
-        <p className="player-note">
-          VidSrc needs an IMDb or TMDB ID. This player now tries direct item IDs first, then an IMDb title lookup.
-        </p>
       </div>
     </div>
   );

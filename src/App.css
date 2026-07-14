@@ -5178,8 +5178,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  padding: 0.75rem 1.25rem;
-  border-bottom: 1px solid #1a1a1a;
   flex-shrink: 0;
 }
 .player-control-group {
@@ -5226,8 +5224,6 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.25rem;
-  border-bottom: 1px solid #1a1a1a;
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -5270,6 +5266,57 @@ body {
   display: block;
   min-height: 480px;
 }
+
+/* Floating controls overlay — sits over the video, fades in on mouse-enter
+   and auto-hides a few seconds later (see EmbedPlayer's revealControls). A
+   cross-origin iframe swallows mousemove once the cursor is over it, so the
+   small toggle button below is the reliable fallback for bringing it back. */
+.player-controls-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 2.5rem 1.25rem 0.9rem;
+  background: linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.72) 55%, transparent 100%);
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.player-controls-overlay.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.player-controls-toggle {
+  position: absolute;
+  right: 0.85rem;
+  bottom: 0.85rem;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.55);
+  color: #ddd;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, background 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+.player-controls-toggle.is-hidden {
+  opacity: 1;
+  pointer-events: auto;
+}
+.player-controls-toggle:hover { background: rgba(0,0,0,0.8); color: #fff; }
 
 .player-note {
   text-align: center;
@@ -6089,18 +6136,6 @@ body {
   font-size: 0.7rem;
   color: #555;
 }
-
-/* Anime hint in player */
-.player-anime-hint {
-  margin: 0;
-  padding: 0.3rem 1.25rem 0;
-  font-size: 0.72rem;
-  color: #555;
-  flex-shrink: 0;
-}
-.player-anime-hint strong { color: #f4f6f8; }
-
-
 
 /* ══════════════════════════════════════════════════════════════
    CURATED / NETFLIX-STYLE LAYOUT — Refined Dark Cinema Theme
@@ -9080,11 +9115,12 @@ select.filter-input,
    ══════════════════════════════════════════════════════════════ */
 .player-kb-hint {
   font-size: 0.68rem;
-  color: #444;
-  padding: 0.25rem 0.75rem;
-  text-align: center;
+  color: rgba(255,255,255,0.4);
+  margin: 0.1rem 0 0;
+  text-align: left;
   letter-spacing: 0.02em;
 }
+.player-kb-hint strong { color: rgba(255,255,255,0.65); }
 
 /* ══════════════════════════════════════════════════════════════
    MOBILE INTERIOR OPTIMIZATIONS
