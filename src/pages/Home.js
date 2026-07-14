@@ -609,6 +609,32 @@ export default function Home() {
     };
   }, [authLoading, onboardingKey, userId]);
 
+  // The details overlay that saves a rating is a separately-mounted screen
+  // on top of Home (background-location routing), so it can't update Home's
+  // own state directly — it broadcasts instead. Merge the new rating in
+  // immediately so the Library hover-rating badge reflects it right away,
+  // rather than only after Home's next full data fetch.
+  useEffect(() => {
+    function onRatingSaved(event) {
+      const { mediaType, mediaId, categories } = event.detail || {};
+      if (!mediaType || !Number.isFinite(mediaId)) return;
+
+      setRatingsItems((current) => {
+        const next = { ...categories, media_type: mediaType, media_id: mediaId };
+        const index = current.findIndex(
+          (entry) => entry.media_type === mediaType && entry.media_id === mediaId
+        );
+        if (index === -1) return [...current, next];
+        const updated = [...current];
+        updated[index] = { ...updated[index], ...next };
+        return updated;
+      });
+    }
+
+    window.addEventListener('binge:ratingSaved', onRatingSaved);
+    return () => window.removeEventListener('binge:ratingSaved', onRatingSaved);
+  }, []);
+
   function completeOnboarding() {
     localStorage.setItem(onboardingKey, '1');
     setShowOnboarding(false);

@@ -123,7 +123,7 @@ function getEmbeddedId(item) {
 }
 
 function buildUrl(providerId, externalId, mediaType, season, episode) {
-  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[4];
+  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
   if (!provider) return null;
   if (!externalId) return null;
   try {
@@ -140,7 +140,7 @@ function normalizeStartAt(value) {
 
 export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
   const { isMobile, isLandscape } = useDeviceType();
-  const [provider, setProvider] = useState(PROVIDERS[4].id);
+  const [provider, setProvider] = useState(PROVIDERS[0].id);
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
@@ -149,15 +149,17 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [metadataWarning, setMetadataWarning] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [seasonEpisodeCounts, setSeasonEpisodeCounts] = useState({});
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const [watched, setWatched] = useState(new Set());
   const [markingWatched, setMarkingWatched] = useState(false);
   const [realSeasonCount, setRealSeasonCount] = useState(null);
   const [lsControlsOpen, setLsControlsOpen] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const modalRef = useRef(null);
+  const frameWrapRef = useRef(null);
   const iframeRef = useRef(null);
   const watchTimerRef = useRef(null);
   const watchSecondsRef = useRef(0);
+  const hideControlsTimerRef = useRef(null);
 
   const isTV = mediaType === 'tv_show';
   const tmdbId = externalId?.kind === 'tmdb' ? externalId.value : null;
@@ -167,7 +169,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const canTrackEpisodes = Boolean(item?.id);
 
   useEffect(() => {
-    setProvider(PROVIDERS[4].id);
+    setProvider(PROVIDERS[0].id);
     setSeason(normalizeStartAt(initialSeason));
     setEpisode(normalizeStartAt(initialEpisode));
     setSeasonEpisodeCounts({});
@@ -341,7 +343,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const fetchSeasonEpisodes = useCallback(async (seasonNumber) => {
     if (!tmdbId || !isTV || seasonEpisodeCounts[seasonNumber] !== undefined) return;
 
-    setLoadingEpisodes(true);
     try {
       const data = await api.get(`/media/tmdb-season?tmdbId=${tmdbId}&season=${seasonNumber}`);
       const nextCount = Math.max(1, Number(data?.episodeCount) || 1);
@@ -356,8 +357,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         ...previous,
         [seasonNumber]: previous[seasonNumber] ?? null,
       }));
-    } finally {
-      setLoadingEpisodes(false);
     }
   }, [tmdbId, isTV, seasonEpisodeCounts]);
 
@@ -393,6 +392,27 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     }).catch(() => {});
   }, [item?.id, mediaType, isTV, season, episode, provider, externalId]);
 
+  // Floating controls overlay (desktop only) — auto-hides a few seconds after
+  // the cursor enters the video area, matching Netflix/YouTube-style players.
+  // A cross-origin iframe swallows mousemove events once the cursor is over
+  // its content, so we can only reliably react to entering/leaving the frame
+  // itself, not continuous movement within it — leaving and re-entering the
+  // frame is what brings the overlay back once it's auto-hidden.
+  const scheduleHideControls = useCallback(() => {
+    clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 4000);
+  }, []);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    scheduleHideControls();
+  }, [scheduleHideControls]);
+
+  useEffect(() => {
+    revealControls();
+    return () => clearTimeout(hideControlsTimerRef.current);
+  }, [item?.id, season, episode, revealControls]);
+
   function toggleFullscreen() {
     if (isMobile) {
       // On mobile, use Screen Orientation API to rotate to landscape.
@@ -407,7 +427,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       return;
     }
     if (!document.fullscreenElement) {
-      const element = iframeRef.current || modalRef.current;
+      // Fullscreen the frame wrapper (iframe + our overlay), not the raw
+      // iframe — requestFullscreen() only renders the target element's own
+      // subtree, so fullscreening the iframe directly would make our
+      // sibling overlay/toggle button impossible to show at all.
+      const element = frameWrapRef.current || modalRef.current;
       element?.requestFullscreen().catch(() => {
         modalRef.current?.requestFullscreen();
       });
@@ -451,7 +475,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
-  const usingManualEpisodeInput = false;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
   // ── Mobile player ────────────────────────────────────────────
@@ -687,17 +710,26 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               {externalId && (
                 <span className="player-tmdb-badge">{externalId.kind.toUpperCase()} OK</span>
               )}
+              {isTV && (
+                <button
+                  className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
+                  onClick={() => markWatched(season, episode)}
+                  disabled={!canTrackEpisodes || markingWatched}
+                  title={
+                    !canTrackEpisodes
+                      ? 'Watch tracking is unavailable for this item.'
+                      : watched.has(currentEpisodeKey)
+                        ? 'Click to unmark as watched'
+                        : 'Click to manually mark as watched (auto-marks after 5 min)'
+                  }
+                  type="button"
+                >
+                  {watched.has(currentEpisodeKey) ? '✓ Watched' : '+ Mark as watched'}
+                </button>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button
-              className="player-close"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              type="button"
-            >
-              {isFullscreen ? '<' : '>'}
-            </button>
             <button className="player-close" onClick={onClose} title="Close" type="button">
               X
             </button>
@@ -719,133 +751,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             {metadataWarning}
           </div>
         )}
-        {isTV && (
-          <div className="player-tv-controls">
-            <div className="player-control-group">
-              <label>Season</label>
-              <div className="player-episode-btns">
-                {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => {
-                  const watchedCount = Array.from(watched).filter(
-                    (key) => key.startsWith(`${value}:`),
-                  ).length;
-                  const totalEpisodes = seasonEpisodeCounts[value];
-                  const allWatched = totalEpisodes && watchedCount === totalEpisodes;
-
-                  return (
-                    <button
-                      key={value}
-                      className={`player-ep-btn ${season === value ? 'active' : ''} ${allWatched ? 'ep-all-watched' : watchedCount > 0 ? 'ep-partial-watched' : ''}`}
-                      onClick={() => {
-                        setSeason(value);
-                        setEpisode(1);
-                      }}
-                      title={watchedCount > 0 ? `${watchedCount}${totalEpisodes ? `/${totalEpisodes}` : ''} watched` : ''}
-                      type="button"
-                    >
-                      {value}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="player-control-group">
-              <label>
-                Episode
-                {episodeCount !== undefined && (
-                  <span className="player-ep-meta">
-                    {loadingEpisodes && tmdbId
-                      ? ' ...'
-                      : ` (${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''})`}
-                  </span>
-                )}
-              </label>
-              <div className="player-episode-btns">
-                {usingManualEpisodeInput ? (
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={episode}
-                    onChange={(event) => {
-                      const nextEpisode = Math.max(1, Number(event.target.value) || 1);
-                      setEpisode(nextEpisode);
-                    }}
-                    className="filter-input"
-                    aria-label="Episode number"
-                    style={{ maxWidth: 140 }}
-                  />
-                ) : episodeCount === undefined ? (
-                  <span className="player-ep-loading">Loading episodes...</span>
-                ) : (
-                  Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => {
-                    const isWatched = watched.has(`${season}:${value}`);
-                    const isCurrent = episode === value;
-
-                    return (
-                      <button
-                        key={value}
-                        className={`player-ep-btn ${isCurrent ? 'active' : ''} ${isWatched && !isCurrent ? 'ep-watched' : ''}`}
-                        onClick={() => setEpisode(value)}
-                        title={isWatched ? 'Watched' : 'Click to watch'}
-                        type="button"
-                      >
-                        {value}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className="player-mark-row">
-              <button
-                className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
-                onClick={() => markWatched(season, episode)}
-                disabled={!canTrackEpisodes || markingWatched}
-                title={
-                  !canTrackEpisodes
-                    ? 'Watch tracking is unavailable for this item.'
-                    : watched.has(currentEpisodeKey)
-                      ? 'Click to unmark as watched'
-                      : 'Click to manually mark as watched (auto-marks after 5 min)'
-                }
-                type="button"
-              >
-                {watched.has(currentEpisodeKey) ? '\u2713 Watched' : '+ Mark as watched'}
-              </button>
-              <span className="player-mark-hint">
-                S{season} E{episode}
-                {!watched.has(currentEpisodeKey) && canTrackEpisodes && ' | auto-tracks after 5 min'}
-                {!canTrackEpisodes && ' | tracking unavailable'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <div className="player-providers">
-          <span className="player-providers-label">Source:</span>
-          {PROVIDERS.map((entry) => (
-            <button
-              key={entry.id}
-              className={`player-provider-btn ${provider === entry.id ? 'active' : ''}`}
-              onClick={() => setProvider(entry.id)}
-              type="button"
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
-        <p className="player-anime-hint">
-          For anime try <strong>2Embed</strong> or <strong>AutoEmbed</strong>.
-        </p>
-        <p className="player-kb-hint">
-          {isTV
-            ? 'Keyboard: F fullscreen · ← prev episode · → next episode · Esc close'
-            : 'Keyboard: F fullscreen · Esc close'}
-        </p>
-
-        <div className="player-frame-wrap">
+        <div
+          className="player-frame-wrap"
+          ref={frameWrapRef}
+          onMouseEnter={revealControls}
+          onMouseLeave={() => { clearTimeout(hideControlsTimerRef.current); setControlsVisible(false); }}
+        >
           {embedUrl ? (
             <iframe
               key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
@@ -862,11 +773,89 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               <p>{lookupState === 'loading' ? 'Preparing stream...' : 'Stream unavailable right now.'}</p>
             </div>
           )}
-        </div>
 
-        <p className="player-note">
-          VidSrc needs an IMDb or TMDB ID. This player now tries direct item IDs first, then an IMDb title lookup.
-        </p>
+          <div
+            className={`player-controls-overlay ${controlsVisible ? 'visible' : ''}`}
+            onMouseEnter={() => clearTimeout(hideControlsTimerRef.current)}
+            onMouseLeave={revealControls}
+          >
+            {isFullscreen && (
+              <div className="player-overlay-fs-btns">
+                <button
+                  className="player-close"
+                  onClick={toggleFullscreen}
+                  title="Exit fullscreen"
+                  type="button"
+                >
+                  {'<'}
+                </button>
+                <button className="player-close" onClick={onClose} title="Close" type="button">
+                  X
+                </button>
+              </div>
+            )}
+
+            <div className="player-controls-top-row">
+              <div className="player-providers">
+                {PROVIDERS.map((entry) => (
+                  <button
+                    key={entry.id}
+                    className={`player-provider-btn ${provider === entry.id ? 'active' : ''}`}
+                    onClick={() => setProvider(entry.id)}
+                    type="button"
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+              </div>
+
+              {isTV && (
+                <div className="player-se-select-group">
+                  <select
+                    className="player-se-select"
+                    value={season}
+                    onChange={(event) => {
+                      setSeason(Number(event.target.value));
+                      setEpisode(1);
+                    }}
+                    aria-label="Season"
+                  >
+                    {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => {
+                      const watchedCount = Array.from(watched).filter(
+                        (key) => key.startsWith(`${value}:`),
+                      ).length;
+                      const totalEpisodes = seasonEpisodeCounts[value];
+
+                      return (
+                        <option key={value} value={value}>
+                          Season {value}{totalEpisodes ? ` (${watchedCount}/${totalEpisodes})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  <select
+                    className="player-se-select"
+                    value={episode}
+                    onChange={(event) => setEpisode(Number(event.target.value))}
+                    aria-label="Episode"
+                    disabled={episodeCount === undefined}
+                  >
+                    {episodeCount === undefined ? (
+                      <option>Loading\u2026</option>
+                    ) : (
+                      Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => (
+                        <option key={value} value={value}>
+                          {watched.has(`${season}:${value}`) ? '\u2713 ' : ''}Episode {value}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
