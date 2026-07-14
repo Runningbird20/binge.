@@ -16,7 +16,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/[...slug]"
+      "dest": "/api/[...slug]?slug=$1"
     },
     {
       "src": "/(.*)",
