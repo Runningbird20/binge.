@@ -1,104 +1,42 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   House,
-  MagnifyingGlass,
-  Sparkle,
+  Trophy,
+  FilmSlate,
+  MonitorPlay,
+  BookOpen,
 } from '@phosphor-icons/react';
-import { useAuth } from '../contexts/AuthContext';
-import UserAvatar from './UserAvatar';
 
-const SIZE = 24;
-
+// Mirrors Navbar's desktop NAV_LINKS so mobile gets the same primary
+// navigation as the site, in the same order with the same icons.
 const TABS = [
-  {
-    id: 'home',
-    label: 'Home',
-    path: '/home',
-    icon: (active) => (
-      <House size={SIZE} weight={active ? 'fill' : 'regular'} />
-    ),
-  },
-  {
-    id: 'search',
-    label: 'Search',
-    action: 'search',
-    icon: (active) => (
-      <MagnifyingGlass size={SIZE} weight={active ? 'fill' : 'regular'} />
-    ),
-  },
-  {
-    id: 'profile',
-    label: 'Profile',
-    action: 'profile',
-    icon: null, // rendered separately as avatar
-  },
-  {
-    id: 'ai',
-    label: 'For You',
-    path: '/home#for-you',
-    icon: () => <Sparkle size={SIZE} weight="duotone" />,
-  },
+  { to: '/home',     label: 'Home',   Icon: House },
+  { to: '/sports',   label: 'Sports', Icon: Trophy },
+  { to: '/movies',   label: 'Movies', Icon: FilmSlate },
+  { to: '/tv-shows', label: 'Series', Icon: MonitorPlay },
+  { to: '/books',    label: 'Books',  Icon: BookOpen },
 ];
 
 export default function BottomNav() {
-  const location = useLocation();
-  const navigate  = useNavigate();
-  const { user }  = useAuth();
-
-  function handleTab(tab) {
-    if (tab.path) {
-      navigate(tab.path);
-      return;
-    }
-    if (tab.action === 'search') {
-      window.dispatchEvent(new CustomEvent('binge:openSearch'));
-      return;
-    }
-    if (tab.action === 'profile') {
-      navigate('/account-settings');
-      return;
-    }
-  }
-
-  function isActive(tab) {
-    if (!tab.path) return false;
-    if (tab.path === '/home') return location.pathname === '/home';
-    return location.pathname.startsWith(tab.path);
-  }
-
   return (
     <nav className="bottom-nav" aria-label="Main navigation">
-      {TABS.map((tab) => {
-        const active = isActive(tab);
-        const isAI = tab.id === 'ai';
-        const isProfile = tab.id === 'profile';
-
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            className={`bottom-nav-item ${active ? 'active' : ''} ${isAI ? 'bottom-nav-ai' : ''}`}
-            onClick={() => handleTab(tab)}
-            aria-label={tab.label}
-            aria-current={active ? 'page' : undefined}
-          >
-            <span className={`bottom-nav-icon ${isAI ? 'bottom-nav-ai-icon' : ''}`}>
-              {isProfile ? (
-                <span className={`bottom-nav-avatar ${active ? 'active' : ''}`}>
-                  <UserAvatar
-                    avatarUrl={user?.avatarUrl || user?.avatar_url}
-                    name={user?.username || user?.name || ''}
-                    size="sm"
-                  />
-                </span>
-              ) : (
-                tab.icon(active)
-              )}
-            </span>
-            {isAI && <span className="bottom-nav-label bottom-nav-ai-label">{tab.label}</span>}
-          </button>
-        );
-      })}
+      {TABS.map(({ to, label, Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}
+          aria-label={label}
+        >
+          {({ isActive }) => (
+            <>
+              <span className="bottom-nav-icon">
+                <Icon size={21} weight={isActive ? 'fill' : 'regular'} aria-hidden="true" />
+              </span>
+              <span className="bottom-nav-label">{label}</span>
+            </>
+          )}
+        </NavLink>
+      ))}
     </nav>
   );
 }

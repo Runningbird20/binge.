@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import GlobalSearch from './GlobalSearch';
+import useIsMobile from '../hooks/useIsMobile';
 
 const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
@@ -23,6 +24,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const isAdmin = user?.isAdmin || user?.userType === 'admin';
 
   async function handleLogout() {
@@ -45,7 +47,10 @@ export default function Navbar() {
             <div className="navbar-left">
               <div className="navbar-profile-wrap">
                 <NavLink
-                  to="/home"
+                  // The desktop avatar chip is a hover target for the profile
+                  // drawer; on touch there is no hover, so tapping it goes to
+                  // account settings (the drawer's main destination) instead.
+                  to={isMobile ? '/account-settings' : '/home'}
                   className="navbar-profile"
                   title={user.username}
                 >
