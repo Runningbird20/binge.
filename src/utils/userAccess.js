@@ -78,13 +78,7 @@ function resolveAccessUserType(userOrType) {
   return normalizeUserType(userOrType);
 }
 
-export function getDefaultRouteForUserType(userOrType) {
-  const normalized = resolveAccessUserType(userOrType);
-
-  if (normalized === 'admin') {
-    return '/admin';
-  }
-
+export function getDefaultRouteForUserType() {
   return '/home';
 }
 
