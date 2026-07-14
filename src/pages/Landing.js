@@ -11,20 +11,13 @@ export default function Landing() {
 
   return (
     <div className="App">
-      <nav className="nav">
-        <div className="nav-logo">binge.</div>
-        <div className="nav-links">
-          <Link to="/login">Log in</Link>
-          <Link to="/signup" className="btn-primary">Sign Up</Link>
-        </div>
-      </nav>
-
       <section
         className="landing-hero"
         style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` }}
       >
         <div className="landing-hero-overlay" aria-hidden="true" />
         <div className="landing-hero-content">
+          <div className="nav-logo">binge.</div>
           <h1 className="landing-hero-title">Everything you watch and read, in one place.</h1>
           <p className="landing-hero-subtitle">
             Track movies, TV shows, and books, rate what you finish, and get picks tailored to your taste.
