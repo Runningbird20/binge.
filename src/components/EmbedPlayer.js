@@ -396,8 +396,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // the cursor enters the video area, matching Netflix/YouTube-style players.
   // A cross-origin iframe swallows mousemove events once the cursor is over
   // its content, so we can only reliably react to entering/leaving the frame
-  // itself, not continuous movement within it — see revealControls/onMouseLeave
-  // below and the always-visible toggle button as a manual fallback.
+  // itself, not continuous movement within it — leaving and re-entering the
+  // frame is what brings the overlay back once it's auto-hidden.
   const scheduleHideControls = useCallback(() => {
     clearTimeout(hideControlsTimerRef.current);
     hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 4000);
@@ -710,17 +710,26 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               {externalId && (
                 <span className="player-tmdb-badge">{externalId.kind.toUpperCase()} OK</span>
               )}
+              {isTV && (
+                <button
+                  className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
+                  onClick={() => markWatched(season, episode)}
+                  disabled={!canTrackEpisodes || markingWatched}
+                  title={
+                    !canTrackEpisodes
+                      ? 'Watch tracking is unavailable for this item.'
+                      : watched.has(currentEpisodeKey)
+                        ? 'Click to unmark as watched'
+                        : 'Click to manually mark as watched (auto-marks after 5 min)'
+                  }
+                  type="button"
+                >
+                  {watched.has(currentEpisodeKey) ? '✓ Watched' : '+ Mark as watched'}
+                </button>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button
-              className="player-close"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              type="button"
-            >
-              {isFullscreen ? '<' : '>'}
-            </button>
             <button className="player-close" onClick={onClose} title="Close" type="button">
               X
             </button>
@@ -764,16 +773,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               <p>{lookupState === 'loading' ? 'Preparing stream...' : 'Stream unavailable right now.'}</p>
             </div>
           )}
-
-          <button
-            type="button"
-            className={`player-controls-toggle ${controlsVisible ? 'is-hidden' : ''}`}
-            onClick={revealControls}
-            title="Show controls"
-            aria-label="Show player controls"
-          >
-            ⋮
-          </button>
 
           <div
             className={`player-controls-overlay ${controlsVisible ? 'visible' : ''}`}
@@ -855,38 +854,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
                 </div>
               )}
             </div>
-
-            {isTV && (
-              <div className="player-mark-row">
-                <button
-                  className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
-                  onClick={() => markWatched(season, episode)}
-                  disabled={!canTrackEpisodes || markingWatched}
-                  title={
-                    !canTrackEpisodes
-                      ? 'Watch tracking is unavailable for this item.'
-                      : watched.has(currentEpisodeKey)
-                        ? 'Click to unmark as watched'
-                        : 'Click to manually mark as watched (auto-marks after 5 min)'
-                  }
-                  type="button"
-                >
-                  {watched.has(currentEpisodeKey) ? '\u2713 Watched' : '+ Mark as watched'}
-                </button>
-                <span className="player-mark-hint">
-                  S{season} E{episode}
-                  {!watched.has(currentEpisodeKey) && canTrackEpisodes && ' | auto-tracks after 5 min'}
-                  {!canTrackEpisodes && ' | tracking unavailable'}
-                </span>
-              </div>
-            )}
-
-            <p className="player-kb-hint">
-              {isTV
-                ? 'Keyboard: F fullscreen · ← prev episode · → next episode · Esc close'
-                : 'Keyboard: F fullscreen · Esc close'}
-              {' · For anime try '}<strong>2Embed</strong> or <strong>AutoEmbed</strong>.
-            </p>
           </div>
         </div>
       </div>
