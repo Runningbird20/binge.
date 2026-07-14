@@ -31,11 +31,11 @@ describe('user access helpers', () => {
     }, ['dev', 'admin'])).toBe(true);
   });
 
-  test('keeps admin precedence when both role flags are present', () => {
+  test('routes admins to home like every other account', () => {
     expect(getDefaultRouteForUserType({
       userType: 'user',
       isAdmin: true,
       isDev: true,
-    })).toBe('/admin');
+    })).toBe('/home');
   });
 });
