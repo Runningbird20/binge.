@@ -1,19 +1,66 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import ThemedSelect from '../components/ThemedSelect';
-import UserAvatar from '../components/UserAvatar';
-import ForYou from '../components/ForYou';
 import Onboarding from '../components/Onboarding';
+import { computeStarRating } from '../components/RatingArtifact';
+import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
-import { buildHomeInsights, buildRecapNarrative } from '../homeInsights';
-import { fetchSupabaseRatings, fetchSupabaseWatchlist } from '../utils/supabaseData';
+import {
+  fetchSupabaseRatings,
+  fetchSupabaseWatchlist,
+  fetchSupabaseContinueWatching,
+  removeSupabaseContinueWatching,
+} from '../utils/supabaseData';
+import { generateSupabaseRecommendations, generateSupabaseTypeRecommendations } from '../utils/recommendations';
+import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
 
 const MEDIA_ICONS = {
-  movie: '\ud83c\udfac',
-  tv_show: '\ud83d\udcfa',
-  book: '\ud83d\udcda',
+  movie: FilmSlate,
+  tv_show: MonitorPlay,
+  book: BookOpen,
 };
+
+function MediaTypeIcon({ type, size = 16 }) {
+  const Icon = MEDIA_ICONS[type];
+  if (!Icon) return null;
+  return <Icon size={size} weight="bold" aria-hidden="true" />;
+}
+
+// Edge fade — matches the genre-bar scroll fade, but only shown when the
+// row actually has enough items to scroll (checked on mount, on scroll,
+// and whenever the row resizes or its item count changes).
+function useEdgeFade(items) {
+  const ref = useRef(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 8);
+    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll, { passive: true });
+
+    // Not every environment has ResizeObserver (e.g. jsdom in tests) —
+    // the scroll listener + the mount/items-change check above still
+    // cover the cases that matter, this just adds live resize tracking.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(checkScroll) : null;
+    ro?.observe(el);
+
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      ro?.disconnect();
+    };
+  }, [items, checkScroll]);
+
+  return { ref, canLeft, canRight };
+}
 
 function resolvePosterUrl(url) {
   if (!url) return null;
@@ -37,302 +84,518 @@ function resolvePosterUrl(url) {
   return url;
 }
 
-function BadgeIcon({ iconKey, label, toneKey }) {
-  const commonProps = {
-    viewBox: '0 0 64 64',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: '2.6',
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': 'true',
-  };
+const HERO_TYPE_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
 
-  const icons = {
-    collection: (
-      <svg {...commonProps}>
-        <rect x="14" y="18" width="18" height="28" rx="5" />
-        <rect x="32" y="14" width="18" height="28" rx="5" />
-        <path d="M22 31l4 4 8-9" />
-      </svg>
-    ),
-    film: (
-      <svg {...commonProps}>
-        <rect x="14" y="18" width="36" height="28" rx="6" />
-        <path d="M24 18v28M40 18v28M14 26h36M14 38h36" />
-        <circle cx="22" cy="24" r="1.5" fill="currentColor" stroke="none" />
-        <circle cx="42" cy="24" r="1.5" fill="currentColor" stroke="none" />
-        <circle cx="22" cy="40" r="1.5" fill="currentColor" stroke="none" />
-        <circle cx="42" cy="40" r="1.5" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-    tv: (
-      <svg {...commonProps}>
-        <rect x="14" y="18" width="36" height="22" rx="5" />
-        <path d="M24 46h16M32 40v6M22 14l10 8 10-8" />
-        <path d="M19 24h26M19 30h18" />
-      </svg>
-    ),
-    book: (
-      <svg {...commonProps}>
-        <path d="M18 18h14c4 0 7 3 7 7v21c-2.2-2-4.8-3-8-3H18z" />
-        <path d="M46 18H32c-4 0-7 3-7 7v21c2.2-2 4.8-3 8-3h13z" />
-        <path d="M32 22v20" />
-      </svg>
-    ),
-    review: (
-      <svg {...commonProps}>
-        <path d="M18 18h20c4.4 0 8 3.6 8 8v12c0 4.4-3.6 8-8 8H28l-10 8v-8h-2c-4.4 0-8-3.6-8-8V26c0-4.4 3.6-8 8-8z" />
-        <path d="M24 28h16M24 34h12" />
-        <path d="M42 18l4-4" />
-      </svg>
-    ),
-    trilogy: (
-      <svg {...commonProps}>
-        <path d="M16 40c3-11 11-18 16-18s13 7 16 18" />
-        <circle cx="20" cy="40" r="6" />
-        <circle cx="32" cy="24" r="6" />
-        <circle cx="44" cy="40" r="6" />
-      </svg>
-    ),
-    adaptation: (
-      <svg {...commonProps}>
-        <path d="M18 18h12c4 0 7 3 7 7v21c-2-2-4.8-3-8-3H18z" />
-        <path d="M46 18H34c-4 0-7 3-7 7v21c2-2 4.8-3 8-3h11z" />
-        <path d="M43 31l7 5-7 5z" />
-      </svg>
-    ),
-    spectrum: (
-      <svg {...commonProps}>
-        <circle cx="20" cy="22" r="6" />
-        <rect x="27" y="34" width="10" height="10" rx="2" />
-        <path d="M44 18h8l-4 10z" />
-        <path d="M25 26l7 8M39 33l7-10M22 28l10 10" />
-      </svg>
-    ),
-    shelf: (
-      <svg {...commonProps}>
-        <path d="M18 18v28M46 18v28M18 46h28" />
-        <rect x="22" y="22" width="6" height="20" rx="2" />
-        <rect x="30" y="20" width="7" height="22" rx="2" />
-        <rect x="39" y="24" width="4" height="18" rx="2" />
-      </svg>
-    ),
-  };
+function detailsUrl(item) {
+  if (item.media_type === 'movie') return `/movie/${item.media_id}`;
+  if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}`;
+  if (item.media_type === 'book') return `/book/${item.media_id}`;
+  return '/home';
+}
+
+function resumeUrl(item) {
+  if (item.media_type === 'movie') return `/movie/${item.media_id}?play=1`;
+  if (item.media_type === 'tv_show') {
+    const params = new URLSearchParams({ play: '1' });
+    if (item.current_season) params.set('season', item.current_season);
+    if (item.current_episode) params.set('episode', item.current_episode);
+    return `/tv-show/${item.media_id}?${params.toString()}`;
+  }
+  return detailsUrl(item);
+}
+
+function StreamHero({ user, continueWatchingItems, watchlistItems }) {
+  const location = useLocation();
+  const inProgressItem = continueWatchingItems.find(
+    (item) => resolvePosterUrl(item.image_url || item.poster_url)
+  ) || null;
+  const libraryItem = watchlistItems.find(
+    (item) => resolvePosterUrl(item.image_url || item.poster_url)
+  ) || null;
+  const heroItem = inProgressItem || libraryItem;
+  const poster = heroItem ? resolvePosterUrl(heroItem.image_url || heroItem.poster_url) : null;
+  const inProgress = Boolean(inProgressItem) && heroItem === inProgressItem;
 
   return (
-    <div
-      className={`badge-card-icon-shell badge-card-icon-shell-${toneKey}`}
-      aria-label={label}
-      role="img"
-    >
-      {icons[iconKey] || icons.collection}
+    <section className="stream-hero">
+      {poster && (
+        <div
+          className="stream-hero-backdrop"
+          style={{ backgroundImage: `url(${poster})` }}
+          aria-hidden="true"
+        />
+      )}
+      <div className="stream-hero-scrim" aria-hidden="true" />
+      <div className="stream-hero-content">
+        <p className="stream-hero-kicker">Welcome back, {user.username}</p>
+        <h1 className="stream-hero-title">
+          {heroItem ? heroItem.title : 'What will you binge tonight?'}
+        </h1>
+        <div className="stream-hero-meta">
+          {heroItem ? (
+            <>
+              <span className="stream-hero-chip">
+                {HERO_TYPE_LABELS[heroItem.media_type] || 'Title'}
+              </span>
+              {heroItem.year && <span>{heroItem.year}</span>}
+              <span className="stream-hero-dot">•</span>
+              <span>{inProgress ? 'Continue where you left off' : 'From your library'}</span>
+            </>
+          ) : (
+            <span>Pick up where you left off or discover something new.</span>
+          )}
+        </div>
+        <div className="stream-hero-actions">
+          {heroItem ? (
+            <>
+              <Link
+                className="btn-primary"
+                to={inProgress ? resumeUrl(heroItem) : detailsUrl(heroItem)}
+                state={{ backgroundLocation: location }}
+              >
+                {inProgress ? 'Resume' : 'Details'}
+              </Link>
+              <Link className="btn-secondary" to="/home">My Library</Link>
+            </>
+          ) : (
+            <>
+              <Link className="btn-primary" to="/movies">Browse Movies</Link>
+              <Link className="btn-secondary" to="/tv-shows">Browse Series</Link>
+            </>
+          )}
+        </div>
+      </div>
+      {poster && (
+        <img
+          className="stream-hero-poster"
+          src={poster}
+          alt={heroItem.title}
+          referrerPolicy="no-referrer"
+        />
+      )}
+    </section>
+  );
+}
+
+function ContinueWatchingCard({ item, onRemove }) {
+  const location = useLocation();
+  const poster = resolvePosterUrl(item.image_url || item.poster_url);
+  const url = resumeUrl(item);
+
+  const s  = item.current_season;
+  const e  = item.current_episode;
+  const ch = item.current_chapter;
+  const pg = item.current_page;
+
+  const progressLabel = item.media_type === 'tv_show' && (s || e)
+    ? `S${s || 1} · E${e || 1}`
+    : item.media_type === 'book' && (ch || pg)
+    ? (ch ? `Chapter ${ch}` : `Page ${pg}`)
+    : 'Continue watching';
+
+  return (
+    <div className="cw-card-wrap">
+      <Link to={url} className="foryou-card" state={{ backgroundLocation: location }}>
+        <div className="foryou-card-poster">
+          {poster
+            ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+            : <div className="foryou-card-placeholder"><MediaTypeIcon type={item.media_type} size={28} /></div>
+          }
+        </div>
+        <div className="foryou-card-body">
+          <div className="foryou-card-type">
+            <MediaTypeIcon type={item.media_type} /> {FOR_YOU_LABELS[item.media_type]}
+            {item.year && <span className="foryou-card-year">{item.year}</span>}
+          </div>
+          <h4 className="foryou-card-title">{item.title}</h4>
+          <p className="foryou-card-genre">{progressLabel}</p>
+        </div>
+      </Link>
+      <button
+        type="button"
+        className="cw-remove-btn"
+        title="Remove from Continue Watching"
+        aria-label={`Remove ${item.title} from Continue Watching`}
+        onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
 
-function ContinueWatching({ items }) {
-  const inProgress = items.filter(
-    i => i.status === 'watching' || i.status === 'reading'
-  );
-  if (!inProgress.length) return null;
+// Mirrors ForYouSection's layout (section-header + mr-track-wrap edge fade
+// over a foryou-grid of foryou-cards) so both rows read as one system.
+function ContinueWatching({ items, onRemove }) {
+  const { ref: cwRowRef, canLeft: cwCanLeft, canRight: cwCanRight } = useEdgeFade(items);
+  if (!items.length) return null;
 
   return (
     <section className="home-section">
       <div className="section-header">
-        <h2>▶ Continue Watching</h2>
+        <h2>Continue Watching</h2>
       </div>
-      <div className="continue-watching-row">
-        {inProgress.map(item => {
-          const poster = resolvePosterUrl(item.image_url || item.poster_url);
-          const url = item.media_type === 'movie'
-            ? `/movies?open=${item.media_id}`
-            : item.media_type === 'tv_show'
-            ? `/tv-shows?open=${item.media_id}`
-            : `/books?open=${item.media_id}`;
-
-          const s  = item.current_season;
-          const e  = item.current_episode;
-          const ch = item.current_chapter;
-          const pg = item.current_page;
-
-          let badge = null;
-          let sub   = null;
-          if (item.media_type === 'tv_show' && (s || e)) {
-            badge = `S${s || 1} E${e || 1}`;
-            sub   = `Season ${s || 1}, Ep ${e || 1}`;
-          } else if (item.media_type === 'book' && (ch || pg)) {
-            badge = ch ? `Ch ${ch}` : `Pg ${pg}`;
-            sub   = [ch ? `Chapter ${ch}` : null, pg ? `Page ${pg}` : null].filter(Boolean).join(', ');
-          } else {
-            sub = item.media_type === 'book' ? 'Reading' : 'Watching';
-          }
-
-          return (
-            <Link key={item.id} to={url} className="continue-card">
-              <div className="continue-card-poster">
-                {poster
-                  ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-                  : <div className="continue-card-placeholder">{MEDIA_ICONS[item.media_type]}</div>
-                }
-                <div className="continue-card-play">▶</div>
-                {badge && <div className="continue-card-badge">{badge}</div>}
-              </div>
-              <p className="continue-card-title">{item.title}</p>
-              <p className="continue-card-sub">{sub}</p>
-            </Link>
-          );
-        })}
+      <div className="mr-track-wrap">
+        <div className="foryou-grid" ref={cwRowRef}>
+          {items.map(item => (
+            <ContinueWatchingCard key={item.id} item={item} onRemove={onRemove} />
+          ))}
+        </div>
+        {cwCanLeft && <div className="mr-fade mr-fade-left" />}
+        {cwCanRight && <div className="mr-fade mr-fade-right" />}
       </div>
     </section>
   );
 }
 
-function WatchlistGallery({ items, loading }) {
-  const scrollRef = useRef(null);
-  const watchableItems = items.filter((item) => (
-    item.media_type === 'movie' || item.media_type === 'tv_show'
-  ));
+const FOR_YOU_TABS = [
+  { id: 'all', label: 'All', Icon: null },
+  { id: 'movie', label: 'Movies', Icon: FilmSlate },
+  { id: 'tv_show', label: 'TV Shows', Icon: MonitorPlay },
+  { id: 'book', label: 'Books', Icon: BookOpen },
+];
+const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
+const FOR_YOU_IDLE_STATE = { all: 'idle', movie: 'idle', tv_show: 'idle', book: 'idle' };
 
-  function scroll(direction) {
-    if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: direction * 220, behavior: 'smooth' });
-    }
-  }
-
-  function getSiteUrl(item) {
-    if (item.media_type === 'movie') return `/movies?open=${item.media_id}`;
-    if (item.media_type === 'tv_show') return `/tv-shows?open=${item.media_id}`;
-    if (item.media_type === 'book') return `/books?open=${item.media_id}`;
-    return '/watchlist';
-  }
-
-  if (loading) {
-    return <div className="loading-state" style={{ padding: '2rem' }}>Loading...</div>;
-  }
-
-  if (watchableItems.length === 0) {
-    return (
-      <div className="empty-state">
-        <p>Your movie and TV watchlist is empty.</p>
-        <p className="empty-hint">Add movies or TV shows to keep your next picks ready.</p>
-        <div className="cta-buttons" style={{ marginTop: '1rem' }}>
-          <Link to="/movies" className="btn-secondary">Browse movies</Link>
-          <Link to="/tv-shows" className="btn-secondary">Browse TV shows</Link>
-        </div>
+function ForYouCard({ rec }) {
+  const location = useLocation();
+  return (
+    <Link to={rec.siteUrl} className="foryou-card" state={{ backgroundLocation: location }}>
+      <div className="foryou-card-poster">
+        {rec.posterUrl ? (
+          <img src={rec.posterUrl} alt={rec.title} />
+        ) : (
+          <div className="foryou-card-placeholder"><MediaTypeIcon type={rec.media_type} size={28} /></div>
+        )}
       </div>
-    );
-  }
+      <div className="foryou-card-body">
+        <div className="foryou-card-type">
+          <MediaTypeIcon type={rec.media_type} /> {FOR_YOU_LABELS[rec.media_type]}
+          {rec.year && <span className="foryou-card-year">{rec.year}</span>}
+        </div>
+        <h4 className="foryou-card-title">{rec.title}</h4>
+        {rec.genre && <p className="foryou-card-genre">{rec.genre.split(',')[0].trim()}</p>}
+      </div>
+    </Link>
+  );
+}
+
+function ForYouSection({ ready }) {
+  const [activeType, setActiveType]     = useState('all');
+  const [tabState, setTabState]         = useState(FOR_YOU_IDLE_STATE);
+  const [tabData, setTabData]           = useState({});
+  const [tabError, setTabError]         = useState({});
+
+  const fetchType = useCallback(async (mediaType) => {
+    setTabState((prev) => ({ ...prev, [mediaType]: 'loading' }));
+    setTabError((prev) => ({ ...prev, [mediaType]: '' }));
+    try {
+      const result = mediaType === 'all'
+        ? await generateSupabaseRecommendations()
+        : await generateSupabaseTypeRecommendations(mediaType);
+      setTabData((prev) => ({ ...prev, [mediaType]: result }));
+      setTabState((prev) => ({ ...prev, [mediaType]: result.recommendations?.length ? 'done' : 'empty' }));
+    } catch (err) {
+      setTabError((prev) => ({ ...prev, [mediaType]: String(err?.message || '').trim() || 'Something went wrong.' }));
+      setTabState((prev) => ({ ...prev, [mediaType]: 'error' }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (ready && tabState[activeType] === 'idle') fetchType(activeType);
+  }, [ready, activeType, tabState, fetchType]);
+
+  const state = tabState[activeType];
+  const data = tabData[activeType];
+  const error = tabError[activeType];
+  const { ref: foryouRowRef, canLeft: foryouCanLeft, canRight: foryouCanRight } = useEdgeFade(data?.recommendations);
 
   return (
-    <div className="wl-gallery-wrap">
-      {watchableItems.length > 4 && (
-        <button
-          className="wl-gallery-arrow wl-gallery-arrow--left"
-          onClick={() => scroll(-1)}
-          type="button"
-        >
-          {'\u2039'}
-        </button>
-      )}
-      <div className="wl-gallery-scroll" ref={scrollRef}>
-        {watchableItems.map((item) => (
-          <Link key={item.id} to={getSiteUrl(item)} className="wl-gallery-card">
-            <div className="wl-gallery-poster">
-              {item.image_url || item.poster_url ? (
-                <img
-                  src={resolvePosterUrl(item.image_url || item.poster_url)}
-                  alt={item.title}
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="wl-gallery-placeholder">
-                  {MEDIA_ICONS[item.media_type] || MEDIA_ICONS.tv_show}
-                </div>
-              )}
-              <div className="wl-gallery-overlay">
-                <span className="wl-gallery-type">{MEDIA_ICONS[item.media_type]}</span>
-              </div>
-            </div>
-            <div className="wl-gallery-info">
-              <p className="wl-gallery-title">{item.title}</p>
-              {item.year && <p className="wl-gallery-year">{item.year}</p>}
-            </div>
-          </Link>
-        ))}
+    <section className="home-section" id="for-you">
+      <div className="section-header">
+        <h2>For You</h2>
       </div>
-      {watchableItems.length > 4 && (
-        <button
-          className="wl-gallery-arrow wl-gallery-arrow--right"
-          onClick={() => scroll(1)}
-          type="button"
-        >
-          {'\u203a'}
-        </button>
+
+      <div className="profile-wl-filters">
+        <div className="books-tab-bar books-tab-bar--inline">
+          {FOR_YOU_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`books-tab ${activeType === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveType(tab.id)}
+            >
+              {tab.Icon && <tab.Icon size={16} weight="bold" aria-hidden="true" />} {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="foryou-section">
+        {state === 'loading' && (
+          <div className="foryou-loading">
+            <div className="foryou-loading-owl">🍿</div>
+            <p>Matching your taste...</p>
+            <div className="foryou-loading-dots"><span /><span /><span /></div>
+          </div>
+        )}
+
+        {state === 'error' && (
+          <div className="foryou-error">
+            <p>⚠️ {error}</p>
+            <button type="button" className="foryou-generate-btn" onClick={() => fetchType(activeType)}>Try again</button>
+          </div>
+        )}
+
+        {state === 'empty' && (
+          <div className="foryou-idle">
+            <p className="foryou-idle-text">
+              {data?.message || 'Rate some movies, TV shows, or books first to unlock personalized recommendations!'}
+            </p>
+            <Link to="/movies" className="foryou-generate-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+              Browse & Rate Media
+            </Link>
+          </div>
+        )}
+
+        {state === 'done' && data && (
+          <div className="mr-track-wrap">
+            <div className="foryou-grid" ref={foryouRowRef}>
+              {data.recommendations.map((rec) => (
+                <ForYouCard key={`${rec.media_type}:${rec.id}`} rec={rec} />
+              ))}
+            </div>
+            {foryouCanLeft && <div className="mr-fade mr-fade-left" />}
+            {foryouCanRight && <div className="mr-fade mr-fade-right" />}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LibraryCard({ item, ratingScore }) {
+  const location = useLocation();
+
+  // Library always opens the media card (details view) — auto-play is
+  // reserved for the Continue Watching row, which resumes at the saved point.
+  const mediaUrl = item.media_type === 'movie'
+    ? `/movie/${item.media_id}`
+    : item.media_type === 'tv_show'
+    ? `/tv-show/${item.media_id}`
+    : `/book/${item.media_id}`;
+
+  const poster = resolvePosterUrl(item.poster_url || item.image_url);
+
+  const progressBadge = item.media_type === 'tv_show' && (item.current_season || item.current_episode)
+    ? `S${item.current_season || '?'} · E${item.current_episode || '?'}`
+    : item.media_type === 'book' && (item.current_chapter || item.current_page)
+    ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
+    : null;
+
+  const ratingOutOfFive = ratingScore != null ? ratingScore.toFixed(1) : null;
+
+  return (
+    <Link
+      to={mediaUrl}
+      className="profile-wl-card profile-wl-card--own"
+      state={{ backgroundLocation: location }}
+    >
+      <div className="profile-wl-poster">
+        {poster
+          ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+          : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>}
+        {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
+        {ratingOutOfFive != null && (
+          <span className="profile-wl-status-ind profile-wl-status-ind--rated" title={`Rated ${ratingOutOfFive}/5`}>
+            <span className="profile-wl-status-ind-num">{ratingOutOfFive}</span>
+            <span className="profile-wl-status-ind-den">/5</span>
+          </span>
+        )}
+      </div>
+      <p className="profile-wl-title">{item.title || '—'}</p>
+      {item.year && <p className="profile-wl-year">{item.year}</p>}
+    </Link>
+  );
+}
+
+function DashboardLibrarySection({ user, watchlist, ratings, loading }) {
+  const [wlTypeFilter, setWlTypeFilter] = useState('');
+
+  const filteredWatchlist = watchlist.filter(item => {
+    return !wlTypeFilter || item.media_type === wlTypeFilter;
+  });
+
+  const { ref: libraryRowRef, canLeft: libraryCanLeft, canRight: libraryCanRight } = useEdgeFade(filteredWatchlist);
+
+  const ratingScores = useMemo(() => {
+    const map = new Map();
+    ratings.forEach(r => {
+      const score = computeStarRating(r.media_type, r);
+      if (score != null) map.set(`${r.media_type}:${r.media_id}`, score);
+    });
+    return map;
+  }, [ratings]);
+
+  const stats = useMemo(() => {
+    const completed  = watchlist.filter(i => i.status === 'watched' || i.status === 'read').length;
+    const inProgress = watchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
+
+    const scores = ratings.map(r => computeStarRating(r.media_type, r)).filter(s => s != null);
+    const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
+
+    // The catalog has no per-title runtime data, so estimate: watched
+    // movies at ~115 min each, tracked TV progress at ~45 min/episode
+    // assuming ~10 episodes per season.
+    let minutes = 0;
+    watchlist.forEach(i => {
+      if (i.media_type === 'movie' && i.status === 'watched') minutes += 115;
+      if (i.media_type === 'tv_show') {
+        const season  = Number(i.current_season)  || 0;
+        const episode = Number(i.current_episode) || 0;
+        if (season || episode) minutes += (Math.max(season - 1, 0) * 10 + episode) * 45;
+      }
+    });
+
+    return { completed, inProgress, avg, minutes, totalRatings: ratings.length };
+  }, [watchlist, ratings]);
+
+  return (
+    <section className="home-section dashboard-section">
+      <div className="profile-header">
+        <div className="profile-avatar-wrap">
+          <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
+        </div>
+        <div className="profile-info">
+          <h1 className="profile-username">{user.username}</h1>
+          <p className="profile-minutes">
+            <span className="profile-minutes-num">{stats.minutes.toLocaleString()}</span> minutes watched
+          </p>
+        </div>
+        <div className="profile-actions profile-actions--stacked">
+          <Link to="/account-settings" className="btn-ghost">Edit Profile</Link>
+          <div className="profile-stat-squares">
+            <div className="profile-stat-square">
+              <span className="profile-stat-square-num">{stats.completed}</span>
+              <span className="profile-stat-square-label">Completed</span>
+            </div>
+            <div className="profile-stat-square">
+              <span className="profile-stat-square-num">{stats.inProgress}</span>
+              <span className="profile-stat-square-label">In Progress</span>
+            </div>
+            <div className="profile-stat-square">
+              <span className="profile-stat-square-num">{stats.totalRatings}</span>
+              <span className="profile-stat-square-label">Ratings</span>
+            </div>
+            <div className="profile-stat-square">
+              <span className="profile-stat-square-num">{stats.avg}</span>
+              <span className="profile-stat-square-label">Avg Score</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="section-header">
+        <h2>Library</h2>
+      </div>
+
+      <div className="profile-wl-filters">
+        <div className="books-tab-bar books-tab-bar--inline">
+          {[
+            { value: '', label: 'All', Icon: null },
+            { value: 'movie', label: 'Movies', Icon: FilmSlate },
+            { value: 'tv_show', label: 'TV', Icon: MonitorPlay },
+            { value: 'book', label: 'Books', Icon: BookOpen },
+          ].map(t => (
+            <button key={t.value} className={`books-tab ${wlTypeFilter === t.value ? 'active' : ''}`} onClick={() => setWlTypeFilter(t.value)} type="button">
+              {t.Icon && <t.Icon size={16} weight="bold" aria-hidden="true" />} {t.label}
+            </button>
+          ))}
+        </div>
+        <span className="profile-filter-count">{filteredWatchlist.length} items</span>
+      </div>
+
+      {loading ? (
+        <div className="loading-state">Loading library...</div>
+      ) : filteredWatchlist.length === 0 ? (
+        <div className="empty-state">
+          <p>Your library is empty.</p>
+          <Link to="/movies" className="btn-secondary" style={{ marginTop: '1rem', display: 'inline-block' }}>Browse the catalog</Link>
+        </div>
+      ) : (
+        <div className="mr-track-wrap">
+          <div className="profile-watchlist-row" ref={libraryRowRef}>
+            {filteredWatchlist.map((item, i) => (
+              <LibraryCard
+                key={item.id ?? i}
+                item={item}
+                ratingScore={ratingScores.get(`${item.media_type}:${item.media_id}`) ?? null}
+              />
+            ))}
+          </div>
+          {libraryCanLeft && <div className="mr-fade mr-fade-left" />}
+          {libraryCanRight && <div className="mr-fade mr-fade-right" />}
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 
 export default function Home() {
   const { user, authLoading } = useAuth();
-  const [stats, setStats] = useState({ ratings: 0, watchlist: 0 });
-  const [ratings, setRatings] = useState([]);
+  const location = useLocation();
   const [watchlistItems, setWatchlistItems] = useState([]);
-  const [selectedYear, setSelectedYear] = useState();
-  const [loading, setLoading] = useState(true);
+  const [ratingsItems, setRatingsItems] = useState([]);
+  const [continueWatchingItems, setContinueWatchingItems] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const insights = buildHomeInsights(ratings, watchlistItems, selectedYear);
 
   const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
+
+  const userId = user?.id;
 
   useEffect(() => {
     let cancelled = false;
 
-    if (authLoading || !user) {
-      setLoading(true);
+    if (authLoading || !userId) {
       return () => {
         cancelled = true;
       };
     }
 
     async function fetchStats() {
-      setLoading(true);
-
+      setDataLoading(true);
       try {
-        const [ratingsResult, watchlistResult] = await Promise.allSettled([
+        const [ratingsResult, watchlistResult, continueWatchingResult] = await Promise.allSettled([
           fetchSupabaseRatings(),
           fetchSupabaseWatchlist(),
+          fetchSupabaseContinueWatching(),
         ]);
 
         if (cancelled) return;
 
         const ratingsData = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
         const watchlistData = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
+        const continueWatchingData = continueWatchingResult.status === 'fulfilled' ? continueWatchingResult.value : [];
         const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
         const nextWatchlist = Array.isArray(watchlistData) ? watchlistData : [];
-        setRatings(nextRatings);
+        const nextContinueWatching = Array.isArray(continueWatchingData) ? continueWatchingData : [];
         setWatchlistItems(nextWatchlist);
-        setStats({ ratings: nextRatings.length, watchlist: nextWatchlist.length });
+        setRatingsItems(nextRatings);
+        setContinueWatchingItems(nextContinueWatching);
         if (nextRatings.length === 0 && !localStorage.getItem(onboardingKey)) {
           setShowOnboarding(true);
         }
-        setSelectedYear((currentYear) => (
-          currentYear == null ? buildHomeInsights(nextRatings, nextWatchlist).selectedYear : currentYear
-        ));
       } catch {
         if (cancelled) return;
-        setRatings([]);
         setWatchlistItems([]);
-        setStats({ ratings: 0, watchlist: 0 });
-        // Still show onboarding for fresh accounts even if the data fetch failed
+        setRatingsItems([]);
+        setContinueWatchingItems([]);
         if (!localStorage.getItem(onboardingKey)) {
           setShowOnboarding(true);
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setDataLoading(false);
       }
     }
 
@@ -341,12 +604,28 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, onboardingKey, user]);
+  }, [authLoading, onboardingKey, userId]);
 
   function completeOnboarding() {
     localStorage.setItem(onboardingKey, '1');
     setShowOnboarding(false);
   }
+
+  async function handleRemoveContinueWatching(id) {
+    setContinueWatchingItems(prev => prev.filter(item => item.id !== id));
+    try {
+      await removeSupabaseContinueWatching(id);
+    } catch {
+      // Re-fetching on next visit will reconcile if the delete failed.
+    }
+  }
+
+  // Bottom-nav "For You" tab links to /home#for-you — scroll it into view
+  // once the section has actually mounted (gated behind authLoading below).
+  useEffect(() => {
+    if (location.hash !== '#for-you' || authLoading || !userId) return;
+    document.getElementById('for-you')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash, authLoading, userId]);
 
   return (
     <>
@@ -358,256 +637,19 @@ export default function Home() {
           <div className="loading-state">Loading dashboard...</div>
         ) : (
         <>
-        <div className="page-header home-header">
-          <p className="page-kicker">Dashboard</p>
-          <div className="home-profile">
-            <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
-            <div>
-              <h1>Welcome back, {user.username}.</h1>
-              <p className="page-subtitle home-subtitle">
-                Track what you finish, jump back into your library, and plan the next pick with friends.
-              </p>
-              {user.bio && <p className="home-bio">{user.bio}</p>}
-            </div>
-          </div>
-        </div>
-
-        <div className="stats-row">
-          <div className="stat-card">
-            <div className="stat-number">{stats.ratings}</div>
-            <div className="stat-label">Ratings</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-number">{stats.watchlist}</div>
-            <div className="stat-label">Saved Titles</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-number">{insights.earnedBadgeCount}</div>
-            <div className="stat-label">Badges Complete</div>
-          </div>
-        </div>
+        <StreamHero user={user} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
-          <section className="home-section surface-panel">
-            <div className="section-header home-insights-header">
-              <div>
-                <h2>Annual Recap</h2>
-                <p className="home-panel-copy">
-                  See how your movies, shows, and books add up over the year.
-                </p>
-              </div>
-              <Link to="/year-in-review" className="section-link">Full report →</Link>
-              <label className="home-year-filter">
-                <span>Year</span>
-                <ThemedSelect
-                  className="filter-input"
-                  aria-label="Choose recap year"
-                  value={insights.selectedYear}
-                  options={insights.availableYears.map((year) => ({ value: year, label: year }))}
-                  onChange={(event) => setSelectedYear(Number(event.target.value))}
-                />
-              </label>
-            </div>
+          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
 
-            {stats.ratings === 0 ? (
-              <div className="empty-state home-empty-card">
-                <p>Your recap will fill in as soon as you start rating titles.</p>
-                <p className="empty-hint">
-                  Log a movie, TV show, or book to unlock milestones and a yearly summary.
-                </p>
-                <Link to="/movies" className="btn-secondary">Browse the catalog</Link>
-              </div>
-            ) : (
-              <>
-                <p className="home-recap-summary">{buildRecapNarrative(insights.recap)}</p>
+          <DashboardLibrarySection
+            user={user}
+            watchlist={watchlistItems}
+            ratings={ratingsItems}
+            loading={dataLoading}
+          />
 
-                <div className="home-recap-stat-grid">
-                  <div className="home-recap-stat-card">
-                    <span className="home-recap-stat-label">Logged</span>
-                    <strong>{insights.recap.totalLogged}</strong>
-                  </div>
-                  <div className="home-recap-stat-card">
-                    <span className="home-recap-stat-label">Movies</span>
-                    <strong>{insights.recap.countsByType.movie}</strong>
-                  </div>
-                  <div className="home-recap-stat-card">
-                    <span className="home-recap-stat-label">TV Shows</span>
-                    <strong>{insights.recap.countsByType.tv_show}</strong>
-                  </div>
-                  <div className="home-recap-stat-card">
-                    <span className="home-recap-stat-label">Books</span>
-                    <strong>{insights.recap.countsByType.book}</strong>
-                  </div>
-                </div>
-
-                <div className="home-recap-grid">
-                  <div className="home-recap-card">
-                    <div className="home-recap-card-header">
-                      <h3>Monthly Pace</h3>
-                    </div>
-                    <div className="home-monthly-chart" aria-label="Monthly recap chart">
-                      {insights.recap.monthly.map((month) => (
-                        <div key={month.label} className="home-month-bar">
-                          <div className="home-month-bar-track">
-                            <span
-                              className="home-month-bar-fill"
-                              style={{ height: `${month.percent}%` }}
-                            />
-                          </div>
-                          <span className="home-month-bar-label">{month.label}</span>
-                          <span className="home-month-bar-count">{month.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="home-recap-card">
-                    <div className="home-recap-card-header">
-                      <h3>Highlights</h3>
-                    </div>
-                    <div className="home-highlight-grid">
-                      <div className="home-highlight-card">
-                        <span className="home-highlight-label">Active Months</span>
-                        <strong>{insights.recap.activeMonths}</strong>
-                      </div>
-                      <div className="home-highlight-card">
-                        <span className="home-highlight-label">Busiest Month</span>
-                        <strong>
-                          {insights.recap.busiestMonth
-                            ? insights.recap.busiestMonth.label
-                            : 'None yet'}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <div className="home-genre-block">
-                      <h4>Top Genres</h4>
-                      {insights.recap.topGenres.length === 0 ? (
-                        <p className="home-genre-empty">No genre breakdown yet.</p>
-                      ) : (
-                        <div className="home-genre-list">
-                          {insights.recap.topGenres.map((genre) => (
-                            <span key={genre.label} className="home-genre-chip">
-                              {genre.label} <strong>{genre.count}</strong>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="home-section">
-            <div className="section-header">
-              <h2>Explore the Library</h2>
-            </div>
-            <div className="browse-grid">
-              <Link to="/movies" className="browse-card browse-movies">
-                <div className="browse-card-badge">FILM</div>
-                <h3>Movies</h3>
-                <p>Browse the catalog, open full details, and rate what you watch.</p>
-              </Link>
-              <Link to="/tv-shows" className="browse-card browse-tv">
-                <div className="browse-card-badge">SHOW</div>
-                <h3>TV Shows</h3>
-                <p>Keep up with series, seasons, and your next binge pick.</p>
-              </Link>
-              <Link to="/books" className="browse-card browse-books">
-                <div className="browse-card-badge">BOOK</div>
-                <h3>Books</h3>
-                <p>Search the shelf, open book details, and save future reads.</p>
-              </Link>
-              <Link to="/lists" className="browse-card browse-lists">
-                <div className="browse-card-badge">LIST</div>
-                <h3>Shared Lists</h3>
-                <p>Build collaborative watchlists and book-club queues with vibe voting.</p>
-              </Link>
-            </div>
-          </section>
-
-          <ForYou />
-
-          <ContinueWatching items={watchlistItems} />
-
-          <section className="home-section">
-            <div className="section-header">
-              <h2>Your Watchlist</h2>
-              <Link to="/watchlist" className="section-link">View all →</Link>
-            </div>
-            <WatchlistGallery items={watchlistItems} loading={loading} />
-          </section>
-
-          <section className="home-section surface-panel">
-            <div className="section-header">
-              <h2>Plan Together</h2>
-               <Link to="/lists" className="section-link">Open lists</Link>
-            </div>
-            <div className="home-action-card">
-              <p className="home-panel-copy">
-                Create public or private lists, invite collaborators, and let anonymous vibe votes surface the group favorite.
-              </p>
-              <Link to="/lists" className="btn-secondary">Go to shared lists</Link>
-            </div>
-          </section>
-        
-          <section className="home-section surface-panel">
-            <div className="section-header home-insights-header">
-              <div>
-                <h2>Achievements</h2>
-                <p className="home-panel-copy">
-                  Achievements level up from bronze to rarer metals based on what you finish and save in your library.
-                </p>
-              </div>
-              <p className="surface-panel-meta">
-                {insights.earnedBadgeCount} of {insights.badges.length} unlocked
-              </p>
-            </div>
-
-            <div className="home-badge-grid">
-              {insights.badges.map((badge) => (
-                <article
-                  key={badge.id}
-                  className={`badge-card badge-card-tier-${badge.displayTier.key}${badge.completed ? ' badge-card-earned' : ''}`}
-                >
-                  <BadgeIcon
-                    iconKey={badge.iconKey}
-                    label={badge.iconLabel}
-                    toneKey={badge.currentTier ? badge.currentTier.key : 'locked'}
-                  />
-                  <div className="badge-card-main">
-                    <div className="badge-card-header">
-                      <div className="badge-card-chip-row">
-                        <span className="badge-card-progress-chip">{badge.progressLabel}</span>
-                        <span className="badge-card-kicker">{badge.kicker}</span>
-                      </div>
-                      <span
-                        className={`badge-card-status${badge.currentTier ? ` badge-card-tier badge-card-tier-${badge.currentTier.key}` : ' badge-card-status-locked'}`}
-                      >
-                        {badge.statusLabel}
-                      </span>
-                    </div>
-                    <div className="badge-card-copy-block">
-                      <h3>{badge.name}</h3>
-                      <p className="badge-card-copy">{badge.description}</p>
-                    </div>
-                    <div className="badge-progress-row">
-                      <div className="badge-progress-track" aria-hidden="true">
-                        <span style={{ width: `${badge.progressPercent}%` }} />
-                      </div>
-                      <span className="badge-progress-value">{badge.progressPercent}%</span>
-                    </div>
-                    <div className="badge-card-footer">
-                      <p className="badge-progress-caption">{badge.progressCaption}</p>
-                      <p className="badge-card-detail">{badge.detail}</p>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+          <ForYouSection ready={!authLoading && !!user} />
         </div>
         </>
         )}

@@ -53,6 +53,35 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
+// A second client with session persistence off, used for one-shot signUp()
+// calls made on someone else's behalf (e.g. an admin creating an account).
+// auth.signUp() logs in as the new user on whatever client it's called on —
+// running it here instead of the main `supabase` client keeps the caller's
+// own session untouched.
+let sessionlessClient = null;
+export function getSessionlessSupabaseClient() {
+  if (!isSupabaseConfigured) {
+    throw new Error(getSupabaseConfigErrorMessage());
+  }
+
+  if (!sessionlessClient) {
+    sessionlessClient = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        // A distinct storageKey gives this client its own Navigator LockManager
+        // lock name — without it, GoTrueClient derives the lock from the project
+        // URL alone, so this client fights the main `supabase` client for the
+        // same lock ("Lock ... was released because another request stole it").
+        storageKey: 'sb-admin-signup-auth-token',
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
+
+  return sessionlessClient;
+}
+
 export function getSupabaseConfigErrorMessage() {
   return [
     'Missing Supabase environment variables.',
@@ -80,10 +109,41 @@ function runSerializedAuthOperation(operation) {
   return run;
 }
 
+// GoTrueClient serializes its own critical sections (init, token refresh,
+// session save) behind a single Navigator LockManager lock keyed off the
+// project URL. That lock is shared across every caller on the page —
+// our own getSession/getUser/refreshSession calls, the SDK's internal
+// auto-refresh timer, and onAuthStateChange's internal notifications all
+// queue for the same name. If whichever caller is holding it runs long
+// (slow network, a dev-only React Strict Mode double-mount, etc.), a
+// waiting caller times out and force-steals the lock, and the original
+// holder's call rejects with "Lock ... was released because another
+// request stole it". That's transient contention, not a real failure —
+// retrying picks up an uncontended lock a moment later.
+function isLockStolenError(error) {
+  return /lock ".*" was released because another request stole it/i.test(String(error?.message || ''));
+}
+
+async function withLockStealRetry(operation, retries = 2) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isLockStolenError(error) && attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function getSupabaseSession() {
   const client = requireSupabaseClient();
   if (!sessionRequestPromise) {
-    sessionRequestPromise = runSerializedAuthOperation(() => client.auth.getSession()).finally(() => {
+    sessionRequestPromise = runSerializedAuthOperation(() =>
+      withLockStealRetry(() => client.auth.getSession())
+    ).finally(() => {
       sessionRequestPromise = null;
     });
   }
@@ -94,7 +154,9 @@ export async function getSupabaseSession() {
 export async function getSupabaseUser() {
   const client = requireSupabaseClient();
   if (!userRequestPromise) {
-    userRequestPromise = runSerializedAuthOperation(() => client.auth.getUser()).finally(() => {
+    userRequestPromise = runSerializedAuthOperation(() =>
+      withLockStealRetry(() => client.auth.getUser())
+    ).finally(() => {
       userRequestPromise = null;
     });
   }
@@ -105,7 +167,9 @@ export async function getSupabaseUser() {
 export async function refreshSupabaseSession() {
   const client = requireSupabaseClient();
   if (!refreshRequestPromise) {
-    refreshRequestPromise = runSerializedAuthOperation(() => client.auth.refreshSession()).finally(() => {
+    refreshRequestPromise = runSerializedAuthOperation(() =>
+      withLockStealRetry(() => client.auth.refreshSession())
+    ).finally(() => {
       refreshRequestPromise = null;
     });
   }

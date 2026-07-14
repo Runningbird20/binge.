@@ -144,7 +144,6 @@ export default function Sports() {
   const [error, setError]               = useState('');
   const [selected, setSelected]         = useState(null);
   const [category, setCategory]         = useState('All');
-  const [sidebarOpen, setSidebar]       = useState(true);
   const [fullscreen, setFullscreen]     = useState(false);
   const [nowMs, setNowMs]               = useState(Date.now());
   const [sportsProvider, setSportsProvider] = useState('ppv.st');
@@ -368,92 +367,34 @@ export default function Sports() {
       <Navbar />
       <div className="sports-shell">
 
-        {/* ── Sidebar ── */}
-        <aside className={`sports-sidebar ${sidebarOpen ? '' : 'sports-sidebar--hidden'}`}>
-          <div className="sports-sidebar-header">
-            <div className="sports-sidebar-title">
-              <span>🏆</span>
-              <h2>Sports</h2>
-              {!loading && liveCount > 0 && (
-                <span className="sports-live-count">{liveCount} LIVE</span>
-              )}
-            </div>
-            <button className="sports-sidebar-toggle" onClick={() => setSidebar(o => !o)}>‹</button>
-          </div>
-
-          <div className="sports-categories">
-            {categories.map(cat => {
-              const count = cat === 'All'
-                ? streams.length
-                : streams.filter(s => s.category === cat).length;
-              return (
-                <button
-                  key={cat}
-                  className={`sports-cat-btn ${category === cat ? 'active' : ''}`}
-                  onClick={() => setCategory(cat)}
-                >
-                  {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
-                  <span className="sports-cat-count">{count}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="sports-stream-list">
-            {loading ? (
-              <div className="sports-loading">
-                <div className="sports-loading-dots"><span /><span /><span /></div>
-                <p>Loading streams...</p>
-              </div>
-            ) : error ? (
-              <div className="sports-error">
-                <p>⚠️ {error}</p>
-                <button className="sports-retry-btn" onClick={load}>Retry</button>
-              </div>
-            ) : filtered.length === 0 ? (
-              <p className="sports-empty">No streams in this category.</p>
-            ) : (
-              filtered.map(s => {
-                const status = getStatus(s, nowMs);
-                return (
-                  <button
-                    key={s.id}
-                    className={`sports-stream-btn ${selected?.id === s.id ? 'active' : ''}`}
-                    onClick={() => { setSelected(s); if (window.innerWidth < 768) setSidebar(false); }}
-                  >
-                    {s.poster ? (
-                      <img src={s.poster} alt={s.name} className="sports-stream-poster"
-                        onError={e => { e.target.style.display = 'none'; }} />
-                    ) : (
-                      <div className="sports-stream-poster sports-stream-poster--placeholder">
-                        {catIcon(s.category)}
-                      </div>
-                    )}
-                    <div className="sports-stream-info">
-                      <span className="sports-stream-name">{s.name}</span>
-                      {s.tag && <span className="sports-stream-tag">{s.tag}</span>}
-                      <div className="sports-stream-meta">
-                        {status === 'live' && (
-                          <span className="sports-badge sports-badge--live">● LIVE</span>
-                        )}
-                        {status === 'upcoming' && (
-                          <span className="sports-badge sports-badge--upcoming">
-                            {fmtDate(s.startsAt)} {fmtTime(s.startsAt)}
-                            {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
-                          </span>
-                        )}
-                        {status === 'replay' && (
-                          <span className="sports-badge sports-badge--replay">REPLAY</span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
+        {/* ── Sport type filter, along the top like the genre bar ── */}
+        <div className="genre-bar-wrap">
+          <div className="genre-bar" role="tablist" aria-label="Sport categories">
+            {liveCount > 0 && (
+              <span className="sports-live-pill">● {liveCount} LIVE</span>
             )}
+            {categories.map(cat => (
+              <button
+                key={cat}
+                type="button"
+                className={`genre-chip${category === cat ? ' active' : ''}`}
+                onClick={() => setCategory(cat)}
+              >
+                {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div className="sports-sidebar-footer">
+        <div className="sports-main">
+
+          {/* ── Games, on the left ── */}
+          <aside className="sports-games-panel">
+            <div className="sports-games-header">
+              <h2>Games</h2>
+              <button className="sports-refresh-btn" onClick={load} title="Refresh" type="button">↻</button>
+            </div>
+
             <div className="sports-provider-row">
               {PPV_PROVIDERS.map(p => (
                 <button
@@ -464,80 +405,129 @@ export default function Sports() {
                 >{p.label}</button>
               ))}
             </div>
-            <button className="sports-refresh-btn" onClick={load} title="Refresh">↻</button>
-          </div>
-        </aside>
 
-        {/* ── Player ── */}
-        <main className="sports-player-area" ref={playerRef}>
-          {!sidebarOpen && (
-            <button className="sports-sidebar-show-btn" onClick={() => setSidebar(true)}>
-              ← Streams
-            </button>
-          )}
+            <div className="sports-games-divider" />
 
-          {selected ? (
-            <>
-              <div className="sports-now-playing">
-                <div className="sports-now-info">
-                  {getStatus(selected, nowMs) === 'live' && (
-                    <span className="sports-live-badge">● LIVE</span>
-                  )}
-                  <span className="sports-now-name">{selected.name}</span>
-                  {selected.tag && <span className="sports-now-tag">{selected.tag}</span>}
-                  <span className="sports-now-cat">
-                    {catIcon(selected.category)} {selected.category}
-                  </span>
+            <div className="sports-stream-list">
+              {loading ? (
+                <div className="sports-loading">
+                  <div className="sports-loading-dots"><span /><span /><span /></div>
+                  <p>Loading streams...</p>
                 </div>
-                <button className="sports-fullscreen-btn" onClick={toggleFs}
-                  title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                  {fullscreen ? '↙' : '↗'}
-                </button>
-              </div>
-
-              <div className="sports-frame-wrap">
-                {buildStreamUrl(selected, sportsProvider) ? (
-                  <iframe
-                    key={`${selected.id}-${sportsProvider}`}
-                    ref={iframeRef}
-                    src={buildStreamUrl(selected, sportsProvider)}
-                    className="sports-frame"
-                    allowFullScreen
-                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    scrolling="no"
-                    title={selected.name}
-                  />
-                ) : (
-                  <div className="sports-no-stream">
-                    <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
-                    <h3>{selected.name}</h3>
-                    {getStatus(selected, nowMs) === 'upcoming' ? (
-                      <>
-                        <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}
-                          {timeUntil(selected.startsAt) && ` (in ${timeUntil(selected.startsAt)})`}
-                        </p>
-                        <p className="sports-no-stream-note">Stream link will appear when the event goes live.</p>
-                      </>
-                    ) : (
-                      <p className="sports-no-stream-note">Stream unavailable — try refreshing.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
-          ) : !loading && (
-            <div className="sports-no-selection">
-              <div style={{ fontSize: '5rem' }}>🏆</div>
-              <h2>Live Sports</h2>
-              <p>Select a stream from the sidebar to start watching.</p>
-              {liveCount > 0 && (
-                <p className="sports-live-hint">{liveCount} event{liveCount !== 1 ? 's' : ''} live now</p>
+              ) : error ? (
+                <div className="sports-error">
+                  <p>⚠️ {error}</p>
+                  <button className="sports-retry-btn" onClick={load}>Retry</button>
+                </div>
+              ) : filtered.length === 0 ? (
+                <p className="sports-empty">No streams in this category.</p>
+              ) : (
+                filtered.map(s => {
+                  const status = getStatus(s, nowMs);
+                  return (
+                    <button
+                      key={s.id}
+                      className={`sports-stream-btn ${selected?.id === s.id ? 'active' : ''}`}
+                      onClick={() => setSelected(s)}
+                    >
+                      {s.poster ? (
+                        <img src={s.poster} alt={s.name} className="sports-stream-poster"
+                          onError={e => { e.target.style.display = 'none'; }} />
+                      ) : (
+                        <div className="sports-stream-poster sports-stream-poster--placeholder">
+                          {catIcon(s.category)}
+                        </div>
+                      )}
+                      <div className="sports-stream-info">
+                        <span className="sports-stream-name">{s.name}</span>
+                        {s.tag && <span className="sports-stream-tag">{s.tag}</span>}
+                        <div className="sports-stream-meta">
+                          {status === 'live' && (
+                            <span className="sports-badge sports-badge--live">● LIVE</span>
+                          )}
+                          {status === 'upcoming' && (
+                            <span className="sports-badge sports-badge--upcoming">
+                              {fmtDate(s.startsAt)} {fmtTime(s.startsAt)}
+                              {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
+                            </span>
+                          )}
+                          {status === 'replay' && (
+                            <span className="sports-badge sports-badge--replay">REPLAY</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
-          )}
-        </main>
+          </aside>
 
+          {/* ── Player, on the right ── */}
+          <main className="sports-player-area" ref={playerRef}>
+            {selected ? (
+              <>
+                <div className="sports-now-playing">
+                  <div className="sports-now-info">
+                    {getStatus(selected, nowMs) === 'live' && (
+                      <span className="sports-live-badge">● LIVE</span>
+                    )}
+                    <span className="sports-now-name">{selected.name}</span>
+                    {selected.tag && <span className="sports-now-tag">{selected.tag}</span>}
+                    <span className="sports-now-cat">
+                      {catIcon(selected.category)} {selected.category}
+                    </span>
+                  </div>
+                  <button className="sports-fullscreen-btn" onClick={toggleFs}
+                    title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+                    {fullscreen ? '↙' : '↗'}
+                  </button>
+                </div>
+
+                <div className="sports-frame-wrap">
+                  {buildStreamUrl(selected, sportsProvider) ? (
+                    <iframe
+                      key={`${selected.id}-${sportsProvider}`}
+                      ref={iframeRef}
+                      src={buildStreamUrl(selected, sportsProvider)}
+                      className="sports-frame"
+                      allowFullScreen
+                      allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      scrolling="no"
+                      title={selected.name}
+                    />
+                  ) : (
+                    <div className="sports-no-stream">
+                      <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
+                      <h3>{selected.name}</h3>
+                      {getStatus(selected, nowMs) === 'upcoming' ? (
+                        <>
+                          <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}
+                            {timeUntil(selected.startsAt) && ` (in ${timeUntil(selected.startsAt)})`}
+                          </p>
+                          <p className="sports-no-stream-note">Stream link will appear when the event goes live.</p>
+                        </>
+                      ) : (
+                        <p className="sports-no-stream-note">Stream unavailable — try refreshing.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : !loading && (
+              <div className="sports-no-selection">
+                <div style={{ fontSize: '5rem' }}>🏆</div>
+                <h2>Live Sports</h2>
+                <p>Select a game from the list to start watching.</p>
+                {liveCount > 0 && (
+                  <p className="sports-live-hint">{liveCount} event{liveCount !== 1 ? 's' : ''} live now</p>
+                )}
+              </div>
+            )}
+          </main>
+
+        </div>
       </div>
     </div>
   );

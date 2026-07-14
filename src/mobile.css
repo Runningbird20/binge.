@@ -30,8 +30,6 @@
   /* ── Navbar → minimal mobile header ────────────────────── */
   /* Keep navbar in DOM (GlobalSearch lives inside it), but strip
      it down to logo + hamburger only */
-  .chatbot-fab         { display: none !important; }
-
   .navbar {
     position: fixed !important;
     top: 0;
@@ -318,12 +316,6 @@
     gap: 0.75rem !important;
   }
 
-  /* ── Cards ──────────────────────────────────────────────── */
-  .media-card {
-    border-radius: 10px;
-    overflow: hidden;
-  }
-
   /* Book cards */
   .book-card {
     border-radius: 10px;
@@ -551,116 +543,6 @@
   .tag-chip {
     font-size: 0.7rem !important;
     padding: 0.2rem 0.5rem !important;
-  }
-
-  /* ── Global Search — mobile bottom sheet ───────────────── */
-
-  /* The standalone trigger rendered by AppShell is unused on
-     mobile (bottom nav opens search via custom event). Hide it. */
-  .global-search-trigger {
-    display: none !important;
-  }
-
-  /* Drag handle above sheet */
-  .global-search-modal::before {
-    content: '';
-    display: block;
-    width: 36px;
-    height: 4px;
-    background: rgba(255,255,255,0.18);
-    border-radius: 2px;
-    margin: 10px auto 2px;
-    flex-shrink: 0;
-  }
-
-  /* Taller input bar — easier to tap */
-  .global-search-input-wrap {
-    padding: 0.9rem 1rem !important;
-    gap: 0.6rem !important;
-  }
-
-  .global-search-input-icon {
-    font-size: 1.1rem !important;
-  }
-
-  .global-search-input {
-    font-size: 17px !important;  /* prevents iOS zoom */
-  }
-
-  .global-search-input::placeholder {
-    color: #555 !important;
-  }
-
-  /* Clear button — proper tap target */
-  .global-search-clear {
-    width: 32px !important;
-    height: 32px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: rgba(255,255,255,0.08) !important;
-    border-radius: 50% !important;
-    font-size: 0.8rem !important;
-  }
-
-  /* Hide keyboard navigation hints — useless on touch */
-  .global-search-shortcuts {
-    display: none !important;
-  }
-
-  .global-search-hint {
-    padding: 1.25rem 1rem !important;
-  }
-
-  .global-search-hint p {
-    font-size: 0.85rem !important;
-    color: #555 !important;
-  }
-
-  /* Result rows — bigger tap targets, more breathing room */
-  .global-search-item {
-    padding: 0.75rem 1rem !important;
-    min-height: 56px !important;
-    gap: 0.75rem !important;
-  }
-
-  /* Slightly larger poster thumbnail */
-  .global-search-poster {
-    width: 40px !important;
-    height: 54px !important;
-    border-radius: 6px !important;
-  }
-
-  .global-search-item-icon {
-    width: 40px !important;
-    height: 40px !important;
-  }
-
-  .global-search-item-label {
-    font-size: 0.9rem !important;
-  }
-
-  .global-search-item-sub {
-    font-size: 0.74rem !important;
-    margin-top: 0.15rem !important;
-  }
-
-  /* Section headings */
-  .global-search-section-label {
-    padding: 0.6rem 1rem 0.2rem !important;
-    font-size: 0.65rem !important;
-  }
-
-  /* Arrow indicator — more contrast */
-  .global-search-item-arrow {
-    font-size: 1rem !important;
-    color: #555 !important;
-  }
-
-  /* Empty state */
-  .global-search-empty {
-    padding: 2.5rem 1rem !important;
-    font-size: 0.88rem !important;
   }
 
   /* ── Book cards ─────────────────────────────────────────── */
@@ -1018,9 +900,9 @@
 }
 
 .mp-chip.active {
-  background: rgba(232,201,122,0.15);
-  border-color: rgba(232,201,122,0.55);
-  color: #e8c97a;
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.55);
+  color: #f4f6f8;
 }
 
 .mp-chip-watched { opacity: 0.3; }
@@ -1030,7 +912,7 @@
   color: rgba(74,222,128,0.7);
 }
 
-.mp-chip-partial { border-color: rgba(232,201,122,0.25); }
+.mp-chip-partial { border-color: rgba(74,222,128,0.35); }
 
 .mp-loading {
   color: #555;
@@ -1195,7 +1077,7 @@
   flex-shrink: 0;
   background: none;
   border: none;
-  color: #e8c97a;
+  color: #f4f6f8;
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
@@ -1260,7 +1142,7 @@
 
 .sp-upcoming-time {
   font-size: 0.75rem;
-  color: #e8c97a;
+  color: #6ab0f0;
 }
 
 .sp-provider-row {
@@ -1279,8 +1161,8 @@
   cursor: pointer;
 }
 .sp-provider-btn.active {
-  background: #e8c97a;
-  border-color: #e8c97a;
+  background: #f4f6f8;
+  border-color: #f4f6f8;
   color: #000;
   font-weight: 600;
 }
@@ -1316,7 +1198,7 @@
   flex-shrink: 0;
 }
 .sp-dot.live { background: #ef4444; }
-.sp-dot.upcoming { background: #e8c97a; }
+.sp-dot.upcoming { background: #6ab0f0; }
 .sp-dot.replay { background: #555; }
 
 .sp-mini-name {
@@ -1391,9 +1273,9 @@
 }
 
 .sp-cat-chip.active {
-  background: rgba(232,201,122,0.15);
-  border-color: rgba(232,201,122,0.5);
-  color: #e8c97a;
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.5);
+  color: #f4f6f8;
 }
 
 .sp-feed {
@@ -1471,7 +1353,7 @@
 
 .sp-badge-upcoming {
   font-size: 0.7rem;
-  color: #e8c97a;
+  color: #6ab0f0;
   font-weight: 600;
 }
 
@@ -1610,7 +1492,6 @@
 ═══════════════════════════════════════════════════════════════ */
 @media (hover: none) and (pointer: coarse) {
   /* Remove hover effects that look wrong on touch */
-  .media-card:hover,
   .book-card:hover,
   .manga-card:hover {
     transform: none !important;
@@ -1623,7 +1504,6 @@
   }
 
   /* Active state provides the tap feedback instead */
-  .media-card:active,
   .book-card:active,
   .manga-card:active {
     transform: scale(0.97) !important;

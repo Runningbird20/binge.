@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
+import AvatarPresetPicker from '../components/AvatarPresetPicker';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
 
 const MAX_BIO_LENGTH = 280;
@@ -74,6 +75,15 @@ export default function Signup() {
     }
   }
 
+  function selectPresetAvatar(url) {
+    setError('');
+    setAvatarFileName('');
+    updateForm('avatarUrl', url);
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = '';
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -128,7 +138,7 @@ export default function Signup() {
             <div className="avatar-field-frame">
               <div className="avatar-field-header">
                 <div className="avatar-field-copy">
-                  <p className="auth-field-hint">Upload a profile photo to personalize your account.</p>
+                  <p className="auth-field-hint">Upload a photo or pick a preset to personalize your account.</p>
                   <span className="avatar-upload-note">PNG, JPG, GIF, or WebP up to 2 MB</span>
                 </div>
                 <UserAvatar
@@ -163,6 +173,18 @@ export default function Signup() {
                   </button>
                 </div>
               )}
+              {!avatarFileName && form.avatarUrl && (
+                <div className="avatar-upload-meta">
+                  <span className="avatar-upload-chip">Preset avatar selected</span>
+                  <button type="button" className="btn-ghost btn-sm" onClick={clearAvatar}>
+                    Remove
+                  </button>
+                </div>
+              )}
+              <div className="avatar-preset-section">
+                <p className="avatar-preset-label">Or pick a preset</p>
+                <AvatarPresetPicker selected={form.avatarUrl} onSelect={selectPresetAvatar} />
+              </div>
             </div>
           </div>
 

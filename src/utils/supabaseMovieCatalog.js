@@ -259,6 +259,22 @@ function buildIlikePattern(value) {
   return normalized ? `%${normalized}%` : '';
 }
 
+function applyGenreFilter(query, genre) {
+  const values = (Array.isArray(genre) ? genre : [genre]).filter(Boolean);
+
+  if (values.length === 0) {
+    return query;
+  }
+
+  if (values.length === 1) {
+    return query.ilike('genre', `%${normalizeSearchValue(values[0])}%`);
+  }
+
+  return query.or(
+    values.map((value) => `genre.ilike.%${normalizeSearchValue(value)}%`).join(',')
+  );
+}
+
 function applyTitleGenreFilters(query, { search = '', genre = '' } = {}) {
   let nextQuery = query;
   const searchPattern = buildIlikePattern(search);
@@ -267,11 +283,7 @@ function applyTitleGenreFilters(query, { search = '', genre = '' } = {}) {
     nextQuery = nextQuery.ilike('title', searchPattern);
   }
 
-  if (genre) {
-    nextQuery = nextQuery.ilike('genre', `%${normalizeSearchValue(genre)}%`);
-  }
-
-  return nextQuery;
+  return applyGenreFilter(nextQuery, genre);
 }
 
 function applyBookFilters(query, { search = '', genre = '' } = {}) {

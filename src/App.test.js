@@ -6,9 +6,12 @@ import AccountSettings from './pages/AccountSettings';
 import Books from './pages/Books';
 import Movies from './pages/Movies';
 import TVShows from './pages/TVShows';
+import * as AuthContextModule from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
+import * as supabaseDataModule from './utils/supabaseData';
 
 const mockNavigate = jest.fn();
+let mockSearchParams = new URLSearchParams();
 
 function mockResponse({ ok = true, status = 200, body = '', contentType = 'application/json' }) {
   return {
@@ -37,7 +40,8 @@ jest.mock(
     ),
     Navigate: ({ to }) => <div data-testid="navigate" data-to={to} />,
     useNavigate: () => mockNavigate,
-    useSearchParams: () => [new URLSearchParams(), jest.fn()],
+    useSearchParams: () => [mockSearchParams, jest.fn()],
+    useLocation: () => ({ pathname: '', search: '', hash: '', state: null, key: 'test' }),
   }),
   { virtual: true }
 );
@@ -69,6 +73,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockNavigate.mockReset();
+  mockSearchParams = new URLSearchParams();
   global.fetch = jest.fn();
 });
 
@@ -192,138 +197,40 @@ test('shows avatar and bio on the signed-in home page', async () => {
   });
 });
 
-test('shows achievement badges and an annual recap on the home page', async () => {
-  const ratings = [
-    {
-      media_type: 'movie',
-      media_id: 1,
-      title: 'Harry Potter and the Sorcerer\'s Stone',
-      genre: 'Fantasy, Adventure',
-      created_at: '2026-01-09 10:00:00',
-      review: 'Still magical on every revisit.',
-    },
-    {
-      media_type: 'movie',
-      media_id: 2,
-      title: 'Harry Potter and the Chamber of Secrets',
-      genre: 'Fantasy, Adventure',
-      created_at: '2026-02-11 10:00:00',
-      review: 'Darker and more confident than the first one.',
-    },
-    {
-      media_type: 'movie',
-      media_id: 3,
-      title: 'Harry Potter and the Prisoner of Azkaban',
-      genre: 'Fantasy, Adventure',
-      created_at: '2026-03-03 10:00:00',
-    },
-    {
-      media_type: 'book',
-      media_id: 4,
-      title: 'Harry Potter and the Prisoner of Azkaban',
-      genre: 'Fantasy',
-      created_at: '2026-03-15 10:00:00',
-    },
-    {
-      media_type: 'tv_show',
-      media_id: 5,
-      title: 'The Bear',
-      genre: 'Drama',
-      created_at: '2026-04-07 10:00:00',
-    },
-    {
-      media_type: 'movie',
-      media_id: 6,
-      title: 'Dune',
-      genre: 'Science Fiction',
-      created_at: '2025-11-21 10:00:00',
-    },
-  ];
-  const watchlist = [
-    {
-      id: 1,
-      media_type: 'movie',
-      title: 'Harry Potter and the Sorcerer\'s Stone',
-      status: 'watched',
-    },
-    {
-      id: 2,
-      media_type: 'movie',
-      title: 'Harry Potter and the Chamber of Secrets',
-      status: 'watched',
-    },
-    {
-      id: 3,
-      media_type: 'movie',
-      title: 'Harry Potter and the Prisoner of Azkaban',
-      status: 'watched',
-    },
-    {
-      id: 4,
-      media_type: 'movie',
-      title: 'Harry Potter and the Goblet of Fire',
-      status: 'watched',
-    },
-    {
-      id: 5,
-      media_type: 'book',
-      title: 'Harry Potter and the Prisoner of Azkaban',
-      status: 'read',
-    },
-    {
-      id: 6,
-      media_type: 'tv_show',
-      title: 'The Bear',
-      status: 'watched',
-    },
-  ];
+test('resume links for in-progress movies launch the player instead of the card', async () => {
+  localStorage.setItem('onboarding_done_7', '1');
 
-  global.fetch.mockImplementation((url) => {
-    if (url === '/api/ratings/my') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify(ratings),
-        })
-      );
-    }
-
-    if (url === '/api/watchlist') {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify(watchlist),
-        })
-      );
-    }
-
-    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-  });
-
-  renderWithAuth(
-    <Home />,
-    {
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: {
       id: 7,
       username: 'mediafan',
       email: 'mediafan@example.com',
       bio: 'Always logging the next favorite.',
       avatarUrl: 'data:image/png;base64,avatar-preview',
-    }
-  );
+    },
+    authLoading: false,
+  });
+  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([
+    {
+      id: 12,
+      media_type: 'movie',
+      media_id: 42,
+      title: 'Interstellar',
+      image_url: 'https://example.com/interstellar.jpg',
+    },
+  ]);
 
-  expect(await screen.findByRole('heading', { name: /achievements/i })).toBeInTheDocument();
-  expect(screen.getByText(/5 of 9 unlocked/i)).toBeInTheDocument();
-  expect(screen.getByText(/achievements level up from bronze to rarer metals/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/^bronze$/i).length).toBeGreaterThan(0);
-  expect(screen.getAllByText(/^silver$/i).length).toBeGreaterThan(0);
-  expect(screen.getByText(/show runner/i)).toBeInTheDocument();
-  expect(screen.getByText(/bookworm/i)).toBeInTheDocument();
-  expect(screen.getByText(/review writer/i)).toBeInTheDocument();
-  expect(screen.getByText(/library curator/i)).toBeInTheDocument();
-  expect(screen.getByText(/trilogy finisher/i)).toBeInTheDocument();
-  expect(screen.getByText(/best series progress: harry potter \(4 watched films\)\./i)).toBeInTheDocument();
-  expect(screen.getByText(/read the book and watched the film/i)).toBeInTheDocument();
-  expect(screen.getByText(/you logged 5 titles in 2026\./i)).toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: /choose recap year/i })).toHaveValue('2026');
-  expect(screen.getAllByText(/fantasy/i).length).toBeGreaterThan(0);
+  render(<Home />);
+
+  const resumeLink = await screen.findByRole('link', { name: /^resume$/i });
+  expect(resumeLink).toHaveAttribute('href', '/movie/42?play=1');
+
+  ratingsSpy.mockRestore();
+  watchlistSpy.mockRestore();
+  continueWatchingSpy.mockRestore();
+  useAuthSpy.mockRestore();
 });
 
 test('shows an account settings gear link for signed-in users', async () => {
@@ -466,14 +373,6 @@ test('shows seeded books as clickable covers and adds a book to the library', as
         mockResponse({
           status: 201,
           body: JSON.stringify({ id: 12 }),
-        })
-      );
-    }
-
-    if (url === '/api/lists' && (!options.method || options.method === 'GET')) {
-      return Promise.resolve(
-        mockResponse({
-          body: JSON.stringify([]),
         })
       );
     }
@@ -731,6 +630,73 @@ test('uses a movie-style filter bar on the books page', async () => {
       'Open details for Dune',
     ]);
   });
+});
+
+test('ignores a page-level search query on the movies page', async () => {
+  mockSearchParams = new URLSearchParams('?search=arrival');
+
+  const allMovies = [
+    {
+      id: 1,
+      title: 'Arrival',
+      year: 2016,
+      genre: 'Science Fiction, Drama',
+      synopsis: 'A linguist works to communicate with visitors from space.',
+      poster_url: 'https://example.com/arrival.jpg',
+    },
+    {
+      id: 2,
+      title: 'Heat',
+      year: 1995,
+      genre: 'Crime, Drama',
+      synopsis: 'A meticulous detective closes in on a career thief.',
+      poster_url: 'https://example.com/heat.jpg',
+    },
+  ];
+
+  global.fetch.mockImplementation((url) => {
+    if (String(url).startsWith('/api/media/movies?')) {
+      const parsedUrl = new URL(String(url), 'http://localhost');
+      expect(parsedUrl.searchParams.get('search')).toBe(null);
+
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify({
+            items: allMovies,
+            total: allMovies.length,
+            totalPages: 1,
+            facets: {
+              genres: ['Crime', 'Drama', 'Science Fiction'],
+            },
+          }),
+        })
+      );
+    }
+
+    if (url === '/api/ratings/my?media_type=movie') {
+      return Promise.resolve(
+        mockResponse({
+          body: JSON.stringify([]),
+        })
+      );
+    }
+
+    return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+  });
+
+  renderWithAuth(
+    <Movies />,
+    {
+      id: 7,
+      username: 'mediafan',
+      email: 'mediafan@example.com',
+      bio: 'Always logging the next favorite.',
+      avatarUrl: 'data:image/png;base64,avatar-preview',
+    }
+  );
+
+  expect(await screen.findByText('Arrival')).toBeInTheDocument();
+  expect(screen.getByText('Heat')).toBeInTheDocument();
 });
 
 test('uses a genre dropdown on the movies page', async () => {

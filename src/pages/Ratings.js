@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
-import RatingArtifact, { computeNormalizedScore } from '../components/RatingArtifact';
+import StarRating from '../components/StarRating';
+import { computeStarRating } from '../components/RatingArtifact';
 import { fetchSupabaseRatings } from '../utils/supabaseData';
 
 const TYPE_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
@@ -36,7 +37,7 @@ export default function Ratings() {
           <p className="page-kicker">Your Library</p>
           <h1>My Ratings</h1>
           <p className="page-subtitle">
-            Every title you've rated, with your scores, radar charts, and reviews.
+            Every title you've rated, out of 5 stars.
           </p>
         </div>
 
@@ -72,7 +73,7 @@ export default function Ratings() {
           ) : (
             <div className="ratings-page-grid">
               {filtered.map((rating) => {
-                const score = computeNormalizedScore(rating.media_type, rating);
+                const stars = computeStarRating(rating.media_type, rating);
                 return (
                   <div key={`${rating.media_type}-${rating.media_id}`} className="ratings-page-card">
                     <div className="ratings-page-poster-wrap">
@@ -96,22 +97,10 @@ export default function Ratings() {
                       <h3 className="ratings-page-title">{rating.title || `ID ${rating.media_id}`}</h3>
                       {rating.year && <p className="ratings-page-year">{rating.year}</p>}
 
-                      {score !== null && (
-                        <p className="ratings-page-score">
-                          {score}<span>/10</span>
-                        </p>
-                      )}
-
-                      <div className="ratings-page-artifact">
-                        <RatingArtifact
-                          mediaType={rating.media_type}
-                          scores={rating}
-                          size={160}
-                        />
-                      </div>
-
-                      {rating.review && (
-                        <p className="ratings-page-review">{rating.review}</p>
+                      {stars !== null && (
+                        <div className="ratings-page-stars">
+                          <StarRating value={stars} readOnly size="md" />
+                        </div>
                       )}
                     </div>
                   </div>

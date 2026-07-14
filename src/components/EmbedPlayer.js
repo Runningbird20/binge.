@@ -4,7 +4,7 @@ import {
   fetchEpisodeProgress,
   markEpisodeWatched,
   unmarkEpisodeWatched,
-  updateWatchlistProgress,
+  upsertSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 
@@ -133,11 +133,16 @@ function buildUrl(providerId, externalId, mediaType, season, episode) {
   }
 }
 
-export default function EmbedPlayer({ item, mediaType, onClose }) {
+function normalizeStartAt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
   const { isMobile, isLandscape } = useDeviceType();
   const [provider, setProvider] = useState(PROVIDERS[4].id);
-  const [season, setSeason] = useState(1);
-  const [episode, setEpisode] = useState(1);
+  const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
+  const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
   const [lookupState, setLookupState] = useState(() => (getEmbeddedId(item) ? 'done' : 'loading'));
   const [lookupError, setLookupError] = useState('');
@@ -156,7 +161,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
   const isTV = mediaType === 'tv_show';
   const tmdbId = externalId?.kind === 'tmdb' ? externalId.value : null;
-  const autoAddedRef = useRef(false);
   const itemSeasonCount = Number.isFinite(Number(item?.seasons)) ? Number(item.seasons) : null;
   const totalSeasons = Math.max(1, realSeasonCount ?? itemSeasonCount ?? 1);
   const currentEpisodeKey = `${season}:${episode}`;
@@ -164,13 +168,13 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
   useEffect(() => {
     setProvider(PROVIDERS[4].id);
-    setSeason(1);
-    setEpisode(1);
+    setSeason(normalizeStartAt(initialSeason));
+    setEpisode(normalizeStartAt(initialEpisode));
     setSeasonEpisodeCounts({});
     setRealSeasonCount(null);
     setWatched(new Set());
     setMetadataWarning('');
-  }, [item?.id, item?.title, mediaType]);
+  }, [item?.id, item?.title, mediaType, initialSeason, initialEpisode]);
 
   useEffect(() => {
     function onFsChange() {
@@ -233,20 +237,13 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
 
     watchTimerRef.current = setInterval(() => {
       watchSecondsRef.current += 1;
+
       if (watchSecondsRef.current >= AUTO_WATCH_SECONDS) {
         clearInterval(watchTimerRef.current);
         watchTimerRef.current = null;
         markEpisodeWatched({ mediaId: item.id, season, episode })
           .then(() => {
             setWatched((previous) => new Set([...previous, key]));
-            // Auto-add to watchlist and update current progress
-            updateWatchlistProgress({
-              mediaType: 'tv_show',
-              mediaId: item.id,
-              currentSeason: season,
-              currentEpisode: episode,
-              status: 'watching',
-            }).catch(() => {});
           })
           .catch(() => {});
       }
@@ -259,21 +256,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       }
     };
   }, [episode, isTV, item?.id, season, watched]);
-
-  // Auto-add movies to watchlist after 2 minutes of watching
-  useEffect(() => {
-    if (isTV || !item?.id || autoAddedRef.current) return;
-    const timer = setTimeout(() => {
-      if (autoAddedRef.current) return;
-      autoAddedRef.current = true;
-      updateWatchlistProgress({
-        mediaType: 'movie',
-        mediaId: item.id,
-        status: 'watching',
-      }).catch(() => {});
-    }, 2 * 60 * 1000); // 2 minutes
-    return () => clearTimeout(timer);
-  }, [isTV, item?.id]);
 
   useEffect(() => {
     const embeddedId = getEmbeddedId(item);
@@ -398,6 +380,19 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
       .catch(() => {});
   }, [item?.id, isTV]);
 
+  // Starting playback records/updates Continue Watching — independent of
+  // whether this title is in the library. Adding to the library stays a
+  // separate, explicit action (the "Add to Watchlist" button).
+  useEffect(() => {
+    if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode)) return;
+
+    upsertSupabaseContinueWatching({
+      mediaType,
+      mediaId: item.id,
+      ...(isTV ? { currentSeason: season, currentEpisode: episode } : {}),
+    }).catch(() => {});
+  }, [item?.id, mediaType, isTV, season, episode, provider, externalId]);
+
   function toggleFullscreen() {
     if (isMobile) {
       // On mobile, use Screen Orientation API to rotate to landscape.
@@ -446,14 +441,6 @@ export default function EmbedPlayer({ item, mediaType, onClose }) {
           episode: selectedEpisode,
         });
         setWatched((previous) => new Set([...previous, key]));
-        // Auto-add to watchlist and update progress
-        updateWatchlistProgress({
-          mediaType: 'tv_show',
-          mediaId: item.id,
-          currentSeason: selectedSeason,
-          currentEpisode: selectedEpisode,
-          status: 'watching',
-        }).catch(() => {});
       }
     } catch {
       // Keep playback usable even if watch tracking fails.

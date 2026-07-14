@@ -25,9 +25,7 @@ function ProgressDots({ current, total }) {
 
 const FEATURES = [
   { icon: '⭐', title: 'Rate & Review', desc: 'Multi-dimensional scores for movies, TV, and books.' },
-  { icon: '📋', title: 'Track & Watch', desc: 'Watchlist, progress tracking, and status per title.' },
-  { icon: '🤝', title: 'Collaborate', desc: 'Shared lists with friends and vibe voting.' },
-  { icon: '🎬', title: 'Watch Together', desc: 'Sync playback and chat live with friends in a watch room.' },
+  { icon: '📋', title: 'Track & Watch', desc: 'Library, progress tracking, and status per title.' },
 ];
 
 export default function Onboarding({ onComplete }) {

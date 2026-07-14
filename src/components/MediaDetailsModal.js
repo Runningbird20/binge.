@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
-import ListSaveControls from './ListSaveControls';
-import RatingInput from './RatingInput';
-import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
+import StarRating from './StarRating';
+import { computeStarRating, buildUniformCategories } from './RatingArtifact';
 import useIsMobile from '../hooks/useIsMobile';
 import MobileMediaDetail from './MobileMediaDetail';
 
@@ -31,11 +30,6 @@ function getRuntimeLabel(item) {
   return 'Details';
 }
 
-function allCategoriesFilled(mediaType, scores) {
-  const cats = RATING_CATEGORIES[mediaType] || [];
-  return cats.every((cat) => scores[cat.key] >= 1);
-}
-
 export default function MediaDetailsModal({
   item,
   mediaType,
@@ -47,22 +41,22 @@ export default function MediaDetailsModal({
   detailMessage,
   allowActions = true,
   browseOnlyMessage = '',
+  autoPlay = false,
+  initialSeason,
+  initialEpisode,
 }) {
   const isMobile = useIsMobile();
-  const [showPlayer, setShowPlayer] = useState(false);
-  const [draftScores, setDraftScores] = useState({});
-  const [draftReview, setDraftReview] = useState('');
+  const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
+  const [draftStars, setDraftStars] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (userRating && typeof userRating === 'object') {
-      setDraftScores(userRating);
-      setDraftReview(userRating.review || '');
-    } else {
-      setDraftScores({});
-      setDraftReview('');
-    }
-  }, [userRating, item]);
+    setShowPlayer(Boolean(autoPlay));
+  }, [autoPlay, item?.id]);
+
+  useEffect(() => {
+    setDraftStars(computeStarRating(mediaType, userRating) || 0);
+  }, [userRating, item, mediaType]);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -96,6 +90,9 @@ export default function MediaDetailsModal({
         detailMessage={detailMessage}
         allowActions={allowActions}
         browseOnlyMessage={browseOnlyMessage}
+        autoPlay={autoPlay}
+        initialSeason={initialSeason}
+        initialEpisode={initialEpisode}
       />
     );
   }
@@ -104,15 +101,14 @@ export default function MediaDetailsModal({
   const subtitle = item.director || item.creator || item.author || item.studio || '';
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
   const typeLabel = mediaType === 'movie' ? 'Movie Details' : mediaType === 'tv_show' ? 'TV Show Details' : 'Book Details';
-  const canSave = allCategoriesFilled(mediaType, draftScores);
-  const displayScore = computeNormalizedScore(mediaType, draftScores);
   const canWatch = mediaType === 'movie' || mediaType === 'tv_show';
 
-  async function handleSave() {
-    if (!allowActions || typeof onRate !== 'function' || !canSave || isSaving) return;
+  async function handleStarChange(nextValue) {
+    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
+    setDraftStars(nextValue);
     setIsSaving(true);
     try {
-      await onRate(item, draftScores, draftReview);
+      await onRate(item, buildUniformCategories(mediaType, nextValue));
     } finally {
       setIsSaving(false);
     }
@@ -148,12 +144,15 @@ export default function MediaDetailsModal({
               )}
             </div>
 
-            <div className="artifact-panel">
-              <RatingArtifact mediaType={mediaType} scores={draftScores} size={220} />
-              {displayScore !== null && (
-                <p className="artifact-score">{displayScore}<span>/10</span></p>
-              )}
-            </div>
+            {canWatch && (
+              <button
+                type="button"
+                className="btn-watch book-detail-watch-now"
+                onClick={() => setShowPlayer(true)}
+              >
+                {'\u25B6'} Watch Now
+              </button>
+            )}
           </div>
 
           <div className="book-detail-content">
@@ -205,62 +204,29 @@ export default function MediaDetailsModal({
 
             <div className="rating-section">
               <p className="rating-section-title">Your Rating</p>
-              <RatingInput
-                mediaType={mediaType}
-                value={draftScores}
-                onChange={allowActions ? setDraftScores : () => {}}
-              />
-              <textarea
-                className="review-textarea"
-                placeholder="Write a review (optional)..."
-                value={draftReview}
-                onChange={(event) => setDraftReview(event.target.value)}
-                rows={3}
-                maxLength={2000}
-                disabled={!allowActions}
-              />
-              <div className="rating-section-actions">
-                <button
-                  type="button"
-                  className={`btn-primary${allowActions && canSave ? '' : ' btn-disabled'}`}
-                  onClick={handleSave}
-                  disabled={!allowActions || !canSave || isSaving}
-                >
-                  {!allowActions ? 'Browse Only' : isSaving ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
-                </button>
-                {allowActions && !canSave && (
-                  <span className="rating-incomplete-hint">Rate all categories to save</span>
+              <div className="rating-section-row">
+                <StarRating
+                  value={draftStars}
+                  onChange={allowActions ? handleStarChange : undefined}
+                  readOnly={!allowActions}
+                  size="lg"
+                />
+                {onWatchlist && (
+                  <button
+                    type="button"
+                    className="btn-primary book-detail-library-btn"
+                    onClick={() => onWatchlist(item)}
+                    disabled={!allowActions || isAddingWatchlist}
+                  >
+                    {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
+                  </button>
                 )}
               </div>
-            </div>
-
-            <div className="book-detail-actions">
-              {onWatchlist && (
-                <button
-                  type="button"
-                  className="btn-primary book-detail-library-btn"
-                  onClick={() => onWatchlist(item)}
-                  disabled={!allowActions || isAddingWatchlist}
-                >
-                  {isAddingWatchlist ? 'Saving...' : 'Add to Watchlist'}
-                </button>
-              )}
-              {allowActions && (
-                <ListSaveControls mediaType={mediaType} mediaId={item.id} itemTitle={item.title} />
-              )}
+              {isSaving && <span className="rating-saving-hint">Saving...</span>}
               {!allowActions && browseOnlyMessage && (
                 <p className="book-detail-status">{browseOnlyMessage}</p>
               )}
               {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
-              {canWatch && (
-                <button
-                  type="button"
-                  className="btn-watch"
-                  onClick={() => setShowPlayer(true)}
-                >
-                  {'\u25B6'} Watch Now
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -271,6 +237,8 @@ export default function MediaDetailsModal({
           item={item}
           mediaType={mediaType}
           onClose={() => setShowPlayer(false)}
+          initialSeason={initialSeason}
+          initialEpisode={initialEpisode}
         />
       )}
     </>
