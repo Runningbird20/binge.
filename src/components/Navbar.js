@@ -1,7 +1,6 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
   House,
-  Broadcast,
   FilmSlate,
   MonitorPlay,
   BookOpen,
@@ -15,7 +14,6 @@ import GlobalSearch from './GlobalSearch';
 
 const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
-  { to: '/live-tv',   label: 'Live',      Icon: Broadcast },
   { to: '/sports',    label: 'Sports',    Icon: Trophy },
   { to: '/movies',    label: 'Movies',    Icon: FilmSlate },
   { to: '/tv-shows',  label: 'Series',    Icon: MonitorPlay },

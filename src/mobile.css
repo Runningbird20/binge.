@@ -615,15 +615,6 @@
     grid-template-columns: 1fr !important;
   }
 
-  /* ── Live TV ─────────────────────────────────────────────── */
-  .livetv-sidebar {
-    display: none !important;
-  }
-
-  .livetv-layout {
-    grid-template-columns: 1fr !important;
-  }
-
   /* ── Account settings ───────────────────────────────────── */
   .settings-layout {
     grid-template-columns: 1fr !important;
