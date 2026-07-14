@@ -5173,50 +5173,15 @@ body {
 }
 .player-close:hover { color: #fff; background: #1e1e1e; }
 
-/* TV season/episode controls */
-.player-tv-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  flex-shrink: 0;
-}
-.player-control-group {
+
+/* Top row of the controls overlay: sources pinned left, season/episode
+   dropdowns pinned right. */
+.player-controls-top-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
-}
-.player-control-group label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  min-width: 55px;
-  flex-shrink: 0;
-}
-.player-episode-btns {
-  display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-}
-.player-ep-btn {
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #888;
-  font-size: 0.78rem;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-.player-ep-btn:hover { border-color: #555; color: #fff; }
-.player-ep-btn.active {
-  background: rgba(255,255,255,0.15);
-  border-color: rgba(255,255,255,0.4);
-  color: #f4f6f8;
-  font-weight: 700;
 }
 
 /* Provider switcher */
@@ -5226,13 +5191,6 @@ body {
   gap: 0.5rem;
   flex-shrink: 0;
   flex-wrap: wrap;
-}
-.player-providers-label {
-  font-size: 0.78rem;
-  color: #555;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .player-provider-btn {
   background: #1a1a1a;
@@ -5251,6 +5209,35 @@ body {
   color: #f4f6f8;
   font-weight: 600;
 }
+
+/* Season/episode dropdowns */
+.player-se-select-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.player-se-select {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #e0e0e0;
+  font-size: 0.78rem;
+  padding: 0.35rem 1.6rem 0.35rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  max-width: 160px;
+  text-overflow: ellipsis;
+}
+.player-se-select:hover { border-color: #555; }
+.player-se-select:focus { outline: none; border-color: rgba(255,255,255,0.4); }
+.player-se-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.player-se-select option { background: #1a1a1a; color: #e0e0e0; }
 
 /* iframe */
 .player-frame-wrap {
@@ -5965,32 +5952,6 @@ body {
   .livetv-frame { min-height: 56vw; }
 }
 
-/* ── Episode progress tracking ── */
-.ep-watched {
-  background: rgba(74,222,128,0.15) !important;
-  border-color: rgba(74,222,128,0.5) !important;
-  color: #4ade80 !important;
-}
-.ep-all-watched {
-  background: rgba(74,222,128,0.2) !important;
-  border-color: rgba(74,222,128,0.6) !important;
-  color: #4ade80 !important;
-}
-.ep-partial-watched {
-  border-color: rgba(74,222,128,0.35) !important;
-  color: #86efac !important;
-}
-.player-ep-meta {
-  font-size: 0.68rem;
-  color: rgba(255,255,255,0.3);
-  font-weight: 400;
-  margin-left: 0.25rem;
-}
-.player-ep-loading {
-  font-size: 0.75rem;
-  color: rgba(255,255,255,0.3);
-  padding: 0.2rem 0;
-}
 .player-mark-row {
   display: flex;
   align-items: center;
