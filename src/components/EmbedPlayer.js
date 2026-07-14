@@ -149,7 +149,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [metadataWarning, setMetadataWarning] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [seasonEpisodeCounts, setSeasonEpisodeCounts] = useState({});
-  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const [watched, setWatched] = useState(new Set());
   const [markingWatched, setMarkingWatched] = useState(false);
   const [realSeasonCount, setRealSeasonCount] = useState(null);
@@ -343,7 +342,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const fetchSeasonEpisodes = useCallback(async (seasonNumber) => {
     if (!tmdbId || !isTV || seasonEpisodeCounts[seasonNumber] !== undefined) return;
 
-    setLoadingEpisodes(true);
     try {
       const data = await api.get(`/media/tmdb-season?tmdbId=${tmdbId}&season=${seasonNumber}`);
       const nextCount = Math.max(1, Number(data?.episodeCount) || 1);
@@ -358,8 +356,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         ...previous,
         [seasonNumber]: previous[seasonNumber] ?? null,
       }));
-    } finally {
-      setLoadingEpisodes(false);
     }
   }, [tmdbId, isTV, seasonEpisodeCounts]);
 
@@ -474,7 +470,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
-  const usingManualEpisodeInput = false;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
   // ── Mobile player ────────────────────────────────────────────
@@ -779,123 +774,90 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             onMouseEnter={() => clearTimeout(hideControlsTimerRef.current)}
             onMouseLeave={revealControls}
           >
-        {isTV && (
-          <div className="player-tv-controls">
-            <div className="player-control-group">
-              <label>Season</label>
-              <div className="player-episode-btns">
-                {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => {
-                  const watchedCount = Array.from(watched).filter(
-                    (key) => key.startsWith(`${value}:`),
-                  ).length;
-                  const totalEpisodes = seasonEpisodeCounts[value];
-                  const allWatched = totalEpisodes && watchedCount === totalEpisodes;
-
-                  return (
-                    <button
-                      key={value}
-                      className={`player-ep-btn ${season === value ? 'active' : ''} ${allWatched ? 'ep-all-watched' : watchedCount > 0 ? 'ep-partial-watched' : ''}`}
-                      onClick={() => {
-                        setSeason(value);
-                        setEpisode(1);
-                      }}
-                      title={watchedCount > 0 ? `${watchedCount}${totalEpisodes ? `/${totalEpisodes}` : ''} watched` : ''}
-                      type="button"
-                    >
-                      {value}
-                    </button>
-                  );
-                })}
+            <div className="player-controls-top-row">
+              <div className="player-providers">
+                {PROVIDERS.map((entry) => (
+                  <button
+                    key={entry.id}
+                    className={`player-provider-btn ${provider === entry.id ? 'active' : ''}`}
+                    onClick={() => setProvider(entry.id)}
+                    type="button"
+                  >
+                    {entry.label}
+                  </button>
+                ))}
               </div>
-            </div>
 
-            <div className="player-control-group">
-              <label>
-                Episode
-                {episodeCount !== undefined && (
-                  <span className="player-ep-meta">
-                    {loadingEpisodes && tmdbId
-                      ? ' ...'
-                      : ` (${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''})`}
-                  </span>
-                )}
-              </label>
-              <div className="player-episode-btns">
-                {usingManualEpisodeInput ? (
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={episode}
+              {isTV && (
+                <div className="player-se-select-group">
+                  <select
+                    className="player-se-select"
+                    value={season}
                     onChange={(event) => {
-                      const nextEpisode = Math.max(1, Number(event.target.value) || 1);
-                      setEpisode(nextEpisode);
+                      setSeason(Number(event.target.value));
+                      setEpisode(1);
                     }}
-                    className="filter-input"
-                    aria-label="Episode number"
-                    style={{ maxWidth: 140 }}
-                  />
-                ) : episodeCount === undefined ? (
-                  <span className="player-ep-loading">Loading episodes...</span>
-                ) : (
-                  Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => {
-                    const isWatched = watched.has(`${season}:${value}`);
-                    const isCurrent = episode === value;
+                    aria-label="Season"
+                  >
+                    {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => {
+                      const watchedCount = Array.from(watched).filter(
+                        (key) => key.startsWith(`${value}:`),
+                      ).length;
+                      const totalEpisodes = seasonEpisodeCounts[value];
 
-                    return (
-                      <button
-                        key={value}
-                        className={`player-ep-btn ${isCurrent ? 'active' : ''} ${isWatched && !isCurrent ? 'ep-watched' : ''}`}
-                        onClick={() => setEpisode(value)}
-                        title={isWatched ? 'Watched' : 'Click to watch'}
-                        type="button"
-                      >
-                        {value}
-                      </button>
-                    );
-                  })
-                )}
+                      return (
+                        <option key={value} value={value}>
+                          Season {value}{totalEpisodes ? ` (${watchedCount}/${totalEpisodes})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  <select
+                    className="player-se-select"
+                    value={episode}
+                    onChange={(event) => setEpisode(Number(event.target.value))}
+                    aria-label="Episode"
+                    disabled={episodeCount === undefined}
+                  >
+                    {episodeCount === undefined ? (
+                      <option>Loading\u2026</option>
+                    ) : (
+                      Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => (
+                        <option key={value} value={value}>
+                          {watched.has(`${season}:${value}`) ? '\u2713 ' : ''}Episode {value}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {isTV && (
+              <div className="player-mark-row">
+                <button
+                  className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
+                  onClick={() => markWatched(season, episode)}
+                  disabled={!canTrackEpisodes || markingWatched}
+                  title={
+                    !canTrackEpisodes
+                      ? 'Watch tracking is unavailable for this item.'
+                      : watched.has(currentEpisodeKey)
+                        ? 'Click to unmark as watched'
+                        : 'Click to manually mark as watched (auto-marks after 5 min)'
+                  }
+                  type="button"
+                >
+                  {watched.has(currentEpisodeKey) ? '\u2713 Watched' : '+ Mark as watched'}
+                </button>
+                <span className="player-mark-hint">
+                  S{season} E{episode}
+                  {!watched.has(currentEpisodeKey) && canTrackEpisodes && ' | auto-tracks after 5 min'}
+                  {!canTrackEpisodes && ' | tracking unavailable'}
+                </span>
               </div>
-            </div>
-
-            <div className="player-mark-row">
-              <button
-                className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
-                onClick={() => markWatched(season, episode)}
-                disabled={!canTrackEpisodes || markingWatched}
-                title={
-                  !canTrackEpisodes
-                    ? 'Watch tracking is unavailable for this item.'
-                    : watched.has(currentEpisodeKey)
-                      ? 'Click to unmark as watched'
-                      : 'Click to manually mark as watched (auto-marks after 5 min)'
-                }
-                type="button"
-              >
-                {watched.has(currentEpisodeKey) ? '\u2713 Watched' : '+ Mark as watched'}
-              </button>
-              <span className="player-mark-hint">
-                S{season} E{episode}
-                {!watched.has(currentEpisodeKey) && canTrackEpisodes && ' | auto-tracks after 5 min'}
-                {!canTrackEpisodes && ' | tracking unavailable'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <div className="player-providers">
-          <span className="player-providers-label">Source:</span>
-          {PROVIDERS.map((entry) => (
-            <button
-              key={entry.id}
-              className={`player-provider-btn ${provider === entry.id ? 'active' : ''}`}
-              onClick={() => setProvider(entry.id)}
-              type="button"
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
+            )}
 
             <p className="player-kb-hint">
               {isTV
