@@ -12,8 +12,10 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import './App.css';
-import './mobile.css';
 import './theme-experiment.css';
+// mobile.css loads last: it adapts the theme-experiment design language to
+// small screens, so its overrides must win over both stylesheets above.
+import './mobile.css';
 
 const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
