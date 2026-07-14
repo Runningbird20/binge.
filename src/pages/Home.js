@@ -248,10 +248,10 @@ function ContinueWatching({ items, onRemove }) {
 const FOR_YOU_TABS = [
   { id: 'all', label: 'All', Icon: null },
   { id: 'movie', label: 'Movies', Icon: FilmSlate },
-  { id: 'tv_show', label: 'TV Shows', Icon: MonitorPlay },
+  { id: 'tv_show', label: 'Series', Icon: MonitorPlay },
   { id: 'book', label: 'Books', Icon: BookOpen },
 ];
-const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
+const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
 const FOR_YOU_IDLE_STATE = { all: 'idle', movie: 'idle', tv_show: 'idle', book: 'idle' };
 
 function ForYouCard({ rec }) {
@@ -507,7 +507,7 @@ function LibrarySection({ watchlist, ratings, loading }) {
           {[
             { value: '', label: 'All', Icon: null },
             { value: 'movie', label: 'Movies', Icon: FilmSlate },
-            { value: 'tv_show', label: 'TV', Icon: MonitorPlay },
+            { value: 'tv_show', label: 'Series', Icon: MonitorPlay },
             { value: 'book', label: 'Books', Icon: BookOpen },
           ].map(t => (
             <button key={t.value} className={`books-tab ${wlTypeFilter === t.value ? 'active' : ''}`} onClick={() => setWlTypeFilter(t.value)} type="button">

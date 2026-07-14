@@ -8,7 +8,7 @@ const TYPE_LABELS = { movie: 'Movie', tv_show: 'TV Show', book: 'Book' };
 const TYPE_TABS   = [
   { key: 'all',    label: 'All' },
   { key: 'movie',  label: 'Movies' },
-  { key: 'tv_show',label: 'TV Shows' },
+  { key: 'tv_show',label: 'Series' },
   { key: 'book',   label: 'Books' },
 ];
 
