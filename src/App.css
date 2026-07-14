@@ -5006,7 +5006,10 @@ body {
   gap: 0.85rem;
   overflow-x: auto;
   overflow-y: visible;
-  padding-bottom: 0.75rem;
+  /* Horizontal buffer matches .mr-track's — .mr-track-wrap clips with
+     overflow:hidden, so edge cards need room for their hover scale/shadow
+     to not get cut off. */
+  padding: 0.5rem 1.5rem 0.75rem;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
   scroll-snap-type: x mandatory;
@@ -7298,7 +7301,11 @@ body {
 .profile-empty { color: #444; font-size: 0.85rem; padding: 2rem 0; }
 .profile-watchlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 0.75rem; }
 .profile-watchlist-row {
-  display: flex; gap: 0.75rem; overflow-x: auto; overflow-y: visible; padding: 0.75rem 0 1.5rem;
+  display: flex; gap: 0.75rem; overflow-x: auto; overflow-y: visible;
+  /* Horizontal buffer matches .mr-track's — .mr-track-wrap clips with
+     overflow:hidden, so edge cards need room for their hover scale/shadow
+     to not get cut off. */
+  padding: 0.75rem 1.5rem 1.5rem;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent;
 }
 .profile-watchlist-row::-webkit-scrollbar { height: 3px; }
