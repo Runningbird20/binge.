@@ -846,6 +846,15 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
   if (media) {
     cacheMediaMetadata(mediaType, media);
   }
+
+  // Rating UI can live far from where a rating gets saved (e.g. Home's
+  // Library hover badge vs. the details overlay opened on top of it, which
+  // is a separate mounted component with its own local state). Broadcast
+  // so any mounted screen showing this item's rating can update immediately
+  // instead of only refreshing on its next full data fetch.
+  window.dispatchEvent(new CustomEvent('binge:ratingSaved', {
+    detail: { mediaType, mediaId: Number(mediaId), categories },
+  }));
 }
 
 export async function fetchSupabaseDashboardCounts() {
