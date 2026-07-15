@@ -90,12 +90,12 @@ async function fetchStreams() {
 }
 
 const CAT_ICONS = {
+  'American Football': '🏈', 'Australian Football': '🏉',
   Basketball: '🏀', Soccer: '⚽', Football: '⚽', Baseball: '⚾',
   Hockey: '🏒', Boxing: '🥊', MMA: '🥊', 'Combat Sports': '🥊',
   Wrestling: '🤼', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
   Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Olympics: '🏅',
   Esports: '🎮', Athletics: '🏃', Cycling: '🚴', Motorsport: '🏎️',
-  'American Football': '🏈', 'Australian Football': '🏈',
 };
 
 function catIcon(cat) {
