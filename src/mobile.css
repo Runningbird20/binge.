@@ -272,6 +272,9 @@
   .catalog-header { padding: 0.75rem 1rem 0.5rem; }
   .catalog-title { font-size: 1.5rem; }
 
+  .catalog-search-row { padding: 0 1rem 0.7rem; }
+  .catalog-search-bar { max-width: none; }
+
   .genre-bar-wrap {
     top: calc(56px + env(safe-area-inset-top, 0px));
     padding: 0.5rem 1rem 0.7rem;
