@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
 import MobileBookDetail from '../components/MobileBookDetail';
 import useIsMobile from '../hooks/useIsMobile';
+import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import {
@@ -60,7 +62,15 @@ function orderBatch(items) {
 
 function appendUniqueBooks(currentItems, nextItems) {
   const seenIds = new Set(currentItems.map((item) => item.id));
-  return [...currentItems, ...nextItems.filter((item) => !seenIds.has(item.id))];
+  const deduped = [];
+
+  for (const item of nextItems) {
+    if (seenIds.has(item.id)) continue;
+    seenIds.add(item.id);
+    deduped.push(item);
+  }
+
+  return [...currentItems, ...deduped];
 }
 
 const ARCHIVE_DOWNLOAD_EXTENSIONS = {
@@ -497,6 +507,8 @@ export default function Books() {
 
   const [books, setBooks] = useState([]);
   const [activeLabel, setActiveLabel] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const searchTerm = useDebounce(searchInput, 350).trim();
   const [allGenres, setAllGenres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -550,13 +562,14 @@ export default function Books() {
       fetchSupabaseBooksPage({
         page,
         pageSize: windowSize,
+        search: searchTerm,
         genre: genreValues,
         sortOrder: 'title-asc',
       }).catch(() => null)
     )));
 
     return orderBatch(results.flatMap((result) => (Array.isArray(result?.items) ? result.items : [])));
-  }, [genreValues]);
+  }, [genreValues, searchTerm]);
 
   const fetchApiPage = useCallback(async (pageNum) => {
     const params = new URLSearchParams({
@@ -568,6 +581,7 @@ export default function Books() {
     // The legacy API only supports a single genre substring; this tier only
     // runs when Supabase is unreachable, so an approximate match is fine.
     if (genreValues[0]) params.set('genre', genreValues[0]);
+    if (searchTerm) params.set('search', searchTerm);
 
     const data = await api.get(`/media/books?${params.toString()}`);
     return {
@@ -578,7 +592,7 @@ export default function Books() {
         genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
       },
     };
-  }, [genreValues]);
+  }, [genreValues, searchTerm]);
 
   useEffect(() => {
     let cancelled = false;
@@ -586,6 +600,7 @@ export default function Books() {
     requestTokenRef.current = requestToken;
     emptyBatchesRef.current = 0;
     const fetchHadGenreFilter = genreValues.length > 0;
+    const fetchHadFilter = fetchHadGenreFilter || Boolean(searchTerm);
 
     setLoading(true);
     setLoadingMore(false);
@@ -609,11 +624,12 @@ export default function Books() {
         const probe = await fetchSupabaseBooksPage({
           page: 1,
           pageSize: 1,
+          search: searchTerm,
           genre: genreValues,
           sortOrder: 'title-asc',
         });
         const totalCount = Number(probe?.total) || 0;
-        if (totalCount === 0 && !fetchHadGenreFilter) {
+        if (totalCount === 0 && !fetchHadFilter) {
           throw new Error('Book catalog is empty');
         }
 
@@ -641,7 +657,7 @@ export default function Books() {
 
       try {
         const data = await fetchApiPage(1);
-        if (data.items.length === 0 && !fetchHadGenreFilter) {
+        if (data.items.length === 0 && !fetchHadFilter) {
           throw new Error('Book catalog is empty');
         }
 
@@ -662,6 +678,7 @@ export default function Books() {
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         const pool = filterBooksCatalog(fallbackItems, {
+          search: searchTerm,
           genre: genreValues,
           sortOrder: 'year-desc',
           page: 1,
@@ -687,7 +704,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, fetchSupabaseWindows, fetchApiPage]);
+  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -927,6 +944,30 @@ export default function Books() {
 
         {activeTab === 'books' && (
           <div className="catalog-view">
+            <div className="catalog-search-row">
+              <div className="catalog-search-bar">
+                <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
+                <input
+                  type="text"
+                  className="catalog-search-input"
+                  placeholder="Search books…"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  aria-label="Search books"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    className="catalog-search-clear"
+                    onClick={() => setSearchInput('')}
+                    aria-label="Clear search"
+                  >
+                    <X size={14} weight="bold" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="genre-bar-wrap">
               <div className="genre-bar" role="tablist" aria-label="Book genres">
                 <button
@@ -954,8 +995,8 @@ export default function Books() {
             ) : books.length === 0 ? (
               <div className="empty-state">
                 <p style={{ fontSize: '2rem', margin: 0 }}>📖</p>
-                <p>No books match this genre.</p>
-                <p className="empty-hint">Try a different genre.</p>
+                <p>No books match {searchTerm ? `"${searchTerm}"` : 'this genre'}.</p>
+                <p className="empty-hint">Try a different {searchTerm ? 'search term' : 'genre'}.</p>
               </div>
             ) : (
               <>
