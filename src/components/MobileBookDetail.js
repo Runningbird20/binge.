@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import StarRating from './StarRating';
-import { computeStarRating, buildUniformCategories } from './RatingArtifact';
+import RateReviewPanel from './RateReviewPanel';
+import { computeStarRating } from './RatingArtifact';
 
 const ARCHIVE_DOWNLOAD_EXTENSIONS = {
   pdf:  ['.pdf'],
@@ -22,7 +23,6 @@ export default function MobileBookDetail({
   onReadNow,
 }) {
   const [draftStars, setDraftStars]   = useState(0);
-  const [isSaving, setIsSaving]       = useState(false);
   const [tab, setTab]                 = useState('info');
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
@@ -55,12 +55,9 @@ export default function MobileBookDetail({
   const imageUrl   = book.cover_url || book.cover || book.image_url || '';
   const avgRating  = book.avg_rating ? Number(book.avg_rating).toFixed(1) : null;
 
-  async function handleStarChange(nextValue) {
-    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
-    setDraftStars(nextValue);
-    setIsSaving(true);
-    try { await onRate(book, buildUniformCategories('book', nextValue)); }
-    finally { setIsSaving(false); }
+  async function handleRatingSave(categories, review) {
+    if (typeof onRate !== 'function') return;
+    await onRate(book, categories, review);
   }
 
   async function handleDownload(format) {
@@ -207,15 +204,13 @@ export default function MobileBookDetail({
         {/* Rate tab */}
         {tab === 'rate' && (
           <div className="mob-detail-tab-content">
-            <div className="mob-detail-star-row">
-              <StarRating
-                value={draftStars}
-                onChange={allowActions ? handleStarChange : undefined}
-                readOnly={!allowActions}
-                size="lg"
-              />
-            </div>
-            {isSaving && <p className="mob-detail-rate-hint">Saving…</p>}
+            <RateReviewPanel
+              mediaType="book"
+              value={userRating}
+              onSave={handleRatingSave}
+              allowActions={allowActions}
+              size="lg"
+            />
             {!allowActions && (
               <p className="mob-detail-rate-hint">Browse only — sign in to rate.</p>
             )}

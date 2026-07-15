@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
 import StarRating from './StarRating';
-import { computeStarRating, buildUniformCategories } from './RatingArtifact';
+import RateReviewPanel from './RateReviewPanel';
+import { computeStarRating } from './RatingArtifact';
 
 function getImageUrl(item) {
   const raw = item.poster_url || item.cover_url || item.image_url || '';
@@ -39,7 +40,6 @@ export default function MobileMediaDetail({
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [draftStars, setDraftStars] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
   const [tab, setTab] = useState('info');
 
   useEffect(() => {
@@ -69,12 +69,9 @@ export default function MobileMediaDetail({
   const avgRating = item.avg_rating ? Number(item.avg_rating).toFixed(1) : null;
   const canWatch = mediaType === 'movie' || mediaType === 'tv_show';
 
-  async function handleStarChange(nextValue) {
-    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
-    setDraftStars(nextValue);
-    setIsSaving(true);
-    try { await onRate(item, buildUniformCategories(mediaType, nextValue)); }
-    finally { setIsSaving(false); }
+  async function handleRatingSave(categories, review) {
+    if (typeof onRate !== 'function') return;
+    await onRate(item, categories, review);
   }
 
   const runtimeLine = item.seasons != null
@@ -176,15 +173,13 @@ export default function MobileMediaDetail({
           {/* Rate tab */}
           {tab === 'rate' && (
             <div className="mob-detail-tab-content">
-              <div className="mob-detail-star-row">
-                <StarRating
-                  value={draftStars}
-                  onChange={allowActions ? handleStarChange : undefined}
-                  readOnly={!allowActions}
-                  size="lg"
-                />
-              </div>
-              {isSaving && <p className="mob-detail-rate-hint">Saving…</p>}
+              <RateReviewPanel
+                mediaType={mediaType}
+                value={userRating}
+                onSave={handleRatingSave}
+                allowActions={allowActions}
+                size="lg"
+              />
               {!allowActions && (
                 <p className="mob-detail-rate-hint">Browse only — sign in to rate.</p>
               )}

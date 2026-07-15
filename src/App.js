@@ -25,7 +25,7 @@ const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
 const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const Sports         = lazy(() => import('./pages/Sports'));
-const Ratings        = lazy(() => import('./pages/Ratings'));
+const Profile        = lazy(() => import('./pages/Profile'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -75,7 +75,7 @@ function AppRoutes() {
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
         <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
-        <Route path="/ratings"   element={<ProtectedRoute><Ratings /></ProtectedRoute>} />
+        <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />

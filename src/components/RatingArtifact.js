@@ -48,18 +48,22 @@ export function computeNormalizedScore(mediaType, scores) {
   return Math.round((total / max) * 100) / 10; // 0-10 with one decimal
 }
 
-// Movie/TV/book ratings are a single 5-star value in the UI, but still
-// stored across the existing per-category columns (all categories are
-// max:5, so they line up 1:1 with stars) — this reads that single value
-// back out by averaging whatever categories are present. Works for both
-// new uniform ratings and any legacy per-category ratings.
+// Movie/TV/book ratings collapse to a single "star" value in most of the
+// UI, but the underlying columns are still per-category. A quick rating
+// spreads one value uniformly (buildUniformCategories), so averaging it
+// back out is exact — but a *detailed* rating has genuinely different
+// values per category, and rounding that average to the nearest 0.5 would
+// silently discard the detail the user entered (e.g. a true 3.8 average
+// collapsing to a flat 4.0). Round only to one decimal, just enough to
+// clear floating-point noise, so the detailed average is what's shown
+// wherever "the rating" is displayed.
 export function computeStarRating(mediaType, scores) {
   const cats = RATING_CATEGORIES[mediaType];
   if (!cats || !scores) return null;
   const values = cats.map((cat) => scores[cat.key]).filter((v) => v != null && v > 0);
   if (!values.length) return null;
   const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
-  return Math.round(avg * 2) / 2; // nearest 0.5
+  return Math.round(avg * 10) / 10; // one decimal place
 }
 
 // Inverse of computeStarRating — spreads a single star value across every

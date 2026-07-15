@@ -155,7 +155,7 @@ function StreamHero({ user, continueWatchingItems, watchlistItems }) {
               >
                 {inProgress ? 'Resume' : 'Details'}
               </Link>
-              <Link className="btn-secondary" to="/home">My Library</Link>
+              <Link className="btn-secondary" to="/profile">My Library</Link>
             </>
           ) : (
             <>

@@ -817,7 +817,7 @@ export async function fetchSupabaseRatingMap(mediaType) {
   }, {});
 }
 
-export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null }) {
+export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null, review }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const schema = RATING_TABLES[mediaType];
@@ -834,6 +834,13 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
   schema.columns.forEach((column) => {
     payload[column] = Number(categories[column]);
   });
+
+  // Only touch the review column when a value was explicitly passed in —
+  // upsert() only overwrites keys present in the payload, so a quick
+  // star-only save never clobbers an existing review.
+  if (review !== undefined) {
+    payload.review = review;
+  }
 
   const { error } = await client
     .from(schema.table)
