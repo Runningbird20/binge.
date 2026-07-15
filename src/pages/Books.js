@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MangaTab from '../components/MangaTab';
-import { computeStarRating, buildUniformCategories } from '../components/RatingArtifact';
-import StarRating from '../components/StarRating';
+import RateReviewPanel from '../components/RateReviewPanel';
 import MobileBookDetail from '../components/MobileBookDetail';
 import useIsMobile from '../hooks/useIsMobile';
 import { api } from '../api';
@@ -136,8 +135,6 @@ export function BookDetailsModal({
   const [showReader, setShowReader] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
-  const [draftStars, setDraftStars] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
 
   const rawId = book?.source_key?.startsWith('internet-archive:')
     ? book.source_key.replace('internet-archive:', '')
@@ -146,10 +143,6 @@ export function BookDetailsModal({
   const archiveId = rawId && !isOlRecord ? rawId : null;
   const itemUrl = book?.item_url || book?.itemUrl || null;
   const canRead = Boolean(book?.title); // Reader searches Gutenberg if no direct source
-
-  useEffect(() => {
-    setDraftStars(computeStarRating('book', userRating) || 0);
-  }, [userRating, book]);
 
   useEffect(() => {
     if (!book) {
@@ -211,15 +204,9 @@ export function BookDetailsModal({
     }
   }
 
-  async function handleStarChange(nextValue) {
-    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
-    setDraftStars(nextValue);
-    setIsSaving(true);
-    try {
-      await onRate(book, buildUniformCategories('book', nextValue));
-    } finally {
-      setIsSaving(false);
-    }
+  async function handleRatingSave(categories, review) {
+    if (typeof onRate !== 'function') return;
+    await onRate(book, categories, review);
   }
 
   // Mobile gets the dedicated native-feeling layout
@@ -314,14 +301,13 @@ export function BookDetailsModal({
 
             <div className="rating-section">
               <p className="rating-section-title">Your Rating</p>
-              <div className="rating-section-row">
-                <StarRating
-                  value={draftStars}
-                  onChange={allowActions ? handleStarChange : undefined}
-                  readOnly={!allowActions}
-                  size="lg"
-                />
-                {allowActions && (
+              <RateReviewPanel
+                mediaType="book"
+                value={userRating}
+                onSave={handleRatingSave}
+                allowActions={allowActions}
+                size="lg"
+                actions={allowActions && (
                   <button
                     type="button"
                     className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
@@ -331,8 +317,7 @@ export function BookDetailsModal({
                     {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
                   </button>
                 )}
-              </div>
-              {isSaving && <span className="rating-saving-hint">Saving...</span>}
+              />
               {!allowActions && browseOnlyMessage && (
                 <p className="book-detail-status">{browseOnlyMessage}</p>
               )}
@@ -873,10 +858,10 @@ export default function Books() {
     setAddingBookId(null);
   }
 
-  async function handleRate(book, categories) {
+  async function handleRate(book, categories, review) {
     try {
-      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book });
-      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id } }));
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book, review });
+      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
       setDetailMessage(err.message);
