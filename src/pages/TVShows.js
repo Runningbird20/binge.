@@ -542,17 +542,18 @@ export default function TVShows() {
     }
   }
 
-  async function handleRate(item, categories) {
+  async function handleRate(item, categories, review) {
     try {
       await saveSupabaseRating({
         mediaType: 'tv_show',
         mediaId: item.id,
         categories,
         media: item,
+        review,
       });
       setUserRatings((current) => ({
         ...current,
-        [item.id]: { ...categories, media_id: item.id },
+        [item.id]: { ...categories, media_id: item.id, review },
       }));
       setDetailMessage('Rating saved!');
     } catch (error) {

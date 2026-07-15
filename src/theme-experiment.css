@@ -1129,3 +1129,180 @@ body {
   border-color: rgba(220, 60, 60, 0.55);
   color: #ff8080;
 }
+
+/* ── Rating badge — compact "x.x / 5" pill, the layout-friendly
+   alternative to a full per-category radar chart. Same visual language
+   as the old .profile-wl-status-ind--rated indicator, generalized so it
+   isn't tied to the watchlist card's hover-only visibility. ────────── */
+
+.rating-badge {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1;
+  color: var(--exp-text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
+}
+.rating-badge-num { font-weight: 800; }
+.rating-badge-den { font-weight: 600; opacity: 0.8; }
+
+.rating-badge-sm .rating-badge-num { font-size: 0.72rem; }
+.rating-badge-sm .rating-badge-den { font-size: 0.46rem; }
+.rating-badge-md .rating-badge-num { font-size: 0.88rem; }
+.rating-badge-md .rating-badge-den { font-size: 0.52rem; }
+.rating-badge-lg .rating-badge-num { font-size: 1.1rem; }
+.rating-badge-lg .rating-badge-den { font-size: 0.62rem; }
+
+.rating-badge--corner {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+/* ── Rate & Review panel ───────────────────────────────────────── */
+
+.rate-review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rate-review-quick-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.rate-review-detail-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--exp-text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rate-review-detail-toggle:hover { color: var(--exp-text); }
+
+/* Collapse the old per-media-type saturated accent colors down to the
+   theme's monochrome accent so the detail rubric doesn't look like it
+   belongs to a different app. */
+.rating-section .rating-btn,
+.rating-input-row .rating-btn {
+  background: var(--exp-surface);
+  border: 1px solid var(--exp-border);
+  color: var(--exp-text-dim);
+}
+.rating-section .rating-btn:hover,
+.rating-input-row .rating-btn:hover {
+  border-color: var(--exp-border-strong);
+  color: var(--exp-text);
+}
+.rating-section .rating-btn-active,
+.rating-input-row .rating-btn-active {
+  background: var(--exp-text);
+  border-color: var(--exp-text);
+  color: #0b0d12;
+}
+
+.rate-review-textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  background: var(--exp-surface);
+  border: 1px solid var(--exp-border);
+  border-radius: var(--exp-radius);
+  color: var(--exp-text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.65rem 0.8rem;
+}
+.rate-review-textarea:focus {
+  outline: none;
+  border-color: var(--exp-border-strong);
+}
+.rate-review-textarea::placeholder { color: var(--exp-text-faint); }
+
+.rate-review-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--exp-text-faint);
+}
+
+/* ── Profile page ──────────────────────────────────────────────── */
+
+.profile-bio-line {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--exp-text-dim);
+  max-width: 46ch;
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3em;
+  padding: 0 0.35em;
+  margin-left: 0.35em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.tab-btn.active .tab-count {
+  background: rgba(11, 13, 18, 0.18);
+}
+
+.profile-tab-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.profile-tab-controls .filter-input { margin-left: auto; }
+.profile-filter-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--exp-text-faint);
+}
+
+/* Profile card — poster tile (reused) + a footer of management controls
+   that catalog poster tiles don't need (status select / remove / review). */
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.profile-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+.profile-card-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.profile-card-remove {
+  align-self: flex-start;
+}
+.profile-card-review {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--exp-text-dim);
+  white-space: pre-wrap;
+}

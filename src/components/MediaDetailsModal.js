@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
-import StarRating from './StarRating';
-import { computeStarRating, buildUniformCategories } from './RatingArtifact';
+import RateReviewPanel from './RateReviewPanel';
 import useIsMobile from '../hooks/useIsMobile';
 import MobileMediaDetail from './MobileMediaDetail';
 
@@ -47,16 +46,10 @@ export default function MediaDetailsModal({
 }) {
   const isMobile = useIsMobile();
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
-  const [draftStars, setDraftStars] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setShowPlayer(Boolean(autoPlay));
   }, [autoPlay, item?.id]);
-
-  useEffect(() => {
-    setDraftStars(computeStarRating(mediaType, userRating) || 0);
-  }, [userRating, item, mediaType]);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -103,15 +96,9 @@ export default function MediaDetailsModal({
   const typeLabel = mediaType === 'movie' ? 'Movie Details' : mediaType === 'tv_show' ? 'TV Show Details' : 'Book Details';
   const canWatch = mediaType === 'movie' || mediaType === 'tv_show';
 
-  async function handleStarChange(nextValue) {
-    if (!allowActions || typeof onRate !== 'function' || isSaving) return;
-    setDraftStars(nextValue);
-    setIsSaving(true);
-    try {
-      await onRate(item, buildUniformCategories(mediaType, nextValue));
-    } finally {
-      setIsSaving(false);
-    }
+  async function handleRatingSave(categories, review) {
+    if (typeof onRate !== 'function') return;
+    await onRate(item, categories, review);
   }
 
   return (
@@ -204,14 +191,13 @@ export default function MediaDetailsModal({
 
             <div className="rating-section">
               <p className="rating-section-title">Your Rating</p>
-              <div className="rating-section-row">
-                <StarRating
-                  value={draftStars}
-                  onChange={allowActions ? handleStarChange : undefined}
-                  readOnly={!allowActions}
-                  size="lg"
-                />
-                {onWatchlist && (
+              <RateReviewPanel
+                mediaType={mediaType}
+                value={userRating}
+                onSave={handleRatingSave}
+                allowActions={allowActions}
+                size="lg"
+                actions={onWatchlist && (
                   <button
                     type="button"
                     className="btn-primary book-detail-library-btn"
@@ -221,8 +207,7 @@ export default function MediaDetailsModal({
                     {isAddingWatchlist ? 'Saving...' : 'Add to Library'}
                   </button>
                 )}
-              </div>
-              {isSaving && <span className="rating-saving-hint">Saving...</span>}
+              />
               {!allowActions && browseOnlyMessage && (
                 <p className="book-detail-status">{browseOnlyMessage}</p>
               )}
