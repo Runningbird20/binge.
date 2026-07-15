@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { SkeletonGrid } from '../components/SkeletonCard';
+import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import {
   addSupabaseWatchlistItem,
@@ -37,7 +39,15 @@ function normalizeMediaItems(data) {
 
 function appendUniqueItems(currentItems, nextItems) {
   const seenIds = new Set(currentItems.map((item) => item.id));
-  return [...currentItems, ...nextItems.filter((item) => !seenIds.has(item.id))];
+  const deduped = [];
+
+  for (const item of nextItems) {
+    if (seenIds.has(item.id)) continue;
+    seenIds.add(item.id);
+    deduped.push(item);
+  }
+
+  return [...currentItems, ...deduped];
 }
 
 function shuffleItems(items) {
@@ -112,6 +122,8 @@ function PosterTile({ item, onClick }) {
 function CatalogView({ onItemClick, initialGenre }) {
   const [items, setItems] = useState([]);
   const [activeLabel, setActiveLabel] = useState(initialGenre || '');
+  const [searchInput, setSearchInput] = useState('');
+  const searchTerm = useDebounce(searchInput, 350).trim();
   const [allGenres, setAllGenres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -162,7 +174,7 @@ function CatalogView({ onItemClick, initialGenre }) {
       fetchSupabaseMovieCatalogSegment({
         offset,
         limit: windowSize,
-        search: '',
+        search: searchTerm,
         genre: genreValues,
         sortOrder: 'title-asc',
         includeCount: false,
@@ -172,7 +184,7 @@ function CatalogView({ onItemClick, initialGenre }) {
     )));
 
     return orderBatch(results.flatMap((result) => normalizeMediaItems(result)));
-  }, [genreValues]);
+  }, [genreValues, searchTerm]);
 
   const fetchApiPage = useCallback(async (pageNum) => {
     const params = new URLSearchParams({
@@ -184,6 +196,7 @@ function CatalogView({ onItemClick, initialGenre }) {
     // The legacy API only supports a single genre substring; this tier only
     // runs when Supabase is unreachable, so an approximate match is fine.
     if (genreValues[0]) params.set('genre', genreValues[0]);
+    if (searchTerm) params.set('search', searchTerm);
 
     const data = await api.get(`/media/movies?${params.toString()}`);
     return {
@@ -194,7 +207,7 @@ function CatalogView({ onItemClick, initialGenre }) {
         genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [],
       },
     };
-  }, [genreValues]);
+  }, [genreValues, searchTerm]);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +215,7 @@ function CatalogView({ onItemClick, initialGenre }) {
     requestTokenRef.current = requestToken;
     emptyBatchesRef.current = 0;
     const fetchHadGenreFilter = genreValues.length > 0;
+    const fetchHadFilter = fetchHadGenreFilter || Boolean(searchTerm);
 
     setLoading(true);
     setLoadingMore(false);
@@ -225,7 +239,7 @@ function CatalogView({ onItemClick, initialGenre }) {
         const probe = await fetchSupabaseMovieCatalogSegment({
           offset: 0,
           limit: 1,
-          search: '',
+          search: searchTerm,
           genre: genreValues,
           sortOrder: 'title-asc',
           includeCount: true,
@@ -233,7 +247,7 @@ function CatalogView({ onItemClick, initialGenre }) {
           includeUpcoming: false,
         });
         const totalCount = Number(probe?.total) || 0;
-        if (totalCount === 0 && !fetchHadGenreFilter) {
+        if (totalCount === 0 && !fetchHadFilter) {
           throw new Error('Movie catalog is empty');
         }
 
@@ -261,7 +275,7 @@ function CatalogView({ onItemClick, initialGenre }) {
 
       try {
         const data = await fetchApiPage(1);
-        if (data.items.length === 0 && !fetchHadGenreFilter) {
+        if (data.items.length === 0 && !fetchHadFilter) {
           throw new Error('Movie catalog is empty');
         }
 
@@ -282,6 +296,7 @@ function CatalogView({ onItemClick, initialGenre }) {
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         const pool = filterMediaItems(fallbackItems, {
+          search: searchTerm,
           genre: genreValues,
           sortOrder: 'year-desc',
         });
@@ -305,7 +320,7 @@ function CatalogView({ onItemClick, initialGenre }) {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, fetchSupabaseWindows, fetchApiPage]);
+  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -390,6 +405,30 @@ function CatalogView({ onItemClick, initialGenre }) {
 
   return (
     <div className="catalog-view">
+      <div className="catalog-search-row">
+        <div className="catalog-search-bar">
+          <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
+          <input
+            type="text"
+            className="catalog-search-input"
+            placeholder="Search movies…"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            aria-label="Search movies"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              className="catalog-search-clear"
+              onClick={() => setSearchInput('')}
+              aria-label="Clear search"
+            >
+              <X size={14} weight="bold" />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="genre-bar-wrap">
         <div className="genre-bar" role="tablist" aria-label="Movie genres">
           <button
@@ -417,8 +456,8 @@ function CatalogView({ onItemClick, initialGenre }) {
       ) : items.length === 0 ? (
         <div className="empty-state">
           <p style={{ fontSize: '2rem', margin: 0 }}>🎬</p>
-          <p>No movies match this genre.</p>
-          <p className="empty-hint">Try a different genre.</p>
+          <p>No movies match {searchTerm ? `"${searchTerm}"` : 'this genre'}.</p>
+          <p className="empty-hint">Try a different {searchTerm ? 'search term' : 'genre'}.</p>
         </div>
       ) : (
         <>
