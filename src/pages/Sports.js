@@ -1,89 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
 import useDeviceType from '../hooks/useDeviceType';
+import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel } from '../utils/sportsProviders';
 
 const POLL_MS = 60_000;
-const PPV_API = 'https://api.ppv.st/api/streams';
-
-const PPV_PROVIDERS = [
-  { id: 'ppv.st',  label: 'PPV.st'  },
-  { id: 'ppv.cx',  label: 'PPV.cx'  },
-  { id: 'ppv.is',  label: 'PPV.is'  },
-  { id: 'ppv.lc',  label: 'PPV.lc'  },
-];
-
-// Every PPV mirror's own "/live/" page turns out to just embed this exact
-// same iframeSrc inside its own site chrome (login, chat, ads) rather than
-// serving a genuinely different feed — confirmed by inspecting the nested
-// iframe on ppv.cx/ppv.is/ppv.lc for multiple streams. Routing through a
-// mirror's wrapper page therefore only adds their UI on top of the same
-// video, so always use the direct source regardless of which one is picked.
-// The provider param is kept (and still drives the iframe `key`) so
-// switching "source" still works as a manual retry/reload.
-function buildStreamUrl(stream) {
-  return stream.iframeSrc || null;
-}
-
-function truthy(v) { return v === 1 || v === true || v === '1'; }
-
-function parsePpvResponse(data) {
-  const now = Math.floor(Date.now() / 1000);
-  const streams = [];
-  for (const cat of data.streams || []) {
-    const catLive = truthy(cat.always_live);
-    for (const s of cat.streams || []) {
-      const alwaysLive = catLive || truthy(s.always_live);
-      const live     = alwaysLive || (s.starts_at <= now && s.ends_at >= now);
-      const upcoming = !alwaysLive && s.starts_at > now;
-      const ended    = !alwaysLive && s.ends_at < now;
-      if (ended && !truthy(s.allowpaststreams)) continue;
-      streams.push({
-        id:         s.id,
-        name:       s.name,
-        tag:        s.tag        || null,
-        poster:     s.poster     || null,
-        category:   s.category_name || cat.category,
-        uriName:    s.uri_name,
-        startsAt:   s.starts_at,
-        endsAt:     s.ends_at,
-        alwaysLive,
-        live,
-        upcoming,
-        replay:     ended && truthy(s.allowpaststreams),
-        iframeSrc:  s.iframe || null,
-      });
-    }
-  }
-  streams.sort((a, b) => {
-    if (a.live !== b.live)         return a.live ? -1 : 1;
-    if (a.upcoming !== b.upcoming) return a.upcoming ? -1 : 1;
-    return a.startsAt - b.startsAt;
-  });
-  return streams;
-}
-
-async function fetchStreams() {
-  // 1. Try server-side proxy route
-  try {
-    const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(5000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.error && Array.isArray(data.streams) && data.streams.length > 0) {
-        return data.streams;
-      }
-    }
-  } catch { /* fall through */ }
-
-  // 2. Direct browser call — ppv.st allows Access-Control-Allow-Origin: *
-  const res = await fetch(PPV_API, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) throw new Error(`ppv.st ${res.status}`);
-  const data = await res.json();
-  if (!data.success) throw new Error('ppv.st error');
-  return parsePpvResponse(data);
-}
+// Failover timeout: how long we give a provider's iframe to fire `load`
+// before silently advancing to the next one. This only catches network-
+// level failures (DNS, connection refused, timeout) — a cross-origin iframe
+// that loads successfully but shows a dead/ad-only player looks identical
+// to a working one from the outside, so that residual case still needs the
+// manual "next source" control.
+const LOAD_TIMEOUT_MS = 8_000;
 
 const CAT_ICONS = {
   'American Football': '🏈', 'Australian Football': '🏉',
@@ -92,6 +19,7 @@ const CAT_ICONS = {
   Wrestling: '🤼', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
   Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Olympics: '🏅',
   Esports: '🎮', Athletics: '🏃', Cycling: '🚴', Motorsport: '🏎️',
+  Billiards: '🎱', Darts: '🎯',
 };
 
 function catIcon(cat) {
@@ -175,14 +103,25 @@ export default function Sports() {
   const [category, setCategory]         = useState('All');
   const [fullscreen, setFullscreen]     = useState(false);
   const [nowMs, setNowMs]               = useState(Date.now());
-  const [sportsProvider, setSportsProvider] = useState('ppv.st');
   const [showReplays, setShowReplays] = useState(false);
   const iframeRef = useRef(null);
   const playerRef = useRef(null);
 
+  // Provider failover — each merged stream carries a `providers` array
+  // (1-3 entries: PPV.st, Streamed.pk, StreamFree, and Streamed.pk itself
+  // can contribute more than one). providerIndex is which one we're
+  // currently trying; retryNonce forces an iframe remount without changing
+  // providers (used when there's only one, or to re-try from scratch).
+  const [providerIndex, setProviderIndex] = useState(0);
+  const [retryNonce, setRetryNonce]       = useState(0);
+  const [embedUrl, setEmbedUrl]           = useState(null);
+  const [resolving, setResolving]         = useState(false);
+  const [exhausted, setExhausted]         = useState(false);
+  const loadedRef = useRef(false);
+
   const load = useCallback(async () => {
     try {
-      const streams = await fetchStreams();
+      const streams = await fetchSportsStreams();
       setStreams(streams);
       setError('');
     } catch (e) {
@@ -213,14 +152,80 @@ export default function Sports() {
     }
   }
 
-  // All PPV mirrors resolve to the same underlying stream (see buildStreamUrl
-  // above), so there's no real "source" choice — cycling this just changes
-  // the iframe's key, forcing a fresh connection attempt when one stalls.
-  function retryStream() {
-    setSportsProvider(prev => {
-      const idx = PPV_PROVIDERS.findIndex(p => p.id === prev);
-      return PPV_PROVIDERS[(idx + 1) % PPV_PROVIDERS.length].id;
+  // Reset failover state whenever a different event is selected.
+  useEffect(() => {
+    setProviderIndex(0);
+    setRetryNonce(0);
+    setExhausted(false);
+  }, [selected?.id]);
+
+  const advanceProvider = useCallback(() => {
+    setProviderIndex((i) => {
+      const providers = selected?.providers || [];
+      if (i + 1 < providers.length) return i + 1;
+      setExhausted(true);
+      return i;
     });
+  }, [selected]);
+
+  // Resolve the current provider's actual embed URL (instant for PPV.st /
+  // StreamFree, one extra request for Streamed.pk) whenever the selection
+  // or the active provider changes.
+  useEffect(() => {
+    const providers = selected?.providers || [];
+    const provider = providers[providerIndex];
+    if (!provider) { setEmbedUrl(null); return undefined; }
+    let cancelled = false;
+    setResolving(true);
+    setEmbedUrl(null);
+    resolveProviderEmbedUrl(provider).then((url) => {
+      if (cancelled) return;
+      setResolving(false);
+      if (url) setEmbedUrl(url);
+      else advanceProvider();
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, providerIndex]);
+
+  // Failover watchdog — if the iframe never fires `load` within
+  // LOAD_TIMEOUT_MS, treat this provider as dead and silently move on.
+  useEffect(() => {
+    loadedRef.current = false;
+    if (!embedUrl) return undefined;
+    const timer = setTimeout(() => {
+      if (!loadedRef.current) advanceProvider();
+    }, LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [embedUrl, advanceProvider]);
+
+  function handlePlayerLoad() { loadedRef.current = true; }
+  function handlePlayerError() { advanceProvider(); }
+
+  const currentProviders = selected?.providers || [];
+  const currentProvider = currentProviders[providerIndex] || null;
+  const sourceLabel = currentProvider ? providerLabel(currentProvider) : '';
+  const sourceCountLabel = currentProviders.length > 1
+    ? `${sourceLabel} · ${providerIndex + 1}/${currentProviders.length}`
+    : null;
+
+  // Manually cycle to the next known source for this event (wrapping back
+  // to the first), or just force a fresh connection attempt if there's only
+  // one — covers the case a provider "loads" but shows a dead/blank player,
+  // which the load-timeout watchdog above can't detect on its own.
+  function switchSource() {
+    if (currentProviders.length > 1) {
+      setExhausted(false);
+      setProviderIndex((i) => (i + 1) % currentProviders.length);
+    } else {
+      setRetryNonce((n) => n + 1);
+    }
+  }
+
+  function retryFromStart() {
+    setExhausted(false);
+    setProviderIndex(0);
+    setRetryNonce((n) => n + 1);
   }
 
   const categories = ['All', ...Array.from(
@@ -261,26 +266,35 @@ export default function Sports() {
 
           {/* Video */}
           <div className="sp-video-wrap" ref={playerRef}>
-            {buildStreamUrl(selected) ? (
+            {embedUrl ? (
               <iframe
-                key={`${selected.id}-${sportsProvider}`}
+                key={`${selected.id}-${providerIndex}-${retryNonce}`}
                 ref={iframeRef}
-                src={buildStreamUrl(selected)}
+                src={embedUrl}
                 className="mp-iframe"
                 allowFullScreen
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                 referrerPolicy="no-referrer-when-downgrade"
                 title={selected.name}
+                onLoad={handlePlayerLoad}
+                onError={handlePlayerError}
               />
+            ) : resolving ? (
+              <div className="mp-no-url">
+                <span style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</span>
+                <p>Connecting{sourceLabel ? ` via ${sourceLabel}` : ''}...</p>
+              </div>
             ) : (
               <div className="mp-no-url">
                 <span style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</span>
                 {status === 'upcoming' ? (
                   <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}</p>
+                ) : exhausted ? (
+                  <p>All sources unavailable right now.</p>
                 ) : (
                   <p>Stream unavailable — try refreshing.</p>
                 )}
-                <button className="sp-refresh-btn" onClick={load} type="button">↻ Refresh</button>
+                <button className="sp-refresh-btn" onClick={exhausted ? retryFromStart : load} type="button">↻ Refresh</button>
               </div>
             )}
           </div>
@@ -297,9 +311,9 @@ export default function Sports() {
             <button
               type="button"
               className="sp-source-btn"
-              onClick={retryStream}
+              onClick={switchSource}
             >
-              ↻ Retry connection
+              {sourceCountLabel ? `↻ Next source (${sourceCountLabel})` : '↻ Retry connection'}
             </button>
             {otherStreams.length > 0 && (
               <>
@@ -549,7 +563,11 @@ export default function Sports() {
                       {catIcon(selected.category)} {selected.category}
                     </span>
                   </div>
-                  <button className="sports-fullscreen-btn" onClick={retryStream} title="Retry connection">
+                  <button
+                    className="sports-fullscreen-btn"
+                    onClick={switchSource}
+                    title={sourceCountLabel ? `Next source (${sourceCountLabel})` : 'Retry connection'}
+                  >
                     ↻
                   </button>
                   <button className="sports-fullscreen-btn" onClick={toggleFs}
@@ -558,19 +576,31 @@ export default function Sports() {
                   </button>
                 </div>
 
+                {sourceCountLabel && (
+                  <p className="sports-source-indicator">Source: {sourceCountLabel}</p>
+                )}
+
                 <div className="sports-frame-wrap">
-                  {buildStreamUrl(selected) ? (
+                  {embedUrl ? (
                     <iframe
-                      key={`${selected.id}-${sportsProvider}`}
+                      key={`${selected.id}-${providerIndex}-${retryNonce}`}
                       ref={iframeRef}
-                      src={buildStreamUrl(selected)}
+                      src={embedUrl}
                       className="sports-frame"
                       allowFullScreen
                       allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
                       referrerPolicy="no-referrer-when-downgrade"
                       scrolling="no"
                       title={selected.name}
+                      onLoad={handlePlayerLoad}
+                      onError={handlePlayerError}
                     />
+                  ) : resolving ? (
+                    <div className="sports-no-stream">
+                      <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
+                      <h3>{selected.name}</h3>
+                      <p className="sports-no-stream-note">Connecting{sourceLabel ? ` via ${sourceLabel}` : ''}...</p>
+                    </div>
                   ) : (
                     <div className="sports-no-stream">
                       <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
@@ -581,6 +611,11 @@ export default function Sports() {
                             {timeUntil(selected.startsAt) && ` (in ${timeUntil(selected.startsAt)})`}
                           </p>
                           <p className="sports-no-stream-note">Stream link will appear when the event goes live.</p>
+                        </>
+                      ) : exhausted ? (
+                        <>
+                          <p className="sports-no-stream-note">All sources unavailable right now.</p>
+                          <button className="sports-retry-btn" onClick={retryFromStart} type="button">↻ Try again</button>
                         </>
                       ) : (
                         <p className="sports-no-stream-note">Stream unavailable — try refreshing.</p>

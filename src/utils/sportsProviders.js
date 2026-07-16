@@ -1,19 +1,27 @@
-const express = require('express');
-const router = express.Router();
+// Multi-provider sports stream aggregation. Combines 3 independent, free
+// live-sports APIs (PPV.st, Streamed.pk, StreamFree) into one unified feed
+// and opportunistically groups entries that are almost certainly the same
+// real-world event (same two teams + same day + same sport) so the player
+// can silently fail over to another provider's feed if one goes down,
+// instead of forcing the user to hunt for an alternate stream themselves.
+//
+// The three source APIs disagree on team-name formatting ("LA Clippers" vs.
+// "Los Angeles Clippers") and on what "football" means (soccer vs. American
+// football), so matching/labelling below is heuristic, not exact — a merge
+// miss just means the same game shows up as separate entries per provider,
+// which is harmless. Matching two different games together would be worse,
+// so buildMatchKey requires category + day + a team-nickname pair before
+// ever merging two entries.
 
-// Server-side mirror of src/utils/sportsProviders.js's fetch+normalize+merge
-// logic. Kept as a separate copy (Node vs. CRA/webpack can't share a source
-// file across this repo's client/server boundary) rather than a shared
-// module — matches the existing precedent of this route already duplicating
-// the PPV.st parsing that also lives client-side as a fallback path.
+const PROVIDER_LABELS = {
+  ppv: 'PPV.st',
+  streamed: 'Streamed.pk',
+  streamfree: 'StreamFree',
+};
 
-const CACHE_TTL = 60 * 1000;
-let cache = null;
-let cacheTime = 0;
-
-const RESOLVE_CACHE_TTL = 30 * 1000;
-const resolveCache = new Map();
-
+// Rough event length per sport, used only to estimate an end time for the
+// two providers (Streamed.pk, StreamFree) that don't give one — PPV.st's
+// own starts_at/ends_at stay authoritative once a match is merged with it.
 const DURATION_SEC = {
   Basketball: 3 * 3600,
   Soccer: 2.25 * 3600,
@@ -34,7 +42,7 @@ const DEFAULT_DURATION_SEC = 3 * 3600;
 
 const STREAMED_CATEGORY_MAP = {
   basketball: 'Basketball',
-  football: 'Soccer',
+  football: 'Soccer', // streamed.pk uses "football" for soccer
   'american-football': 'American Football',
   hockey: 'Hockey',
   baseball: 'Baseball',
@@ -56,20 +64,21 @@ const STREAMFREE_CATEGORY_MAP = {
   hockey: 'Hockey',
   combat: 'Combat Sports',
   baseball: 'Baseball',
-  football: 'American Football',
+  football: 'American Football', // streamfree uses "football" for NFL/CFB
   racing: 'Racing',
   tennis: 'Tennis',
   cricket: 'Cricket',
 };
 
-function isTruthy(val) {
-  return val === 1 || val === true || val === '1';
-}
+function truthy(v) { return v === 1 || v === true || v === '1'; }
 
 function slugifyTeam(name) {
   if (!name) return '';
   const cleaned = String(name).toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
   const tokens = cleaned.split(/\s+/).filter(Boolean);
+  // The last token is almost always the team's nickname ("Clippers",
+  // "Wizards") — providers disagree on whether they include the city
+  // ("Los Angeles Clippers" vs. "LA Clippers"), but the nickname is stable.
   return tokens[tokens.length - 1] || cleaned;
 }
 
@@ -85,6 +94,8 @@ function dayBucket(startsAtSec) {
   return new Date(startsAtSec * 1000).toISOString().slice(0, 10);
 }
 
+// Order-independent key so "A vs B" and "B vs A" (providers disagree on
+// home/away order) still merge into one entry.
 function buildMatchKey({ category, home, away, title, startsAtSec }) {
   let teamA = home;
   let teamB = away;
@@ -97,14 +108,17 @@ function buildMatchKey({ category, home, away, title, startsAtSec }) {
     const pair = [slugifyTeam(teamA), slugifyTeam(teamB)].sort().join('_');
     return `${category}|${pair}|${bucket}`;
   }
+  // No parseable team pair (e.g. a golf tournament or fight-night card name)
+  // — fall back to the whole title, which won't merge across providers but
+  // still displays correctly as its own single-provider entry.
   const titleSlug = String(title || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
   return `${category}|title:${titleSlug}|${bucket}`;
 }
 
 async function fetchPpvNormalized() {
   const res = await fetch('https://api.ppv.st/api/streams', {
-    headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; sports-aggregator/1.0)' },
-    signal: AbortSignal.timeout(8000),
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`ppv.st ${res.status}`);
   const data = await res.json();
@@ -113,13 +127,13 @@ async function fetchPpvNormalized() {
   const now = Math.floor(Date.now() / 1000);
   const out = [];
   for (const cat of data.streams || []) {
-    const catAlwaysLive = isTruthy(cat.always_live);
+    const catAlwaysLive = truthy(cat.always_live);
     for (const s of cat.streams || []) {
-      const alwaysLive = catAlwaysLive || isTruthy(s.always_live);
+      const alwaysLive = catAlwaysLive || truthy(s.always_live);
       const live     = alwaysLive || (s.starts_at <= now && s.ends_at >= now);
       const upcoming = !alwaysLive && s.starts_at > now;
       const ended    = !alwaysLive && s.ends_at < now;
-      if (ended && !isTruthy(s.allowpaststreams)) continue;
+      if (ended && !truthy(s.allowpaststreams)) continue;
       if (!s.iframe) continue;
       const category = s.category_name || cat.category || 'Other';
       out.push({
@@ -133,7 +147,7 @@ async function fetchPpvNormalized() {
         alwaysLive,
         live,
         upcoming,
-        replay: ended && isTruthy(s.allowpaststreams),
+        replay: ended && truthy(s.allowpaststreams),
         provider: { id: 'ppv', embedUrl: s.iframe },
       });
     }
@@ -144,7 +158,7 @@ async function fetchPpvNormalized() {
 async function fetchStreamedNormalized() {
   const res = await fetch('https://streamed.pk/api/matches/all', {
     headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`streamed.pk ${res.status}`);
   const data = await res.json();
@@ -158,11 +172,14 @@ async function fetchStreamedNormalized() {
     const startsAt = Math.floor((m.date || 0) / 1000);
     const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
     const endsAt = startsAt + duration;
-    if (startsAt && now > endsAt) continue;
-    const home = m.teams && m.teams.home ? m.teams.home.name : null;
-    const away = m.teams && m.teams.away ? m.teams.away.name : null;
+    if (startsAt && now > endsAt) continue; // stale — streamed.pk has no replay assets
+    const home = m.teams?.home?.name || null;
+    const away = m.teams?.away?.name || null;
     const poster = m.poster ? `https://streamed.pk${m.poster}` : null;
     const matchKey = buildMatchKey({ category, home, away, title: m.title, startsAtSec: startsAt });
+    // Each match can itself have multiple independent backend sources
+    // (admin/delta/echo/...) — surface all of them as separate provider
+    // entries so failover has real alternates even within just this API.
     for (const src of m.sources) {
       out.push({
         matchKey,
@@ -186,7 +203,7 @@ async function fetchStreamedNormalized() {
 async function fetchStreamfreeNormalized() {
   const res = await fetch('https://streamfree.top/api/v1/streams', {
     headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`streamfree ${res.status}`);
   const data = await res.json();
@@ -202,13 +219,7 @@ async function fetchStreamfreeNormalized() {
     if (startsAt && now > endsAt) continue;
     if (!s.embed_url) continue;
     out.push({
-      matchKey: buildMatchKey({
-        category,
-        home: s.team1 ? s.team1.name : null,
-        away: s.team2 ? s.team2.name : null,
-        title: s.name,
-        startsAtSec: startsAt,
-      }),
+      matchKey: buildMatchKey({ category, home: s.team1?.name, away: s.team2?.name, title: s.name, startsAtSec: startsAt }),
       name: s.name,
       category,
       poster: s.thumbnail_url || null,
@@ -249,6 +260,9 @@ function mergeNormalized(lists) {
       existing.providers.push(item.provider);
       if (!existing.poster && item.poster) existing.poster = item.poster;
       if (item.provider.id === 'ppv' && !existing._timingFromPpv) {
+        // PPV.st has real end times / replay detection — prefer it as the
+        // timing "source of truth" once present, over the estimated
+        // durations used for the other two providers.
         existing.startsAt = item.startsAt;
         existing.endsAt = item.endsAt;
         existing.alwaysLive = item.alwaysLive;
@@ -268,9 +282,11 @@ function mergeNormalized(lists) {
   return merged;
 }
 
-async function fetchMergedStreams() {
-  if (cache && Date.now() - cacheTime < CACHE_TTL) return cache;
-
+// Fetches + merges all 3 providers directly from the browser (all three
+// send Access-Control-Allow-Origin: *). Used both as the client-side
+// fallback when the server proxy is unavailable, and reused verbatim by
+// fetchSportsStreams below.
+export async function fetchAllSportsStreams() {
   const [ppv, streamed, streamfree] = await Promise.allSettled([
     fetchPpvNormalized(),
     fetchStreamedNormalized(),
@@ -279,57 +295,71 @@ async function fetchMergedStreams() {
 
   const lists = [];
   if (ppv.status === 'fulfilled') lists.push(...ppv.value);
-  else console.error('[sports] ppv.st', ppv.reason && ppv.reason.message);
   if (streamed.status === 'fulfilled') lists.push(...streamed.value);
-  else console.error('[sports] streamed.pk', streamed.reason && streamed.reason.message);
   if (streamfree.status === 'fulfilled') lists.push(...streamfree.value);
-  else console.error('[sports] streamfree', streamfree.reason && streamfree.reason.message);
 
   if (lists.length === 0) {
-    if (cache) return cache;
-    throw new Error('All sports providers unavailable');
+    const firstError = [ppv, streamed, streamfree].find((r) => r.status === 'rejected');
+    throw new Error(firstError?.reason?.message || 'All sports providers unavailable');
   }
-
-  const result = { streams: mergeNormalized(lists) };
-  cache = result;
-  cacheTime = Date.now();
-  return result;
+  return mergeNormalized(lists);
 }
 
-router.get('/streams', async (req, res) => {
+export async function fetchSportsStreams() {
+  // Server proxy first (one shared cache instead of every visitor hitting
+  // three separate free APIs, and a server IP is less likely to trip
+  // streamed.pk's ddos-guard challenge than a random browser) — direct
+  // multi-provider fetch as a fallback if the proxy route is unavailable.
   try {
-    const result = await fetchMergedStreams();
-    res.json(result);
-  } catch (err) {
-    console.error('[sports]', err.message);
-    res.status(502).json({ error: 'Sports streams unavailable', details: err.message });
-  }
-});
+    const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(6000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (!data.error && Array.isArray(data.streams) && data.streams.length > 0) {
+        return data.streams;
+      }
+    }
+  } catch { /* fall through */ }
+  return fetchAllSportsStreams();
+}
 
-router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
-  const { source, matchId } = req.params;
-  const cacheKey = `${source}/${matchId}`;
-  const cached = resolveCache.get(cacheKey);
-  if (cached && Date.now() - cached.time < RESOLVE_CACHE_TTL) {
-    return res.json({ embedUrl: cached.embedUrl });
-  }
+// Resolves one provider entry from a merged stream's `providers` array into
+// an actual embeddable iframe URL. PPV.st and StreamFree already give a
+// direct embed URL up front; Streamed.pk requires a second lookup per
+// (source, matchId) pair, done lazily here so we're not making hundreds of
+// extra requests for matches the user never opens.
+export async function resolveProviderEmbedUrl(provider) {
+  if (!provider) return null;
+  if (provider.embedUrl) return provider.embedUrl;
+  if (provider.id === 'streamed' && provider.source && provider.matchId) {
+    try {
+      const res = await fetch(
+        `/api/sports/resolve/streamed/${encodeURIComponent(provider.source)}/${encodeURIComponent(provider.matchId)}`,
+        { signal: AbortSignal.timeout(6000) },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.embedUrl) return data.embedUrl;
+      }
+    } catch { /* fall through */ }
 
-  try {
-    const upstream = await fetch(
-      `https://streamed.pk/api/stream/${encodeURIComponent(source)}/${encodeURIComponent(matchId)}`,
-      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) },
-    );
-    if (!upstream.ok) throw new Error(`streamed.pk ${upstream.status}`);
-    const list = await upstream.json();
-    if (!Array.isArray(list) || list.length === 0) throw new Error('no streams for source');
-    const best = list.find((s) => s.hd) || list[0];
-    const embedUrl = best.embedUrl || null;
-    resolveCache.set(cacheKey, { embedUrl, time: Date.now() });
-    res.json({ embedUrl });
-  } catch (err) {
-    console.error('[sports] resolve streamed', err.message);
-    res.status(502).json({ error: 'Could not resolve stream', details: err.message });
+    try {
+      const res = await fetch(
+        `https://streamed.pk/api/stream/${encodeURIComponent(provider.source)}/${encodeURIComponent(provider.matchId)}`,
+        { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) },
+      );
+      if (!res.ok) return null;
+      const list = await res.json();
+      if (!Array.isArray(list) || list.length === 0) return null;
+      const best = list.find((s) => s.hd) || list[0];
+      return best.embedUrl || null;
+    } catch {
+      return null;
+    }
   }
-});
+  return null;
+}
 
-module.exports = router;
+export function providerLabel(provider) {
+  if (!provider) return '';
+  return provider.label || PROVIDER_LABELS[provider.id] || provider.id;
+}
