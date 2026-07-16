@@ -572,7 +572,10 @@ export default function Home() {
 
   const userId = user?.id;
   const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Lifted out of the mount effect (rather than an inline async function
   // inside it) so pull-to-refresh can call the exact same fetch again later.

@@ -1004,8 +1004,9 @@
   color: #6ab0f0;
 }
 
-/* Retry-connection pill — all PPV mirrors resolve to the same stream, so
-   this is a manual reconnect, not a real "source" choice. */
+/* Source pill — cycles through this event's real alternate providers
+   (PPV.st / Streamed.pk / StreamFree) when more than one is available;
+   otherwise it's just a manual reconnect for the single source we have. */
 .sp-source-btn {
   display: inline-flex;
   align-items: center;
