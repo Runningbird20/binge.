@@ -1,6 +1,15 @@
 // Unified manga API — routes to the right backend based on source key.
-// MangaDex calls go directly to api.mangadex.org (CORS-enabled, no server hop).
-// WeebCentral and Bato.to go through our server proxy.
+// All three sources go through our server proxy first. MangaDex's API only
+// sets Access-Control-Allow-Origin for a small allowlist that happens to
+// include localhost (confirmed by inspecting its real response headers) —
+// so a direct browser call works in local dev and then silently breaks in
+// production ("NetworkError when attempting to fetch resource", a raw CORS
+// rejection, not an app-level error). The server-side proxy in
+// server/routes/manga.js isn't subject to browser CORS at all, so route
+// through it first; fall back to the direct client call only as a last
+// resort (e.g. if the Express backend is ever unavailable).
+// WeebCentral and Bato.to only ever worked via the server proxy anyway
+// (their sites don't set CORS headers for third-party origins at all).
 
 import { searchManga as mdxSearch, getPopular as mdxPopular, getMangaChapters as mdxChapters, getChapterPages as mdxPages } from './mangadexApi';
 
@@ -23,7 +32,14 @@ async function serverGet(path, signal) {
 export async function searchBySource(source, query, signal) {
   if (!query?.trim()) return [];
   switch (source) {
-    case 'mangadex':    return mdxSearch(query, signal);
+    case 'mangadex': {
+      try {
+        const d = await serverGet(`/api/manga/search?q=${encodeURIComponent(query)}`, signal);
+        return d.results || [];
+      } catch {
+        return mdxSearch(query, signal);
+      }
+    }
     case 'weebcentral': {
       const d = await serverGet(`/api/weebcentral/search?q=${encodeURIComponent(query)}`, signal);
       return d.results || [];
@@ -39,7 +55,14 @@ export async function searchBySource(source, query, signal) {
 // ── Popular ────────────────────────────────────────────────────
 export async function popularBySource(source, signal) {
   switch (source) {
-    case 'mangadex':    return mdxPopular(signal);
+    case 'mangadex': {
+      try {
+        const d = await serverGet('/api/manga/popular', signal);
+        return d.results || [];
+      } catch {
+        return mdxPopular(signal);
+      }
+    }
     case 'weebcentral': {
       const d = await serverGet('/api/weebcentral/popular', signal);
       return d.results || [];
@@ -55,7 +78,14 @@ export async function popularBySource(source, signal) {
 // ── Chapter list ───────────────────────────────────────────────
 export async function chaptersBySource(source, mangaId, signal) {
   switch (source) {
-    case 'mangadex':    return mdxChapters(mangaId, signal);
+    case 'mangadex': {
+      try {
+        const d = await serverGet(`/api/manga/${encodeURIComponent(mangaId)}/chapters`, signal);
+        return d.chapters || [];
+      } catch {
+        return mdxChapters(mangaId, signal);
+      }
+    }
     case 'weebcentral': {
       const d = await serverGet(`/api/weebcentral/${encodeURIComponent(mangaId)}/chapters`, signal);
       return d.chapters || [];
@@ -71,7 +101,14 @@ export async function chaptersBySource(source, mangaId, signal) {
 // ── Chapter pages ──────────────────────────────────────────────
 export async function pagesBySource(source, chapterId, signal) {
   switch (source) {
-    case 'mangadex':    return mdxPages(chapterId, signal);
+    case 'mangadex': {
+      try {
+        const d = await serverGet(`/api/manga/chapter/${encodeURIComponent(chapterId)}/pages`, signal);
+        return { pages: d.pages || [], dataSaverPages: d.dataSaverPages || [] };
+      } catch {
+        return mdxPages(chapterId, signal);
+      }
+    }
     case 'weebcentral': {
       const d = await serverGet(`/api/weebcentral/chapter/${encodeURIComponent(chapterId)}/pages`, signal);
       return { pages: d.pages || [], dataSaverPages: [] };
