@@ -7,6 +7,7 @@ import {
   upsertSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
+import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
@@ -140,6 +141,7 @@ function normalizeStartAt(value) {
 
 export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
   const { isMobile, isLandscape } = useDeviceType();
+  const { showMini, closeMini } = useMiniPlayer();
   const [provider, setProvider] = useState(PROVIDERS[0].id);
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
@@ -185,6 +187,13 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // Only one video should ever be audible at once — opening this (full)
+  // player always wins over whatever the mini-player widget was doing.
+  useEffect(() => {
+    closeMini();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -477,6 +486,19 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
+  // Hand off to the persistent global mini-player, then close this (full)
+  // view the same way the close button would — the mini widget carries on
+  // with its own copy of the embed, independent of this component now.
+  function handleMinimize() {
+    showMini({
+      embedUrl,
+      title: item.title,
+      subtitle: isTV ? `S${season} E${episode}` : (item.year || ''),
+      poster: item.poster_url || item.cover_url || item.image_url || null,
+    });
+    onClose?.();
+  }
+
   // ── Mobile player ────────────────────────────────────────────
   const epChipsRef = useRef(null);
   useEffect(() => {
@@ -495,6 +517,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             {isTV && <span className="mp-title-ep">S{season} E{episode}</span>}
           </div>
           <div className="mp-header-btns">
+            <button className="mp-btn" onClick={handleMinimize} type="button" title="Minimize">⌄</button>
             <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape">
               ⤢
             </button>
@@ -730,6 +753,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <button className="player-close" onClick={handleMinimize} title="Minimize" type="button">
+              ⌄
+            </button>
             <button className="player-close" onClick={onClose} title="Close" type="button">
               X
             </button>

@@ -5,10 +5,11 @@ import Navbar from '../components/Navbar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
 import MobileBookDetail from '../components/MobileBookDetail';
-import useIsMobile from '../hooks/useIsMobile';
+import useDeviceType from '../hooks/useDeviceType';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
+import PullToRefresh from '../components/PullToRefresh';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -141,7 +142,7 @@ export function BookDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
 }) {
-  const isMobile = useIsMobile();
+  const { isMobile } = useDeviceType();
   const [showReader, setShowReader] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
@@ -509,6 +510,7 @@ export default function Books() {
   const [activeLabel, setActiveLabel] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const searchTerm = useDebounce(searchInput, 350).trim();
+  const [refreshKey, setRefreshKey] = useState(0);
   const [allGenres, setAllGenres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -704,7 +706,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage]);
+  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -915,10 +917,16 @@ export default function Books() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function handleRefresh() {
+    setRefreshKey((key) => key + 1);
+    return new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
   return (
     <div className="app-layout">
       <Navbar />
       <main className="page-content curated-page">
+        <PullToRefresh onRefresh={activeTab === 'books' ? handleRefresh : (() => {})}>
         <div className="catalog-header">
           <h1 className="catalog-title">{activeTab === 'manga' ? 'Manga & Comics' : 'Books'}</h1>
         </div>
@@ -1026,6 +1034,7 @@ export default function Books() {
             )}
           </div>
         )}
+        </PullToRefresh>
       </main>
 
       {selectedBook && (

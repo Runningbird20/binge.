@@ -1,7 +1,7 @@
 import StarRating from './StarRating';
 import { computeStarRating } from './RatingArtifact';
 import { useToast } from '../contexts/ToastContext';
-import useIsMobile from '../hooks/useIsMobile';
+import useDeviceType from '../hooks/useDeviceType';
 import MobileMediaCard from './MobileMediaCard';
 
 function resolvePosterUrl(url) {
@@ -52,7 +52,7 @@ export default function MediaCard({
   onOpenDetails,
   showDescription = true,
 }) {
-  const isMobile = useIsMobile();
+  const { isMobile } = useDeviceType();
   const toast = useToast();
 
   if (isMobile) {
