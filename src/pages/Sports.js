@@ -12,20 +12,16 @@ const PPV_PROVIDERS = [
   { id: 'ppv.lc',  label: 'PPV.lc'  },
 ];
 
-function buildStreamUrl(stream, providerDomain) {
-  if (!stream.iframeSrc && !stream.uriName) return null;
-  if (providerDomain === 'ppv.st') return stream.iframeSrc || null;
-  if (stream.iframeSrc) {
-    try {
-      const url = new URL(stream.iframeSrc);
-      url.hostname = providerDomain;
-      url.pathname = url.pathname.replace('/embed/', '/live/');
-      url.searchParams.delete('gid');
-      return url.toString();
-    } catch { /* fall through */ }
-  }
-  if (stream.uriName) return `https://${providerDomain}/live/${stream.uriName}`;
-  return null;
+// Every PPV mirror's own "/live/" page turns out to just embed this exact
+// same iframeSrc inside its own site chrome (login, chat, ads) rather than
+// serving a genuinely different feed — confirmed by inspecting the nested
+// iframe on ppv.cx/ppv.is/ppv.lc for multiple streams. Routing through a
+// mirror's wrapper page therefore only adds their UI on top of the same
+// video, so always use the direct source regardless of which one is picked.
+// The provider param is kept (and still drives the iframe `key`) so
+// switching "source" still works as a manual retry/reload.
+function buildStreamUrl(stream) {
+  return stream.iframeSrc || null;
 }
 
 function truthy(v) { return v === 1 || v === true || v === '1'; }
@@ -137,6 +133,39 @@ function getStatus(s, nowMs) {
   return 'replay';
 }
 
+function StreamListCard({ stream, nowMs, onSelect }) {
+  const status = getStatus(stream, nowMs);
+  return (
+    <button className="sp-card" onClick={() => onSelect(stream)} type="button">
+      <div className="sp-card-left">
+        {stream.poster ? (
+          <img src={stream.poster} alt={stream.name} className="sp-card-poster"
+            onError={e => { e.target.style.display = 'none'; }} />
+        ) : (
+          <div className="sp-card-poster sp-card-poster--icon">
+            {catIcon(stream.category)}
+          </div>
+        )}
+      </div>
+      <div className="sp-card-body">
+        <div className="sp-card-badges">
+          {status === 'live' && <span className="sp-badge-live">● LIVE</span>}
+          {status === 'replay' && <span className="sp-badge-replay">REPLAY</span>}
+          {status === 'upcoming' && (
+            <span className="sp-badge-upcoming">
+              {fmtDate(stream.startsAt)} · {fmtTime(stream.startsAt)}
+              {timeUntil(stream.startsAt) && ` · ${timeUntil(stream.startsAt)}`}
+            </span>
+          )}
+        </div>
+        <p className="sp-card-name">{stream.name}</p>
+        <p className="sp-card-cat">{catIcon(stream.category)} {stream.category}</p>
+      </div>
+      <span className="sp-card-arrow">›</span>
+    </button>
+  );
+}
+
 export default function Sports() {
   const { isMobile } = useDeviceType();
   const [streams, setStreams]           = useState([]);
@@ -147,6 +176,7 @@ export default function Sports() {
   const [fullscreen, setFullscreen]     = useState(false);
   const [nowMs, setNowMs]               = useState(Date.now());
   const [sportsProvider, setSportsProvider] = useState('ppv.st');
+  const [showReplays, setShowReplays] = useState(false);
   const iframeRef = useRef(null);
   const playerRef = useRef(null);
 
@@ -183,6 +213,16 @@ export default function Sports() {
     }
   }
 
+  // All PPV mirrors resolve to the same underlying stream (see buildStreamUrl
+  // above), so there's no real "source" choice — cycling this just changes
+  // the iframe's key, forcing a fresh connection attempt when one stalls.
+  function retryStream() {
+    setSportsProvider(prev => {
+      const idx = PPV_PROVIDERS.findIndex(p => p.id === prev);
+      return PPV_PROVIDERS[(idx + 1) % PPV_PROVIDERS.length].id;
+    });
+  }
+
   const categories = ['All', ...Array.from(
     new Set(streams.map(s => s.category).filter(Boolean))
   ).sort()];
@@ -193,11 +233,16 @@ export default function Sports() {
     ? streams
     : streams.filter(s => s.category === category);
 
+  const liveNow    = filtered.filter(s => getStatus(s, nowMs) === 'live');
+  const upcoming   = filtered.filter(s => getStatus(s, nowMs) === 'upcoming');
+  const replays    = filtered.filter(s => getStatus(s, nowMs) === 'replay');
+
   // ── Mobile layout ────────────────────────────────────────────
   if (isMobile) {
     // Full-screen player when a stream is selected
     if (selected) {
       const status = getStatus(selected, nowMs);
+      const otherStreams = filtered.filter(s => s.id !== selected.id);
       return (
         <div className="sp-shell">
           {/* Header bar */}
@@ -216,11 +261,11 @@ export default function Sports() {
 
           {/* Video */}
           <div className="sp-video-wrap" ref={playerRef}>
-            {buildStreamUrl(selected, sportsProvider) ? (
+            {buildStreamUrl(selected) ? (
               <iframe
                 key={`${selected.id}-${sportsProvider}`}
                 ref={iframeRef}
-                src={buildStreamUrl(selected, sportsProvider)}
+                src={buildStreamUrl(selected)}
                 className="mp-iframe"
                 allowFullScreen
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
@@ -249,113 +294,150 @@ export default function Sports() {
                 <span className="sp-upcoming-time">{fmtDate(selected.startsAt)} {fmtTime(selected.startsAt)}</span>
               )}
             </div>
-            <p className="sp-section-label">More Streams</p>
-            {filtered.filter(s => s.id !== selected.id).slice(0, 8).map(s => {
-              const st = getStatus(s, nowMs);
-              return (
-                <button key={s.id} className="sp-mini-card" onClick={() => setSelected(s)} type="button">
-                  <span className={`sp-dot ${st === 'live' ? 'live' : st === 'upcoming' ? 'upcoming' : 'replay'}`} />
-                  <span className="sp-mini-name">{s.name}</span>
-                  <span className="sp-mini-cat">{catIcon(s.category)}</span>
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              className="sp-source-btn"
+              onClick={retryStream}
+            >
+              ↻ Retry connection
+            </button>
+            {otherStreams.length > 0 && (
+              <>
+                <p className="sp-section-label">More Streams</p>
+                {otherStreams.map(s => {
+                  const st = getStatus(s, nowMs);
+                  return (
+                    <button key={s.id} className="sp-mini-card" onClick={() => setSelected(s)} type="button">
+                      <span className={`sp-dot ${st === 'live' ? 'live' : st === 'upcoming' ? 'upcoming' : 'replay'}`} />
+                      <span className="sp-mini-name">{s.name}</span>
+                      <span className="sp-mini-cat">{catIcon(s.category)}</span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </div>
         </div>
       );
     }
 
-    // Stream list view
+    // Stream list view — grouped by status like a "Live TV" streaming home
     return (
       <div className="app-layout">
         <Navbar />
         <div className="sp-feed-shell">
           {/* Category filter chips */}
-          <div className="sp-cat-strip">
-            {liveCount > 0 && (
-              <span className="sp-live-pill">● {liveCount} LIVE</span>
-            )}
-            {categories.map(cat => (
-              <button
-                key={cat}
-                className={`sp-cat-chip ${category === cat ? 'active' : ''}`}
-                onClick={() => setCategory(cat)}
-                type="button"
-              >
-                {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
-              </button>
-            ))}
-          </div>
-
-          {/* Provider selector */}
-          <div className="sp-provider-row">
-            {PPV_PROVIDERS.map(p => (
-              <button
-                key={p.id}
-                className={`sp-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
-                onClick={() => setSportsProvider(p.id)}
-                type="button"
-              >{p.label}</button>
-            ))}
-          </div>
-
-          {/* Stream cards */}
-          <div className="sp-feed">
-            {loading && (
-              <div className="sp-feed-loading">
-                {[1,2,3,4,5].map(i => <div key={i} className="sp-skeleton-card" />)}
-              </div>
-            )}
-            {error && (
-              <div className="sp-feed-error">
-                <p>⚠️ {error}</p>
-                <button className="sp-refresh-btn" onClick={load} type="button">↻ Retry</button>
-              </div>
-            )}
-            {!loading && !error && filtered.length === 0 && (
-              <div className="sp-feed-empty">
-                <p style={{ fontSize: '2.5rem', margin: 0 }}>🏆</p>
-                <p>No streams in this category.</p>
-              </div>
-            )}
-            {filtered.map(s => {
-              const status = getStatus(s, nowMs);
-              return (
+          <div className="sp-cat-strip-wrap">
+            <div className="sp-cat-strip">
+              {liveCount > 0 && (
+                <span className="sp-live-pill">● {liveCount} LIVE</span>
+              )}
+              {categories.map(cat => (
                 <button
-                  key={s.id}
-                  className="sp-card"
-                  onClick={() => setSelected(s)}
+                  key={cat}
+                  className={`sp-cat-chip ${category === cat ? 'active' : ''}`}
+                  onClick={() => setCategory(cat)}
                   type="button"
                 >
-                  <div className="sp-card-left">
-                    {s.poster ? (
-                      <img src={s.poster} alt={s.name} className="sp-card-poster"
-                        onError={e => { e.target.style.display = 'none'; }} />
-                    ) : (
-                      <div className="sp-card-poster sp-card-poster--icon">
-                        {catIcon(s.category)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="sp-card-body">
-                    <div className="sp-card-badges">
-                      {status === 'live' && <span className="sp-badge-live">● LIVE</span>}
-                      {status === 'replay' && <span className="sp-badge-replay">REPLAY</span>}
-                      {status === 'upcoming' && (
-                        <span className="sp-badge-upcoming">
-                          {fmtDate(s.startsAt)} · {fmtTime(s.startsAt)}
-                          {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="sp-card-name">{s.name}</p>
-                    <p className="sp-card-cat">{catIcon(s.category)} {s.category}</p>
-                  </div>
-                  <span className="sp-card-arrow">›</span>
+                  {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
+
+          {loading && (
+            <>
+              <div className="sp-skeleton-hero" />
+              <div className="sp-skeleton-rail">
+                {[1, 2, 3].map(i => <div key={i} className="sp-skeleton-rail-card" />)}
+              </div>
+              <div className="sp-feed-loading">
+                {[1, 2, 3].map(i => <div key={i} className="sp-skeleton-card" />)}
+              </div>
+            </>
+          )}
+          {error && (
+            <div className="sp-feed-error">
+              <p>⚠️ {error}</p>
+              <button className="sp-refresh-btn" onClick={load} type="button">↻ Retry</button>
+            </div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="sp-feed-empty">
+              <p style={{ fontSize: '2.5rem', margin: 0 }}>🏆</p>
+              <p>No streams in this category.</p>
+            </div>
+          )}
+
+          {!loading && !error && liveNow.length > 0 && (
+            <div className="sp-live-section">
+              <p className="sp-section-label" style={{ paddingLeft: '1rem' }}>Live Now</p>
+              <button type="button" className="sp-live-hero" onClick={() => setSelected(liveNow[0])}>
+                {liveNow[0].poster ? (
+                  <img src={liveNow[0].poster} alt={liveNow[0].name} className="sp-live-hero-img"
+                    onError={e => { e.target.style.display = 'none'; }} />
+                ) : (
+                  <div className="sp-live-hero-icon">{catIcon(liveNow[0].category)}</div>
+                )}
+                <div className="sp-live-hero-grad" />
+                <div className="sp-live-hero-info">
+                  <span className="sp-badge-live">● LIVE</span>
+                  <p className="sp-live-hero-name">{liveNow[0].name}</p>
+                  <p className="sp-live-hero-cat">{catIcon(liveNow[0].category)} {liveNow[0].category}</p>
+                </div>
+              </button>
+
+              {liveNow.length > 1 && (
+                <div className="sp-live-row-wrap">
+                  <div className="sp-live-row">
+                    {liveNow.slice(1).map(s => (
+                      <button key={s.id} type="button" className="sp-live-card" onClick={() => setSelected(s)}>
+                        {s.poster ? (
+                          <img src={s.poster} alt={s.name}
+                            onError={e => { e.target.style.display = 'none'; }} />
+                        ) : (
+                          <div className="sp-live-card-icon">{catIcon(s.category)}</div>
+                        )}
+                        <span className="sp-badge-live sp-badge-live--sm">● LIVE</span>
+                        <p className="sp-live-card-name">{s.name}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loading && !error && upcoming.length > 0 && (
+            <div className="sp-section">
+              <p className="sp-section-label" style={{ paddingLeft: '1rem' }}>Upcoming</p>
+              <div className="sp-list">
+                {upcoming.map(s => (
+                  <StreamListCard key={s.id} stream={s} nowMs={nowMs} onSelect={setSelected} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && replays.length > 0 && (
+            <div className="sp-section">
+              <button
+                type="button"
+                className="sp-disclosure"
+                onClick={() => setShowReplays(v => !v)}
+              >
+                <span>Replays ({replays.length})</span>
+                <span className={`sp-disclosure-chevron${showReplays ? ' open' : ''}`}>›</span>
+              </button>
+              {showReplays && (
+                <div className="sp-list">
+                  {replays.map(s => (
+                    <StreamListCard key={s.id} stream={s} nowMs={nowMs} onSelect={setSelected} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -393,17 +475,6 @@ export default function Sports() {
             <div className="sports-games-header">
               <h2>Games</h2>
               <button className="sports-refresh-btn" onClick={load} title="Refresh" type="button">↻</button>
-            </div>
-
-            <div className="sports-provider-row">
-              {PPV_PROVIDERS.map(p => (
-                <button
-                  key={p.id}
-                  className={`sports-provider-btn ${sportsProvider === p.id ? 'active' : ''}`}
-                  onClick={() => setSportsProvider(p.id)}
-                  type="button"
-                >{p.label}</button>
-              ))}
             </div>
 
             <div className="sports-games-divider" />
@@ -478,6 +549,9 @@ export default function Sports() {
                       {catIcon(selected.category)} {selected.category}
                     </span>
                   </div>
+                  <button className="sports-fullscreen-btn" onClick={retryStream} title="Retry connection">
+                    ↻
+                  </button>
                   <button className="sports-fullscreen-btn" onClick={toggleFs}
                     title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
                     {fullscreen ? '↙' : '↗'}
@@ -485,11 +559,11 @@ export default function Sports() {
                 </div>
 
                 <div className="sports-frame-wrap">
-                  {buildStreamUrl(selected, sportsProvider) ? (
+                  {buildStreamUrl(selected) ? (
                     <iframe
                       key={`${selected.id}-${sportsProvider}`}
                       ref={iframeRef}
-                      src={buildStreamUrl(selected, sportsProvider)}
+                      src={buildStreamUrl(selected)}
                       className="sports-frame"
                       allowFullScreen
                       allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"

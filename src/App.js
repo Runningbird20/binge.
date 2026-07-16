@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { MiniPlayerProvider } from './contexts/MiniPlayerContext';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
@@ -124,30 +125,32 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <BrowserRouter>
-          <Suspense fallback={<AppRouteFallback />}>
-            <AppShell>
-              <AdBlocker />
-              <AppRoutes />
-            </AppShell>
-          </Suspense>
+        <MiniPlayerProvider>
+          <BrowserRouter>
+            <Suspense fallback={<AppRouteFallback />}>
+              <AppShell>
+                <AdBlocker />
+                <AppRoutes />
+              </AppShell>
+            </Suspense>
 
-          {/* Sonner toasts — positioned above bottom nav on mobile */}
-          <Toaster
-            theme="dark"
-            position="bottom-center"
-            offset={{ bottom: 80 }}
-            toastOptions={{
-              style: {
-                background: '#1c1c1e',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: '#fff',
-                borderRadius: '12px',
-                fontSize: '14px',
-              },
-            }}
-          />
-        </BrowserRouter>
+            {/* Sonner toasts — positioned above bottom nav on mobile */}
+            <Toaster
+              theme="dark"
+              position="bottom-center"
+              offset={{ bottom: 80 }}
+              toastOptions={{
+                style: {
+                  background: '#1c1c1e',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#fff',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                },
+              }}
+            />
+          </BrowserRouter>
+        </MiniPlayerProvider>
       </ToastProvider>
     </AuthProvider>
   );

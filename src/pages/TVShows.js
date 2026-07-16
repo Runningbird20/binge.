@@ -4,6 +4,7 @@ import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { SkeletonGrid } from '../components/SkeletonCard';
+import PullToRefresh from '../components/PullToRefresh';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import {
@@ -119,7 +120,7 @@ function PosterTile({ item, onClick }) {
   );
 }
 
-function CatalogView({ onItemClick, initialGenre }) {
+function CatalogView({ onItemClick, initialGenre, refreshKey }) {
   const [items, setItems] = useState([]);
   const [activeLabel, setActiveLabel] = useState(initialGenre || '');
   const [searchInput, setSearchInput] = useState('');
@@ -320,7 +321,7 @@ function CatalogView({ onItemClick, initialGenre }) {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage]);
+  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -496,6 +497,12 @@ export default function TVShows() {
   const [detailMessage, setDetailMessage] = useState('');
   const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
   const [userRatings, setUserRatings] = useState({});
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  function handleRefresh() {
+    setRefreshKey((key) => key + 1);
+    return new Promise((resolve) => setTimeout(resolve, 500));
+  }
 
   useEffect(() => {
     fetchSupabaseRatingMap('tv_show')
@@ -625,14 +632,17 @@ export default function TVShows() {
     <div className="app-layout">
       <Navbar />
       <main className="page-content curated-page">
-        <div className="catalog-header">
-          <h1 className="catalog-title">Series</h1>
-        </div>
+        <PullToRefresh onRefresh={handleRefresh}>
+          <div className="catalog-header">
+            <h1 className="catalog-title">Series</h1>
+          </div>
 
-        <CatalogView
-          onItemClick={openItemDetails}
-          initialGenre={initialGenre}
-        />
+          <CatalogView
+            onItemClick={openItemDetails}
+            initialGenre={initialGenre}
+            refreshKey={refreshKey}
+          />
+        </PullToRefresh>
       </main>
 
       {selectedItem && (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Onboarding from '../components/Onboarding';
+import PullToRefresh from '../components/PullToRefresh';
 import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
@@ -277,7 +278,7 @@ function ForYouCard({ rec }) {
   );
 }
 
-function ForYouSection({ ready }) {
+function ForYouSection({ ready, refreshSignal }) {
   const [activeType, setActiveType]     = useState('all');
   const [tabState, setTabState]         = useState(FOR_YOU_IDLE_STATE);
   const [tabData, setTabData]           = useState({});
@@ -301,6 +302,20 @@ function ForYouSection({ ready }) {
   useEffect(() => {
     if (ready && tabState[activeType] === 'idle') fetchType(activeType);
   }, [ready, activeType, tabState, fetchType]);
+
+  // Pull-to-refresh signal — re-run the active tab's fetch on demand. The
+  // ref skips the very first run (mount), which the effect above already
+  // covers via the 'idle' check.
+  const skippedFirstRefresh = useRef(true);
+  useEffect(() => {
+    if (skippedFirstRefresh.current) {
+      skippedFirstRefresh.current = false;
+      return;
+    }
+    if (!ready) return;
+    fetchType(activeType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   const state = tabState[activeType];
   const data = tabData[activeType];
@@ -556,58 +571,58 @@ export default function Home() {
   const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
 
   const userId = user?.id;
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
+  // Lifted out of the mount effect (rather than an inline async function
+  // inside it) so pull-to-refresh can call the exact same fetch again later.
+  const fetchStats = useCallback(async () => {
+    setDataLoading(true);
+    try {
+      const [ratingsResult, watchlistResult, continueWatchingResult] = await Promise.allSettled([
+        fetchSupabaseRatings(),
+        fetchSupabaseWatchlist(),
+        fetchSupabaseContinueWatching(),
+      ]);
+
+      if (!mountedRef.current) return;
+
+      const ratingsData = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
+      const watchlistData = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
+      const continueWatchingData = continueWatchingResult.status === 'fulfilled' ? continueWatchingResult.value : [];
+      const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
+      const nextWatchlist = Array.isArray(watchlistData) ? watchlistData : [];
+      const nextContinueWatching = Array.isArray(continueWatchingData) ? continueWatchingData : [];
+      setWatchlistItems(nextWatchlist);
+      setRatingsItems(nextRatings);
+      setContinueWatchingItems(nextContinueWatching);
+      if (nextRatings.length === 0 && !localStorage.getItem(onboardingKey)) {
+        setShowOnboarding(true);
+      }
+    } catch {
+      if (!mountedRef.current) return;
+      setWatchlistItems([]);
+      setRatingsItems([]);
+      setContinueWatchingItems([]);
+      if (!localStorage.getItem(onboardingKey)) {
+        setShowOnboarding(true);
+      }
+    } finally {
+      if (mountedRef.current) setDataLoading(false);
+    }
+  }, [onboardingKey]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    if (authLoading || !userId) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    async function fetchStats() {
-      setDataLoading(true);
-      try {
-        const [ratingsResult, watchlistResult, continueWatchingResult] = await Promise.allSettled([
-          fetchSupabaseRatings(),
-          fetchSupabaseWatchlist(),
-          fetchSupabaseContinueWatching(),
-        ]);
-
-        if (cancelled) return;
-
-        const ratingsData = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
-        const watchlistData = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
-        const continueWatchingData = continueWatchingResult.status === 'fulfilled' ? continueWatchingResult.value : [];
-        const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
-        const nextWatchlist = Array.isArray(watchlistData) ? watchlistData : [];
-        const nextContinueWatching = Array.isArray(continueWatchingData) ? continueWatchingData : [];
-        setWatchlistItems(nextWatchlist);
-        setRatingsItems(nextRatings);
-        setContinueWatchingItems(nextContinueWatching);
-        if (nextRatings.length === 0 && !localStorage.getItem(onboardingKey)) {
-          setShowOnboarding(true);
-        }
-      } catch {
-        if (cancelled) return;
-        setWatchlistItems([]);
-        setRatingsItems([]);
-        setContinueWatchingItems([]);
-        if (!localStorage.getItem(onboardingKey)) {
-          setShowOnboarding(true);
-        }
-      } finally {
-        if (!cancelled) setDataLoading(false);
-      }
-    }
-
+    if (authLoading || !userId) return;
     fetchStats();
+  }, [authLoading, userId, fetchStats]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, onboardingKey, userId]);
+  const [foryouRefreshSignal, setForyouRefreshSignal] = useState(0);
+
+  async function handleRefresh() {
+    setForyouRefreshSignal((n) => n + 1);
+    await fetchStats();
+  }
 
   // The details overlay that saves a rating is a separately-mounted screen
   // on top of Home (background-location routing), so it can't update Home's
@@ -662,6 +677,7 @@ export default function Home() {
     <div className="app-layout">
       <Navbar />
       <main className="page-content">
+        <PullToRefresh onRefresh={handleRefresh} disabled={authLoading || !user}>
         {(authLoading || !user) ? (
           <div className="loading-state">Loading dashboard...</div>
         ) : (
@@ -679,10 +695,11 @@ export default function Home() {
             loading={dataLoading}
           />
 
-          <ForYouSection ready={!authLoading && !!user} />
+          <ForYouSection ready={!authLoading && !!user} refreshSignal={foryouRefreshSignal} />
         </div>
         </>
         )}
+        </PullToRefresh>
       </main>
     </div>
     </>
