@@ -136,6 +136,11 @@ async function fetchPpvNormalized() {
       if (ended && !truthy(s.allowpaststreams)) continue;
       if (!s.iframe) continue;
       const category = s.category_name || cat.category || 'Other';
+      // PPV.st bundles a non-sports "24/7 Streams" category (cartoon reruns,
+      // a live cow cam, etc.) alongside real events — filter the whole
+      // category out rather than naming individual shows, since it's a
+      // fixed bucket the source itself uses to mean "not a sport".
+      if (category === '24/7 Streams') continue;
       out.push({
         matchKey: buildMatchKey({ category, title: s.name, startsAtSec: s.starts_at }),
         name: s.name,
