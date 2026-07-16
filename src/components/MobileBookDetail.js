@@ -160,16 +160,10 @@ export default function MobileBookDetail({
                   <span>{book.author}</span>
                 </div>
               )}
-              {book.genre && (
+              {avgRating && (
                 <div className="mob-detail-fact">
-                  <span className="mob-detail-fact-label">Genre</span>
-                  <span>{book.genre}</span>
-                </div>
-              )}
-              {book.year && (
-                <div className="mob-detail-fact">
-                  <span className="mob-detail-fact-label">Published</span>
-                  <span>{book.year}</span>
+                  <span className="mob-detail-fact-label">Community Score</span>
+                  <span>★ {avgRating}/10{book.rating_count ? ` (${book.rating_count})` : ''}</span>
                 </div>
               )}
             </div>

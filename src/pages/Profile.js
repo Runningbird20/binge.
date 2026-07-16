@@ -44,6 +44,11 @@ function getStatusOptions(mediaType) {
   return ['plan_to_watch', 'watched'];
 }
 
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'All Statuses' },
+  ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
+];
+
 function getMediaUrl(item) {
   if (item.media_type === 'movie') return `/movie/${item.media_id}`;
   if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}`;
@@ -121,15 +126,35 @@ function WatchlistCard({ item, location, onStatusChange, onRemove }) {
   );
 }
 
-function WatchlistTab({ items, loading, location, typeFilter, onTypeFilterChange, onStatusChange, onRemove }) {
-  const filtered = typeFilter ? items.filter((item) => item.media_type === typeFilter) : items;
+function WatchlistTab({
+  items,
+  loading,
+  location,
+  typeFilter,
+  onTypeFilterChange,
+  statusFilter,
+  onStatusFilterChange,
+  onStatusChange,
+  onRemove,
+}) {
+  const filtered = items.filter((item) => (
+    (!typeFilter || item.media_type === typeFilter)
+    && (!statusFilter || item.status === statusFilter)
+  ));
 
   return (
     <>
       <div className="profile-tab-controls">
         <TypeFilterBar value={typeFilter} onChange={onTypeFilterChange} />
-        <span className="profile-filter-count">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
+        <ThemedSelect
+          className="filter-input"
+          aria-label="Filter by status"
+          value={statusFilter}
+          options={STATUS_FILTER_OPTIONS}
+          onChange={(event) => onStatusFilterChange(event.target.value)}
+        />
       </div>
+      <p className="profile-filter-count">{filtered.length} item{filtered.length === 1 ? '' : 's'}</p>
 
       {loading ? (
         <div className="loading-state">Loading your library...</div>
@@ -260,6 +285,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('watchlist');
   const [wlTypeFilter, setWlTypeFilter] = useState('');
+  const [wlStatusFilter, setWlStatusFilter] = useState('');
   const [ratingsTypeFilter, setRatingsTypeFilter] = useState('');
   const [ratingsSort, setRatingsSort] = useState('recent');
 
@@ -368,6 +394,8 @@ export default function Profile() {
               location={location}
               typeFilter={wlTypeFilter}
               onTypeFilterChange={setWlTypeFilter}
+              statusFilter={wlStatusFilter}
+              onStatusFilterChange={setWlStatusFilter}
               onStatusChange={handleStatusChange}
               onRemove={handleRemove}
             />
