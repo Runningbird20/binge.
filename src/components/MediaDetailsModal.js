@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
 import RateReviewPanel from './RateReviewPanel';
-import useIsMobile from '../hooks/useIsMobile';
+import useDeviceType from '../hooks/useDeviceType';
 import MobileMediaDetail from './MobileMediaDetail';
 
 function getImageUrl(item) {
@@ -44,7 +44,7 @@ export default function MediaDetailsModal({
   initialSeason,
   initialEpisode,
 }) {
-  const isMobile = useIsMobile();
+  const { isMobile } = useDeviceType();
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
 
   useEffect(() => {

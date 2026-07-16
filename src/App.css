@@ -3313,7 +3313,7 @@ body {
 
 @media (max-width: 1180px) {
   .devlab-panel-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .devlab-card--full {
@@ -3340,7 +3340,7 @@ body {
   .devlab-form-grid,
   .devlab-form-grid--two,
   .devlab-form-grid--quality {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .devlab-list-actions,
@@ -3352,7 +3352,7 @@ body {
 
 @media (max-width: 640px) {
   .devlab-stats-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .devlab-form-actions,
@@ -4705,7 +4705,9 @@ body {
 .landing-hero-content {
   position: relative;
   z-index: 1;
+  width: 100%;
   max-width: 640px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4716,6 +4718,9 @@ body {
 
 .landing-hero-title {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  white-space: normal;
   font-size: clamp(2rem, 5vw, 3.2rem);
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -4726,6 +4731,7 @@ body {
 
 .landing-hero-subtitle {
   margin: 0;
+  width: 100%;
   max-width: 480px;
   font-size: 1.05rem;
   line-height: 1.6;
@@ -4762,9 +4768,9 @@ body {
 
   .browse-grid,
   .home-secondary-grid,
-  .home-recap-grid { grid-template-columns: 1fr; }
+  .home-recap-grid { grid-template-columns: minmax(0, 1fr); }
   .home-highlight-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .home-insights-header {
     flex-direction: column;
@@ -4777,9 +4783,9 @@ body {
     width: 100%;
     min-width: 0;
   }
-  .books-shell { grid-template-columns: 1fr; }
-  .ll-shell { grid-template-columns: 1fr; }
-  .lists-shell { grid-template-columns: 1fr; }
+  .books-shell { grid-template-columns: minmax(0, 1fr); }
+  .ll-shell { grid-template-columns: minmax(0, 1fr); }
+  .lists-shell { grid-template-columns: minmax(0, 1fr); }
   .books-filter-sidebar {
     position: static;
   }
@@ -4787,13 +4793,13 @@ body {
     overflow: visible;
   }
   .book-detail-modal {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     width: min(660px, 100%);
   }
   .book-detail-cover-panel {
     max-width: 280px;
   }
-  .settings-grid { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 600px) {
@@ -4801,7 +4807,7 @@ body {
   .navbar-user-copy { display: none; }
   .home-profile { flex-direction: column; }
   .badge-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     justify-items: flex-start;
     border-radius: 20px;
     padding: 0.72rem;
@@ -6730,7 +6736,7 @@ body {
 .profile-avatar { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.3); }
 .profile-avatar-placeholder { width: 88px; height: 88px; border-radius: 50%; background: linear-gradient(135deg, #1c1c1c, #2a2a2a); display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 900; color: #444; border: 3px solid rgba(255,255,255,0.07); }
 .profile-info { flex: 1; }
-.profile-username { font-size: 1.75rem; font-weight: 900; color: #fff; margin: 0 0 0.4rem; letter-spacing: -0.03em; }
+.profile-username { font-size: 1.75rem; font-weight: 900; color: #fff; margin: 0 0 0.4rem; letter-spacing: -0.03em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .profile-bio { font-size: 0.88rem; color: #666; margin: 0 0 0.75rem; }
 .profile-stats { display: flex; gap: 1.25rem; flex-wrap: wrap; }
 .profile-stats span { font-size: 0.82rem; color: #555; }
@@ -6784,7 +6790,7 @@ body {
 .wr-create-btn { font-size: 1rem; padding: 0.75rem 2.5rem; min-width: 220px; }
 .wr-join-row { display: flex; gap: 0.65rem; width: 100%; max-width: 420px; }
 .wr-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.85rem; }
-@media (max-width: 700px) { .wr-features { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .wr-features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .wr-feature { display: flex; gap: 0.85rem; align-items: flex-start; padding: 1.1rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; }
 .wr-feature > span { font-size: 1.5rem; flex-shrink: 0; line-height: 1; }
 .wr-feature strong { display: block; font-size: 0.88rem; color: #e0e0e0; margin-bottom: 0.2rem; }
@@ -6805,7 +6811,7 @@ body {
 
 /* ── Main 2-col layout ── */
 .wr-room-body { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: flex-start; }
-@media (max-width: 1050px) { .wr-room-body { grid-template-columns: 1fr; } }
+@media (max-width: 1050px) { .wr-room-body { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── Left col: player + controls ── */
 .wr-player-section { display: flex; flex-direction: column; gap: 0; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; overflow: hidden; }
@@ -6963,7 +6969,7 @@ body {
 
 /* ── Status row ── */
 .admin-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-@media (max-width: 600px) { .admin-status-row { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .admin-status-row { grid-template-columns: minmax(0, 1fr); } }
 .admin-status-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 1rem 1.25rem; }
 .admin-status-card h3 { font-size: 0.85rem; font-weight: 700; color: #888; margin: 0 0 0.75rem; }
 .admin-status-items { display: flex; flex-direction: column; gap: 0.45rem; }
@@ -6994,13 +7000,13 @@ body {
 
 /* ── Charts ── */
 .admin-charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
-@media (max-width: 700px) { .admin-charts-row { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .admin-charts-row { grid-template-columns: minmax(0, 1fr); } }
 .admin-chart-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 1rem 1.25rem; }
 .admin-chart-card h3 { font-size: 0.82rem; font-weight: 700; color: #666; margin: 0 0 0.85rem; }
 .admin-chart-card h3 span { font-weight: 400; color: #444; }
 .admin-chart-xaxis { display: flex; justify-content: space-between; margin-top: 0.35rem; font-size: 0.62rem; color: #333; font-family: monospace; }
 .admin-bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
-@media (max-width: 700px) { .admin-bottom-row { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .admin-bottom-row { grid-template-columns: minmax(0, 1fr); } }
 
 /* Intent breakdown */
 .admin-intent-row { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.5rem; }
@@ -7971,7 +7977,7 @@ select.filter-input,
 
   /* ── Media grid: single-column list on mobile ────────────── */
   .media-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
 
@@ -8076,7 +8082,8 @@ select.filter-input,
   }
 
   /* ── Watchlist items ──────────────────────────────────────── */
-  .status-select { min-width: 0; width: 100%; }
+  .status-select,
+  .themed-select.status-select { min-width: 0; width: 100%; }
 
   /* ── General touch targets ────────────────────────────────── */
   .btn-primary,
@@ -8363,41 +8370,30 @@ select.filter-input,
 }
 .sports-now-tag  { font-size: 0.75rem; color: #666; flex-shrink: 0; }
 .sports-now-cat  { font-size: 0.75rem; color: #888; flex-shrink: 0; }
-.sports-provider-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  padding: 10px 14px 0;
-}
 .sports-games-divider {
   height: 1px;
   margin: 12px 14px 4px;
   background: #1e1e1e;
   flex-shrink: 0;
 }
-.sports-provider-btn {
-  background: #1a1a1a;
-  border: 1px solid #333;
-  color: #aaa;
-  border-radius: 5px;
-  padding: 3px 9px;
-  font-size: 0.7rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.sports-provider-btn:hover { border-color: #555; color: #ddd; }
-.sports-provider-btn.active {
-  background: #f4f6f8;
-  border-color: #f4f6f8;
-  color: #000;
-  font-weight: 600;
-}
 .sports-fullscreen-btn {
   background: none; border: none; color: #888; cursor: pointer;
   font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; flex-shrink: 0;
 }
 .sports-fullscreen-btn:hover { color: #f4f6f8; }
+
+/* Shown only when a stream has more than one real provider (see the
+   `providers` array built by src/utils/sportsProviders.js) — a single-
+   provider stream just gets the plain "↻ retry" tooltip instead. */
+.sports-source-indicator {
+  margin: 0;
+  padding: 4px 16px;
+  font-size: 0.7rem;
+  color: #666;
+  background: #0d0d0d;
+  border-bottom: 1px solid #1e1e1e;
+  flex-shrink: 0;
+}
 
 .sports-frame-wrap { flex: 1; position: relative; background: #000; }
 .sports-frame {
@@ -8625,7 +8621,7 @@ select.filter-input,
 /* ── book-detail-modal: bottom-sheet on mobile ───────────── */
 @media (max-width: 600px) {
   .book-detail-modal {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     width: 100%;
     max-height: 92vh;
     overflow-y: auto;
@@ -8756,19 +8752,20 @@ select.filter-input,
   flex-wrap: wrap;
   gap: 0.3rem;
   font-size: 0.72rem;
-  color: #666;
+  color: var(--exp-text-dim, #a9b1bd);
 }
 .mob-card-genre {
   background: rgba(255,255,255,0.06);
   border-radius: 999px;
   padding: 0.1rem 0.45rem;
-  color: #aaa;
+  color: var(--exp-text-dim, #a9b1bd);
 }
 .mob-card-creator {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 120px;
+  color: var(--exp-text-dim, #a9b1bd);
 }
 .mob-card-scores {
   display: flex;
@@ -9013,11 +9010,6 @@ select.filter-input,
 }
 
 /* Rate tab */
-.mob-detail-star-row {
-  display: flex;
-  justify-content: center;
-  padding: 1.5rem 0;
-}
 .mob-detail-rate-hint {
   font-size: 0.75rem;
   color: #555;
@@ -9160,6 +9152,10 @@ select.filter-input,
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 1.25rem;
+  animation: catalog-fade-in 0.35s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .manga-grid { animation: none; }
 }
 
 .manga-card {

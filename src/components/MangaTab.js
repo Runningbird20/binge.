@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { SOURCES, searchBySource, popularBySource, chaptersBySource, pagesBySource } from '../utils/mangaSources';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
+import BottomSheet from './BottomSheet';
+import useDeviceType from '../hooks/useDeviceType';
 
 // ─── Manga localStorage storage ───────────────────────────────
 const LS_LIST    = 'manga_reading_list';
@@ -169,10 +171,12 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
 
 // ─── ChapterModal (full book-style detail view) ───────────────
 function ChapterModal({ comic, source, onClose, onRead }) {
+  const { isMobile } = useDeviceType();
   const [chapters, setChapters]     = useState([]);
   const [chapLoading, setChapLoading] = useState(true);
   const [chapError, setChapError]   = useState('');
   const [showAll, setShowAll]       = useState(false);
+  const [tab, setTab]               = useState('info');
 
   // Library state
   const [saved, setSaved]           = useState(() => getMangaListItem(comic.id));
@@ -229,6 +233,137 @@ function ChapterModal({ comic, source, onClose, onRead }) {
   }
 
   const displayed = showAll ? chapters : chapters.slice(0, 20);
+
+  const libraryLabel = saved
+    ? `✓ ${MANGA_STATUSES.find(s => s.value === saved.status)?.label || 'In Library'}`
+    : '+ Library';
+
+  if (isMobile) {
+    return (
+      <div className="mob-detail-overlay" role="dialog" aria-modal="true" aria-label={comic.title}>
+        <div className="mob-detail-hero">
+          {comic.cover ? (
+            <img src={comic.cover} alt={comic.title} className="mob-detail-hero-img" referrerPolicy="no-referrer"
+              onError={e => { e.target.style.display = 'none'; }} />
+          ) : (
+            <div className="mob-detail-hero-placeholder"><span>{comic.title?.charAt(0) || '?'}</span></div>
+          )}
+          <div className="mob-detail-hero-grad" />
+          <button type="button" className="mob-detail-back" onClick={onClose} aria-label="Go back">← Back</button>
+        </div>
+
+        <div className="mob-detail-scroll">
+          <div className="mob-detail-head">
+            <h1 className="mob-detail-title">{comic.title}</h1>
+            {comic.author && <p className="mob-detail-subtitle">{comic.author}</p>}
+            <div className="mob-detail-chips">
+              {comic.status && <span className="mob-detail-chip" style={{ textTransform: 'capitalize' }}>{comic.status}</span>}
+              {comic.year && <span className="mob-detail-chip">{comic.year}</span>}
+              {comic.contentRating && comic.contentRating !== 'safe' &&
+                <span className="mob-detail-chip">{comic.contentRating}</span>}
+            </div>
+            {displayScore !== null && (
+              <div className="mob-detail-scores">
+                <span className="mob-detail-community">★ {displayScore}/10</span>
+              </div>
+            )}
+          </div>
+
+          <div className="mob-detail-tabs">
+            <button type="button" className={`mob-detail-tab${tab === 'info' ? ' mob-detail-tab--active' : ''}`} onClick={() => setTab('info')}>
+              Info
+            </button>
+            <button type="button" className={`mob-detail-tab${tab === 'rate' ? ' mob-detail-tab--active' : ''}`} onClick={() => setTab('rate')}>
+              Rate
+            </button>
+          </div>
+
+          {tab === 'info' && (
+            <div className="mob-detail-tab-content">
+              {comic.description && <p className="mob-detail-overview">{comic.description}</p>}
+              <div className="manga-chapter-list">
+                <h3 className="manga-chapter-list-title">
+                  Chapters
+                  {!chapLoading && <span className="manga-chapter-count">{chapters.length}</span>}
+                </h3>
+                {chapLoading && <p className="manga-chapter-loading">Loading chapters…</p>}
+                {chapError && <p className="manga-chapter-error">⚠️ {chapError}</p>}
+                {!chapLoading && chapters.length === 0 && !chapError && (
+                  <p className="manga-chapter-empty">No English chapters found.</p>
+                )}
+                <div className="manga-chapter-grid">
+                  {displayed.map(ch => (
+                    <button key={ch.id} type="button" className="manga-chapter-btn" onClick={() => onRead(ch, chapters)}>
+                      <span className="manga-chapter-num">{ch.number ? `Ch. ${ch.number}` : 'Oneshot'}</span>
+                      {ch.title && <span className="manga-chapter-name">{ch.title}</span>}
+                      {ch.externalUrl
+                        ? <span className="manga-chapter-pages">↗ External</span>
+                        : ch.group && <span className="manga-chapter-pages">{ch.group}</span>}
+                    </button>
+                  ))}
+                </div>
+                {chapters.length > 20 && (
+                  <button className="btn-ghost btn-sm manga-show-all-btn" onClick={() => setShowAll(v => !v)}>
+                    {showAll ? 'Show less' : `Show all ${chapters.length} chapters`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'rate' && (
+            <div className="mob-detail-tab-content">
+              <RatingInput mediaType="manga" value={draftScores} onChange={setDraftScores} />
+              <div className="manga-detail-rating-actions" style={{ marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  className={`btn-primary${canSave ? '' : ' btn-disabled'}`}
+                  onClick={handleSaveRating}
+                  disabled={!canSave || isSaving}
+                >
+                  {isSaving ? 'Saving…' : getMangaRating(comic.id) ? 'Update Rating' : 'Save Rating'}
+                </button>
+                {!canSave && <span className="rating-incomplete-hint">Rate all categories to save</span>}
+                {ratingMsg && <span className="rating-incomplete-hint" style={{ color: '#5db88a' }}>{ratingMsg}</span>}
+              </div>
+            </div>
+          )}
+
+          <div className="mob-detail-bar-spacer" />
+        </div>
+
+        <div className="mob-detail-bar">
+          <button type="button" className="mob-detail-bar-btn mob-detail-bar-btn--secondary" onClick={() => setListOpen(true)}>
+            {libraryLabel}
+          </button>
+          {chapters.length > 0 && (
+            <button type="button" className="mob-detail-bar-btn mob-detail-bar-btn--watch" onClick={() => onRead(chapters[0], chapters)}>
+              ▶ Read Ch. {chapters[0]?.number || '1'}
+            </button>
+          )}
+        </div>
+
+        <BottomSheet open={listOpen} onClose={() => setListOpen(false)} title="Library status">
+          {MANGA_STATUSES.map(s => (
+            <button
+              key={s.value}
+              type="button"
+              className={`bsheet-option${saved?.status === s.value ? ' active' : ''}`}
+              onClick={() => selectStatus(s.value)}
+            >
+              <span>{s.label}</span>
+              {saved?.status === s.value && <span className="bsheet-option-check">✓</span>}
+            </button>
+          ))}
+          {saved && (
+            <button type="button" className="bsheet-option" onClick={removeFromLibrary}>
+              <span style={{ color: '#f87171' }}>Remove from Library</span>
+            </button>
+          )}
+        </BottomSheet>
+      </div>
+    );
+  }
 
   return (
     <div className="manga-detail-overlay" onClick={onClose}>

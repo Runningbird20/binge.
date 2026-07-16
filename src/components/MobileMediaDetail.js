@@ -149,16 +149,10 @@ export default function MobileMediaDetail({
                     <span>{subtitle}</span>
                   </div>
                 )}
-                {item.genre && (
+                {avgRating && (
                   <div className="mob-detail-fact">
-                    <span className="mob-detail-fact-label">Genre</span>
-                    <span>{item.genre}</span>
-                  </div>
-                )}
-                {runtimeLine && (
-                  <div className="mob-detail-fact">
-                    <span className="mob-detail-fact-label">{item.seasons != null ? 'Seasons' : 'Runtime'}</span>
-                    <span>{runtimeLine}</span>
+                    <span className="mob-detail-fact-label">Community Score</span>
+                    <span>★ {avgRating}/10 ({item.rating_count})</span>
                   </div>
                 )}
               </div>
