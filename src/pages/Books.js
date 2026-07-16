@@ -26,6 +26,7 @@ import {
   loadFallbackBooks,
 } from '../catalogFallback';
 import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
+import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
 
 // Random-window sampling (same technique as Movies/Series): jump to random
 // pages across the catalog instead of paging alphabetically, so the shelf
@@ -109,6 +110,17 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
 }
 
 function BookPosterTile({ book, onClick }) {
+  const [freeEdition, setFreeEdition] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkFreeEditionCached(book).then((match) => {
+      if (!cancelled) setFreeEdition(Boolean(match));
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.title, book.author]);
+
   return (
     <button
       type="button"
@@ -123,6 +135,14 @@ function BookPosterTile({ book, onClick }) {
           imageClassName=""
           placeholderClassName="poster-tile-placeholder"
         />
+        {freeEdition && (
+          <span
+            className="poster-tile-badge poster-tile-badge--free"
+            title="Free to read on Project Gutenberg or Internet Archive"
+          >
+            Free to Read
+          </span>
+        )}
       </div>
       <p className="poster-tile-title">{book.title}</p>
       {book.author && <p className="poster-tile-year">{book.author}</p>}
@@ -386,7 +406,7 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
   useEffect(() => {
     if (archiveId) return; // Archive.org already resolved
 
-    // Try Gutenberg URL in itemUrl first (fast path)
+    // Try Gutenberg URL in itemUrl first (fast path — no search needed)
     if (itemUrl) {
       const gutMatch = itemUrl.match(/gutenberg\.org\/(?:ebooks\/|files\/)(\d+)/);
       if (gutMatch) {
@@ -397,21 +417,28 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
       }
     }
 
-    // Search Gutenberg by title + author
-    const q = encodeURIComponent(`${book.title}${book.author ? ' ' + book.author : ''}`.trim());
-    fetch(`/api/books/gutenberg/search?q=${q}`)
-      .then(r => r.json())
-      .then(data => {
-        const htmlBook = (data.books || []).find(b => b.hasHtml);
-        if (htmlBook) {
-          setEmbedUrl(`/api/books/gutenberg/read/${htmlBook.id}`);
-          setSource('gutenberg');
+    // Otherwise search both free providers for a confidently-matching
+    // public-domain edition (title + author, not just a title guess).
+    // StrictMode double-invokes this effect once in dev — use a local
+    // `cancelled` flag (reset naturally on every re-run) rather than an
+    // AbortController, so the throwaway first run's cancellation can't get
+    // misread as "no match found" and clobber the real run's result.
+    let cancelled = false;
+    findFreeEdition(book)
+      .then((match) => {
+        if (cancelled) return;
+        if (match) {
+          setEmbedUrl(match.embedUrl);
+          setSource(match.source);
+          setNotFound(false);
         } else {
           setNotFound(true);
         }
       })
-      .catch(() => setNotFound(true))
-      .finally(() => setSearching(false));
+      .catch(() => { if (!cancelled) setNotFound(true); })
+      .finally(() => { if (!cancelled) setSearching(false); });
+
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
