@@ -4,6 +4,7 @@ import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
 } from './mediaMetadataCache';
+import { getActiveProfileId } from './activeProfile';
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
@@ -28,11 +29,11 @@ const RATING_TABLES = {
 const MEDIA_METADATA_TABLES = {
   movie: {
     table: 'movies',
-    columns: 'id, title, year, genre, poster_url',
+    columns: 'id, title, year, genre, poster_url, director',
   },
   tv_show: {
     table: 'tv_shows',
-    columns: 'id, title, year, genre, poster_url',
+    columns: 'id, title, year, genre, poster_url, creator',
   },
   book: {
     table: 'books',
@@ -211,6 +212,83 @@ async function getAuthenticatedUser() {
   }
 
   return data.user;
+}
+
+// ─── Account (sub-)profiles ─────────────────────────────────────────────────
+// Netflix-style profiles under one account login. Not a security boundary —
+// see the migration comment in supabase/repeatable_schema.sql — so these
+// just read/write account_profiles directly, scoped by account_id = auth.uid()
+// the same way every other per-user table is.
+
+export async function fetchAccountProfiles() {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+
+  const { data, error } = await client
+    .from('account_profiles')
+    .select('id, account_id, name, avatar_url, is_kids, is_default, created_at')
+    .eq('account_id', authUser.id)
+    .order('is_default', { ascending: false })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load profiles.'));
+  }
+
+  return data || [];
+}
+
+export async function createAccountProfile({ name, isKids = false, avatarUrl = null }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+
+  const { data, error } = await client
+    .from('account_profiles')
+    .insert({
+      account_id: authUser.id,
+      name: name?.trim() || 'New Profile',
+      is_kids: Boolean(isKids),
+      avatar_url: avatarUrl,
+    })
+    .select('id, account_id, name, avatar_url, is_kids, is_default, created_at')
+    .single();
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to create that profile.'));
+  }
+
+  return data;
+}
+
+export async function updateAccountProfile(profileId, { name, isKids, avatarUrl } = {}) {
+  const client = requireSupabase();
+
+  const update = {};
+  if (name !== undefined) update.name = name?.trim() || 'Profile';
+  if (isKids !== undefined) update.is_kids = Boolean(isKids);
+  if (avatarUrl !== undefined) update.avatar_url = avatarUrl;
+
+  const { error } = await client
+    .from('account_profiles')
+    .update(update)
+    .eq('id', profileId);
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to update that profile.'));
+  }
+}
+
+export async function deleteAccountProfile(profileId) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('account_profiles')
+    .delete()
+    .eq('id', profileId)
+    .eq('is_default', false); // guard rail: the default profile can't be deleted from here
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to delete that profile.'));
+  }
 }
 
 async function getProfileRow(userId) {
@@ -585,6 +663,8 @@ function enrichMediaRecord(record, mediaType, metadata) {
     year: item?.year ?? null,
     genre: item?.genre ?? null,
     image_url: item?.image_url || null,
+    director: item?.director ?? null,
+    creator: item?.creator ?? null,
   };
 }
 
@@ -658,13 +738,22 @@ async function enrichMediaRecords(records = []) {
 
 export async function fetchSupabaseWatchlist({ mediaType = '', status = '', userId = null } = {}) {
   const client = requireSupabase();
+  const isOwnWatchlist = !userId;
   if (!userId) {
     const authUser = await getAuthenticatedUser();
     userId = authUser.id;
   }
+  // Only scope by the active profile when reading our own watchlist — a
+  // followed user's watchlist (userId passed explicitly) has its own,
+  // unrelated profile ids, so filtering by ours there would just 0-out.
+  const profileId = isOwnWatchlist ? getActiveProfileId() : null;
 
   function applyFilters(query) {
     let nextQuery = query.eq('user_id', userId);
+
+    if (profileId) {
+      nextQuery = nextQuery.eq('profile_id', profileId);
+    }
 
     if (mediaType) {
       nextQuery = nextQuery.eq('media_type', mediaType);
@@ -681,7 +770,6 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
     client
       .from('watchlist')
       .select('id, user_id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter, updated_at')
-      .order('updated_at', { ascending: false, nullsFirst: false })
       .order('added_at', { ascending: false })
   );
 
@@ -704,13 +792,15 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
 export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'plan_to_watch', media = null }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
 
-  const { data: existing, error: existingError } = await client
+  let existingQuery = client
     .from('watchlist')
     .select('id')
     .eq('media_type', mediaType)
-    .eq('media_id', Number(mediaId))
-    .maybeSingle();
+    .eq('media_id', Number(mediaId));
+  if (profileId) existingQuery = existingQuery.eq('profile_id', profileId);
+  const { data: existing, error: existingError } = await existingQuery.maybeSingle();
 
   if (existingError) {
     throw new Error(toFriendlyError(existingError, 'Unable to check your library.'));
@@ -724,6 +814,7 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
     .from('watchlist')
     .insert({
       user_id: authUser.id,
+      profile_id: profileId,
       media_type: mediaType,
       media_id: Number(mediaId),
       status,
@@ -737,6 +828,39 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
 
   const metadata = media ? cacheMediaMetadata(mediaType, media) : getCachedMediaMetadata(mediaType, mediaId);
   return enrichMediaRecord(data, data.media_type, metadata);
+}
+
+// Bulk status lookup for an entire catalog grid — lets browse pages show/edit
+// each item's watchlist status inline (on the card itself) without a per-item
+// round trip or having to open the watchlist page.
+export async function fetchSupabaseWatchlistStatusMap(mediaType) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+
+  let query = client
+    .from('watchlist')
+    .select('id, media_id, status, current_season, current_episode, current_page, current_chapter')
+    .eq('user_id', authUser.id)
+    .eq('media_type', mediaType);
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(toFriendlyError(error, 'Unable to load your library status.'));
+  }
+
+  return (data || []).reduce((accumulator, row) => {
+    accumulator[row.media_id] = {
+      id: row.id,
+      status: row.status,
+      current_season: row.current_season,
+      current_episode: row.current_episode,
+      current_page: row.current_page,
+      current_chapter: row.current_chapter,
+    };
+    return accumulator;
+  }, {});
 }
 
 export async function updateSupabaseWatchlistStatus(id, status) {
@@ -771,17 +895,23 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null) {
     return [];
   }
 
+  const isOwnRatings = !userId;
   if (!userId) {
     const authUser = await getAuthenticatedUser();
     userId = authUser.id;
   }
+  // Only scope by the active profile for our own ratings — see the same
+  // note on fetchSupabaseWatchlist above.
+  const profileId = isOwnRatings ? getActiveProfileId() : null;
 
   const selectColumns = ['id', 'user_id', 'media_id', ...schema.columns, 'review', 'created_at'].join(', ');
-  const { data, error } = await client
+  let query = client
     .from(schema.table)
     .select(selectColumns)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to load your ratings.'));
@@ -828,6 +958,7 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
 
   const payload = {
     user_id: authUser.id,
+    profile_id: getActiveProfileId(),
     media_id: Number(mediaId),
   };
 
@@ -844,7 +975,7 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
 
   const { error } = await client
     .from(schema.table)
-    .upsert(payload, { onConflict: 'user_id,media_id' });
+    .upsert(payload, { onConflict: 'user_id,media_id,profile_id' });
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to save your rating.'));
@@ -900,11 +1031,14 @@ export async function fetchEpisodeProgress(mediaId) {
   const supabase = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) return [];
-  const { data, error } = await supabase
+  const profileId = getActiveProfileId();
+  let query = supabase
     .from('episode_progress')
     .select('season, episode, watched_at')
     .eq('user_id', user.id)
     .eq('media_id', mediaId);
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
   if (error) throw toFriendlyError(error, 'Failed to fetch episode progress');
   return data || [];
 }
@@ -913,10 +1047,11 @@ export async function markEpisodeWatched({ mediaId, season, episode }) {
   const supabase = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
+  const profileId = getActiveProfileId();
   const { error } = await supabase
     .from('episode_progress')
-    .upsert({ user_id: user.id, media_id: mediaId, season, episode, watched_at: new Date().toISOString() },
-             { onConflict: 'user_id,media_id,season,episode' });
+    .upsert({ user_id: user.id, profile_id: profileId, media_id: mediaId, season, episode, watched_at: new Date().toISOString() },
+             { onConflict: 'user_id,media_id,season,episode,profile_id' });
   if (error) throw toFriendlyError(error, 'Failed to mark episode watched');
 }
 
@@ -924,13 +1059,16 @@ export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
   const supabase = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
-  const { error } = await supabase
+  const profileId = getActiveProfileId();
+  let query = supabase
     .from('episode_progress')
     .delete()
     .eq('user_id', user.id)
     .eq('media_id', mediaId)
     .eq('season', season)
     .eq('episode', episode);
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { error } = await query;
   if (error) throw toFriendlyError(error, 'Failed to unmark episode');
 }
 
@@ -940,17 +1078,19 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
   const supabase = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
+  const profileId = getActiveProfileId();
 
   // Only updates an existing entry — titles are added to the library
   // exclusively through the explicit "Add to Watchlist"/"Add to Library"
   // actions, never as a side effect of watching/reading progress.
-  const { data: existing } = await supabase
+  let existingQuery = supabase
     .from('watchlist')
     .select('id')
     .eq('user_id', user.id)
     .eq('media_type', mediaType)
-    .eq('media_id', mediaId)
-    .maybeSingle();
+    .eq('media_id', mediaId);
+  if (profileId) existingQuery = existingQuery.eq('profile_id', profileId);
+  const { data: existing } = await existingQuery.maybeSingle();
 
   if (!existing) return;
 
@@ -977,12 +1117,15 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 export async function fetchSupabaseContinueWatching() {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
 
-  const { data, error } = await client
+  let query = client
     .from('continue_watching')
     .select('id, media_type, media_id, current_season, current_episode, current_page, current_chapter, updated_at')
     .eq('user_id', authUser.id)
     .order('updated_at', { ascending: false });
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to load continue watching.'));
@@ -994,9 +1137,11 @@ export async function fetchSupabaseContinueWatching() {
 export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
 
   const row = {
     user_id: authUser.id,
+    profile_id: profileId,
     media_type: mediaType,
     media_id: Number(mediaId),
     updated_at: new Date().toISOString(),
@@ -1008,7 +1153,7 @@ export async function upsertSupabaseContinueWatching({ mediaType, mediaId, curre
 
   const { error } = await client
     .from('continue_watching')
-    .upsert(row, { onConflict: 'user_id,media_type,media_id' });
+    .upsert(row, { onConflict: 'user_id,media_type,media_id,profile_id' });
 
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to update continue watching.'));

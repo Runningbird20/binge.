@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { canAccessUserType, getDefaultRouteForUserType } from '../utils/userAccess';
 
 export default function ProtectedRoute({ children, allowedUserTypes }) {
-  const { isAuthenticated, authLoading, user } = useAuth();
+  const { isAuthenticated, authLoading, user, canUseAdminFeatures, canUseDevFeatures } = useAuth();
 
   // While auth is loading, render nothing (invisible) rather than
   // a loading spinner that causes a visible flash on every navigation
@@ -13,7 +13,16 @@ export default function ProtectedRoute({ children, allowedUserTypes }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!canAccessUserType(user, allowedUserTypes)) {
+  // Admin/dev routes: the account may hold that role, but a non-default
+  // (sub-)profile never gets to use it — see canUseAdminFeatures.
+  const effectiveUser = {
+    ...user,
+    isAdmin: canUseAdminFeatures,
+    isDev: canUseDevFeatures,
+    userType: canUseAdminFeatures ? 'admin' : canUseDevFeatures ? 'dev' : 'user',
+  };
+
+  if (!canAccessUserType(effectiveUser, allowedUserTypes)) {
     return <Navigate to={getDefaultRouteForUserType(user)} replace />;
   }
 

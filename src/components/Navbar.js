@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
   House,
@@ -7,9 +8,12 @@ import {
   Trophy,
   Gear,
   ShieldCheck,
+  UsersFour,
 } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
+import ProfileAvatar from './ProfileAvatar';
+import EditProfileModal from './EditProfileModal';
 import GlobalSearch from './GlobalSearch';
 
 const NAV_LINKS = [
@@ -21,9 +25,10 @@ const NAV_LINKS = [
 ];
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, activeProfile, profiles, canUseAdminFeatures, refreshProfiles } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.isAdmin || user?.userType === 'admin';
+  const isAdmin = canUseAdminFeatures;
+  const [editingProfile, setEditingProfile] = useState(null);
 
   async function handleLogout() {
     try {
@@ -47,28 +52,67 @@ export default function Navbar() {
                 <NavLink
                   to="/profile"
                   className="navbar-profile"
-                  title={user.username}
+                  title={activeProfile?.name || user.username}
                 >
-                  <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
-                  <span className="navbar-profile-name">{user.username}</span>
+                  {activeProfile ? (
+                    <ProfileAvatar profile={activeProfile} size={28} />
+                  ) : (
+                    <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="sm" />
+                  )}
+                  <span className="navbar-profile-name">{activeProfile?.name || user.username}</span>
                 </NavLink>
 
                 <div className="profile-hover-drawer">
                   <div className="profile-hover-card">
-                    <Link to="/profile" className="profile-hover-user-link">
-                      <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
-                      <div className="profile-hover-user-text">
-                        <span className="profile-hover-user-name">{user.username}</span>
-                        <span className="profile-hover-user-sub">View Profile →</span>
+                    {/* On a non-default (sub-)profile, the account owner's
+                        name/page must not surface anywhere in this menu —
+                        only the active profile's own identity shows. */}
+                    {activeProfile && !activeProfile.is_default ? (
+                      <div className="profile-hover-active-profile">
+                        <ProfileAvatar profile={activeProfile} size={40} />
+                        <div className="profile-hover-user-text">
+                          <span className="profile-hover-user-name">{activeProfile.name}</span>
+                          {activeProfile.is_kids && <span className="profile-hover-user-sub">Kids Profile</span>}
+                        </div>
                       </div>
-                    </Link>
+                    ) : (
+                      <Link to="/profile" className="profile-hover-user-link">
+                        <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
+                        <div className="profile-hover-user-text">
+                          <span className="profile-hover-user-name">{user.username}</span>
+                          <span className="profile-hover-user-sub">View Profile →</span>
+                        </div>
+                      </Link>
+                    )}
+
+                    {activeProfile && (
+                      <div className="profile-hover-section">
+                        <p className="profile-hover-section-label">Profile</p>
+                        <nav className="profile-hover-nav">
+                          <NavLink to="/profiles" className={profileDrawerLink}>
+                            <UsersFour size={17} weight="bold" aria-hidden="true" />
+                            {profiles.length > 1 ? `Switch Profile (${activeProfile.name})` : 'Manage Profiles'}
+                          </NavLink>
+                        </nav>
+                      </div>
+                    )}
 
                     <div className="profile-hover-section">
                       <p className="profile-hover-section-label">Account</p>
                       <nav className="profile-hover-nav">
-                        <NavLink to="/account-settings" className={profileDrawerLink}>
-                          <Gear size={17} weight="bold" aria-hidden="true" /> Account Settings
-                        </NavLink>
+                        {/* Sub-profiles can only rename themselves / change
+                            their picture — the full account settings (email,
+                            password, admin/dev role) stay behind the default
+                            profile only. */}
+                        {activeProfile && !activeProfile.is_default ? (
+                          <button type="button" className={profileDrawerLink({ isActive: false })} onClick={() => setEditingProfile(activeProfile)}>
+                            <Gear size={17} weight="bold" aria-hidden="true" /> Edit Profile
+                          </button>
+                        ) : (
+                          <NavLink to="/account-settings" className={profileDrawerLink}>
+                            <Gear size={17} weight="bold" aria-hidden="true" /> Account Settings
+                          </NavLink>
+                        )}
                         {isAdmin && (
                           <NavLink to="/admin" className={profileDrawerLink}>
                             <ShieldCheck size={17} weight="bold" aria-hidden="true" /> Admin Panel
@@ -120,6 +164,13 @@ export default function Navbar() {
         )}
       </nav>
 
+      {editingProfile && (
+        <EditProfileModal
+          profile={editingProfile}
+          onClose={() => setEditingProfile(null)}
+          onSaved={() => { setEditingProfile(null); refreshProfiles(); }}
+        />
+      )}
     </>
   );
 }

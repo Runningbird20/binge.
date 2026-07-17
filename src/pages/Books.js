@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import GenreScrollBar from '../components/GenreScrollBar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
 import MobileBookDetail from '../components/MobileBookDetail';
@@ -13,9 +14,11 @@ import PullToRefresh from '../components/PullToRefresh';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
-  fetchSupabaseWatchlist,
+  fetchSupabaseWatchlistStatusMap,
+  updateSupabaseWatchlistStatus,
   saveSupabaseRating,
 } from '../utils/supabaseData';
+import WatchlistStatusControl from '../components/WatchlistStatusControl';
 import {
   fetchSupabaseBookById,
   fetchSupabaseBooksPage,
@@ -26,6 +29,8 @@ import {
   loadFallbackBooks,
 } from '../catalogFallback';
 import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
+import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
+import ThemedSelect from '../components/ThemedSelect';
 import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
 
 // Random-window sampling (same technique as Movies/Series): jump to random
@@ -109,7 +114,7 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
   );
 }
 
-function BookPosterTile({ book, onClick }) {
+function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange }) {
   const [freeEdition, setFreeEdition] = useState(false);
 
   useEffect(() => {
@@ -122,31 +127,45 @@ function BookPosterTile({ book, onClick }) {
   }, [book.title, book.author]);
 
   return (
-    <button
-      type="button"
-      className="poster-tile"
-      onClick={onClick}
-      title={book.title}
-      aria-label={`Open details for ${book.title}`}
-    >
-      <div className="poster-tile-frame">
-        <BookCoverImage
-          book={book}
-          imageClassName=""
-          placeholderClassName="poster-tile-placeholder"
-        />
-        {freeEdition && (
-          <span
-            className="poster-tile-badge poster-tile-badge--free"
-            title="Free to read on Project Gutenberg or Internet Archive"
-          >
-            Free to Read
-          </span>
-        )}
-      </div>
-      <p className="poster-tile-title">{book.title}</p>
-      {book.author && <p className="poster-tile-year">{book.author}</p>}
-    </button>
+    <div className="poster-tile-wrap">
+      <button
+        type="button"
+        className="poster-tile"
+        onClick={onClick}
+        title={book.title}
+        aria-label={`Open details for ${book.title}`}
+      >
+        <div className="poster-tile-frame">
+          <BookCoverImage
+            book={book}
+            imageClassName=""
+            placeholderClassName="poster-tile-placeholder"
+          />
+          {freeEdition && (
+            <span
+              className="poster-tile-badge poster-tile-badge--free"
+              title="Free to read on Project Gutenberg or Internet Archive"
+            >
+              Free to Read
+            </span>
+          )}
+        </div>
+        <p className="poster-tile-title">{book.title}</p>
+        {book.author && <p className="poster-tile-year">{book.author}</p>}
+      </button>
+
+      {onAddWatchlist && (
+        <div className="poster-tile-status" onClick={(event) => event.stopPropagation()}>
+          <WatchlistStatusControl
+            mediaType="book"
+            status={watchlistEntry?.status}
+            adding={addingWatchlist}
+            onAdd={() => onAddWatchlist(book)}
+            onChange={(nextStatus) => onStatusChange(book, watchlistEntry, nextStatus)}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -544,7 +563,8 @@ export default function Books() {
   const [total, setTotal] = useState(0);
   const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
-  const [libraryIds, setLibraryIds] = useState({});
+  const [sortMode, setSortMode] = useState('featured');
+  const [watchlistStatusMap, setWatchlistStatusMap] = useState({});
   const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookBrowseOnly, setSelectedBookBrowseOnly] = useState(false);
@@ -600,6 +620,23 @@ export default function Books() {
     return orderBatch(results.flatMap((result) => (Array.isArray(result?.items) ? result.items : [])));
   }, [genreValues, searchTerm]);
 
+  // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
+  const fetchSupabaseSortedPage = useCallback(async (page) => {
+    const { sortOrder } = sortModeToQuery(sortMode);
+    const result = await fetchSupabaseBooksPage({
+      page,
+      pageSize: API_PAGE_SIZE,
+      search: searchTerm,
+      genre: genreValues,
+      sortOrder,
+    });
+    return {
+      total: result.total,
+      facets: result.facets,
+      items: Array.isArray(result?.items) ? result.items : [],
+    };
+  }, [genreValues, searchTerm, sortMode]);
+
   const fetchApiPage = useCallback(async (pageNum) => {
     const params = new URLSearchParams({
       page: String(pageNum),
@@ -649,6 +686,26 @@ export default function Books() {
     }
 
     async function loadCatalog() {
+      if (sortMode !== 'featured') {
+        try {
+          const page = await fetchSupabaseSortedPage(1);
+          const totalCount = Number(page.total) || 0;
+          if (totalCount === 0 && !fetchHadFilter) {
+            throw new Error('Book catalog is empty');
+          }
+
+          if (cancelled || requestTokenRef.current !== requestToken) return;
+
+          adoptGenres(page.facets?.genres);
+          sourceRef.current = { mode: 'supabase-sorted', nextPage: 2 };
+          setTotal(totalCount);
+          setBooks(page.items);
+          setLoading(false);
+          return;
+        } catch {
+          // Fall through to the legacy API, then the bundled snapshot below.
+        }
+      } else {
       try {
         const probe = await fetchSupabaseBooksPage({
           page: 1,
@@ -682,6 +739,7 @@ export default function Books() {
         return;
       } catch {
         // Fall through to the legacy API, then the bundled snapshot.
+      }
       }
 
       try {
@@ -733,7 +791,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage, refreshKey]);
+  }, [genreValues, searchTerm, sortMode, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -747,6 +805,21 @@ export default function Books() {
 
         setBooks((current) => {
           const next = appendUniqueBooks(current, batch);
+          emptyBatchesRef.current = next.length === current.length
+            ? emptyBatchesRef.current + 1
+            : 0;
+          return next;
+        });
+        return;
+      }
+
+      if (source.mode === 'supabase-sorted') {
+        const page = await fetchSupabaseSortedPage(source.nextPage);
+        if (requestTokenRef.current !== requestToken) return;
+
+        sourceRef.current = { ...source, nextPage: source.nextPage + 1 };
+        setBooks((current) => {
+          const next = appendUniqueBooks(current, page.items);
           emptyBatchesRef.current = next.length === current.length
             ? emptyBatchesRef.current + 1
             : 0;
@@ -770,7 +843,7 @@ export default function Books() {
         setLoadingMore(false);
       }
     }
-  }, [total, fetchSupabaseWindows, fetchApiPage]);
+  }, [total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
 
   const visibleBooks = books.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -869,15 +942,8 @@ export default function Books() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchSupabaseWatchlist({ mediaType: 'book' })
-      .then((items) => {
-        if (cancelled) return;
-        const nextLibraryIds = {};
-        items.forEach((item) => {
-          nextLibraryIds[item.media_id] = true;
-        });
-        setLibraryIds(nextLibraryIds);
-      })
+    fetchSupabaseWatchlistStatusMap('book')
+      .then((map) => { if (!cancelled) setWatchlistStatusMap(map); })
       .catch(() => {});
 
     return () => {
@@ -919,18 +985,21 @@ export default function Books() {
     setAddingBookId(book.id);
 
     try {
-      await addSupabaseWatchlistItem({
+      const saved = await addSupabaseWatchlistItem({
         mediaType: 'book',
         mediaId: book.id,
         status: 'plan_to_read',
         media: book,
       });
 
-      setLibraryIds((current) => ({ ...current, [book.id]: true }));
+      setWatchlistStatusMap((current) => ({ ...current, [book.id]: { id: saved.id, status: saved.status } }));
       setDetailMessage('Added to your Library.');
     } catch (err) {
       if (/already in watchlist/i.test(err.message)) {
-        setLibraryIds((current) => ({ ...current, [book.id]: true }));
+        setWatchlistStatusMap((current) => ({
+          ...current,
+          [book.id]: current[book.id] || { status: 'plan_to_read' },
+        }));
         setDetailMessage('This book is already in your Library.');
       } else {
         setDetailMessage(err.message);
@@ -938,6 +1007,14 @@ export default function Books() {
     } finally {
       setAddingBookId(null);
     }
+  }
+
+  function handleQuickStatusChange(book, entry, nextStatus) {
+    setWatchlistStatusMap((current) => ({ ...current, [book.id]: { ...current[book.id], status: nextStatus } }));
+    if (!entry?.id) return;
+    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
+      setWatchlistStatusMap((current) => ({ ...current, [book.id]: entry }));
+    });
   }
 
   function scrollToTop() {
@@ -1001,29 +1078,34 @@ export default function Books() {
                   </button>
                 )}
               </div>
+              <ThemedSelect
+                className="catalog-sort-select"
+                aria-label="Sort books by"
+                value={sortMode}
+                options={SORT_OPTIONS}
+                onChange={(event) => setSortMode(event.target.value)}
+              />
             </div>
 
-            <div className="genre-bar-wrap">
-              <div className="genre-bar" role="tablist" aria-label="Book genres">
+            <GenreScrollBar ariaLabel="Book genres">
+              <button
+                type="button"
+                className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+                onClick={() => setActiveLabel('')}
+              >
+                Featured
+              </button>
+              {genreGroups.map((group) => (
                 <button
+                  key={group.label}
                   type="button"
-                  className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
-                  onClick={() => setActiveLabel('')}
+                  className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+                  onClick={() => setActiveLabel(group.label)}
                 >
-                  Featured
+                  {group.label}
                 </button>
-                {genreGroups.map((group) => (
-                  <button
-                    key={group.label}
-                    type="button"
-                    className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
-                    onClick={() => setActiveLabel(group.label)}
-                  >
-                    {group.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+              ))}
+            </GenreScrollBar>
 
             {loading ? (
               <SkeletonGrid count={20} />
@@ -1041,6 +1123,10 @@ export default function Books() {
                       key={book.id}
                       book={book}
                       onClick={() => openBookDetails(book, { browseOnly: usingFallbackCatalog })}
+                      watchlistEntry={watchlistStatusMap[book.id]}
+                      addingWatchlist={addingBookId === book.id}
+                      onAddWatchlist={handleAddToLibrary}
+                      onStatusChange={handleQuickStatusChange}
                     />
                   ))}
                 </div>
@@ -1069,7 +1155,7 @@ export default function Books() {
           book={selectedBook}
           onClose={closeBookDetails}
           onAddToLibrary={handleAddToLibrary}
-          isInLibrary={!!libraryIds[selectedBook?.id]}
+          isInLibrary={!!watchlistStatusMap[selectedBook?.id]}
           isAddingToLibrary={addingBookId === selectedBook?.id}
           onRate={handleRate}
           userRating={userRatings[selectedBook?.id]}

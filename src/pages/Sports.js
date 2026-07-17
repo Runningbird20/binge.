@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../components/Navbar';
+import GenreScrollBar from '../components/GenreScrollBar';
 import useDeviceType from '../hooks/useDeviceType';
 import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel } from '../utils/sportsProviders';
 
@@ -464,23 +465,21 @@ export default function Sports() {
       <div className="sports-shell">
 
         {/* ── Sport type filter, along the top like the genre bar ── */}
-        <div className="genre-bar-wrap">
-          <div className="genre-bar" role="tablist" aria-label="Sport categories">
-            {liveCount > 0 && (
-              <span className="sports-live-pill">● {liveCount} LIVE</span>
-            )}
-            {categories.map(cat => (
-              <button
-                key={cat}
-                type="button"
-                className={`genre-chip${category === cat ? ' active' : ''}`}
-                onClick={() => setCategory(cat)}
-              >
-                {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
-              </button>
-            ))}
-          </div>
-        </div>
+        <GenreScrollBar ariaLabel="Sport categories">
+          {liveCount > 0 && (
+            <span className="sports-live-pill">● {liveCount} LIVE</span>
+          )}
+          {categories.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              className={`genre-chip${category === cat ? ' active' : ''}`}
+              onClick={() => setCategory(cat)}
+            >
+              {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
+            </button>
+          ))}
+        </GenreScrollBar>
 
         <div className="sports-main">
 

@@ -13,6 +13,8 @@ import {
   updateSupabaseWatchlistStatus,
   removeSupabaseWatchlistItem,
 } from '../utils/supabaseData';
+import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
+import { computeProgressBadge } from '../utils/continueWatching';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
 
@@ -28,21 +30,6 @@ const TYPE_FILTERS = [
   { value: 'tv_show', label: 'Series', Icon: MonitorPlay },
   { value: 'book', label: 'Books', Icon: BookOpen },
 ];
-
-const STATUS_LABELS = {
-  plan_to_watch: 'Plan to Watch',
-  watching: 'Watching',
-  watched: 'Watched',
-  plan_to_read: 'Plan to Read',
-  reading: 'Reading',
-  read: 'Read',
-};
-
-function getStatusOptions(mediaType) {
-  if (mediaType === 'tv_show') return ['plan_to_watch', 'watching', 'watched'];
-  if (mediaType === 'book') return ['plan_to_read', 'reading', 'read'];
-  return ['plan_to_watch', 'watched'];
-}
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -85,6 +72,7 @@ function TypeFilterBar({ value, onChange }) {
 
 function WatchlistCard({ item, location, onStatusChange, onRemove }) {
   const poster = resolvePosterUrl(item.poster_url || item.image_url);
+  const progressBadge = computeProgressBadge(item);
 
   return (
     <article className="profile-card">
@@ -97,6 +85,7 @@ function WatchlistCard({ item, location, onStatusChange, onRemove }) {
           {poster
             ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
             : <div className="poster-tile-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>}
+          {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
         </div>
         <p className="poster-tile-title">{item.title || '—'}</p>
         {item.year && <p className="poster-tile-year">{item.year}</p>}
@@ -126,6 +115,36 @@ function WatchlistCard({ item, location, onStatusChange, onRemove }) {
   );
 }
 
+const WATCHLIST_PAGE_SIZE = 49;
+
+function PaginationBar({ page, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="profile-pagination">
+      <button
+        type="button"
+        className="btn-ghost btn-sm"
+        onClick={() => onPageChange(page - 1)}
+        disabled={page === 0}
+        aria-label="Previous page"
+      >
+        ‹ Prev
+      </button>
+      <span className="profile-pagination-label">Page {page + 1} of {totalPages}</span>
+      <button
+        type="button"
+        className="btn-ghost btn-sm"
+        onClick={() => onPageChange(page + 1)}
+        disabled={page >= totalPages - 1}
+        aria-label="Next page"
+      >
+        Next ›
+      </button>
+    </div>
+  );
+}
+
 function WatchlistTab({
   items,
   loading,
@@ -137,10 +156,22 @@ function WatchlistTab({
   onStatusChange,
   onRemove,
 }) {
+  const [page, setPage] = useState(0);
+
   const filtered = items.filter((item) => (
     (!typeFilter || item.media_type === typeFilter)
     && (!statusFilter || item.status === statusFilter)
   ));
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / WATCHLIST_PAGE_SIZE));
+  const clampedPage = Math.min(page, totalPages - 1);
+  const pageItems = filtered.slice(
+    clampedPage * WATCHLIST_PAGE_SIZE,
+    clampedPage * WATCHLIST_PAGE_SIZE + WATCHLIST_PAGE_SIZE,
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(0); }, [typeFilter, statusFilter]);
 
   return (
     <>
@@ -170,17 +201,21 @@ function WatchlistTab({
           )}
         </div>
       ) : (
-        <div className="poster-grid">
-          {filtered.map((item) => (
-            <WatchlistCard
-              key={item.id}
-              item={item}
-              location={location}
-              onStatusChange={onStatusChange}
-              onRemove={onRemove}
-            />
-          ))}
-        </div>
+        <>
+          <PaginationBar page={clampedPage} totalPages={totalPages} onPageChange={setPage} />
+          <div className="poster-grid">
+            {pageItems.map((item) => (
+              <WatchlistCard
+                key={item.id}
+                item={item}
+                location={location}
+                onStatusChange={onStatusChange}
+                onRemove={onRemove}
+              />
+            ))}
+          </div>
+          <PaginationBar page={clampedPage} totalPages={totalPages} onPageChange={setPage} />
+        </>
       )}
     </>
   );
