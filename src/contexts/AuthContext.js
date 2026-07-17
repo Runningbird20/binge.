@@ -251,8 +251,8 @@ export function AuthProvider({ children }) {
     window.location.assign('/home');
   }, []);
 
-  const addProfile = useCallback(async ({ name, isKids }) => {
-    const created = await createAccountProfile({ name, isKids });
+  const addProfile = useCallback(async ({ name, isKids, avatarUrl, avatarColor }) => {
+    const created = await createAccountProfile({ name, isKids, avatarUrl, avatarColor });
     await loadProfiles();
     return created;
   }, [loadProfiles]);

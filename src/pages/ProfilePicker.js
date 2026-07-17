@@ -93,35 +93,41 @@ export default function ProfilePicker() {
   const canManage = Boolean(activeProfile?.is_default);
 
   return (
-    <div className="profile-picker-page">
-      <h1 className="profile-picker-title">Who's watching?</h1>
+    <div
+      className="profile-picker-page"
+      style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` }}
+    >
+      <div className="profile-picker-overlay" aria-hidden="true" />
+      <div className="profile-picker-content">
+        <h1 className="profile-picker-title">Who's watching?</h1>
 
-      {profilesLoading ? (
-        <p className="profile-picker-loading">Loading profiles…</p>
-      ) : (
-        <div className="profile-picker-grid">
-          {profiles.map((profile) => (
-            <ProfileTile
-              key={profile.id}
-              profile={profile}
-              active={activeProfile?.id === profile.id}
-              canDelete={canManage && !profile.is_default}
-              onClick={() => switchProfile(profile.id)}
-              onRequestDelete={setDeleteTarget}
-            />
-          ))}
-          <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
-            <span className="profile-picker-avatar profile-picker-avatar--add">
-              <Plus size={32} weight="bold" aria-hidden="true" />
-            </span>
-            <span className="profile-picker-name">Add Profile</span>
-          </button>
-        </div>
-      )}
+        {profilesLoading ? (
+          <p className="profile-picker-loading">Loading profiles…</p>
+        ) : (
+          <div className="profile-picker-grid">
+            {profiles.map((profile) => (
+              <ProfileTile
+                key={profile.id}
+                profile={profile}
+                active={activeProfile?.id === profile.id}
+                canDelete={canManage && !profile.is_default}
+                onClick={() => switchProfile(profile.id)}
+                onRequestDelete={setDeleteTarget}
+              />
+            ))}
+            <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
+              <span className="profile-picker-avatar profile-picker-avatar--add">
+                <Plus size={32} weight="bold" aria-hidden="true" />
+              </span>
+              <span className="profile-picker-name">Add Profile</span>
+            </button>
+          </div>
+        )}
 
-      <button type="button" className="btn-secondary profile-picker-back" onClick={() => navigate(-1)}>
-        Back
-      </button>
+        <button type="button" className="btn-secondary profile-picker-back" onClick={() => navigate(-1)}>
+          Back
+        </button>
+      </div>
 
       {deleteTarget && (
         <DeleteProfileConfirm

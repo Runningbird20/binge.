@@ -226,7 +226,7 @@ export async function fetchAccountProfiles() {
 
   const { data, error } = await client
     .from('account_profiles')
-    .select('id, account_id, name, avatar_url, is_kids, is_default, created_at')
+    .select('id, account_id, name, avatar_url, avatar_color, is_kids, is_default, created_at')
     .eq('account_id', authUser.id)
     .order('is_default', { ascending: false })
     .order('created_at', { ascending: true });
@@ -238,7 +238,7 @@ export async function fetchAccountProfiles() {
   return data || [];
 }
 
-export async function createAccountProfile({ name, isKids = false, avatarUrl = null }) {
+export async function createAccountProfile({ name, isKids = false, avatarUrl = null, avatarColor = null }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -249,8 +249,9 @@ export async function createAccountProfile({ name, isKids = false, avatarUrl = n
       name: name?.trim() || 'New Profile',
       is_kids: Boolean(isKids),
       avatar_url: avatarUrl,
+      avatar_color: avatarColor,
     })
-    .select('id, account_id, name, avatar_url, is_kids, is_default, created_at')
+    .select('id, account_id, name, avatar_url, avatar_color, is_kids, is_default, created_at')
     .single();
 
   if (error) {
@@ -260,13 +261,14 @@ export async function createAccountProfile({ name, isKids = false, avatarUrl = n
   return data;
 }
 
-export async function updateAccountProfile(profileId, { name, isKids, avatarUrl } = {}) {
+export async function updateAccountProfile(profileId, { name, isKids, avatarUrl, avatarColor } = {}) {
   const client = requireSupabase();
 
   const update = {};
   if (name !== undefined) update.name = name?.trim() || 'Profile';
   if (isKids !== undefined) update.is_kids = Boolean(isKids);
   if (avatarUrl !== undefined) update.avatar_url = avatarUrl;
+  if (avatarColor !== undefined) update.avatar_color = avatarColor;
 
   const { error } = await client
     .from('account_profiles')
@@ -887,7 +889,12 @@ export async function removeSupabaseWatchlistItem(id) {
   }
 }
 
-async function fetchRawRatingsForMediaType(mediaType, userId = null) {
+// isOwnRatings is passed explicitly by the caller rather than re-derived
+// from `userId` here — fetchSupabaseRatings' multi-type branch always
+// resolves a concrete userId before calling this (even for "my own"
+// lookups), so `!userId` alone can't distinguish "own" from "someone else's"
+// by the time it reaches this function.
+async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRatings = !userId) {
   const client = requireSupabase();
   const schema = RATING_TABLES[mediaType];
 
@@ -895,7 +902,6 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null) {
     return [];
   }
 
-  const isOwnRatings = !userId;
   if (!userId) {
     const authUser = await getAuthenticatedUser();
     userId = authUser.id;
@@ -924,14 +930,16 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null) {
 }
 
 export async function fetchSupabaseRatings({ mediaType = '', userId = null } = {}) {
+  const isOwn = !userId;
+
   if (mediaType) {
-    const ratings = await fetchRawRatingsForMediaType(mediaType, userId);
+    const ratings = await fetchRawRatingsForMediaType(mediaType, userId, isOwn);
     return enrichMediaRecords(ratings);
   }
 
   const selectedUserId = userId || (await getAuthenticatedUser()).id;
   const grouped = await Promise.all(
-    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type, selectedUserId))
+    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type, selectedUserId, isOwn))
   );
 
   const enrichedRatings = await enrichMediaRecords(grouped.flat());

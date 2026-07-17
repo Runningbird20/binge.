@@ -1,17 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check } from '@phosphor-icons/react';
-import { fetchSupabaseMovieCuratedRows } from '../utils/supabaseMovieCatalog';
-import { saveSupabaseRating } from '../utils/supabaseData';
-import { setActiveProfileId } from '../utils/activeProfile';
 import { AVATAR_COLORS, AVATAR_EMOJI } from './ProfileAvatar';
-
-const RATING_COLUMNS = {
-  movie: ['acting', 'writing', 'originality', 'pacing', 'cinematography'],
-};
-
-function buildCategories(score) {
-  return Object.fromEntries(RATING_COLUMNS.movie.map((c) => [c, score]));
-}
 
 function ProgressDots({ current, total }) {
   return (
@@ -23,99 +12,67 @@ function ProgressDots({ current, total }) {
   );
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 3;
 
-// Netflix-style multi-step "Add Profile" flow: picture → name → permissions
-// → quick-rate a few titles (so this profile's recommendations aren't cold
-// from the very first visit) → done. Mirrors Onboarding.js's rating step
-// (same curated rows, same star UI) but scoped to the profile being created.
+// Netflix-style "Add Profile" flow: picture → name → permissions → done.
+// Deliberately no rating/onboarding step in here — creating a profile should
+// be as fast as Netflix's own flow, not a detour into seeding recommendations.
 export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) {
-  const [step, setStep] = useState(0); // 0=picture 1=name 2=permissions 3=rate 4=done
+  const [step, setStep] = useState(0); // 0=picture 1=name 2=permissions
   const [avatarUrl, setAvatarUrl] = useState(AVATAR_EMOJI[0]);
+  const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
   const [name, setName] = useState('');
   const [isKids, setIsKids] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
-  const [createdProfile, setCreatedProfile] = useState(null);
 
-  const [picks, setPicks] = useState([]);
-  const [loadingPicks, setLoadingPicks] = useState(false);
-  const [rated, setRated] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (step === 3 && !picks.length) {
-      setLoadingPicks(true);
-      fetchSupabaseMovieCuratedRows()
-        .then((rows) => {
-          const items = rows
-            .filter((r) => r.id !== 'upcoming')
-            .flatMap((r) => r.items || [])
-            .slice(0, 9);
-          setPicks(items);
-        })
-        .catch(() => setPicks([]))
-        .finally(() => setLoadingPicks(false));
-    }
-  }, [step, picks.length]);
-
-  async function handleCreateAndContinue() {
+  async function handleCreate() {
     if (!name.trim()) return;
     setCreating(true);
     setCreateError('');
     try {
-      const created = await onCreate({ name: name.trim(), isKids, avatarUrl });
-      setCreatedProfile(created);
-      // Attribute the upcoming ratings step to this new profile right away —
-      // saveSupabaseRating reads the active profile id internally.
-      setActiveProfileId(created.id);
-      setStep(3);
+      const created = await onCreate({ name: name.trim(), isKids, avatarUrl, avatarColor });
+      onFinish(created);
     } catch (err) {
       setCreateError(err.message || 'Unable to create that profile.');
-    } finally {
       setCreating(false);
     }
   }
 
-  function handleRate(item, score) {
-    setRated((r) => ({ ...r, [item.id]: score }));
-  }
-
-  async function handleFinishRating() {
-    const entries = Object.entries(rated);
-    if (entries.length > 0) {
-      setSaving(true);
-      await Promise.allSettled(
-        entries.map(([mediaIdStr, score]) => saveSupabaseRating({
-          mediaType: 'movie',
-          mediaId: Number(mediaIdStr),
-          categories: buildCategories(Math.max(1, Math.min(5, score))),
-        }))
-      );
-      setSaving(false);
-    }
-    setStep(4);
-  }
-
   return (
-    <div className="onboarding-overlay" onClick={step < 3 ? onCancel : undefined}>
-      <div className={`onboarding-modal${step === 3 ? ' onboarding-modal--wide' : ''}`} onClick={(e) => e.stopPropagation()}>
+    <div className="onboarding-overlay" onClick={onCancel}>
+      <div className="onboarding-modal" onClick={(e) => e.stopPropagation()}>
         <ProgressDots current={step} total={TOTAL_STEPS} />
 
         {step === 0 && (
           <>
             <h2>Choose a picture</h2>
             <div className="profile-avatar-picker profile-avatar-picker--wizard">
-              {AVATAR_EMOJI.map((emoji, index) => (
+              {AVATAR_EMOJI.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
                   className={`profile-avatar-picker-option${avatarUrl === emoji ? ' selected' : ''}`}
-                  style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}
+                  style={{ background: avatarColor }}
                   onClick={() => setAvatarUrl(emoji)}
                 >
                   {emoji}
                   {avatarUrl === emoji && <span className="profile-avatar-picker-check"><Check size={12} weight="bold" /></span>}
+                </button>
+              ))}
+            </div>
+            <p className="profile-picker-add-label">Background color</p>
+            <div className="profile-color-picker">
+              {AVATAR_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={`profile-color-picker-option${avatarColor === color ? ' selected' : ''}`}
+                  style={{ background: color }}
+                  aria-label={`Use ${color} background`}
+                  onClick={() => setAvatarColor(color)}
+                >
+                  {avatarColor === color && <Check size={14} weight="bold" />}
                 </button>
               ))}
             </div>
@@ -137,6 +94,7 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
               onChange={(event) => setName(event.target.value)}
               autoFocus
               maxLength={40}
+              onKeyDown={(event) => { if (event.key === 'Enter' && name.trim()) setStep(2); }}
             />
             <div className="onboarding-actions">
               <button className="btn-primary" type="button" onClick={() => setStep(2)} disabled={!name.trim()}>Continue →</button>
@@ -154,66 +112,11 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
             </label>
             {createError && <p className="profile-picker-add-error">{createError}</p>}
             <div className="onboarding-actions">
-              <button className="btn-primary" type="button" onClick={handleCreateAndContinue} disabled={creating}>
-                {creating ? 'Creating…' : 'Continue →'}
+              <button className="btn-primary" type="button" onClick={handleCreate} disabled={creating}>
+                {creating ? 'Creating…' : 'Create Profile'}
               </button>
               <button className="btn-ghost" type="button" onClick={onCancel} disabled={creating}>Cancel</button>
             </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <h2>Rate a few titles</h2>
-            <p className="onboarding-sub">
-              This sharpens {createdProfile?.name || 'this profile'}'s recommendations right away. Tap stars for anything you've seen — skip the rest.
-            </p>
-            {loadingPicks ? (
-              <div className="loading-state">Loading titles…</div>
-            ) : (
-              <div className="onboarding-picks">
-                {picks.map((item) => {
-                  const myScore = rated[item.id] || 0;
-                  return (
-                    <div key={item.id} className="onboarding-pick-card">
-                      {item.poster_url
-                        ? <img src={item.poster_url} alt={item.title} className="onboarding-pick-poster" referrerPolicy="no-referrer" />
-                        : <div className="onboarding-pick-placeholder">🎬</div>}
-                      <p className="onboarding-pick-title">{item.title}</p>
-                      <div className="onboarding-stars">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            className={`onboarding-star${myScore >= s ? ' active' : ''}`}
-                            onClick={() => handleRate(item, myScore === s ? 0 : s)}
-                          >★</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="onboarding-actions">
-              <button className="btn-primary" type="button" onClick={handleFinishRating} disabled={saving}>
-                {saving ? 'Saving…' : `Done${Object.keys(rated).length > 0 ? ` (${Object.keys(rated).length} rated)` : ''} →`}
-              </button>
-              <button className="btn-ghost" type="button" onClick={() => setStep(4)}>Skip</button>
-            </div>
-          </>
-        )}
-
-        {step === 4 && (
-          <>
-            <div className="onboarding-icon">🎉</div>
-            <h2>{createdProfile?.name || 'Profile'} is ready!</h2>
-            <p>
-              {Object.keys(rated).length > 0
-                ? `Saved ${Object.keys(rated).length} rating${Object.keys(rated).length > 1 ? 's' : ''} — recommendations will reflect them right away.`
-                : "You're all set — recommendations will sharpen as you rate more."}
-            </p>
-            <button className="btn-primary" type="button" onClick={() => onFinish(createdProfile)}>Start watching →</button>
           </>
         )}
       </div>

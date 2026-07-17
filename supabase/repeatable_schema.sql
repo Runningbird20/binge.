@@ -997,6 +997,10 @@ create unique index if not exists idx_account_profiles_one_default
 create index if not exists idx_account_profiles_account_id
   on public.account_profiles(account_id);
 
+-- User-picked swatch for the avatar background, independent of the emoji
+-- choice (previously derived purely from a hash of the profile id).
+alter table public.account_profiles add column if not exists avatar_color text;
+
 drop trigger if exists trg_account_profiles_set_updated_at on public.account_profiles;
 create trigger trg_account_profiles_set_updated_at
 before update on public.account_profiles

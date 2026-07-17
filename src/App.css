@@ -92,6 +92,25 @@ body {
    PROFILE PICKER ("Who's watching?")
    ══════════════════════════════════════════════════════════════ */
 .profile-picker-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background-color: #0b0d12;
+  background-size: cover;
+  background-position: center;
+}
+
+.profile-picker-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(11, 13, 18, 0.35) 0%, rgba(11, 13, 18, 0.55) 60%, rgba(11, 13, 18, 0.96) 100%),
+    linear-gradient(90deg, rgba(11, 13, 18, 0.55) 0%, rgba(11, 13, 18, 0.15) 45%, rgba(11, 13, 18, 0.55) 100%);
+}
+
+.profile-picker-content {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -99,7 +118,6 @@ body {
   justify-content: center;
   gap: 2.5rem;
   padding: 2rem;
-  background: #0b0d12;
 }
 
 .profile-picker-title {
@@ -163,21 +181,22 @@ body {
 
 .profile-picker-delete-btn {
   position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
+  top: -6px;
+  right: -6px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: none;
-  background: rgba(192, 57, 43, 0.85);
-  color: #fff;
+  border: 2px solid #0b0d12;
+  background: #3a3a3a;
+  color: #ddd;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
+  z-index: 1;
 }
-.profile-picker-delete-btn:hover { background: #e74c3c; }
+.profile-picker-delete-btn:hover { background: #c0392b; color: #fff; }
 
 .profile-picker-avatar {
   width: 96px;
@@ -190,6 +209,21 @@ body {
   border: 3px solid transparent;
   transition: border-color 0.15s, transform 0.15s;
   overflow: hidden;
+}
+
+/* The "Add Profile" tile is a bare <button> (not a div wrapping
+   .profile-picker-tile-btn like the other tiles), so it needs its own full
+   reset — otherwise it falls back to the browser's default button chrome
+   (a visible white box) instead of matching the other tiles. */
+.profile-picker-tile--add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
 }
 
 .profile-picker-avatar--add {
@@ -274,6 +308,27 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+.profile-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.profile-color-picker-option {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.profile-color-picker-option.selected { border-color: #f4f6f8; }
 
 .profile-picker-add-input {
   background: #0f0f0f;
@@ -7067,12 +7122,18 @@ body {
 .profile-hover-link {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: 0.55rem;
   padding: 0.6rem 0.65rem;
   border-radius: 8px;
+  background: none;
+  border: none;
   text-decoration: none;
+  font-family: inherit;
   font-size: 0.88rem;
   color: #8a8a8a;
+  cursor: pointer;
+  text-align: left;
   transition: background 0.12s, color 0.12s;
 }
 .profile-hover-link:hover { background: rgba(255,255,255,0.05); color: #d8d8d8; }
