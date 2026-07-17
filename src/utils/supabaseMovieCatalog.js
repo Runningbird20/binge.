@@ -1,5 +1,6 @@
 import { isSupabaseConfigured, supabase } from './supabase';
 import { api } from '../api';
+import { KIDS_SAFE_RATINGS } from './kidsMode';
 
 const MOVIE_COLUMNS = [
   'id',
@@ -384,6 +385,7 @@ export async function fetchSupabaseMovieCatalogSegment({
   includeCount = true,
   includeFacets = true,
   includeUpcoming = false,
+  kidsSafe = false,
 } = {}) {
   const client = requireSupabaseCatalog();
 
@@ -395,6 +397,9 @@ export async function fetchSupabaseMovieCatalogSegment({
   // Hide future releases from browse unless explicitly requested (e.g. upcoming sort)
   if (!includeUpcoming) {
     moviesQuery = moviesQuery.lte('year', THIS_YEAR);
+  }
+  if (kidsSafe) {
+    moviesQuery = moviesQuery.in('age_rating', KIDS_SAFE_RATINGS);
   }
   moviesQuery = applyBrowseSort(moviesQuery, sortOrder);
 
@@ -629,6 +634,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
   includeCount = true,
   includeFacets = true,
   includeUpcoming = false,
+  kidsSafe = false,
 } = {}) {
   const client = requireSupabaseCatalog();
 
@@ -642,6 +648,9 @@ export async function fetchSupabaseTvShowCatalogSegment({
   showsQuery = applyTitleGenreFilters(showsQuery, { search, genre });
   if (!includeUpcoming) {
     showsQuery = showsQuery.lte('year', THIS_YEAR);
+  }
+  if (kidsSafe) {
+    showsQuery = showsQuery.in('age_rating', KIDS_SAFE_RATINGS);
   }
   showsQuery = applyBrowseSort(showsQuery, effectiveSort);
 

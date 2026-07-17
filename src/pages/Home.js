@@ -5,6 +5,7 @@ import Onboarding from '../components/Onboarding';
 import PullToRefresh from '../components/PullToRefresh';
 import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
+import ProfileAvatar from '../components/ProfileAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import {
   fetchSupabaseRatings,
@@ -12,7 +13,8 @@ import {
   fetchSupabaseContinueWatching,
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
-import { generateSupabaseRecommendations, generateSupabaseTypeRecommendations } from '../utils/recommendations';
+import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
+import { detailsUrl, resumeUrl, computeProgressBadge } from '../utils/continueWatching';
 import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
 
 const MEDIA_ICONS = {
@@ -87,25 +89,7 @@ function resolvePosterUrl(url) {
 
 const HERO_TYPE_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
 
-function detailsUrl(item) {
-  if (item.media_type === 'movie') return `/movie/${item.media_id}`;
-  if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}`;
-  if (item.media_type === 'book') return `/book/${item.media_id}`;
-  return '/home';
-}
-
-function resumeUrl(item) {
-  if (item.media_type === 'movie') return `/movie/${item.media_id}?play=1`;
-  if (item.media_type === 'tv_show') {
-    const params = new URLSearchParams({ play: '1' });
-    if (item.current_season) params.set('season', item.current_season);
-    if (item.current_episode) params.set('episode', item.current_episode);
-    return `/tv-show/${item.media_id}?${params.toString()}`;
-  }
-  return detailsUrl(item);
-}
-
-function StreamHero({ user, continueWatchingItems, watchlistItems }) {
+function StreamHero({ user, activeProfile, continueWatchingItems, watchlistItems }) {
   const location = useLocation();
   const inProgressItem = continueWatchingItems.find(
     (item) => resolvePosterUrl(item.image_url || item.poster_url)
@@ -128,7 +112,7 @@ function StreamHero({ user, continueWatchingItems, watchlistItems }) {
       )}
       <div className="stream-hero-scrim" aria-hidden="true" />
       <div className="stream-hero-content">
-        <p className="stream-hero-kicker">Welcome back, {user.username}</p>
+        <p className="stream-hero-kicker">Welcome back, {activeProfile?.name || user.username}</p>
         <h1 className="stream-hero-title">
           {heroItem ? heroItem.title : 'What will you binge tonight?'}
         </h1>
@@ -182,17 +166,7 @@ function ContinueWatchingCard({ item, onRemove }) {
   const location = useLocation();
   const poster = resolvePosterUrl(item.image_url || item.poster_url);
   const url = resumeUrl(item);
-
-  const s  = item.current_season;
-  const e  = item.current_episode;
-  const ch = item.current_chapter;
-  const pg = item.current_page;
-
-  const progressBadge = item.media_type === 'tv_show' && (s || e)
-    ? `S${s || 1} · E${e || 1}`
-    : item.media_type === 'book' && (ch || pg)
-    ? (ch ? `Ch ${ch}` : `Pg ${pg}`)
-    : null;
+  const progressBadge = computeProgressBadge(item);
 
   return (
     <div className="cw-card-wrap">
@@ -246,14 +220,12 @@ function ContinueWatching({ items, onRemove }) {
   );
 }
 
-const FOR_YOU_TABS = [
-  { id: 'all', label: 'All', Icon: null },
-  { id: 'movie', label: 'Movies', Icon: FilmSlate },
-  { id: 'tv_show', label: 'Series', Icon: MonitorPlay },
-  { id: 'book', label: 'Books', Icon: BookOpen },
-];
 const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
-const FOR_YOU_IDLE_STATE = { all: 'idle', movie: 'idle', tv_show: 'idle', book: 'idle' };
+const FOR_YOU_ROWS = [
+  { mediaType: 'movie', heading: 'Movies For You' },
+  { mediaType: 'tv_show', heading: 'Series For You' },
+  { mediaType: 'book', heading: 'Books For You' },
+];
 
 function ForYouCard({ rec }) {
   const location = useLocation();
@@ -278,34 +250,46 @@ function ForYouCard({ rec }) {
   );
 }
 
-function ForYouSection({ ready, refreshSignal }) {
-  const [activeType, setActiveType]     = useState('all');
-  const [tabState, setTabState]         = useState(FOR_YOU_IDLE_STATE);
-  const [tabData, setTabData]           = useState({});
-  const [tabError, setTabError]         = useState({});
+// One row per media type, fetched and shown independently and simultaneously
+// (Netflix/Hulu-style sectioned rows) rather than one mixed list behind a tab
+// switcher — so "Movies", "Series", and "Books" never blur into one pile.
+function ForYouRow({ mediaType, heading, ready, refreshSignal, kidsSafe }) {
+  const [state, setState] = useState('idle');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
 
-  const fetchType = useCallback(async (mediaType) => {
-    setTabState((prev) => ({ ...prev, [mediaType]: 'loading' }));
-    setTabError((prev) => ({ ...prev, [mediaType]: '' }));
+  const fetchData = useCallback(async () => {
+    setState('loading');
+    setError('');
     try {
-      const result = mediaType === 'all'
-        ? await generateSupabaseRecommendations()
-        : await generateSupabaseTypeRecommendations(mediaType);
-      setTabData((prev) => ({ ...prev, [mediaType]: result }));
-      setTabState((prev) => ({ ...prev, [mediaType]: result.recommendations?.length ? 'done' : 'empty' }));
+      const result = await generateSupabaseTypeRecommendations(mediaType, kidsSafe);
+      setData(result);
+      setState(result.recommendations?.length ? 'done' : 'empty');
     } catch (err) {
-      setTabError((prev) => ({ ...prev, [mediaType]: String(err?.message || '').trim() || 'Something went wrong.' }));
-      setTabState((prev) => ({ ...prev, [mediaType]: 'error' }));
+      setError(String(err?.message || '').trim() || 'Something went wrong.');
+      setState('error');
     }
-  }, []);
+  }, [mediaType, kidsSafe]);
 
   useEffect(() => {
-    if (ready && tabState[activeType] === 'idle') fetchType(activeType);
-  }, [ready, activeType, tabState, fetchType]);
+    if (ready && state === 'idle') fetchData();
+  }, [ready, state, fetchData]);
 
-  // Pull-to-refresh signal — re-run the active tab's fetch on demand. The
-  // ref skips the very first run (mount), which the effect above already
-  // covers via the 'idle' check.
+  // activeProfile (and so kidsSafe) resolves asynchronously after mount —
+  // often after the 'idle' fetch above has already fired with the wrong
+  // (stale) kidsSafe value. Re-fetch specifically when kidsSafe changes post-
+  // mount so switching into/out of a kids profile actually re-filters this
+  // row instead of leaving it showing whatever the first, pre-resolution
+  // fetch returned.
+  const previousKidsSafe = useRef(kidsSafe);
+  useEffect(() => {
+    if (previousKidsSafe.current === kidsSafe) return;
+    previousKidsSafe.current = kidsSafe;
+    if (ready && state !== 'idle') fetchData();
+  }, [kidsSafe, ready, state, fetchData]);
+
+  // Pull-to-refresh signal — re-run on demand. The ref skips the very first
+  // run (mount), which the effect above already covers via the 'idle' check.
   const skippedFirstRefresh = useRef(true);
   useEffect(() => {
     if (skippedFirstRefresh.current) {
@@ -313,34 +297,18 @@ function ForYouSection({ ready, refreshSignal }) {
       return;
     }
     if (!ready) return;
-    fetchType(activeType);
+    fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
-  const state = tabState[activeType];
-  const data = tabData[activeType];
-  const error = tabError[activeType];
   const { ref: foryouRowRef, canLeft: foryouCanLeft, canRight: foryouCanRight } = useEdgeFade(data?.recommendations);
 
-  return (
-    <section className="home-section" id="for-you">
-      <div className="section-header">
-        <h2>For You</h2>
-      </div>
+  if (state === 'idle') return null;
 
-      <div className="profile-wl-filters">
-        <div className="books-tab-bar books-tab-bar--inline">
-          {FOR_YOU_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={`books-tab ${activeType === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveType(tab.id)}
-            >
-              {tab.Icon && <tab.Icon size={16} weight="bold" aria-hidden="true" />} {tab.label}
-            </button>
-          ))}
-        </div>
+  return (
+    <section className="home-section">
+      <div className="section-header">
+        <h2>{heading}</h2>
       </div>
 
       <div className="foryou-section">
@@ -355,7 +323,7 @@ function ForYouSection({ ready, refreshSignal }) {
         {state === 'error' && (
           <div className="foryou-error">
             <p>⚠️ {error}</p>
-            <button type="button" className="foryou-generate-btn" onClick={() => fetchType(activeType)}>Try again</button>
+            <button type="button" className="foryou-generate-btn" onClick={fetchData}>Try again</button>
           </div>
         )}
 
@@ -386,6 +354,23 @@ function ForYouSection({ ready, refreshSignal }) {
   );
 }
 
+function ForYouSection({ ready, refreshSignal, kidsSafe }) {
+  return (
+    <div id="for-you">
+      {FOR_YOU_ROWS.map((row) => (
+        <ForYouRow
+          key={row.mediaType}
+          mediaType={row.mediaType}
+          heading={row.heading}
+          ready={ready}
+          refreshSignal={refreshSignal}
+          kidsSafe={kidsSafe}
+        />
+      ))}
+    </div>
+  );
+}
+
 function LibraryCard({ item, ratingScore }) {
   const location = useLocation();
 
@@ -398,12 +383,7 @@ function LibraryCard({ item, ratingScore }) {
     : `/book/${item.media_id}`;
 
   const poster = resolvePosterUrl(item.poster_url || item.image_url);
-
-  const progressBadge = item.media_type === 'tv_show' && (item.current_season || item.current_episode)
-    ? `S${item.current_season || '?'} · E${item.current_episode || '?'}`
-    : item.media_type === 'book' && (item.current_chapter || item.current_page)
-    ? [item.current_chapter ? `Ch ${item.current_chapter}` : null, item.current_page ? `Pg ${item.current_page}` : null].filter(Boolean).join(' · ')
-    : null;
+  const progressBadge = computeProgressBadge(item);
 
   const ratingOutOfFive = ratingScore != null ? ratingScore.toFixed(1) : null;
 
@@ -431,7 +411,7 @@ function LibraryCard({ item, ratingScore }) {
   );
 }
 
-function ProfileStatsHeader({ user, watchlist, ratings }) {
+function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
   const stats = useMemo(() => {
     const completed  = watchlist.filter(i => i.status === 'watched' || i.status === 'read').length;
     const inProgress = watchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
@@ -459,16 +439,22 @@ function ProfileStatsHeader({ user, watchlist, ratings }) {
     <section className="home-section dashboard-section">
       <div className="profile-header">
         <div className="profile-avatar-wrap">
-          <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
+          {activeProfile ? (
+            <ProfileAvatar profile={activeProfile} size={72} />
+          ) : (
+            <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
+          )}
         </div>
         <div className="profile-info">
-          <h1 className="profile-username">{user.username}</h1>
+          <h1 className="profile-username">{activeProfile?.name || user.username}</h1>
           <p className="profile-minutes">
             <span className="profile-minutes-num">{stats.minutes.toLocaleString()}</span> minutes watched
           </p>
         </div>
         <div className="profile-actions profile-actions--stacked">
-          <Link to="/account-settings" className="btn-ghost">Edit Profile</Link>
+          <Link to={activeProfile && !activeProfile.is_default ? '/profiles' : '/account-settings'} className="btn-ghost">
+            {activeProfile && !activeProfile.is_default ? 'Manage Profiles' : 'Edit Profile'}
+          </Link>
           <div className="profile-stat-squares">
             <div className="profile-stat-square">
               <span className="profile-stat-square-num">{stats.completed}</span>
@@ -560,7 +546,7 @@ function LibrarySection({ watchlist, ratings, loading }) {
 }
 
 export default function Home() {
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, activeProfile, profilesLoading } = useAuth();
   const location = useLocation();
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [ratingsItems, setRatingsItems] = useState([]);
@@ -685,10 +671,10 @@ export default function Home() {
           <div className="loading-state">Loading dashboard...</div>
         ) : (
         <>
-        <StreamHero user={user} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
+        <StreamHero user={user} activeProfile={activeProfile} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
 
         <div className="home-sections">
-          <ProfileStatsHeader user={user} watchlist={watchlistItems} ratings={ratingsItems} />
+          <ProfileStatsHeader user={user} activeProfile={activeProfile} watchlist={watchlistItems} ratings={ratingsItems} />
 
           <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
 
@@ -698,7 +684,7 @@ export default function Home() {
             loading={dataLoading}
           />
 
-          <ForYouSection ready={!authLoading && !!user} refreshSignal={foryouRefreshSignal} />
+          <ForYouSection ready={!authLoading && !!user && !profilesLoading} refreshSignal={foryouRefreshSignal} kidsSafe={Boolean(activeProfile?.is_kids)} />
         </div>
         </>
         )}

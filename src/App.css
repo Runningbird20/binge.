@@ -87,6 +87,272 @@ body {
 .btn-danger:hover { background-color: #e74c3c; }
 
 .btn-sm { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+
+/* ══════════════════════════════════════════════════════════════
+   PROFILE PICKER ("Who's watching?")
+   ══════════════════════════════════════════════════════════════ */
+.profile-picker-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5rem;
+  padding: 2rem;
+  background: #0b0d12;
+}
+
+.profile-picker-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f4f6f8;
+  margin: 0;
+}
+
+.profile-picker-loading {
+  color: #999;
+}
+
+.profile-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.75rem;
+  max-width: 900px;
+}
+
+.profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  overflow: hidden;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.profile-picker-tile {
+  position: relative;
+  width: 140px;
+}
+
+.profile-picker-tile-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.profile-picker-tile .profile-avatar {
+  border-radius: 12px;
+  border: 3px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.profile-picker-tile-btn:hover .profile-avatar,
+.profile-picker-tile.active .profile-avatar {
+  border-color: #f4f6f8;
+  transform: scale(1.04);
+}
+
+.profile-picker-delete-btn {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(192, 57, 43, 0.85);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.profile-picker-delete-btn:hover { background: #e74c3c; }
+
+.profile-picker-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  border: 3px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+  overflow: hidden;
+}
+
+.profile-picker-avatar--add {
+  background: #1a1a1a;
+  border: 3px solid #333;
+  color: #888;
+}
+.profile-picker-tile--add:hover .profile-picker-avatar--add {
+  border-color: #666;
+  color: #ccc;
+}
+
+.profile-picker-name {
+  color: #ddd;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.profile-picker-kids-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9be0a3;
+  background: rgba(108, 190, 119, 0.12);
+  border: 1px solid rgba(108, 190, 119, 0.3);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+}
+
+.profile-picker-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 220px;
+  padding: 0.85rem;
+  background: #15161a;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+}
+
+.profile-picker-add-label {
+  margin: 0.35rem 0 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #8a8a8a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.profile-avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.35rem;
+}
+
+.profile-avatar-picker-option {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.profile-avatar-picker-option.selected { border-color: #f4f6f8; }
+.profile-avatar-picker-check {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f4f6f8;
+  color: #0f0f0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-picker-add-input {
+  background: #0f0f0f;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  color: #f4f6f8;
+  font-size: 0.85rem;
+}
+
+.profile-picker-kids-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: #ccc;
+  line-height: 1.3;
+}
+.profile-picker-kids-toggle input { margin-top: 0.2rem; }
+
+.profile-picker-add-error {
+  color: #f08080;
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.profile-picker-add-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.profile-delete-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.profile-delete-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: min(360px, 90vw);
+  padding: 1.25rem;
+  background: #15161a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+}
+.profile-delete-card h3 { margin: 0; color: #f4f6f8; font-size: 1.1rem; }
+.profile-delete-card p { margin: 0; color: #999; font-size: 0.82rem; line-height: 1.4; }
+
+/* Profile-creation wizard — reuses .onboarding-* modal chrome, adds its own
+   sizing for the avatar grid and inputs since it's centered/narrower than
+   the picks step's onboarding-modal--wide layout. */
+.profile-avatar-picker--wizard {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.6rem;
+  margin: 0 0 1.5rem;
+}
+.profile-avatar-picker--wizard .profile-avatar-picker-option {
+  font-size: 1.4rem;
+}
+.profile-wizard-name-input {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 1.5rem;
+}
+.profile-wizard-kids-toggle {
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.profile-picker-back {
+  margin-top: 0;
+}
 .btn-large { padding: 0.85rem 2rem; font-size: 1rem; }
 .btn-block { width: 100%; text-align: center; padding: 0.8rem; font-size: 1rem; }
 
@@ -1719,6 +1985,28 @@ body {
   background-color: var(--exp-surface-2);
   color: var(--exp-text-dim);
   cursor: default;
+}
+
+/* Status dropdown shown once a title is already in the library — sized to
+   match the "Add to Library" btn-primary it replaces. */
+.book-detail-status-control.themed-select .themed-select-control {
+  padding: 0.6rem 2rem 0.6rem 1.4rem;
+  min-height: unset;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: #f4f6f8;
+  border: none;
+  color: #0f0f0f;
+}
+.book-detail-status-control.themed-select .themed-select-control:hover {
+  background-color: #ffffff;
+}
+.book-detail-status-control.themed-select .themed-select-value {
+  color: #0f0f0f;
+}
+.book-detail-status-control.themed-select .themed-select-chevron {
+  border-top-color: #0f0f0f;
 }
 
 .book-detail-status {
@@ -5216,34 +5504,118 @@ body {
   font-weight: 600;
 }
 
-/* Season/episode dropdowns */
-.player-se-select-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+/* Season/episode selector — a trigger button that opens a popover with a
+   season row and a full episode grid, replacing the previous pair of native
+   <select> dropdowns (which forced a slow one-at-a-time scroll through
+   episodes on desktop). */
+.player-ep-selector {
+  position: relative;
   flex-shrink: 0;
 }
-.player-se-select {
+.player-ep-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
   color: #e0e0e0;
-  font-size: 0.78rem;
-  padding: 0.35rem 1.6rem 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.15s;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.6rem center;
-  max-width: 160px;
-  text-overflow: ellipsis;
 }
-.player-se-select:hover { border-color: #555; }
-.player-se-select:focus { outline: none; border-color: rgba(255,255,255,0.4); }
-.player-se-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.player-se-select option { background: #1a1a1a; color: #e0e0e0; }
+.player-ep-trigger:hover { border-color: #555; }
+.player-ep-trigger-caret {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: #999;
+  transition: transform 0.15s;
+}
+.player-ep-trigger-caret.open { transform: rotate(180deg); }
+
+.player-ep-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 10;
+  width: min(360px, 80vw);
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.player-ep-section-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #8a8a8a;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+}
+
+.player-ep-season-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.player-ep-season-chip,
+.player-ep-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid #2a2a2a;
+  color: #d0d0d0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.player-ep-season-chip {
+  min-width: 2.4rem;
+  padding: 0.4rem 0.6rem;
+}
+.player-ep-season-chip.partial { border-color: rgba(108, 190, 119, 0.35); }
+.player-ep-season-chip.done {
+  border-color: rgba(108, 190, 119, 0.45);
+  color: #9be0a3;
+}
+
+.player-ep-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
+  gap: 0.4rem;
+}
+.player-ep-chip {
+  padding: 0.45rem 0.3rem;
+  text-align: center;
+}
+.player-ep-chip.watched { opacity: 0.55; }
+
+.player-ep-season-chip.active,
+.player-ep-chip.active {
+  background: #f4f6f8;
+  border-color: #f4f6f8;
+  color: #0c0e13;
+}
+.player-ep-season-chip:hover:not(.active),
+.player-ep-chip:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.player-ep-loading {
+  color: #8a8a8a;
+  font-size: 0.8rem;
+}
 
 /* iframe */
 .player-frame-wrap {
@@ -6665,6 +7037,14 @@ body {
   background: rgba(255,255,255,0.07);
   border-color: rgba(255,255,255,0.18);
 }
+.profile-hover-active-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.05);
+}
 .profile-hover-user-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .profile-hover-user-name {
   font-weight: 700;
@@ -7406,6 +7786,7 @@ body {
 .onboarding-modal {
   background: #141414; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
   padding: 2.5rem; max-width: 480px; width: 100%; text-align: center;
+  max-height: calc(100vh - 2rem); overflow-y: auto;
 }
 .onboarding-modal--wide { max-width: 780px; text-align: left; }
 .onboarding-icon { font-size: 3rem; margin-bottom: 1rem; }
@@ -9052,6 +9433,23 @@ select.filter-input,
   background: linear-gradient(135deg, #f4f6f8 0%, #c7c7c7 100%);
   color: #0f0f0f;
   box-shadow: 0 4px 16px rgba(255,255,255,0.28);
+}
+
+/* Status dropdown shown in the sticky bar once a title is already in the
+   library — sized to match the mob-detail-bar-btn it replaces. */
+.mob-detail-status-control.themed-select {
+  flex: 1;
+}
+.mob-detail-status-control.themed-select .themed-select-control {
+  width: 100%;
+  min-height: unset;
+  padding: 0.8rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #ddd;
 }
 
 /* ── Mobile book detail — download section ──────────────────── */

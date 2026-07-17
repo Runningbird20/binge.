@@ -9,8 +9,11 @@ import {
   signUpWithSupabase,
   updateSupabasePassword,
   updateSupabaseProfile,
+  fetchAccountProfiles,
+  createAccountProfile,
 } from '../utils/supabaseData';
 import { normalizeUserType } from '../utils/userAccess';
+import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId } from '../utils/activeProfile';
 
 const AuthContext = createContext(null);
 // TEMP (UI preview only — do not commit): raw context export for the mock preview route
@@ -71,6 +74,9 @@ export function AuthProvider({ children }) {
   const storedUser = readStoredUser();
   const [user, setUser] = useState(storedUser);
   const [authLoading, setAuthLoading] = useState(!storedUser);
+  const [profiles, setProfiles] = useState([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [activeProfileIdState, setActiveProfileIdState] = useState(() => loadStoredActiveProfileId());
   const commitUser = useCallback((nextUser) => {
     setUser((currentUser) => {
       const merged = mergeResolvedUser(currentUser, nextUser);
@@ -202,6 +208,60 @@ export function AuthProvider({ children }) {
     };
   }, [commitUser, refreshUser]);
 
+// Fetches this account's profiles and settles on which one is active —
+  // the stored id if it still belongs to this account, else the default
+  // profile. Runs whenever the logged-in account changes (not on every
+  // render), and again after creating/switching profiles.
+  const loadProfiles = useCallback(async () => {
+    if (!user?.id) {
+      setProfiles([]);
+      setProfilesLoading(false);
+      return;
+    }
+    setProfilesLoading(true);
+    try {
+      const list = await fetchAccountProfiles();
+      setProfiles(list);
+      const stored = getActiveProfileId();
+      const valid = list.find((p) => p.id === stored);
+      const fallback = list.find((p) => p.is_default) || list[0] || null;
+      const chosen = valid || fallback;
+      if (chosen && chosen.id !== stored) {
+        setActiveProfileId(chosen.id);
+      }
+      setActiveProfileIdState(chosen?.id || null);
+    } catch {
+      // Leave whatever was already loaded (or empty) — the rest of the app
+      // degrades gracefully to "no active profile" (unfiltered queries).
+    } finally {
+      setProfilesLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadProfiles();
+  }, [loadProfiles]);
+
+  // Hard navigation on switch: every screen's mount-time data fetch (watchlist,
+  // ratings, continue watching, recommendations, ...) picks up the new active
+  // profile automatically, instead of needing each of those components to
+  // separately subscribe to profile changes and re-fetch.
+  const switchProfile = useCallback((profileId) => {
+    setActiveProfileId(profileId);
+    window.location.assign('/home');
+  }, []);
+
+  const addProfile = useCallback(async ({ name, isKids }) => {
+    const created = await createAccountProfile({ name, isKids });
+    await loadProfiles();
+    return created;
+  }, [loadProfiles]);
+
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileIdState) || null,
+    [profiles, activeProfileIdState]
+  );
+
   const signIn = useCallback(async (credentials) => {
     const nextUser = await signInWithSupabase(credentials);
     commitUser(nextUser);
@@ -233,13 +293,25 @@ export function AuthProvider({ children }) {
     // sign-out (revoking the session server-side) still happens, just
     // in the background.
     clearTokenCache();
+    clearActiveProfileId();
     setUser(null);
+    setProfiles([]);
+    setActiveProfileIdState(null);
     try {
       window.localStorage.removeItem('token');
       window.localStorage.removeItem('user');
     } catch {}
     void signOutFromSupabase().catch(() => {});
   }, []);
+
+  // Admin/dev privileges are account-level, but must not follow onto sub-
+  // profiles — a kid (or any non-default) profile shouldn't get the Admin
+  // badge, admin nav, or /admin route access just because the account that
+  // created it happens to be an admin. Only the default profile (the one
+  // auto-created for whoever owns the account) inherits them.
+  const isDefaultProfileActive = !activeProfile || activeProfile.is_default;
+  const canUseAdminFeatures = Boolean(user?.isAdmin) && isDefaultProfileActive;
+  const canUseDevFeatures = Boolean(user?.isDev) && isDefaultProfileActive;
 
   const value = useMemo(() => ({
     user,
@@ -251,7 +323,19 @@ export function AuthProvider({ children }) {
     updatePassword,
     isAuthenticated: Boolean(user),
     authLoading,
-  }), [authLoading, logout, refreshUser, signIn, signUp, updatePassword, updateProfile, user]);
+    profiles,
+    activeProfile,
+    profilesLoading,
+    switchProfile,
+    addProfile,
+    refreshProfiles: loadProfiles,
+    canUseAdminFeatures,
+    canUseDevFeatures,
+  }), [
+    authLoading, logout, refreshUser, signIn, signUp, updatePassword, updateProfile, user,
+    profiles, activeProfile, profilesLoading, switchProfile, addProfile, loadProfiles,
+    canUseAdminFeatures, canUseDevFeatures,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>

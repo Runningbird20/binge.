@@ -5,6 +5,7 @@ import {
   markEpisodeWatched,
   unmarkEpisodeWatched,
   upsertSupabaseContinueWatching,
+  updateWatchlistProgress,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
@@ -86,6 +87,10 @@ const PROVIDERS = [
 ];
 
 const AUTO_WATCH_SECONDS = 5 * 60;
+// How long the player has to stay open on a title before it counts as
+// "actually watching" for Continue Watching purposes — a bare click that's
+// immediately closed (misclick, browsing) shouldn't leave a row behind.
+const CONTINUE_WATCHING_DELAY_SECONDS = 20;
 
 function normalizeExternalId(kind, value) {
   if (value == null) return null;
@@ -156,7 +161,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [realSeasonCount, setRealSeasonCount] = useState(null);
   const [lsControlsOpen, setLsControlsOpen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [epPopoverOpen, setEpPopoverOpen] = useState(false);
   const modalRef = useRef(null);
+  const epSelectorRef = useRef(null);
   const frameWrapRef = useRef(null);
   const iframeRef = useRef(null);
   const watchTimerRef = useRef(null);
@@ -178,6 +185,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     setRealSeasonCount(null);
     setWatched(new Set());
     setMetadataWarning('');
+    setEpPopoverOpen(false);
   }, [item?.id, item?.title, mediaType, initialSeason, initialEpisode]);
 
   useEffect(() => {
@@ -210,10 +218,32 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   useEffect(() => { kbTotalSeasons.current = totalSeasons; }, [totalSeasons]);
   useEffect(() => { kbEpCounts.current = seasonEpisodeCounts; }, [seasonEpisodeCounts]);
 
+  const kbEpPopoverOpen = useRef(epPopoverOpen);
+  useEffect(() => { kbEpPopoverOpen.current = epPopoverOpen; }, [epPopoverOpen]);
+
+  // Close the season/episode popover on outside click, without letting that
+  // click also register on whatever it landed on (e.g. re-toggling the
+  // trigger button).
+  useEffect(() => {
+    if (!epPopoverOpen) return undefined;
+    function onPointerDown(e) {
+      if (epSelectorRef.current && !epSelectorRef.current.contains(e.target)) {
+        setEpPopoverOpen(false);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [epPopoverOpen]);
+
   useEffect(() => {
     function onKey(e) {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      if (e.key === 'Escape') { e.preventDefault(); onClose?.(); return; }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (kbEpPopoverOpen.current) { setEpPopoverOpen(false); return; }
+        onClose?.();
+        return;
+      }
       if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleFullscreen(); return; }
       if (!isTV) return;
       const s = kbSeason.current;
@@ -388,17 +418,28 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       .catch(() => {});
   }, [item?.id, isTV]);
 
-  // Starting playback records/updates Continue Watching — independent of
-  // whether this title is in the library. Adding to the library stays a
-  // separate, explicit action (the "Add to Watchlist" button).
+  // Recording/updating Continue Watching — independent of whether this title
+  // is in the library (adding to the library stays a separate, explicit
+  // action). Delayed by CONTINUE_WATCHING_DELAY_SECONDS so a title only lands
+  // there once the player has actually stayed open, not on every click that
+  // resolves a stream URL — a misclick or quick "let me check this out" close
+  // shouldn't create (or bump) a Continue Watching entry.
   useEffect(() => {
-    if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode)) return;
+    if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode)) return undefined;
 
-    upsertSupabaseContinueWatching({
-      mediaType,
-      mediaId: item.id,
-      ...(isTV ? { currentSeason: season, currentEpisode: episode } : {}),
-    }).catch(() => {});
+    const timer = setTimeout(() => {
+      const progress = isTV ? { currentSeason: season, currentEpisode: episode } : {};
+      upsertSupabaseContinueWatching({ mediaType, mediaId: item.id, ...progress }).catch(() => {});
+      // Keeps the watchlist row's own progress columns in sync too, so a
+      // title that's in BOTH the library and Continue Watching shows the
+      // same up-to-date episode on both surfaces. No-ops if it's not in the
+      // library — see updateWatchlistProgress's own doc comment.
+      if (isTV) {
+        updateWatchlistProgress({ mediaType, mediaId: item.id, ...progress }).catch(() => {});
+      }
+    }, CONTINUE_WATCHING_DELAY_SECONDS * 1000);
+
+    return () => clearTimeout(timer);
   }, [item?.id, mediaType, isTV, season, episode, provider, externalId]);
 
   // Floating controls overlay (desktop only) — auto-hides a few seconds after
@@ -836,47 +877,71 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               </div>
 
               {isTV && (
-                <div className="player-se-select-group">
-                  <select
-                    className="player-se-select"
-                    value={season}
-                    onChange={(event) => {
-                      setSeason(Number(event.target.value));
-                      setEpisode(1);
-                    }}
-                    aria-label="Season"
+                <div className="player-ep-selector" ref={epSelectorRef}>
+                  <button
+                    type="button"
+                    className="player-ep-trigger"
+                    onClick={() => setEpPopoverOpen((open) => !open)}
+                    aria-haspopup="true"
+                    aria-expanded={epPopoverOpen}
                   >
-                    {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => {
-                      const watchedCount = Array.from(watched).filter(
-                        (key) => key.startsWith(`${value}:`),
-                      ).length;
-                      const totalEpisodes = seasonEpisodeCounts[value];
+                    <span>S{season} · E{episode}</span>
+                    <span className={`player-ep-trigger-caret${epPopoverOpen ? ' open' : ''}`}>⌄</span>
+                  </button>
 
-                      return (
-                        <option key={value} value={value}>
-                          Season {value}{totalEpisodes ? ` (${watchedCount}/${totalEpisodes})` : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  {epPopoverOpen && (
+                    <div className="player-ep-popover" role="dialog" aria-label="Season and episode selector">
+                      <div className="player-ep-section">
+                        <span className="player-ep-section-label">Season</span>
+                        <div className="player-ep-season-row">
+                          {Array.from({ length: totalSeasons }, (_, index) => index + 1).map((value) => {
+                            const watchedCount = Array.from(watched).filter(
+                              (key) => key.startsWith(`${value}:`),
+                            ).length;
+                            const totalEpisodes = seasonEpisodeCounts[value];
+                            const isDone = totalEpisodes && watchedCount === totalEpisodes;
 
-                  <select
-                    className="player-se-select"
-                    value={episode}
-                    onChange={(event) => setEpisode(Number(event.target.value))}
-                    aria-label="Episode"
-                    disabled={episodeCount === undefined}
-                  >
-                    {episodeCount === undefined ? (
-                      <option>Loading\u2026</option>
-                    ) : (
-                      Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => (
-                        <option key={value} value={value}>
-                          {watched.has(`${season}:${value}`) ? '\u2713 ' : ''}Episode {value}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                className={`player-ep-season-chip${season === value ? ' active' : ''}${isDone ? ' done' : watchedCount > 0 ? ' partial' : ''}`}
+                                onClick={() => { setSeason(value); setEpisode(1); }}
+                              >
+                                {value}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="player-ep-section">
+                        <span className="player-ep-section-label">
+                          Episode{episodeCount !== undefined ? ` · ${episodeCount} total${watchedInSeason > 0 ? `, ${watchedInSeason} watched` : ''}` : ''}
+                        </span>
+                        <div className="player-ep-grid">
+                          {episodeCount === undefined ? (
+                            <span className="player-ep-loading">Loading episodes…</span>
+                          ) : (
+                            Array.from({ length: episodeCount }, (_, index) => index + 1).map((value) => {
+                              const isWatchedEp = watched.has(`${season}:${value}`);
+                              const isCurrent = episode === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  className={`player-ep-chip${isCurrent ? ' active' : ''}${isWatchedEp && !isCurrent ? ' watched' : ''}`}
+                                  onClick={() => { setEpisode(value); setEpPopoverOpen(false); }}
+                                >
+                                  {isWatchedEp ? '✓ ' : ''}{value}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
