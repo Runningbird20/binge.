@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import Onboarding from '../components/Onboarding';
 import PullToRefresh from '../components/PullToRefresh';
 import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
@@ -552,9 +551,6 @@ export default function Home() {
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  const onboardingKey = `onboarding_done_${user?.id || user?.username}`;
 
   const userId = user?.id;
   const mountedRef = useRef(true);
@@ -585,21 +581,15 @@ export default function Home() {
       setWatchlistItems(nextWatchlist);
       setRatingsItems(nextRatings);
       setContinueWatchingItems(nextContinueWatching);
-      if (nextRatings.length === 0 && !localStorage.getItem(onboardingKey)) {
-        setShowOnboarding(true);
-      }
     } catch {
       if (!mountedRef.current) return;
       setWatchlistItems([]);
       setRatingsItems([]);
       setContinueWatchingItems([]);
-      if (!localStorage.getItem(onboardingKey)) {
-        setShowOnboarding(true);
-      }
     } finally {
       if (mountedRef.current) setDataLoading(false);
     }
-  }, [onboardingKey]);
+  }, []);
 
   useEffect(() => {
     if (authLoading || !userId) return;
@@ -639,11 +629,6 @@ export default function Home() {
     return () => window.removeEventListener('binge:ratingSaved', onRatingSaved);
   }, []);
 
-  function completeOnboarding() {
-    localStorage.setItem(onboardingKey, '1');
-    setShowOnboarding(false);
-  }
-
   async function handleRemoveContinueWatching(id) {
     setContinueWatchingItems(prev => prev.filter(item => item.id !== id));
     try {
@@ -662,7 +647,6 @@ export default function Home() {
 
   return (
     <>
-    {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
     <div className="app-layout">
       <Navbar />
       <main className="page-content">

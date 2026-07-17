@@ -17,12 +17,12 @@ export function colorForId(id) {
 
 export default function ProfileAvatar({ profile, size = 32 }) {
   const avatar = profile?.avatar_url;
-  const isImage = typeof avatar === 'string' && /^https?:\/\//.test(avatar);
+  const isImage = typeof avatar === 'string' && /^(https?:|data:)/.test(avatar);
   const style = {
     width: size,
     height: size,
     fontSize: Math.round(size * 0.55),
-    background: isImage ? undefined : colorForId(profile?.id || profile?.name),
+    background: isImage ? undefined : profile?.avatar_color || colorForId(profile?.id || profile?.name),
   };
 
   return (
