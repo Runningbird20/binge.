@@ -8,6 +8,8 @@ import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
   fetchSupabaseWatchlist,
+  fetchSupabaseWatchlistStatusMap,
+  updateSupabaseWatchlistStatus,
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
@@ -42,6 +44,7 @@ export default function MediaOverlay({ mediaType }) {
   const [browseOnly, setBrowseOnly] = useState(false);
   const [userRating, setUserRating] = useState(null);
   const [isInLibrary, setIsInLibrary] = useState(false);
+  const [watchlistEntry, setWatchlistEntry] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
 
@@ -92,6 +95,15 @@ export default function MediaOverlay({ mediaType }) {
     return () => { cancelled = true; };
   }, [mediaType, numericId]);
 
+  useEffect(() => {
+    if (mediaType === 'book') return undefined;
+    let cancelled = false;
+    fetchSupabaseWatchlistStatusMap(mediaType)
+      .then((map) => { if (!cancelled) setWatchlistEntry(map[numericId] || null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [mediaType, numericId]);
+
   function goBack() {
     if (backgroundLocation) navigate(-1);
     else navigate(config.homePath);
@@ -111,13 +123,22 @@ export default function MediaOverlay({ mediaType }) {
     setIsAddingWatchlist(true);
     setDetailMessage('');
     try {
-      await addSupabaseWatchlistItem({ mediaType, mediaId: target.id, media: target });
+      const saved = await addSupabaseWatchlistItem({ mediaType, mediaId: target.id, media: target });
+      setWatchlistEntry({ id: saved.id, status: saved.status });
       setDetailMessage(`"${target.title}" added to your watchlist.`);
     } catch (err) {
       setDetailMessage(err.message);
     } finally {
       setIsAddingWatchlist(false);
     }
+  }
+
+  function handleStatusChange(target, entry, nextStatus) {
+    setWatchlistEntry((current) => ({ ...current, status: nextStatus }));
+    if (!entry?.id) return;
+    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
+      setWatchlistEntry(entry);
+    });
   }
 
   async function handleAddToLibrary(book) {
@@ -165,6 +186,8 @@ export default function MediaOverlay({ mediaType }) {
       onClose={goBack}
       onRate={browseOnly ? undefined : handleRate}
       onWatchlist={browseOnly ? undefined : handleWatchlist}
+      watchlistEntry={watchlistEntry}
+      onStatusChange={browseOnly ? undefined : handleStatusChange}
       userRating={userRating}
       isAddingWatchlist={isAddingWatchlist}
       detailMessage={detailMessage}

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
 import RateReviewPanel from './RateReviewPanel';
+import WatchlistStatusControl from './WatchlistStatusControl';
 import useDeviceType from '../hooks/useDeviceType';
 import MobileMediaDetail from './MobileMediaDetail';
+import { computeProgressBadge } from '../utils/continueWatching';
 
 function getImageUrl(item) {
   const raw = item.poster_url || item.cover_url || item.image_url || '';
@@ -35,6 +37,8 @@ export default function MediaDetailsModal({
   onClose,
   onRate,
   onWatchlist,
+  watchlistEntry,
+  onStatusChange,
   userRating,
   isAddingWatchlist,
   detailMessage,
@@ -46,6 +50,9 @@ export default function MediaDetailsModal({
 }) {
   const { isMobile } = useDeviceType();
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
+  const progressBadge = computeProgressBadge({ ...watchlistEntry, media_type: mediaType });
+  const resumeSeason = initialSeason ?? watchlistEntry?.current_season ?? undefined;
+  const resumeEpisode = initialEpisode ?? watchlistEntry?.current_episode ?? undefined;
 
   useEffect(() => {
     setShowPlayer(Boolean(autoPlay));
@@ -78,6 +85,8 @@ export default function MediaDetailsModal({
         onClose={onClose}
         onRate={onRate}
         onWatchlist={onWatchlist}
+        watchlistEntry={watchlistEntry}
+        onStatusChange={onStatusChange}
         userRating={userRating}
         isAddingWatchlist={isAddingWatchlist}
         detailMessage={detailMessage}
@@ -137,7 +146,7 @@ export default function MediaDetailsModal({
                 className="btn-watch book-detail-watch-now"
                 onClick={() => setShowPlayer(true)}
               >
-                {'\u25B6'} Watch Now
+                {'\u25B6'} {progressBadge ? `Resume ${progressBadge}` : 'Watch Now'}
               </button>
             )}
           </div>
@@ -198,14 +207,25 @@ export default function MediaDetailsModal({
                 allowActions={allowActions}
                 size="lg"
                 actions={onWatchlist && (
-                  <button
-                    type="button"
-                    className="btn-primary book-detail-library-btn"
-                    onClick={() => onWatchlist(item)}
-                    disabled={!allowActions || isAddingWatchlist}
-                  >
-                    {isAddingWatchlist ? 'Saving...' : 'Add to Library'}
-                  </button>
+                  watchlistEntry?.status ? (
+                    <WatchlistStatusControl
+                      className="book-detail-status-control"
+                      mediaType={mediaType}
+                      status={watchlistEntry.status}
+                      adding={isAddingWatchlist}
+                      onAdd={() => onWatchlist(item)}
+                      onChange={(nextStatus) => onStatusChange?.(item, watchlistEntry, nextStatus)}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-primary book-detail-library-btn"
+                      onClick={() => onWatchlist(item)}
+                      disabled={!allowActions || isAddingWatchlist}
+                    >
+                      {isAddingWatchlist ? 'Saving...' : 'Add to Library'}
+                    </button>
+                  )
                 )}
               />
               {!allowActions && browseOnlyMessage && (
@@ -222,8 +242,8 @@ export default function MediaDetailsModal({
           item={item}
           mediaType={mediaType}
           onClose={() => setShowPlayer(false)}
-          initialSeason={initialSeason}
-          initialEpisode={initialEpisode}
+          initialSeason={resumeSeason}
+          initialEpisode={resumeEpisode}
         />
       )}
     </>
