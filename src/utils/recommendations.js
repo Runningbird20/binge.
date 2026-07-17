@@ -62,6 +62,8 @@ function buildSignals(ratings, watchlist) {
     mediaType: rating.media_type,
     title: rating.title,
     genre: rating.genre,
+    director: rating.director,
+    creator: rating.creator,
     rawStrength: getRatingStrength(rating),
     weight: rankWeight(rank) * decayWeight(rating.created_at),
   }));
@@ -70,6 +72,8 @@ function buildSignals(ratings, watchlist) {
     mediaType: item.media_type,
     title: item.title,
     genre: item.genre,
+    director: item.director,
+    creator: item.creator,
     rawStrength: watchlistStrength(item.status),
     weight: rankWeight(rank) * decayWeight(item.updated_at || item.added_at, 260),
   }));
@@ -126,6 +130,12 @@ function buildTasteProfile(signals, mediaType = null) {
   return `Lately you've been gravitating toward ${favoriteGenres.join(', ')}, especially in ${favoriteTypes.join(' and ')}. These picks are pulled from your most recent ratings and watchlist activity, not just your all-time history.`;
 }
 
+// Movies expose 'director', TV shows expose 'creator' — different column,
+// same role for matching purposes ("more from someone whose work you liked").
+function getCreatorName(record) {
+  return record.director || record.creator || '';
+}
+
 function scoreCandidate(candidate, signals, excludedKeys) {
   const candidateKey = `${candidate.media_type}:${candidate.id}`;
   if (excludedKeys.has(candidateKey)) {
@@ -133,6 +143,7 @@ function scoreCandidate(candidate, signals, excludedKeys) {
   }
 
   const candidateGenres = splitGenres(candidate.genre);
+  const candidateCreator = getCreatorName(candidate).trim().toLowerCase();
   let score = 0;
 
   signals.forEach((signal) => {
@@ -145,6 +156,14 @@ function scoreCandidate(candidate, signals, excludedKeys) {
 
     if (candidate.media_type === signal.mediaType && polarity > 0) {
       score += 0.6 * signal.weight;
+    }
+
+    // Same director/creator as something the user rated or saved — a much
+    // stronger signal than genre overlap, since it's specific to that person's
+    // body of work rather than a broad category.
+    const signalCreator = getCreatorName(signal).trim().toLowerCase();
+    if (candidateCreator && signalCreator && candidateCreator === signalCreator) {
+      score += 4 * weight;
     }
   });
 
@@ -216,8 +235,8 @@ function dedupeById(items) {
 // Instead of always scoring the same alphabetically-first slice of the catalog, probe the
 // genre-filtered count and jump to a random window within it — every call can reach the
 // full catalog, not just the first page.
-async function sampleCatalogSegment(fetchSegment, { genre = '', limit } = {}) {
-  const probe = await fetchSegment({ genre, offset: 0, limit: 1, includeCount: true, includeFacets: false }).catch(() => null);
+async function sampleCatalogSegment(fetchSegment, { genre = '', limit, kidsSafe = false } = {}) {
+  const probe = await fetchSegment({ genre, offset: 0, limit: 1, includeCount: true, includeFacets: false, kidsSafe }).catch(() => null);
   const total = probe?.total || 0;
   if (!total) return [];
 
@@ -225,7 +244,7 @@ async function sampleCatalogSegment(fetchSegment, { genre = '', limit } = {}) {
   const maxOffset = Math.max(0, total - window);
   const offset = maxOffset > 0 ? Math.floor(Math.random() * (maxOffset + 1)) : 0;
 
-  const page = await fetchSegment({ genre, offset, limit: window, includeCount: false, includeFacets: false }).catch(() => ({ items: [] }));
+  const page = await fetchSegment({ genre, offset, limit: window, includeCount: false, includeFacets: false, kidsSafe }).catch(() => ({ items: [] }));
   return page.items || [];
 }
 
@@ -242,18 +261,18 @@ async function sampleBookSegment({ genre = '', limit } = {}) {
   return result.items || [];
 }
 
-async function sampleMoviePool(genres) {
+async function sampleMoviePool(genres, kidsSafe = false) {
   const results = await Promise.all([
-    sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 60 }),
-    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { genre, limit: 60 })),
+    sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 60, kidsSafe }),
+    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { genre, limit: 60, kidsSafe })),
   ]);
   return dedupeById(results.flat());
 }
 
-async function sampleShowPool(genres) {
+async function sampleShowPool(genres, kidsSafe = false) {
   const results = await Promise.all([
-    sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 60 }),
-    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { genre, limit: 60 })),
+    sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 60, kidsSafe }),
+    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { genre, limit: 60, kidsSafe })),
   ]);
   return dedupeById(results.flat());
 }
@@ -266,6 +285,48 @@ async function sampleBookPool(genres) {
   return dedupeById(results.flat());
 }
 
+function qualityScore(item) {
+  return Number(item.vote_average) || (Number(item.popularity) ? Math.min(Number(item.popularity), 100) / 10 : 0);
+}
+
+// Cold-start fallback for users with no ratings/watchlist yet — instead of an
+// empty "unlock recommendations" dead end, surface something reasonable:
+// highest-rated for movies (the only type with a quality column), newest
+// releases for TV/books.
+async function fetchPopularForType(mediaType, limit, kidsSafe = false) {
+  if (mediaType === 'movie') {
+    const pool = await sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 80, kidsSafe });
+    return pool
+      .map((item) => ({ ...item, media_type: 'movie' }))
+      .sort((a, b) => qualityScore(b) - qualityScore(a))
+      .slice(0, limit);
+  }
+  if (mediaType === 'tv_show') {
+    const pool = await sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 80, kidsSafe });
+    return pool
+      .map((item) => ({ ...item, media_type: 'tv_show' }))
+      .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
+      .slice(0, limit);
+  }
+  const pool = await sampleBookSegment({ limit: 60 });
+  return pool
+    .map((item) => ({ ...item, media_type: 'book' }))
+    .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
+    .slice(0, limit);
+}
+
+function buildFallbackReason(candidate) {
+  const quality = Number(candidate.vote_average);
+  if (Number.isFinite(quality) && quality > 0) {
+    return `Highly rated (${quality.toFixed(1)}/10) — a strong starting point.`;
+  }
+  if (candidate.year && Number(candidate.year) >= THIS_YEAR - 1) {
+    return 'A recent release worth checking out.';
+  }
+  return 'Popular with other users right now.';
+}
+
+const COLD_START_MESSAGE = "You haven't rated or tracked anything yet, so these are popular picks to get you started — rate a few titles and your recommendations will personalize.";
 const EMPTY_MESSAGE = 'Rate some movies, TV shows, or books — or add a few to your watchlist — to unlock personalized recommendations.';
 
 async function prepareRecommendationContext() {
@@ -316,7 +377,28 @@ function toRecommendation(candidate, signals) {
 export async function generateSupabaseRecommendations() {
   const context = await prepareRecommendationContext();
   if (!context) {
-    return { recommendations: [], tasteProfile: null, message: EMPTY_MESSAGE };
+    const [movies, shows, books] = await Promise.all([
+      fetchPopularForType('movie', 5),
+      fetchPopularForType('tv_show', 5),
+      fetchPopularForType('book', 2),
+    ]);
+    const recommendations = [...movies, ...shows, ...books].map((candidate) => ({
+      id: candidate.id,
+      title: candidate.title,
+      media_type: candidate.media_type,
+      year: candidate.year,
+      genre: candidate.genre,
+      posterUrl: candidate.poster_url || candidate.cover_url || null,
+      siteUrl: candidate.media_type === 'movie' ? `/movie/${candidate.id}`
+        : candidate.media_type === 'tv_show' ? `/tv-show/${candidate.id}`
+        : `/book/${candidate.id}`,
+      reason: buildFallbackReason(candidate),
+    }));
+    return {
+      recommendations,
+      tasteProfile: null,
+      message: recommendations.length ? COLD_START_MESSAGE : EMPTY_MESSAGE,
+    };
   }
   const { signals, excludedKeys } = context;
 
@@ -355,7 +437,9 @@ const TYPE_POOL_CONFIG = {
 
 // Deep, single-type recommendation list — used by the "Movies only" / "TV only" / "Books only"
 // tabs so they surface a real top-12 for that type instead of duplicating the mixed Home list.
-export async function generateSupabaseTypeRecommendations(mediaType) {
+// kidsSafe restricts movie/tv_show pools to the same age_rating allowlist as
+// the catalog browse pages — books have no rating data to filter on.
+export async function generateSupabaseTypeRecommendations(mediaType, kidsSafe = false) {
   const config = TYPE_POOL_CONFIG[mediaType];
   if (!config) {
     throw new Error(`Unsupported media type: ${mediaType}`);
@@ -363,12 +447,29 @@ export async function generateSupabaseTypeRecommendations(mediaType) {
 
   const context = await prepareRecommendationContext();
   if (!context) {
-    return { recommendations: [], tasteProfile: null, message: EMPTY_MESSAGE };
+    const popular = await fetchPopularForType(mediaType, 12, kidsSafe);
+    const recommendations = popular.map((candidate) => ({
+      id: candidate.id,
+      title: candidate.title,
+      media_type: candidate.media_type,
+      year: candidate.year,
+      genre: candidate.genre,
+      posterUrl: candidate.poster_url || candidate.cover_url || null,
+      siteUrl: mediaType === 'movie' ? `/movie/${candidate.id}`
+        : mediaType === 'tv_show' ? `/tv-show/${candidate.id}`
+        : `/book/${candidate.id}`,
+      reason: buildFallbackReason(candidate),
+    }));
+    return {
+      recommendations,
+      tasteProfile: null,
+      message: recommendations.length ? COLD_START_MESSAGE : EMPTY_MESSAGE,
+    };
   }
   const { signals, excludedKeys } = context;
 
   const genres = weightedGenreCounts(signals, mediaType).slice(0, config.genreSlice);
-  const pool = await config.sample(genres);
+  const pool = await config.sample(genres, kidsSafe);
   const topItems = topScored(pool, mediaType, signals, excludedKeys, 12);
   const recommendations = topItems.map((candidate) => toRecommendation(candidate, signals));
 

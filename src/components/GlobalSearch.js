@@ -76,7 +76,10 @@ export default function GlobalSearch() {
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') { inputRef.current?.blur(); close(); return; }
-    if (e.key === 'Enter' && flat[0]) handleSelect(flat[0]);
+    if (e.key === 'Enter' && query.trim().length >= 2) {
+      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+      close();
+    }
   }
 
   const showDropdown = expanded && query.trim().length >= 2;

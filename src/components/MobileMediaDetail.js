@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import EmbedPlayer from './EmbedPlayer';
 import StarRating from './StarRating';
 import RateReviewPanel from './RateReviewPanel';
+import WatchlistStatusControl from './WatchlistStatusControl';
 import { computeStarRating } from './RatingArtifact';
+import { computeProgressBadge } from '../utils/continueWatching';
 
 function getImageUrl(item) {
   const raw = item.poster_url || item.cover_url || item.image_url || '';
@@ -29,6 +31,8 @@ export default function MobileMediaDetail({
   onClose,
   onRate,
   onWatchlist,
+  watchlistEntry,
+  onStatusChange,
   userRating,
   isAddingWatchlist,
   detailMessage,
@@ -39,6 +43,9 @@ export default function MobileMediaDetail({
   initialEpisode,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
+  const progressBadge = computeProgressBadge({ ...watchlistEntry, media_type: mediaType });
+  const resumeSeason = initialSeason ?? watchlistEntry?.current_season ?? undefined;
+  const resumeEpisode = initialEpisode ?? watchlistEntry?.current_episode ?? undefined;
   const [draftStars, setDraftStars] = useState(0);
   const [tab, setTab] = useState('info');
 
@@ -187,14 +194,25 @@ export default function MobileMediaDetail({
         {/* Sticky bottom action bar */}
         <div className="mob-detail-bar">
           {onWatchlist && (
-            <button
-              type="button"
-              className="mob-detail-bar-btn mob-detail-bar-btn--secondary"
-              onClick={() => onWatchlist(item)}
-              disabled={!allowActions || isAddingWatchlist}
-            >
-              {isAddingWatchlist ? 'Saving…' : '+ Library'}
-            </button>
+            watchlistEntry?.status ? (
+              <WatchlistStatusControl
+                className="mob-detail-status-control"
+                mediaType={mediaType}
+                status={watchlistEntry.status}
+                adding={isAddingWatchlist}
+                onAdd={() => onWatchlist(item)}
+                onChange={(nextStatus) => onStatusChange?.(item, watchlistEntry, nextStatus)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="mob-detail-bar-btn mob-detail-bar-btn--secondary"
+                onClick={() => onWatchlist(item)}
+                disabled={!allowActions || isAddingWatchlist}
+              >
+                {isAddingWatchlist ? 'Saving…' : '+ Library'}
+              </button>
+            )
           )}
           {canWatch && (
             <button
@@ -202,7 +220,7 @@ export default function MobileMediaDetail({
               className="mob-detail-bar-btn mob-detail-bar-btn--watch"
               onClick={() => setShowPlayer(true)}
             >
-              ▶ Watch Now
+              ▶ {progressBadge ? `Resume ${progressBadge}` : 'Watch Now'}
             </button>
           )}
         </div>
@@ -214,8 +232,8 @@ export default function MobileMediaDetail({
           item={item}
           mediaType={mediaType}
           onClose={() => setShowPlayer(false)}
-          initialSeason={initialSeason}
-          initialEpisode={initialEpisode}
+          initialSeason={resumeSeason}
+          initialEpisode={resumeEpisode}
         />
       )}
     </>

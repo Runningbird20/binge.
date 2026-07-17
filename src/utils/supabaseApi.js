@@ -429,6 +429,91 @@ async function handleSearch(searchParams) {
   return payload;
 }
 
+const RELATED_LIMIT = 8;
+// Its own cache + endpoint, deliberately separate from handleSearch — this
+// tier scans the overview/synopsis text columns (no index backs an ILIKE
+// scan there), which takes several seconds on a catalog this size. Keeping
+// it as an independent, non-blocking fetch means the primary title-match
+// results (fast, unchanged) render immediately, and this "more like this"
+// row fills in afterward instead of stalling the whole search.
+const _relatedCache = new Map();
+const RELATED_CACHE_TTL = 5 * 60 * 1000;
+
+async function handleSearchRelated(searchParams) {
+  const client = requireSupabaseClient();
+  const rawQuery = searchParams.get('q') || '';
+  const typesRaw = String(searchParams.get('types') || 'movies,tv,books');
+  const types = new Set(typesRaw.split(',').map((v) => v.trim()).filter(Boolean));
+  const excludeIds = {
+    movies: new Set(String(searchParams.get('excludeMovies') || '').split(',').filter(Boolean).map(Number)),
+    tv: new Set(String(searchParams.get('excludeTv') || '').split(',').filter(Boolean).map(Number)),
+    books: new Set(String(searchParams.get('excludeBooks') || '').split(',').filter(Boolean).map(Number)),
+  };
+
+  if (normalizeSearchTerm(rawQuery).length < 2) {
+    return { moviesRelated: [], tvRelated: [], booksRelated: [] };
+  }
+
+  const cacheKey = `${rawQuery.toLowerCase().trim()}|${typesRaw}`;
+  const cached = _relatedCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < RELATED_CACHE_TTL) return cached.payload;
+
+  const fuzzyPatterns = buildFuzzyIlikePatterns(rawQuery);
+  function fuzzyOr(...fields) {
+    return fuzzyPatterns.flatMap(p => fields.map(f => `${f}.ilike.${p}`)).join(',');
+  }
+
+  const tasks = [];
+
+  if (types.has('movies')) {
+    tasks.push(
+      client
+        .from('movies')
+        .select('id, title, year, genre, poster_url, source_key, external_id')
+        .or(fuzzyOr('overview', 'synopsis'))
+        .not('source_key', 'is', null)
+        .order('vote_average', { ascending: false, nullsFirst: false })
+        .limit(RELATED_LIMIT)
+        .then(({ data, error }) => ['moviesRelated', error ? [] : (data || [])])
+    );
+  }
+  if (types.has('tv')) {
+    tasks.push(
+      client
+        .from('tv_shows')
+        .select('id, title, year, genre, poster_url, source_key, external_id')
+        .or(fuzzyOr('overview', 'synopsis'))
+        .not('source_key', 'is', null)
+        .order('year', { ascending: false, nullsFirst: false })
+        .limit(RELATED_LIMIT)
+        .then(({ data, error }) => ['tvRelated', error ? [] : (data || [])])
+    );
+  }
+  if (types.has('books')) {
+    tasks.push(
+      client
+        .from('books')
+        .select('id, title, author, year, genre, cover_url, source_key, external_id')
+        .or(fuzzyOr('synopsis'))
+        .not('source_key', 'is', null)
+        .order('year', { ascending: false, nullsFirst: false })
+        .limit(RELATED_LIMIT)
+        .then(({ data, error }) => ['booksRelated', error ? [] : (data || [])])
+    );
+  }
+
+  const results = await Promise.all(tasks);
+  const payload = { moviesRelated: [], tvRelated: [], booksRelated: [] };
+  for (const [key, value] of results) payload[key] = value;
+
+  payload.moviesRelated = payload.moviesRelated.filter((r) => !excludeIds.movies.has(r.id));
+  payload.tvRelated = payload.tvRelated.filter((r) => !excludeIds.tv.has(r.id));
+  payload.booksRelated = payload.booksRelated.filter((r) => !excludeIds.books.has(r.id));
+
+  _relatedCache.set(cacheKey, { ts: Date.now(), payload });
+  return payload;
+}
+
 async function loadProfileByRouteParam(client, rawUsername, viewer = null) {
   const username = decodeURIComponent(rawUsername || '').trim();
   let query = client
@@ -510,6 +595,10 @@ export async function executeSupabaseRoute(method, path, body) {
 
   if (pathname === '/search') {
     return handleSearch(searchParams);
+  }
+
+  if (pathname === '/search-related') {
+    return handleSearchRelated(searchParams);
   }
 
   if (pathname.startsWith('/media')) {

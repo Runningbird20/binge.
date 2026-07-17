@@ -619,6 +619,7 @@ alter table public.watchlist enable row level security;
 alter table public.todos enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
+drop policy if exists "profiles_select_public" on public.profiles;
 create policy "profiles_select_public"
 on public.profiles
 for select
@@ -967,5 +968,351 @@ values
     4
   )
 on conflict (intent) do nothing;
+
+-- ─── Sub-profiles (Netflix-style multiple profiles per account) ────────────
+-- Deliberately NOT a new security boundary: every profile under an account
+-- is visible to that account's own authenticated session (same as real
+-- Netflix — a kid profile isn't a separate login). So existing RLS policies
+-- on watchlist/ratings/continue_watching/episode_progress, all keyed on
+-- `user_id = auth.uid()`, are untouched. profile_id is purely an app-level
+-- scoping column the client always filters/sets, not an RLS concern.
+create table if not exists public.account_profiles (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  avatar_url text,
+  is_kids boolean not null default false,
+  is_default boolean not null default false,
+  pin text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- At most one default profile per account — the profile new data backfills
+-- onto and the one auto-selected on first login after this migration.
+create unique index if not exists idx_account_profiles_one_default
+  on public.account_profiles(account_id)
+  where is_default;
+
+create index if not exists idx_account_profiles_account_id
+  on public.account_profiles(account_id);
+
+-- User-picked swatch for the avatar background, independent of the emoji
+-- choice (previously derived purely from a hash of the profile id).
+alter table public.account_profiles add column if not exists avatar_color text;
+
+drop trigger if exists trg_account_profiles_set_updated_at on public.account_profiles;
+create trigger trg_account_profiles_set_updated_at
+before update on public.account_profiles
+for each row execute function public.set_updated_at();
+
+alter table public.account_profiles enable row level security;
+
+drop policy if exists "account_profiles_select_own" on public.account_profiles;
+create policy "account_profiles_select_own"
+on public.account_profiles
+for select
+to authenticated
+using (account_id = auth.uid());
+
+drop policy if exists "account_profiles_insert_own" on public.account_profiles;
+create policy "account_profiles_insert_own"
+on public.account_profiles
+for insert
+to authenticated
+with check (account_id = auth.uid());
+
+drop policy if exists "account_profiles_update_own" on public.account_profiles;
+create policy "account_profiles_update_own"
+on public.account_profiles
+for update
+to authenticated
+using (account_id = auth.uid())
+with check (account_id = auth.uid());
+
+drop policy if exists "account_profiles_delete_own" on public.account_profiles;
+create policy "account_profiles_delete_own"
+on public.account_profiles
+for delete
+to authenticated
+using (account_id = auth.uid());
+
+-- New accounts get a default profile automatically. Separate trigger from
+-- handle_auth_user_changed (which owns public.profiles) so this doesn't
+-- touch that existing, already-load-bearing trigger.
+create or replace function public.handle_auth_user_account_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- The default profile is the account itself — it uses whatever picture
+  -- was set at signup (raw_user_meta_data, same source public.profiles
+  -- reads), not a separate emoji avatar like sub-profiles get.
+  insert into public.account_profiles (account_id, name, avatar_url, is_default)
+  values (
+    new.id,
+    coalesce(nullif(new.raw_user_meta_data->>'username', ''), split_part(new.email, '@', 1), 'Profile 1'),
+    nullif(new.raw_user_meta_data->>'avatar_url', ''),
+    true
+  )
+  on conflict do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_auth_user_account_profile on auth.users;
+create trigger trg_auth_user_account_profile
+after insert on auth.users
+for each row execute function public.handle_auth_user_account_profile();
+
+-- profile_id on every per-user data table it's meaningful for. Nullable —
+-- the backfill below fills it in for all existing rows, but keeping it
+-- nullable at the schema level avoids a NOT NULL constraint blocking this
+-- migration if a future edge case row somehow doesn't get backfilled.
+alter table public.watchlist add column if not exists profile_id uuid references public.account_profiles(id) on delete cascade;
+alter table public.movie_ratings add column if not exists profile_id uuid references public.account_profiles(id) on delete cascade;
+alter table public.tv_show_ratings add column if not exists profile_id uuid references public.account_profiles(id) on delete cascade;
+alter table public.book_ratings add column if not exists profile_id uuid references public.account_profiles(id) on delete cascade;
+alter table public.continue_watching add column if not exists profile_id uuid references public.account_profiles(id) on delete cascade;
+alter table public.episode_progress add column if not exists profile_id uuid references public.account_profiles(id) on delete cascade;
+
+create index if not exists idx_watchlist_profile_id on public.watchlist(profile_id);
+create index if not exists idx_movie_ratings_profile_id on public.movie_ratings(profile_id);
+create index if not exists idx_tv_show_ratings_profile_id on public.tv_show_ratings(profile_id);
+create index if not exists idx_book_ratings_profile_id on public.book_ratings(profile_id);
+create index if not exists idx_continue_watching_profile_id on public.continue_watching(profile_id);
+create index if not exists idx_episode_progress_profile_id on public.episode_progress(profile_id);
+
+-- Backfill: give every existing account a default profile, then stamp all
+-- of that account's existing rows with it. Idempotent — safe to rerun.
+insert into public.account_profiles (account_id, name, avatar_url, is_default)
+select
+  u.id,
+  coalesce(nullif(p.username, ''), split_part(u.email, '@', 1), 'Profile 1'),
+  p.avatar_url,
+  true
+from auth.users u
+left join public.profiles p on p.id = u.id
+where not exists (
+  select 1 from public.account_profiles ap where ap.account_id = u.id and ap.is_default
+);
+
+-- Existing default profiles created before this column was backfilled above
+-- (i.e. by an earlier run of this same migration) still need to pick up the
+-- account's real avatar.
+update public.account_profiles ap
+set avatar_url = p.avatar_url
+from public.profiles p
+where ap.is_default and ap.avatar_url is null and p.id = ap.account_id and p.avatar_url is not null;
+
+update public.watchlist w
+set profile_id = ap.id
+from public.account_profiles ap
+where w.profile_id is null and ap.account_id = w.user_id and ap.is_default;
+
+update public.movie_ratings r
+set profile_id = ap.id
+from public.account_profiles ap
+where r.profile_id is null and ap.account_id = r.user_id and ap.is_default;
+
+update public.tv_show_ratings r
+set profile_id = ap.id
+from public.account_profiles ap
+where r.profile_id is null and ap.account_id = r.user_id and ap.is_default;
+
+update public.book_ratings r
+set profile_id = ap.id
+from public.account_profiles ap
+where r.profile_id is null and ap.account_id = r.user_id and ap.is_default;
+
+update public.continue_watching c
+set profile_id = ap.id
+from public.account_profiles ap
+where c.profile_id is null and ap.account_id = c.user_id and ap.is_default;
+
+update public.episode_progress e
+set profile_id = ap.id
+from public.account_profiles ap
+where e.profile_id is null and ap.account_id = e.user_id and ap.is_default;
+
+-- watchlist's uniqueness was (user_id, media_type, media_id) — pre-dates
+-- profiles, so it would block two different profiles on the same account
+-- from independently saving the same title. Widen it to include profile_id
+-- now that every row has one.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.watchlist'::regclass
+      and conname = 'watchlist_user_id_media_type_media_id_key'
+  ) then
+    alter table public.watchlist
+      drop constraint watchlist_user_id_media_type_media_id_key;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.watchlist'::regclass
+      and conname = 'watchlist_user_media_profile_key'
+  ) then
+    alter table public.watchlist
+      add constraint watchlist_user_media_profile_key
+      unique (user_id, media_type, media_id, profile_id);
+  end if;
+end;
+$$;
+
+-- Same widening for continue_watching (its onConflict upsert target) and
+-- episode_progress, so per-profile progress doesn't collide across profiles
+-- on the same account.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.continue_watching'::regclass
+      and conname = 'continue_watching_unique'
+  ) then
+    alter table public.continue_watching
+      drop constraint continue_watching_unique;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.continue_watching'::regclass
+      and conname = 'continue_watching_user_media_profile_key'
+  ) then
+    alter table public.continue_watching
+      add constraint continue_watching_user_media_profile_key
+      unique (user_id, media_type, media_id, profile_id);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.episode_progress'::regclass
+      and conname = 'episode_progress_unique'
+  ) then
+    alter table public.episode_progress
+      drop constraint episode_progress_unique;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.episode_progress'::regclass
+      and conname = 'episode_progress_user_media_profile_key'
+  ) then
+    alter table public.episode_progress
+      add constraint episode_progress_user_media_profile_key
+      unique (user_id, media_id, season, episode, profile_id);
+  end if;
+end;
+$$;
+
+-- Same widening for the three per-type rating tables (their upsert target
+-- is user_id+media_id — one rating per title per user — which should be one
+-- rating per title per PROFILE now).
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.movie_ratings'::regclass
+      and conname = 'movie_ratings_user_id_media_id_key'
+  ) then
+    alter table public.movie_ratings
+      drop constraint movie_ratings_user_id_media_id_key;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.movie_ratings'::regclass
+      and conname = 'movie_ratings_user_media_profile_key'
+  ) then
+    alter table public.movie_ratings
+      add constraint movie_ratings_user_media_profile_key
+      unique (user_id, media_id, profile_id);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.tv_show_ratings'::regclass
+      and conname = 'tv_show_ratings_user_id_media_id_key'
+  ) then
+    alter table public.tv_show_ratings
+      drop constraint tv_show_ratings_user_id_media_id_key;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.tv_show_ratings'::regclass
+      and conname = 'tv_show_ratings_user_media_profile_key'
+  ) then
+    alter table public.tv_show_ratings
+      add constraint tv_show_ratings_user_media_profile_key
+      unique (user_id, media_id, profile_id);
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.book_ratings'::regclass
+      and conname = 'book_ratings_user_id_media_id_key'
+  ) then
+    alter table public.book_ratings
+      drop constraint book_ratings_user_id_media_id_key;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.book_ratings'::regclass
+      and conname = 'book_ratings_user_media_profile_key'
+  ) then
+    alter table public.book_ratings
+      add constraint book_ratings_user_media_profile_key
+      unique (user_id, media_id, profile_id);
+  end if;
+end;
+$$;
+
+-- ─── Search performance: trigram indexes ────────────────────────────────
+-- Backs the "related" search tier's overview/synopsis ILIKE matching
+-- (previously an unindexed full-table scan taking 10+ seconds). pg_trgm is
+-- already enabled above.
+create index if not exists idx_movies_overview_trgm on public.movies using gin (overview gin_trgm_ops);
+create index if not exists idx_movies_synopsis_trgm on public.movies using gin (synopsis gin_trgm_ops);
+create index if not exists idx_tv_shows_overview_trgm on public.tv_shows using gin (overview gin_trgm_ops);
+create index if not exists idx_tv_shows_synopsis_trgm on public.tv_shows using gin (synopsis gin_trgm_ops);
+create index if not exists idx_books_synopsis_trgm on public.books using gin (synopsis gin_trgm_ops);
+
+-- Backs the kids-profile content filter (age_rating IN (...)) combined with
+-- the browse page's sort column. Partial indexes, not a plain/composite
+-- age_rating index: an IN-list over 6 values needs Postgres to either sort
+-- ~6k matching rows after the fact or merge-append 6 separate index ranges,
+-- both of which cost 1s+ even warm (PostgREST's statement_timeout is well
+-- under that, so the query 500'd and the app silently fell back to the
+-- unfiltered offline snapshot — the actual bug behind kids mode showing
+-- unfiltered content). A partial index scoped to exactly this rating set
+-- returns already sorted, dropping this to ~1ms.
+drop index if exists idx_movies_age_rating;
+drop index if exists idx_movies_age_rating_title;
+drop index if exists idx_movies_age_rating_year;
+drop index if exists idx_tv_shows_age_rating;
+drop index if exists idx_tv_shows_age_rating_title;
+drop index if exists idx_tv_shows_age_rating_year;
+create index if not exists idx_movies_kids_title on public.movies (title) where age_rating in ('G','PG','TV-G','TV-Y','TV-Y7','TV-PG');
+create index if not exists idx_movies_kids_year on public.movies (year) where age_rating in ('G','PG','TV-G','TV-Y','TV-Y7','TV-PG');
+create index if not exists idx_tv_shows_kids_title on public.tv_shows (title) where age_rating in ('G','PG','TV-G','TV-Y','TV-Y7','TV-PG');
+create index if not exists idx_tv_shows_kids_year on public.tv_shows (year) where age_rating in ('G','PG','TV-G','TV-Y','TV-Y7','TV-PG');
 
 commit;

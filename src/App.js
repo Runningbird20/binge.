@@ -22,6 +22,8 @@ const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
 const Books          = lazy(() => import('./pages/Books'));
+const SearchResults  = lazy(() => import('./pages/SearchResults'));
+const ProfilePicker  = lazy(() => import('./pages/ProfilePicker'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
 const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
@@ -76,10 +78,12 @@ function AppRoutes() {
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
         <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
+        <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
+        <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
         <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-        <Route path="/admin/users"      element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
-        <Route path="/admin"            element={<ProtectedRoute><AdminHome /></ProtectedRoute>} />
+        <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
+        <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
         {/* TEMP (UI preview only — do not commit) */}
         <Route path="/ui-preview" element={<UIPreview />} />
         <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />

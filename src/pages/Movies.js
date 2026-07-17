@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import GenreScrollBar from '../components/GenreScrollBar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import PullToRefresh from '../components/PullToRefresh';
@@ -10,8 +11,11 @@ import { api } from '../api';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
+  fetchSupabaseWatchlistStatusMap,
+  updateSupabaseWatchlistStatus,
   saveSupabaseRating,
 } from '../utils/supabaseData';
+import WatchlistStatusControl from '../components/WatchlistStatusControl';
 import {
   fetchSupabaseMovieById,
   fetchSupabaseMovieCatalogSegment,
@@ -22,6 +26,9 @@ import {
   loadFallbackMovies,
 } from '../catalogFallback';
 import { MOVIE_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
+import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
+import ThemedSelect from '../components/ThemedSelect';
+import { useAuth } from '../contexts/AuthContext';
 
 const PAGE_SIZE = 48;
 // Random-window sampling (borrowed from the recommendation engine): instead of
@@ -90,37 +97,59 @@ function resolvePosterUrl(url) {
   return url;
 }
 
-function PosterTile({ item, onClick }) {
+function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange }) {
   const [imgError, setImgError] = useState(false);
   const posterUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
   const isNew = Number(item.year) >= new Date().getFullYear();
 
   return (
-    <button type="button" className="poster-tile" onClick={() => onClick(item)} title={item.title}>
-      <div className="poster-tile-frame">
-        {posterUrl && !imgError ? (
-          <img
-            src={posterUrl}
-            alt={item.title}
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={() => setImgError(true)}
+    <div className="poster-tile-wrap">
+      <button type="button" className="poster-tile" onClick={() => onClick(item)} title={item.title}>
+        <div className="poster-tile-frame">
+          {posterUrl && !imgError ? (
+            <img
+              src={posterUrl}
+              alt={item.title}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="poster-tile-placeholder">
+              <span>{item.title?.charAt(0)}</span>
+            </div>
+          )}
+          {isNew && <span className="poster-tile-badge">New</span>}
+        </div>
+        <p className="poster-tile-title">{item.title}</p>
+        {item.year && <p className="poster-tile-year">{item.year}</p>}
+      </button>
+
+      {onAddWatchlist && (
+        <div className="poster-tile-status" onClick={(event) => event.stopPropagation()}>
+          <WatchlistStatusControl
+            mediaType="movie"
+            status={watchlistEntry?.status}
+            adding={addingWatchlist}
+            onAdd={() => onAddWatchlist(item)}
+            onChange={(nextStatus) => onStatusChange(item, watchlistEntry, nextStatus)}
           />
-        ) : (
-          <div className="poster-tile-placeholder">
-            <span>{item.title?.charAt(0)}</span>
-          </div>
-        )}
-        {isNew && <span className="poster-tile-badge">New</span>}
-      </div>
-      <p className="poster-tile-title">{item.title}</p>
-      {item.year && <p className="poster-tile-year">{item.year}</p>}
-    </button>
+        </div>
+      )}
+    </div>
   );
 }
 
-function CatalogView({ onItemClick, initialGenre, refreshKey }) {
+function CatalogView({
+  onItemClick,
+  initialGenre,
+  refreshKey,
+  watchlistStatusMap,
+  addingWatchlistIds,
+  onQuickAdd,
+  onQuickStatusChange,
+}) {
   const [items, setItems] = useState([]);
   const [activeLabel, setActiveLabel] = useState(initialGenre || '');
   const [searchInput, setSearchInput] = useState('');
@@ -131,6 +160,9 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
   const [total, setTotal] = useState(0);
   const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
+  const [sortMode, setSortMode] = useState('featured');
+  const { activeProfile } = useAuth();
+  const kidsSafe = Boolean(activeProfile?.is_kids);
   const requestTokenRef = useRef(0);
   const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
@@ -181,11 +213,31 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
         includeCount: false,
         includeFacets: false,
         includeUpcoming: false,
+        kidsSafe,
       }).catch(() => null)
     )));
 
     return orderBatch(results.flatMap((result) => normalizeMediaItems(result)));
-  }, [genreValues, searchTerm]);
+  }, [genreValues, searchTerm, kidsSafe]);
+
+  // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
+  // Unlike fetchSupabaseWindows this must NOT be reshuffled by orderBatch;
+  // the whole point is a deterministic order (newest/oldest/A–Z/Z–A).
+  const fetchSupabaseSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
+    const { sortOrder, includeUpcoming } = sortModeToQuery(sortMode);
+    const result = await fetchSupabaseMovieCatalogSegment({
+      offset,
+      limit: PAGE_SIZE,
+      search: searchTerm,
+      genre: genreValues,
+      sortOrder,
+      includeUpcoming,
+      includeCount,
+      includeFacets,
+      kidsSafe,
+    });
+    return { total: result.total, facets: result.facets, items: normalizeMediaItems(result) };
+  }, [genreValues, searchTerm, sortMode, kidsSafe]);
 
   const fetchApiPage = useCallback(async (pageNum) => {
     const params = new URLSearchParams({
@@ -236,6 +288,26 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
     }
 
     async function loadCatalog() {
+      if (sortMode !== 'featured') {
+        try {
+          const page = await fetchSupabaseSortedPage(0, { includeCount: true, includeFacets: true });
+          const totalCount = Number(page.total) || 0;
+          if (totalCount === 0 && !fetchHadFilter) {
+            throw new Error('Movie catalog is empty');
+          }
+
+          if (cancelled || requestTokenRef.current !== requestToken) return;
+
+          adoptGenres(page.facets?.genres);
+          sourceRef.current = { mode: 'supabase-sorted', nextOffset: PAGE_SIZE };
+          setTotal(totalCount);
+          setItems(page.items);
+          setLoading(false);
+          return;
+        } catch {
+          // Fall through to the legacy API, then the bundled snapshot below.
+        }
+      } else {
       try {
         const probe = await fetchSupabaseMovieCatalogSegment({
           offset: 0,
@@ -246,6 +318,7 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
           includeCount: true,
           includeFacets: true,
           includeUpcoming: false,
+          kidsSafe,
         });
         const totalCount = Number(probe?.total) || 0;
         if (totalCount === 0 && !fetchHadFilter) {
@@ -272,6 +345,7 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
         return;
       } catch {
         // Fall through to the legacy API, then the bundled snapshot.
+      }
       }
 
       try {
@@ -321,7 +395,7 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, fetchSupabaseWindows, fetchApiPage, refreshKey]);
+  }, [genreValues, searchTerm, sortMode, kidsSafe, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -335,6 +409,21 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
 
         setItems((current) => {
           const next = appendUniqueItems(current, batch);
+          emptyBatchesRef.current = next.length === current.length
+            ? emptyBatchesRef.current + 1
+            : 0;
+          return next;
+        });
+        return;
+      }
+
+      if (source.mode === 'supabase-sorted') {
+        const page = await fetchSupabaseSortedPage(source.nextOffset);
+        if (requestTokenRef.current !== requestToken) return;
+
+        sourceRef.current = { ...source, nextOffset: source.nextOffset + PAGE_SIZE };
+        setItems((current) => {
+          const next = appendUniqueItems(current, page.items);
           emptyBatchesRef.current = next.length === current.length
             ? emptyBatchesRef.current + 1
             : 0;
@@ -358,7 +447,7 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
         setLoadingMore(false);
       }
     }
-  }, [items.length, total, fetchSupabaseWindows, fetchApiPage]);
+  }, [items.length, total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
 
   const visibleItems = items.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -428,29 +517,34 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
             </button>
           )}
         </div>
+        <ThemedSelect
+          className="catalog-sort-select"
+          aria-label="Sort movies by"
+          value={sortMode}
+          options={SORT_OPTIONS}
+          onChange={(event) => setSortMode(event.target.value)}
+        />
       </div>
 
-      <div className="genre-bar-wrap">
-        <div className="genre-bar" role="tablist" aria-label="Movie genres">
+      <GenreScrollBar ariaLabel="Movie genres">
+        <button
+          type="button"
+          className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+          onClick={() => setActiveLabel('')}
+        >
+          Featured
+        </button>
+        {genreGroups.map((group) => (
           <button
+            key={group.label}
             type="button"
-            className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
-            onClick={() => setActiveLabel('')}
+            className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+            onClick={() => setActiveLabel(group.label)}
           >
-            Featured
+            {group.label}
           </button>
-          {genreGroups.map((group) => (
-            <button
-              key={group.label}
-              type="button"
-              className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
-              onClick={() => setActiveLabel(group.label)}
-            >
-              {group.label}
-            </button>
-          ))}
-        </div>
-      </div>
+        ))}
+      </GenreScrollBar>
 
       {loading ? (
         <SkeletonGrid count={20} />
@@ -464,7 +558,15 @@ function CatalogView({ onItemClick, initialGenre, refreshKey }) {
         <>
           <div className="poster-grid">
             {visibleItems.map((movie) => (
-              <PosterTile key={movie.id} item={movie} onClick={onItemClick} />
+              <PosterTile
+                key={movie.id}
+                item={movie}
+                onClick={onItemClick}
+                watchlistEntry={watchlistStatusMap[movie.id]}
+                addingWatchlist={addingWatchlistIds.has(movie.id)}
+                onAddWatchlist={onQuickAdd}
+                onStatusChange={onQuickStatusChange}
+              />
             ))}
           </div>
           <div className="infinite-scroll-footer">
@@ -495,9 +597,10 @@ export default function Movies() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedItemBrowseOnly, setSelectedItemBrowseOnly] = useState(false);
   const [detailMessage, setDetailMessage] = useState('');
-  const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
   const [userRatings, setUserRatings] = useState({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const [watchlistStatusMap, setWatchlistStatusMap] = useState({});
+  const [addingWatchlistIds, setAddingWatchlistIds] = useState(() => new Set());
 
   function handleRefresh() {
     setRefreshKey((key) => key + 1);
@@ -508,6 +611,40 @@ export default function Movies() {
     fetchSupabaseRatingMap('movie')
       .then(setUserRatings)
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSupabaseWatchlistStatusMap('movie')
+      .then((map) => { if (!cancelled) setWatchlistStatusMap(map); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleQuickAdd = useCallback(async (item) => {
+    setAddingWatchlistIds((prev) => new Set(prev).add(item.id));
+    setDetailMessage('');
+    try {
+      const saved = await addSupabaseWatchlistItem({ mediaType: 'movie', mediaId: item.id, media: item });
+      setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: { id: saved.id, status: saved.status } }));
+      setDetailMessage(`"${item.title}" added to your watchlist.`);
+    } catch (error) {
+      setDetailMessage(error.message);
+    } finally {
+      setAddingWatchlistIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+    }
+  }, []);
+
+  const handleQuickStatusChange = useCallback((item, entry, nextStatus) => {
+    setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: { ...prev[item.id], status: nextStatus } }));
+    if (!entry?.id) return;
+    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
+      setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: entry }));
+    });
   }, []);
 
   useEffect(() => {
@@ -607,25 +744,10 @@ export default function Movies() {
     }
   }
 
-  async function handleWatchlist(item) {
-    setIsAddingWatchlist(true);
-    setDetailMessage('');
-
-    try {
-      await addSupabaseWatchlistItem({ mediaType: 'movie', mediaId: item.id, media: item });
-      setDetailMessage(`"${item.title}" added to your watchlist.`);
-    } catch (error) {
-      setDetailMessage(error.message);
-    } finally {
-      setIsAddingWatchlist(false);
-    }
-  }
-
   function closeItemDetails() {
     setSelectedItem(null);
     setSelectedItemBrowseOnly(false);
     setDetailMessage('');
-    setIsAddingWatchlist(false);
   }
 
   return (
@@ -641,6 +763,10 @@ export default function Movies() {
             onItemClick={openItemDetails}
             initialGenre={initialGenre}
             refreshKey={refreshKey}
+            watchlistStatusMap={watchlistStatusMap}
+            addingWatchlistIds={addingWatchlistIds}
+            onQuickAdd={handleQuickAdd}
+            onQuickStatusChange={handleQuickStatusChange}
           />
         </PullToRefresh>
       </main>
@@ -651,9 +777,11 @@ export default function Movies() {
           mediaType="movie"
           onClose={closeItemDetails}
           onRate={selectedItemBrowseOnly ? undefined : handleRate}
-          onWatchlist={selectedItemBrowseOnly ? undefined : handleWatchlist}
+          onWatchlist={selectedItemBrowseOnly ? undefined : handleQuickAdd}
+          watchlistEntry={watchlistStatusMap[selectedItem.id]}
+          onStatusChange={selectedItemBrowseOnly ? undefined : handleQuickStatusChange}
           userRating={userRatings[selectedItem.id]}
-          isAddingWatchlist={isAddingWatchlist}
+          isAddingWatchlist={addingWatchlistIds.has(selectedItem.id)}
           detailMessage={detailMessage}
           allowActions={!selectedItemBrowseOnly}
           browseOnlyMessage="Fallback catalog mode is browse-only."
