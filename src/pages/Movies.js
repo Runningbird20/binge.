@@ -29,6 +29,7 @@ import { MOVIE_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGro
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';
+import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 
 const PAGE_SIZE = 48;
 // Random-window sampling (borrowed from the recommendation engine): instead of
@@ -269,13 +270,27 @@ function CatalogView({
     emptyBatchesRef.current = 0;
     const fetchHadGenreFilter = genreValues.length > 0;
     const fetchHadFilter = fetchHadGenreFilter || Boolean(searchTerm);
+    const cacheKey = buildCatalogCacheKey('movies', { genreValues, searchTerm, sortMode, kidsSafe });
 
-    setLoading(true);
     setLoadingMore(false);
-    setItems([]);
-    setTotal(0);
-    setUsingFallbackCatalog(false);
     setRenderedCount(VISIBLE_BATCH_SIZE);
+
+    // Stale-while-revalidate: if we've loaded this exact browse state before
+    // this session, show it instantly instead of a blank skeleton, then
+    // still refresh in the background below so it doesn't go stale.
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setLoading(false);
+      setItems(cached.items);
+      setTotal(cached.total);
+      setUsingFallbackCatalog(cached.usingFallbackCatalog);
+      sourceRef.current = cached.source;
+    } else {
+      setLoading(true);
+      setItems([]);
+      setTotal(0);
+      setUsingFallbackCatalog(false);
+    }
 
     function adoptGenres(fetchedGenres) {
       if (!Array.isArray(fetchedGenres) || fetchedGenres.length === 0) return;
@@ -284,6 +299,16 @@ function CatalogView({
         // Bail out on an equal-content array so this doesn't retrigger the
         // fetch effect below (genreValues derives from allGenres via genreGroups).
         return sameGenreList(current, fetchedGenres) ? current : fetchedGenres;
+      });
+    }
+
+    function persistCache(itemsSnapshot, totalSnapshot, genresSnapshot, isFallback) {
+      setCached(cacheKey, {
+        items: itemsSnapshot,
+        total: totalSnapshot,
+        allGenres: Array.isArray(genresSnapshot) ? genresSnapshot : [],
+        usingFallbackCatalog: Boolean(isFallback),
+        source: sourceRef.current,
       });
     }
 
@@ -303,6 +328,7 @@ function CatalogView({
           setTotal(totalCount);
           setItems(page.items);
           setLoading(false);
+          persistCache(page.items, totalCount, page.facets?.genres, false);
           return;
         } catch {
           // Fall through to the legacy API, then the bundled snapshot below.
@@ -334,14 +360,17 @@ function CatalogView({
         if (totalCount === 0) {
           setItems([]);
           setLoading(false);
+          persistCache([], 0, probe?.facets?.genres, false);
           return;
         }
 
         const firstBatch = await fetchSupabaseWindows({ totalCount, existingCount: 0 });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
-        setItems(appendUniqueItems([], firstBatch));
+        const nextItems = appendUniqueItems([], firstBatch);
+        setItems(nextItems);
         setLoading(false);
+        persistCache(nextItems, totalCount, probe?.facets?.genres, false);
         return;
       } catch {
         // Fall through to the legacy API, then the bundled snapshot.
@@ -358,9 +387,12 @@ function CatalogView({
 
         adoptGenres(data.facets.genres);
         sourceRef.current = { mode: 'api', totalPages: data.totalPages, nextPage: 2 };
-        setTotal(data.total || data.items.length);
-        setItems(orderBatch(data.items));
+        const orderedItems = orderBatch(data.items);
+        const totalCount = data.total || data.items.length;
+        setTotal(totalCount);
+        setItems(orderedItems);
         setLoading(false);
+        persistCache(orderedItems, totalCount, data.facets.genres, false);
         return;
       } catch {
         // Fall through to the bundled snapshot.
@@ -378,10 +410,14 @@ function CatalogView({
 
         adoptGenres(buildMediaGenreFacets(fallbackItems));
         sourceRef.current = { mode: 'fallback' };
+        const orderedPool = orderBatch(pool);
         setTotal(pool.length);
-        setItems(orderBatch(pool));
+        setItems(orderedPool);
         setUsingFallbackCatalog(true);
         setLoading(false);
+        // Not cached — the bundled snapshot is a last resort when both the
+        // real catalog and legacy API are unreachable; caching it would risk
+        // serving stale placeholder data once the real backend recovers.
       } catch {
         if (cancelled || requestTokenRef.current !== requestToken) return;
         setItems([]);
