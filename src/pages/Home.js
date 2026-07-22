@@ -14,6 +14,7 @@ import {
 } from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { detailsUrl, resumeUrl, computeProgressBadge } from '../utils/continueWatching';
+import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
 
 const MEDIA_ICONS = {
@@ -412,24 +413,18 @@ function LibraryCard({ item, ratingScore }) {
 
 function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
   const stats = useMemo(() => {
-    const completed  = watchlist.filter(i => i.status === 'watched' || i.status === 'read').length;
-    const inProgress = watchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
+    // Rated titles move to Ratings & Reviews, so in-progress (a library-only
+    // status) is measured against the watchlist minus anything already rated.
+    const libraryWatchlist = excludeRated(watchlist, ratings);
+    const completed  = countCompleted(watchlist, ratings);
+    const inProgress = libraryWatchlist.filter(i => i.status === 'watching' || i.status === 'reading').length;
 
     const scores = ratings.map(r => computeStarRating(r.media_type, r)).filter(s => s != null);
     const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
 
-    // The catalog has no per-title runtime data, so estimate: watched
-    // movies at ~115 min each, tracked TV progress at ~45 min/episode
-    // assuming ~10 episodes per season.
-    let minutes = 0;
-    watchlist.forEach(i => {
-      if (i.media_type === 'movie' && i.status === 'watched') minutes += 115;
-      if (i.media_type === 'tv_show') {
-        const season  = Number(i.current_season)  || 0;
-        const episode = Number(i.current_episode) || 0;
-        if (season || episode) minutes += (Math.max(season - 1, 0) * 10 + episode) * 45;
-      }
-    });
+    // Watch time counts both watchlist progress and rated titles (a rating
+    // means it was watched, even if never marked "watched" in the library).
+    const minutes = computeWatchMinutes(watchlist, ratings);
 
     return { completed, inProgress, avg, minutes, totalRatings: ratings.length };
   }, [watchlist, ratings]);
@@ -481,7 +476,9 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
 function LibrarySection({ watchlist, ratings, loading }) {
   const [wlTypeFilter, setWlTypeFilter] = useState('');
 
-  const filteredWatchlist = watchlist.filter(item => {
+  // Rated titles belong to Ratings & Reviews, not the library grid.
+  const libraryWatchlist = excludeRated(watchlist, ratings);
+  const filteredWatchlist = libraryWatchlist.filter(item => {
     return !wlTypeFilter || item.media_type === wlTypeFilter;
   });
 

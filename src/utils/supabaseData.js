@@ -964,9 +964,11 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
     throw new Error('Invalid media type.');
   }
 
+  const profileId = getActiveProfileId();
+
   const payload = {
     user_id: authUser.id,
-    profile_id: getActiveProfileId(),
+    profile_id: profileId,
     media_id: Number(mediaId),
   };
 
@@ -991,6 +993,25 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
 
   if (media) {
     cacheMediaMetadata(mediaType, media);
+  }
+
+  // A rated title lives in the "Ratings & Reviews" section, so remove it from
+  // the watchlist/library to avoid showing it in both places. Best-effort —
+  // the client-side rated-item filter reconciles the view even if this fails,
+  // so a delete error must not fail the rating save itself.
+  try {
+    let deleteQuery = client
+      .from('watchlist')
+      .delete()
+      .eq('user_id', authUser.id)
+      .eq('media_type', mediaType)
+      .eq('media_id', Number(mediaId));
+    deleteQuery = profileId
+      ? deleteQuery.eq('profile_id', profileId)
+      : deleteQuery.is('profile_id', null);
+    await deleteQuery;
+  } catch {
+    // Ignored — reconciled on next load by the rated-item filter.
   }
 
   // Rating UI can live far from where a rating gets saved (e.g. Home's
