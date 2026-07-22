@@ -15,6 +15,7 @@ import {
 } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import { computeProgressBadge } from '../utils/continueWatching';
+import { excludeRated, countCompleted } from '../utils/libraryStats';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
 
@@ -361,13 +362,17 @@ export default function Profile() {
     removeSupabaseWatchlistItem(item.id).catch((error) => window.alert(error.message));
   }
 
+  // Rated titles move to the Ratings & Reviews tab, so exclude them from the
+  // watchlist tab (display, count, and the in-progress stat).
+  const libraryWatchlist = useMemo(() => excludeRated(watchlist, ratings), [watchlist, ratings]);
+
   const stats = useMemo(() => {
-    const completed = watchlist.filter((i) => i.status === 'watched' || i.status === 'read').length;
-    const inProgress = watchlist.filter((i) => i.status === 'watching' || i.status === 'reading').length;
+    const completed = countCompleted(watchlist, ratings);
+    const inProgress = libraryWatchlist.filter((i) => i.status === 'watching' || i.status === 'reading').length;
     const scores = ratings.map((r) => computeStarRating(r.media_type, r)).filter((s) => s != null);
     const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
     return { completed, inProgress, avg, totalRatings: ratings.length };
-  }, [watchlist, ratings]);
+  }, [watchlist, ratings, libraryWatchlist]);
 
   return (
     <div className="app-layout">
@@ -411,7 +416,7 @@ export default function Profile() {
               className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
               onClick={() => setActiveTab('watchlist')}
             >
-              Watchlist <span className="tab-count">{watchlist.length}</span>
+              Watchlist <span className="tab-count">{libraryWatchlist.length}</span>
             </button>
             <button
               type="button"
@@ -424,7 +429,7 @@ export default function Profile() {
 
           {activeTab === 'watchlist' ? (
             <WatchlistTab
-              items={watchlist}
+              items={libraryWatchlist}
               loading={loading}
               location={location}
               typeFilter={wlTypeFilter}
