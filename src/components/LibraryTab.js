@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { X } from '@phosphor-icons/react';
 import {
   searchGutenberg,
   getGutenbergReaderUrl,
@@ -36,7 +37,7 @@ function BookReader({ book, onClose }) {
   return (
     <div className="manga-reader-overlay">
       <div className="manga-reader-header">
-        <button className="manga-reader-close" onClick={onClose} title="Close">✕</button>
+        <button className="manga-reader-close" onClick={onClose} title="Close"><X size={16} weight="bold" /></button>
         <div className="manga-reader-title">
           <span className="manga-reader-manga-name">{book.title}</span>
           {book.authors && (

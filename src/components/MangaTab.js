@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { X } from '@phosphor-icons/react';
 import { SOURCES, searchBySource, popularBySource, chaptersBySource, pagesBySource } from '../utils/mangaSources';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
@@ -87,7 +88,7 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
   return (
     <div className="manga-reader-overlay">
       <div className="manga-reader-header">
-        <button className="manga-reader-close" onClick={onClose} title="Close">✕</button>
+        <button className="manga-reader-close" onClick={onClose} title="Close"><X size={16} weight="bold" /></button>
         <div className="manga-reader-title">
           <span className="manga-reader-manga-name">{comic.title}</span>
           <span className="manga-reader-chapter-name">{chapterLabel}</span>
@@ -368,7 +369,7 @@ function ChapterModal({ comic, source, onClose, onRead }) {
   return (
     <div className="manga-detail-overlay" onClick={onClose}>
       <div className="manga-detail-modal manga-detail-modal--wide" onClick={e => e.stopPropagation()}>
-        <button className="manga-detail-close" onClick={onClose}>✕</button>
+        <button className="manga-detail-close" onClick={onClose}><X size={16} weight="bold" /></button>
 
         {/* ── Top section: cover + info ── */}
         <div className="manga-detail-top">

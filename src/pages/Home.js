@@ -16,7 +16,7 @@ import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { detailsUrl, resumeUrl, computeProgressBadge } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
-import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
+import { FilmSlate, MonitorPlay, BookOpen, X } from '@phosphor-icons/react';
 
 const MEDIA_ICONS = {
   movie: FilmSlate,
@@ -200,7 +200,7 @@ function ContinueWatchingCard({ item, onRemove, priority }) {
         aria-label={`Remove ${item.title} from Continue Watching`}
         onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
       >
-        ✕
+        <X size={11} weight="bold" />
       </button>
     </div>
   );

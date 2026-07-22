@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   fetchEpisodeProgress,
@@ -562,7 +563,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape">
               ⤢
             </button>
-            <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close">✕</button>
+            <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close"><X size={16} weight="bold" /></button>
           </div>
         </div>
 
@@ -597,7 +598,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               </button>
             )}
             {isTV && <span className="mp-ls-ep-badge">S{season} E{episode}</span>}
-            <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close">✕</button>
+            <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close"><X size={16} weight="bold" /></button>
           </div>
 
           {/* Landscape episode/source picker — slides up from bottom of video area */}
