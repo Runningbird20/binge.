@@ -34,6 +34,11 @@ import ThemedSelect from '../components/ThemedSelect';
 import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 
+// How many grid tiles get loading="eager" + high fetch priority. Covers the
+// first visible row across common viewport widths so the browser starts
+// fetching what's actually on screen immediately instead of waiting on the
+// lazy-load IntersectionObserver trigger.
+const EAGER_POSTER_COUNT = 8;
 // Random-window sampling (same technique as Movies/Series): jump to random
 // pages across the catalog instead of paging alphabetically, so the shelf
 // mixes titles with no obvious order.
@@ -87,7 +92,7 @@ const ARCHIVE_DOWNLOAD_EXTENSIONS = {
   txt: ['.txt', '.text'],
 };
 
-function BookCoverImage({ book, imageClassName, placeholderClassName }) {
+function BookCoverImage({ book, imageClassName, placeholderClassName, priority }) {
   const [coverUrl, setCoverUrl] = useState(() => getCoverUrl(book));
 
   useEffect(() => {
@@ -107,7 +112,8 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
       src={coverUrl}
       alt={book.title}
       className={imageClassName}
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setCoverUrl('')}
@@ -115,7 +121,7 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
   );
 }
 
-function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange }) {
+function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange, priority }) {
   const [freeEdition, setFreeEdition] = useState(false);
 
   useEffect(() => {
@@ -141,6 +147,7 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
             book={book}
             imageClassName=""
             placeholderClassName="poster-tile-placeholder"
+            priority={priority}
           />
           {freeEdition && (
             <span
@@ -1151,7 +1158,7 @@ export default function Books() {
             ) : (
               <>
                 <div className="poster-grid">
-                  {visibleBooks.map((book) => (
+                  {visibleBooks.map((book, index) => (
                     <BookPosterTile
                       key={book.id}
                       book={book}
@@ -1160,6 +1167,7 @@ export default function Books() {
                       addingWatchlist={addingBookId === book.id}
                       onAddWatchlist={handleAddToLibrary}
                       onStatusChange={handleQuickStatusChange}
+                      priority={index < EAGER_POSTER_COUNT}
                     />
                   ))}
                 </div>

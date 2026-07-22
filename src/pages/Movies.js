@@ -32,6 +32,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 
 const PAGE_SIZE = 48;
+// How many grid tiles get loading="eager" + high fetch priority. Covers the
+// first visible row across common viewport widths so the browser starts
+// fetching what's actually on screen immediately instead of waiting on the
+// lazy-load IntersectionObserver trigger.
+const EAGER_POSTER_COUNT = 8;
 // Random-window sampling (borrowed from the recommendation engine): instead of
 // paging through the catalog in a fixed order, jump to random offsets so the
 // grid mixes eras and titles with no obvious order.
@@ -98,7 +103,7 @@ function resolvePosterUrl(url) {
   return url;
 }
 
-function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange }) {
+function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange, priority }) {
   const [imgError, setImgError] = useState(false);
   const posterUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
   const isNew = Number(item.year) >= new Date().getFullYear();
@@ -111,7 +116,8 @@ function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatch
             <img
               src={posterUrl}
               alt={item.title}
-              loading="lazy"
+              loading={priority ? 'eager' : 'lazy'}
+              fetchPriority={priority ? 'high' : 'auto'}
               decoding="async"
               referrerPolicy="no-referrer"
               onError={() => setImgError(true)}
@@ -593,7 +599,7 @@ function CatalogView({
       ) : (
         <>
           <div className="poster-grid">
-            {visibleItems.map((movie) => (
+            {visibleItems.map((movie, index) => (
               <PosterTile
                 key={movie.id}
                 item={movie}
@@ -602,6 +608,7 @@ function CatalogView({
                 addingWatchlist={addingWatchlistIds.has(movie.id)}
                 onAddWatchlist={onQuickAdd}
                 onStatusChange={onQuickStatusChange}
+                priority={index < EAGER_POSTER_COUNT}
               />
             ))}
           </div>
