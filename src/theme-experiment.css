@@ -652,6 +652,11 @@ body {
   top: calc(64px + env(safe-area-inset-top, 0px));
   z-index: 15;
   padding: 0.6rem 1.5rem 0.9rem;
+  /* Opaque near the navbar, fading out toward the bottom edge, so once
+     stuck this reads as one continuous panel attached to the navbar
+     instead of a transparent row of chips floating over whatever grid
+     content scrolls up underneath it. */
+  background: linear-gradient(to bottom, var(--exp-bg-0) 70%, rgba(11, 13, 18, 0));
 }
 
 /* Scroll fade — softly dissolves the chip row into whatever is behind it
