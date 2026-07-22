@@ -32,7 +32,13 @@ import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGrou
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
+import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 
+// How many grid tiles get loading="eager" + high fetch priority. Covers the
+// first visible row across common viewport widths so the browser starts
+// fetching what's actually on screen immediately instead of waiting on the
+// lazy-load IntersectionObserver trigger.
+const EAGER_POSTER_COUNT = 8;
 // Random-window sampling (same technique as Movies/Series): jump to random
 // pages across the catalog instead of paging alphabetically, so the shelf
 // mixes titles with no obvious order.
@@ -86,7 +92,7 @@ const ARCHIVE_DOWNLOAD_EXTENSIONS = {
   txt: ['.txt', '.text'],
 };
 
-function BookCoverImage({ book, imageClassName, placeholderClassName }) {
+function BookCoverImage({ book, imageClassName, placeholderClassName, priority }) {
   const [coverUrl, setCoverUrl] = useState(() => getCoverUrl(book));
 
   useEffect(() => {
@@ -106,7 +112,8 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
       src={coverUrl}
       alt={book.title}
       className={imageClassName}
-      loading="lazy"
+      loading={priority ? 'eager' : 'lazy'}
+      fetchPriority={priority ? 'high' : 'auto'}
       decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setCoverUrl('')}
@@ -114,7 +121,7 @@ function BookCoverImage({ book, imageClassName, placeholderClassName }) {
   );
 }
 
-function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange }) {
+function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange, priority }) {
   const [freeEdition, setFreeEdition] = useState(false);
 
   useEffect(() => {
@@ -140,6 +147,7 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
             book={book}
             imageClassName=""
             placeholderClassName="poster-tile-placeholder"
+            priority={priority}
           />
           {freeEdition && (
             <span
@@ -667,13 +675,27 @@ export default function Books() {
     emptyBatchesRef.current = 0;
     const fetchHadGenreFilter = genreValues.length > 0;
     const fetchHadFilter = fetchHadGenreFilter || Boolean(searchTerm);
+    const cacheKey = buildCatalogCacheKey('book', { genreValues, searchTerm, sortMode });
 
-    setLoading(true);
     setLoadingMore(false);
-    setBooks([]);
-    setTotal(0);
-    setUsingFallbackCatalog(false);
     setRenderedCount(VISIBLE_BATCH_SIZE);
+
+    // Stale-while-revalidate: if we've loaded this exact browse state before
+    // this session, show it instantly instead of a blank skeleton, then
+    // still refresh in the background below so it doesn't go stale.
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setLoading(false);
+      setBooks(cached.items);
+      setTotal(cached.total);
+      setUsingFallbackCatalog(cached.usingFallbackCatalog);
+      sourceRef.current = cached.source;
+    } else {
+      setLoading(true);
+      setBooks([]);
+      setTotal(0);
+      setUsingFallbackCatalog(false);
+    }
 
     function adoptGenres(fetchedGenres) {
       if (!Array.isArray(fetchedGenres) || fetchedGenres.length === 0) return;
@@ -682,6 +704,16 @@ export default function Books() {
         // Bail out on an equal-content array so this doesn't retrigger the
         // fetch effect below (genreValues derives from allGenres via genreGroups).
         return sameGenreList(current, fetchedGenres) ? current : fetchedGenres;
+      });
+    }
+
+    function persistCache(itemsSnapshot, totalSnapshot, genresSnapshot, isFallback) {
+      setCached(cacheKey, {
+        items: itemsSnapshot,
+        total: totalSnapshot,
+        allGenres: Array.isArray(genresSnapshot) ? genresSnapshot : [],
+        usingFallbackCatalog: Boolean(isFallback),
+        source: sourceRef.current,
       });
     }
 
@@ -701,6 +733,7 @@ export default function Books() {
           setTotal(totalCount);
           setBooks(page.items);
           setLoading(false);
+          persistCache(page.items, totalCount, page.facets?.genres, false);
           return;
         } catch {
           // Fall through to the legacy API, then the bundled snapshot below.
@@ -728,14 +761,17 @@ export default function Books() {
         if (totalCount === 0) {
           setBooks([]);
           setLoading(false);
+          persistCache([], 0, probe?.facets?.genres, false);
           return;
         }
 
         const firstBatch = await fetchSupabaseWindows({ totalCount });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
-        setBooks(appendUniqueBooks([], firstBatch));
+        const nextBooks = appendUniqueBooks([], firstBatch);
+        setBooks(nextBooks);
         setLoading(false);
+        persistCache(nextBooks, totalCount, probe?.facets?.genres, false);
         return;
       } catch {
         // Fall through to the legacy API, then the bundled snapshot.
@@ -752,9 +788,12 @@ export default function Books() {
 
         adoptGenres(data.facets.genres);
         sourceRef.current = { mode: 'api', totalPages: data.totalPages, nextPage: 2 };
-        setTotal(data.total || data.items.length);
-        setBooks(orderBatch(data.items));
+        const orderedItems = orderBatch(data.items);
+        const totalCount = data.total || data.items.length;
+        setTotal(totalCount);
+        setBooks(orderedItems);
         setLoading(false);
+        persistCache(orderedItems, totalCount, data.facets.genres, false);
         return;
       } catch {
         // Fall through to the bundled snapshot.
@@ -778,6 +817,7 @@ export default function Books() {
         setBooks(orderBatch(pool.items));
         setUsingFallbackCatalog(true);
         setLoading(false);
+        // Not cached — see the equivalent note in Movies.js's loadCatalog.
       } catch {
         if (cancelled || requestTokenRef.current !== requestToken) return;
         setBooks([]);
@@ -1118,7 +1158,7 @@ export default function Books() {
             ) : (
               <>
                 <div className="poster-grid">
-                  {visibleBooks.map((book) => (
+                  {visibleBooks.map((book, index) => (
                     <BookPosterTile
                       key={book.id}
                       book={book}
@@ -1127,6 +1167,7 @@ export default function Books() {
                       addingWatchlist={addingBookId === book.id}
                       onAddWatchlist={handleAddToLibrary}
                       onStatusChange={handleQuickStatusChange}
+                      priority={index < EAGER_POSTER_COUNT}
                     />
                   ))}
                 </div>

@@ -10,6 +10,18 @@
     <meta name="theme-color" content="#111111" />
     <meta name="description" content="binge. — a media journal for tracking movies, TV shows, and books with friends." />
 
+    <!--
+      Preconnect to hosts the first paint depends on, so the DNS/TLS
+      handshake happens in parallel with the app bundle downloading instead
+      of serially after the first Supabase call or poster image is
+      requested. image.tmdb.org and covers.openlibrary.org cover the two
+      catalog image sources with a fixed, well-known host; Plex-sourced
+      posters vary per deployment so they aren't preconnected here.
+    -->
+    <link rel="preconnect" href="%REACT_APP_SUPABASE_URL%" crossorigin />
+    <link rel="preconnect" href="https://image.tmdb.org" crossorigin />
+    <link rel="preconnect" href="https://covers.openlibrary.org" crossorigin />
+
     <!-- PWA / installability -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
