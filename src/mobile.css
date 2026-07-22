@@ -310,8 +310,10 @@
   .catalog-search-row { padding: 0 1rem 0.7rem; }
   .catalog-search-bar { max-width: none; }
 
-  .genre-bar-wrap {
+  .genre-bar-outer {
     top: calc(56px + env(safe-area-inset-top, 0px));
+  }
+  .genre-bar-wrap {
     padding: 0.5rem 1rem 0.7rem;
     --genre-edge-fade: 32px;
   }
