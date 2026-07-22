@@ -14,6 +14,7 @@ import {
 } from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { detailsUrl, resumeUrl, computeProgressBadge } from '../utils/continueWatching';
+import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
 
 const MEDIA_ICONS = {
@@ -559,10 +560,16 @@ export default function Home() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  const profileId = activeProfile?.id || null;
+
   // Lifted out of the mount effect (rather than an inline async function
   // inside it) so pull-to-refresh can call the exact same fetch again later.
+  // Stale-while-revalidate: the mount effect below hydrates instantly from
+  // cache when there's a hit, but this function always does the real fetch
+  // and re-caches the result, so data self-heals within a session.
   const fetchStats = useCallback(async () => {
-    setDataLoading(true);
+    const cacheKey = buildUserDataCacheKey('home-stats', userId, profileId);
+    if (!getCached(cacheKey)) setDataLoading(true);
     try {
       const [ratingsResult, watchlistResult, continueWatchingResult] = await Promise.allSettled([
         fetchSupabaseRatings(),
@@ -581,6 +588,11 @@ export default function Home() {
       setWatchlistItems(nextWatchlist);
       setRatingsItems(nextRatings);
       setContinueWatchingItems(nextContinueWatching);
+      setCached(cacheKey, {
+        watchlistItems: nextWatchlist,
+        ratingsItems: nextRatings,
+        continueWatchingItems: nextContinueWatching,
+      });
     } catch {
       if (!mountedRef.current) return;
       setWatchlistItems([]);
@@ -589,12 +601,20 @@ export default function Home() {
     } finally {
       if (mountedRef.current) setDataLoading(false);
     }
-  }, []);
+  }, [userId, profileId]);
 
   useEffect(() => {
     if (authLoading || !userId) return;
+
+    const cached = getCached(buildUserDataCacheKey('home-stats', userId, profileId));
+    if (cached) {
+      setWatchlistItems(cached.watchlistItems);
+      setRatingsItems(cached.ratingsItems);
+      setContinueWatchingItems(cached.continueWatchingItems);
+      setDataLoading(false);
+    }
     fetchStats();
-  }, [authLoading, userId, fetchStats]);
+  }, [authLoading, userId, profileId, fetchStats]);
 
   const [foryouRefreshSignal, setForyouRefreshSignal] = useState(0);
 
