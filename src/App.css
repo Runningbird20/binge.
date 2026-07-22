@@ -8630,7 +8630,7 @@ select.filter-input,
 /* Sport type filter bar — reuses .genre-bar-wrap/.genre-bar/.genre-chip,
    same look as the Movies/TV/Books genre row (translucent-dark chips
    matching the navbar, with edge scroll fade). */
-.sports-shell .genre-bar-wrap { position: static; flex-shrink: 0; }
+.sports-shell .genre-bar-outer { position: static; flex-shrink: 0; }
 .sports-live-pill {
   flex-shrink: 0;
   background: rgba(239,68,68,0.15);
