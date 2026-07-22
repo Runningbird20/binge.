@@ -15,6 +15,7 @@ import {
 } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import { computeProgressBadge } from '../utils/continueWatching';
+import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
 
@@ -313,7 +314,7 @@ function RatingsTab({ items, loading, location, typeFilter, onTypeFilterChange, 
 }
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, activeProfile } = useAuth();
   const location = useLocation();
   const [watchlist, setWatchlist] = useState([]);
   const [ratings, setRatings] = useState([]);
@@ -324,24 +325,41 @@ export default function Profile() {
   const [ratingsTypeFilter, setRatingsTypeFilter] = useState('');
   const [ratingsSort, setRatingsSort] = useState('recent');
 
+  const userId = user?.id;
+  const profileId = activeProfile?.id || null;
+
   useEffect(() => {
     let cancelled = false;
+    const cacheKey = buildUserDataCacheKey('profile-stats', userId, profileId);
+
+    // Stale-while-revalidate: hydrate instantly from cache if we have it,
+    // then always still fetch fresh in the background to self-heal.
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setWatchlist(cached.watchlist);
+      setRatings(cached.ratings);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
 
     async function load() {
-      setLoading(true);
       const [watchlistResult, ratingsResult] = await Promise.allSettled([
         fetchSupabaseWatchlist(),
         fetchSupabaseRatings(),
       ]);
       if (cancelled) return;
-      setWatchlist(watchlistResult.status === 'fulfilled' ? watchlistResult.value : []);
-      setRatings(ratingsResult.status === 'fulfilled' ? ratingsResult.value : []);
+      const nextWatchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
+      const nextRatings = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
+      setWatchlist(nextWatchlist);
+      setRatings(nextRatings);
       setLoading(false);
+      setCached(cacheKey, { watchlist: nextWatchlist, ratings: nextRatings });
     }
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [userId, profileId]);
 
   function handleStatusChange(item, nextStatus) {
     setWatchlist((current) => current.map((entry) => (
