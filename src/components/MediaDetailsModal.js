@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
 import RateReviewPanel from './RateReviewPanel';
 import WatchlistStatusControl from './WatchlistStatusControl';
@@ -126,7 +127,7 @@ export default function MediaDetailsModal({
             onClick={onClose}
             aria-label="Close details"
           >
-            &times;
+            <X size={18} weight="bold" />
           </button>
 
           <div className="book-detail-cover-panel">

@@ -1930,6 +1930,9 @@ body {
   font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .book-detail-cover-panel {
@@ -5518,6 +5521,9 @@ body {
   cursor: pointer;
   padding: 0.25rem 0.5rem;
   border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: color 0.15s, background 0.15s;
 }
 .player-close:hover { color: #fff; background: #1e1e1e; }
@@ -9976,6 +9982,9 @@ select.filter-input,
   font-size: 1rem;
   cursor: pointer;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.15s, color 0.15s;
 }
 .manga-reader-close:hover { background: rgba(255,255,255,0.14); color: var(--exp-text); }

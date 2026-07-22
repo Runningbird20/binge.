@@ -6,6 +6,8 @@
 // Deliberately simpler than the full EmbedPlayer: no season/episode/source
 // switching here — those live on the title's own detail page. This is a
 // "keep watching while I browse" convenience, not a replacement for it.
+import { X } from '@phosphor-icons/react';
+
 export default function MiniPlayerWidget({ nowPlaying, minimized, onExpand, onMinimize, onClose }) {
   const { embedUrl, title, subtitle, poster } = nowPlaying;
 
@@ -40,7 +42,7 @@ export default function MiniPlayerWidget({ nowPlaying, minimized, onExpand, onMi
             if (event.key === 'Enter' || event.key === ' ') { event.stopPropagation(); onClose(); }
           }}
         >
-          ✕
+          <X size={14} weight="bold" />
         </span>
       </button>
     );
@@ -54,7 +56,7 @@ export default function MiniPlayerWidget({ nowPlaying, minimized, onExpand, onMi
         </button>
         <span className="mini-player-full-title">{title}</span>
         <button type="button" className="mini-player-full-btn" onClick={onClose} aria-label="Close">
-          ✕
+          <X size={16} weight="bold" />
         </button>
       </div>
       <div className="mini-player-full-frame">

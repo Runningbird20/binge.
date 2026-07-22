@@ -312,7 +312,7 @@ export function BookDetailsModal({
             onClick={onClose}
             aria-label="Close book details"
           >
-            &times;
+            <X size={18} weight="bold" />
           </button>
 
           <div className="book-detail-cover-panel">
@@ -506,7 +506,7 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
                 {isFullscreen ? '⊠' : '⊞'}
               </button>
             )}
-            <button className="player-close" onClick={onClose} title="Close">✕</button>
+            <button className="player-close" onClick={onClose} title="Close"><X size={16} weight="bold" /></button>
           </div>
         </div>
 
