@@ -1,3 +1,4 @@
+import { Plus } from '@phosphor-icons/react';
 import ThemedSelect from './ThemedSelect';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 
@@ -27,7 +28,9 @@ export default function WatchlistStatusControl({
         title="Add to library"
         aria-label="Add to library"
       >
-        {adding ? '…' : '+'}
+        {/* SVG plus (not a "+" text glyph) so it's geometrically centered in
+            the round button regardless of the font's plus-sign metrics. */}
+        {adding ? '…' : <Plus size={15} weight="bold" />}
       </button>
     );
   }
