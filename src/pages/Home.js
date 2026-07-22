@@ -156,13 +156,15 @@ function StreamHero({ user, activeProfile, continueWatchingItems, watchlistItems
           src={poster}
           alt={heroItem.title}
           referrerPolicy="no-referrer"
+          loading="eager"
+          fetchPriority="high"
         />
       )}
     </section>
   );
 }
 
-function ContinueWatchingCard({ item, onRemove }) {
+function ContinueWatchingCard({ item, onRemove, priority }) {
   const location = useLocation();
   const poster = resolvePosterUrl(item.image_url || item.poster_url);
   const url = resumeUrl(item);
@@ -173,7 +175,16 @@ function ContinueWatchingCard({ item, onRemove }) {
       <Link to={url} className="profile-wl-card profile-wl-card--own" state={{ backgroundLocation: location }}>
         <div className="profile-wl-poster">
           {poster
-            ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+            ? (
+              <img
+                src={poster}
+                alt={item.title}
+                referrerPolicy="no-referrer"
+                loading={priority ? 'eager' : 'lazy'}
+                fetchPriority={priority ? 'high' : 'auto'}
+                decoding="async"
+              />
+            )
             : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>
           }
           {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
@@ -209,8 +220,8 @@ function ContinueWatching({ items, onRemove }) {
       </div>
       <div className="mr-track-wrap">
         <div className="profile-watchlist-row" ref={cwRowRef}>
-          {items.map(item => (
-            <ContinueWatchingCard key={item.id} item={item} onRemove={onRemove} />
+          {items.map((item, index) => (
+            <ContinueWatchingCard key={item.id} item={item} onRemove={onRemove} priority={index < 4} />
           ))}
         </div>
         {cwCanLeft && <div className="mr-fade mr-fade-left" />}
@@ -233,7 +244,7 @@ function ForYouCard({ rec }) {
     <Link to={rec.siteUrl} className="foryou-card" state={{ backgroundLocation: location }}>
       <div className="foryou-card-poster">
         {rec.posterUrl ? (
-          <img src={rec.posterUrl} alt={rec.title} />
+          <img src={rec.posterUrl} alt={rec.title} loading="lazy" decoding="async" />
         ) : (
           <div className="foryou-card-placeholder"><MediaTypeIcon type={rec.media_type} size={28} /></div>
         )}
@@ -395,7 +406,7 @@ function LibraryCard({ item, ratingScore }) {
     >
       <div className="profile-wl-poster">
         {poster
-          ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
+          ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" loading="lazy" decoding="async" />
           : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>}
         {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
         {ratingOutOfFive != null && (
