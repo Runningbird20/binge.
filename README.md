@@ -18,13 +18,16 @@ A media-tracking web app for movies, TV shows, and books. Users build a personal
 ## Features
 
 **Content Browsing**
-- Movies, TV shows, and books with search, filtering, and detail modals
+- Movies, series, and books with search, filtering, and detail modals
 - Global search across all media (Cmd+K or S)
+- Live Sports — browse live/upcoming games and open a stream
 
 **Personal Tracking**
 - Watchlist with status per item (Plan to Watch / Watching / Watched, and reading equivalents)
-- Progress tracking — season/episode for TV, chapter/page for books
+- Progress tracking — season/episode for series, chapter/page for books
+- Continue Watching row to resume a title from where you left off
 - Star and numeric ratings for all media types
+- Rating a title moves it into your Ratings & Reviews section and counts toward your watch-time stats
 - Personal ratings page with sort and filter
 
 **Social**
@@ -44,6 +47,8 @@ A media-tracking web app for movies, TV shows, and books. Users build a personal
 - User management — view, search, promote/demote admin, create and delete accounts, last login timestamp
 - Media request queue — approve or reject user submissions
 
-**PWA**
+**PWA & Performance**
 - Installable as a home screen app on mobile (standalone display mode)
 - Proper Open Graph and Apple touch icon metadata
+- Service worker caches poster/cover art and app assets for fast repeat loads
+- In-session caching of catalog and profile data so revisited pages load instantly

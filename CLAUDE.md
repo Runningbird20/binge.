@@ -57,6 +57,25 @@ Several components render a completely different implementation on mobile rather
 
 `src/utils/recommendations.js` implements the "For You" taste-matching purely client-side (or Supabase-function-side) over a user's own ratings — no external ML service. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
 
+### Caching & load performance
+
+Two independent cache layers exist to cut catalog/image load times. Neither is a build concern, but both change how data freshness behaves, so know which one you're touching:
+
+1. **Service worker (`public/sw.js`)** — cache-first for poster/cover images *regardless of origin* (they come from TMDB/Plex/Open Library/Supabase storage, all cross-origin, so the same-origin static-asset rule can't catch them), held in a separate `binge-images-v*` cache with a rough insertion-order size cap; cache-first for same-origin static assets (JS/CSS/fonts); network-first for HTML. It also does lightweight ad host/path blocking. **Any behavior change here needs a `CACHE_NAME` / `IMAGE_CACHE_NAME` version bump** so existing clients pick it up on their next load.
+2. **`src/utils/sessionCache.js`** — an in-memory, per-tab (module-level `Map`) stale-while-revalidate cache for *page-level* data: the Movies/TVShows/Books catalog browse results (keyed by `buildCatalogCacheKey` over filters + sort + search + kids-mode) and the Home/Profile user-data fetches (keyed by `buildUserDataCacheKey` over namespace + userId + profileId). Callers hydrate instantly from the cache when present (skipping the spinner) then always refetch in the background and re-cache. It is deliberately not persisted (cleared on a full reload), and the bundled static fallback-catalog tier is intentionally never cached (so a transient outage's placeholder data can't get stuck).
+
+`public/index.html` also carries `<link rel="preconnect">` hints for the Supabase host + image CDNs, and the first row of catalog/Home posters uses `loading="eager"` + `fetchPriority="high"` while everything below stays `loading="lazy"`.
+
+### Library, ratings & watch-time stats
+
+A rated title is treated as watched and belongs in the "Ratings & Reviews" section, **not** the watchlist/library:
+- `saveSupabaseRating` (`src/utils/supabaseData.js`) deletes the matching watchlist row after saving a rating (best-effort — a delete failure must not fail the save).
+- `src/utils/libraryStats.js` centralizes the dashboard math shared by Home (`ProfileStatsHeader` / `LibrarySection`) and Profile: `excludeRated` hides rated titles from the library view, `computeWatchMinutes` counts both watchlist progress and rated titles toward watch time (deduped, since rating a title you'd already tracked must not double-count), and `countCompleted` counts watched/read + rated titles. If you change what "counts" as watched or completed, do it here so both dashboards stay in sync.
+
+### Icons
+
+UI icons come from `@phosphor-icons/react` as SVG components, not text glyphs — a glyph like `+`/`✕` in a round button isn't reliably centered by the font, so close/add/remove buttons render `<Plus>` / `<X>` inside a flex-centered button instead.
+
 ### Environment variables
 
 - `REACT_APP_SUPABASE_URL` / `REACT_APP_SUPABASE_ANON_KEY` (or `_PUBLISHABLE_KEY`) — required, browser-safe.
