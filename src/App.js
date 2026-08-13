@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { MiniPlayerProvider } from './contexts/MiniPlayerContext';
@@ -156,6 +157,7 @@ export default function App() {
           </BrowserRouter>
         </MiniPlayerProvider>
       </ToastProvider>
+      <Analytics />
     </AuthProvider>
   );
 }
