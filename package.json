@@ -80,8 +80,8 @@
     "db:init": "node scripts/migrate-standalone.js --schema-only",
     "db:migrate:catalog": "node scripts/migrate-standalone.js backups/catalog-export-2026-09-22 --catalog-only",
     "sync:catalog": "node scripts/sync-catalog.js",
-    "predeploy": "npm run build && cp build/index.html build/404.html",
-    "deploy": "gh-pages -d build"
+    "predeploy": "npm run build && cp build/index.html build/404.html && touch build/.nojekyll",
+    "deploy": "gh-pages -d build -t"
   },
   "eslintConfig": {
     "extends": [
