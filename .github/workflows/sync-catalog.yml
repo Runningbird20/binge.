@@ -1,0 +1,72 @@
+name: Sync Media Catalog (Movies, Series, Books, Manga)
+
+# Runs twice a week (Mon/Thu) on GitHub's servers
+# Syncs movies, TV shows, books, and manga directly into the standalone
+# PostgreSQL database (binge.records).
+#
+# First-time setup — add these secrets in your repo settings:
+#   Settings → Secrets and variables → Actions → New repository secret
+#
+#   DATABASE_URL              PostgreSQL connection string (e.g. Neon, self-hosted, etc.)
+#   TMDB_API_KEY              v3 API key  — themoviedb.org/settings/api
+#   TMDB_READ_TOKEN           v4 Read Access Token (the long eyJ… JWT on the same page)
+
+on:
+  schedule:
+    - cron: '0 9 * * 1,4'   # Monday and Thursday at 09:00 UTC
+  workflow_dispatch:          # run manually from the Actions tab any time
+
+jobs:
+  sync:
+    name: Catalog Sync → PostgreSQL Database
+    runs-on: ubuntu-latest
+    timeout-minutes: 90       # hard stop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: scripts/package.json
+
+      - name: Install sync dependencies
+        run: npm install
+        working-directory: scripts
+
+      - name: Sync Media from Video Servers (VidSrc)
+        run: node scripts/sync-catalog.js --type vidsrc
+        env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+
+      - name: Sync Movies (TMDB)
+        run: node scripts/sync-catalog.js --type movie
+        env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+          TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
+          TMDB_READ_TOKEN:           ${{ secrets.TMDB_READ_TOKEN }}
+          MAX_DETAILS_PER_RUN:       '5000'
+          MIN_POPULARITY:            '1'
+
+      - name: Sync TV Shows (TMDB)
+        run: node scripts/sync-catalog.js --type tv
+        env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+          TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
+          TMDB_READ_TOKEN:           ${{ secrets.TMDB_READ_TOKEN }}
+          MAX_DETAILS_PER_RUN:       '5000'
+          MIN_POPULARITY:            '1'
+
+      - name: Sync Books (Open Library)
+        run: node scripts/sync-catalog.js --type books
+        env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+
+      - name: Sync Manga (MangaDex)
+        run: node scripts/sync-catalog.js --type manga
+        env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+
