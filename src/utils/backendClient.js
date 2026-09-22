@@ -4,13 +4,14 @@ import { getActiveProfileId } from './activeProfile';
 export const standaloneMode = true;
 const listeners = new Set();
 let sessionPromise = null;
+const API_BASE = (process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
 
 export async function backendRequest(path, { method = 'GET', body, raw = false } = {}) {
   try {
     const profile = getActiveProfileId();
-    const response = await fetch(`/api${path}`, {
+    const response = await fetch(`${API_BASE}/api${path}`, {
       method,
-      credentials: 'same-origin',
+      credentials: API_BASE ? 'include' : 'same-origin',
       headers: {
         'X-Binge-Request': '1',
         ...(profile ? { 'X-Binge-Profile': profile } : {}),
