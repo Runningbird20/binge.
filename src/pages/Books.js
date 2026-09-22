@@ -1,3 +1,4 @@
+import { normalizeMediaId } from '../utils/mediaId';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
@@ -557,7 +558,7 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
 
 export default function Books() {
   const [searchParams] = useSearchParams();
-  const openId = Number(searchParams.get('open'));
+  const openId = normalizeMediaId(searchParams.get('open'));
   const [activeTab, setActiveTab] = useState('books');
 
   const [books, setBooks] = useState([]);

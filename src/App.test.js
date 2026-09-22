@@ -824,3 +824,44 @@ test('shows a back to top arrow after scrolling the books page', async () => {
   watchlistSpy.mockRestore();
   ratingMapSpy.mockRestore();
 });
+
+test.each([
+  ['movies', Movies, 'fetchSupabaseMovieCatalogSegment'],
+  ['series', TVShows, 'fetchSupabaseTvShowCatalogSegment'],
+])('shows %s before discovery requests finish without restarting after genre discovery', async (_, Page, fetchMethod) => {
+  const previousObserver = global.ResizeObserver;
+  global.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+    unobserve() {}
+  };
+  const auth = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+    user: { id: 'latency-test', username: 'Viewer' }, authLoading: false,
+  });
+  const ratings = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const watchlist = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlistStatusMap').mockResolvedValue({});
+  const catalog = jest.spyOn(supabaseCatalogModule, fetchMethod).mockImplementation(({ includeCount }) => (
+    includeCount
+      ? Promise.resolve({
+        items: [{ id: 'fast-title', title: 'Immediately visible', genre: 'Drama', year: 2020 }],
+        total: 1000,
+        facets: { genres: ['Drama'] },
+      })
+      : new Promise(() => {})
+  ));
+  let view;
+  try {
+    view = render(<Page />);
+    expect(await screen.findByText('Immediately visible')).toBeInTheDocument();
+    expect(catalog.mock.calls.filter(([args]) => args.includeCount)).toHaveLength(1);
+    expect(catalog.mock.calls[0][0].limit).toBeGreaterThan(1);
+    expect(catalog.mock.calls.some(([args]) => !args.includeCount)).toBe(true);
+  } finally {
+    view?.unmount();
+    auth.mockRestore();
+    ratings.mockRestore();
+    watchlist.mockRestore();
+    catalog.mockRestore();
+    global.ResizeObserver = previousObserver;
+  }
+});

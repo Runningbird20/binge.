@@ -1,3 +1,4 @@
+import { createBackendClient, standaloneMode } from './backendClient';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL_ENV_KEYS = [
@@ -47,9 +48,9 @@ export const supabaseEnv = {
   anonKeyKey: resolvedSupabaseAnonKey.key,
 };
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
+export const isSupabaseConfigured = standaloneMode || Boolean(supabaseUrl && supabaseKey);
 
-export const supabase = isSupabaseConfigured
+export const supabase = standaloneMode ? createBackendClient() : isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
@@ -60,6 +61,7 @@ export const supabase = isSupabaseConfigured
 // own session untouched.
 let sessionlessClient = null;
 export function getSessionlessSupabaseClient() {
+  if (standaloneMode) return createBackendClient({ admin: true });
   if (!isSupabaseConfigured) {
     throw new Error(getSupabaseConfigErrorMessage());
   }
@@ -336,6 +338,7 @@ function buildFunctionErrorMessage(response, data) {
 }
 
 export async function invokeSupabaseFunction(functionName, body) {
+  if (standaloneMode) throw new Error(`The function ${functionName} is not available on the standalone backend.`);
   if (!isSupabaseConfigured || !supabase) {
     throw new Error(getSupabaseConfigErrorMessage());
   }

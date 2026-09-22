@@ -6,3 +6,5 @@ server-live.stdout.log
 *.db
 *.db-shm
 *.db-wal
+
+backups

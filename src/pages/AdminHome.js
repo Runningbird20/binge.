@@ -1,3 +1,4 @@
+import { standaloneMode } from '../utils/backendClient';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
@@ -57,7 +58,7 @@ export default function AdminHome() {
             <h3>🟢 System Status</h3>
             <div className="admin-status-items">
               <div className="admin-status-item"><span className="admin-status-dot green" />Express API</div>
-              <div className="admin-status-item"><span className="admin-status-dot green" />SQLite Database</div>
+              <div className="admin-status-item"><span className="admin-status-dot green" />{standaloneMode ? 'PostgreSQL Database' : 'SQLite Database'}</div>
               <div className="admin-status-item"><span className="admin-status-dot green" />Admin Routes</div>
             </div>
           </div>

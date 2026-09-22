@@ -1,3 +1,4 @@
+import { normalizeMediaId } from './mediaId';
 const STORAGE_KEY = 'binge.mediaMetadata.v1';
 const memoryCache = new Map();
 
@@ -11,8 +12,8 @@ function normalizeYear(value) {
 }
 
 function toCacheKey(mediaType, mediaId) {
-  const normalizedId = Number(mediaId);
-  if (!mediaType || !Number.isFinite(normalizedId)) {
+  const normalizedId = normalizeMediaId(mediaId);
+  if (!mediaType || normalizedId == null) {
     return null;
   }
 
@@ -50,8 +51,8 @@ function writeStore(store) {
 }
 
 function normalizeMediaMetadata(mediaType, item) {
-  const id = Number(item?.media_id ?? item?.id);
-  if (!mediaType || !Number.isFinite(id)) {
+  const id = normalizeMediaId(item?.media_id ?? item?.id);
+  if (!mediaType || id == null) {
     return null;
   }
 

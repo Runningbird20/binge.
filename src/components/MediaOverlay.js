@@ -1,3 +1,4 @@
+import { normalizeMediaId } from '../utils/mediaId';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
@@ -37,7 +38,7 @@ export default function MediaOverlay({ mediaType }) {
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
   const initialSeason = searchParams.get('season') || undefined;
   const initialEpisode = searchParams.get('episode') || undefined;
-  const numericId = Number(id);
+  const numericId = normalizeMediaId(id);
   const config = CONFIG[mediaType];
 
   const [item, setItem] = useState(null);
