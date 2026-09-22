@@ -1,6 +1,6 @@
 // Tracks which account_profiles row is "active" right now — read internally
 // by the watchlist/ratings/continue-watching/episode-progress functions in
-// supabaseData.js so every one of their many existing call sites across the
+// userData.js so every one of their many existing call sites across the
 // app keeps working unchanged, instead of threading a profileId parameter
 // through all of them individually.
 let activeProfileId = null;

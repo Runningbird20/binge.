@@ -4,7 +4,7 @@ These files capture manual QA and regression scenarios for the hidden Developer 
 
 Files:
 
-- `ai-chatbot.edge-cases.json`: Startup, validation, upstream failure, search, and deployment edge cases for the chatbot request flow. The current UI calls the `ai-chatbot` function name, while the checked-in edge function folder is `supabase/supabase/functions/ai-chat`.
+- `ai-chatbot.edge-cases.json`: Startup, validation, upstream failure, search, and deployment edge cases for the chatbot request flow.
 - `developer-lab.edge-cases.json`: Transport, preview, ingestion, prompt-profile, and evaluation edge cases for the Developer Lab at `/__ops/dev-lab`.
 
 Notes:

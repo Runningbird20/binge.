@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import AvatarPresetPicker from '../components/AvatarPresetPicker';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadSupabaseAvatar } from '../utils/supabaseData';
+import { uploadAvatar } from '../utils/userData';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -116,7 +116,7 @@ export default function AccountSettings() {
     setAvatarError('');
     setAvatarSuccess('');
     try {
-      const publicUrl = await uploadSupabaseAvatar(avatarFile);
+      const publicUrl = await uploadAvatar(avatarFile);
       await updateProfile({
         username: user?.username || '',
         email: user?.email || '',
@@ -350,7 +350,7 @@ export default function AccountSettings() {
           <section className="settings-card">
             <div className="settings-card-header">
               <h2>Password</h2>
-              <p>Set a new password for your Supabase account.</p>
+              <p>Set a new password for your account.</p>
             </div>
 
             {passwordError && <div className="auth-error">{passwordError}</div>}

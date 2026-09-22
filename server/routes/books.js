@@ -3,8 +3,11 @@ const router  = express.Router();
 
 async function gutendexGet(path, signal) {
   const res = await fetch(`https://gutendex.com${path}`, {
-    headers: { 'Accept': 'application/json', 'User-Agent': 'BingeApp/1.0' },
-    signal: signal ?? AbortSignal.timeout(12000),
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    },
+    signal: signal ?? AbortSignal.timeout(4000),
   });
   if (!res.ok) throw Object.assign(new Error(`Gutendex ${res.status}`), { status: res.status });
   return res.json();

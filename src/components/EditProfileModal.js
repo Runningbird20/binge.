@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check } from '@phosphor-icons/react';
-import { updateAccountProfile } from '../utils/supabaseData';
+import { updateAccountProfile } from '../utils/userData';
 import { AVATAR_COLORS, AVATAR_EMOJI } from './ProfileAvatar';
 
 // Sub-profiles can only rename themselves and change their own picture —
