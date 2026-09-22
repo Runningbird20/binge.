@@ -2,6 +2,7 @@
   "name": "project-3",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://runningbird20.github.io/binge.",
   "engines": {
     "node": "24.x"
   },
@@ -78,7 +79,9 @@
     "db:status": "./scripts/db-local.sh status",
     "db:init": "node scripts/migrate-standalone.js --schema-only",
     "db:migrate:catalog": "node scripts/migrate-standalone.js backups/catalog-export-2026-09-22 --catalog-only",
-    "sync:catalog": "node scripts/sync-catalog.js"
+    "sync:catalog": "node scripts/sync-catalog.js",
+    "predeploy": "npm run build && cp build/index.html build/404.html",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -99,6 +102,7 @@
     ]
   },
   "devDependencies": {
+    "gh-pages": "^6.3.0",
     "patch-package": "^8.0.1"
   },
   "proxy": "http://localhost:5001"

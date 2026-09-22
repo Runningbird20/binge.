@@ -30,15 +30,22 @@
     <meta property="og:title" content="binge." />
     <meta property="og:description" content="Track what you watch and read, build lists with friends, and discuss in the forum." />
     <meta property="og:type" content="website" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
+    <!-- Start Single Page Apps for GitHub Pages -->
+    <script type="text/javascript">
+      // Single Page Apps for GitHub Pages: https://github.com/rafgraph/spa-github-pages
+      // Decodes redirect from 404.html into the correct browser history URL
+      (function(l) {
+        if (l.search[1] === '/' ) {
+          var decoded = l.search.slice(1).split('&').map(function(s) { 
+            return s.replace(/~and~/g, '&');
+          }).join('?');
+          window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + decoded + l.hash
+          );
+        }
+      }(window.location));
+    </script>
+    <!-- End Single Page Apps for GitHub Pages -->
     <title>binge.</title>
   </head>
   <body>

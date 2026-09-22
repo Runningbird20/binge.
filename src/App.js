@@ -133,7 +133,7 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <MiniPlayerProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={process.env.PUBLIC_URL || '/'}>
             <Suspense fallback={<AppRouteFallback />}>
               <AppShell>
                 <AdBlocker />
