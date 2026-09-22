@@ -1,3 +1,5 @@
+import { standaloneMode } from './backendClient';
+import { normalizeMediaId } from './mediaId';
 import { getSessionlessSupabaseClient, getSupabaseSession, getSupabaseUser, isSupabaseConfigured, supabase } from './supabase';
 import { resolveUserType } from './userAccess';
 import {
@@ -501,7 +503,7 @@ export async function createSupabaseUserAsAdmin({ username, email, password, bio
     is_public: true,
     created_at: data.user.created_at,
     last_sign_in_at: null,
-    requiresEmailConfirmation: !data.session,
+    requiresEmailConfirmation: !standaloneMode && !data.session,
   };
 }
 
@@ -553,7 +555,8 @@ export async function uploadSupabaseAvatar(file) {
 
   if (!file) throw new Error('No file provided.');
   if (!file.type.startsWith('image/')) throw new Error('File must be an image (JPEG, PNG, WebP, etc.).');
-  if (file.size > 5 * 1024 * 1024) throw new Error('Image must be under 5 MB.');
+  const maxMb = standaloneMode ? 4 : 5;
+  if (file.size > maxMb * 1024 * 1024) throw new Error(`Image must be under ${maxMb} MB.`);
 
   const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const path = `${authUser.id}/avatar.${ext}`;
@@ -709,8 +712,8 @@ async function enrichMediaRecords(records = []) {
 
   records.forEach((record) => {
     const mediaType = record.media_type;
-    const mediaId = Number(record.media_id);
-    if (!MEDIA_METADATA_TABLES[mediaType] || !Number.isFinite(mediaId)) {
+    const mediaId = normalizeMediaId(record.media_id);
+    if (!MEDIA_METADATA_TABLES[mediaType] || mediaId == null) {
       return;
     }
 
@@ -728,7 +731,7 @@ async function enrichMediaRecords(records = []) {
 
   return records.map((record) => {
     const mediaType = record.media_type;
-    const mediaId = Number(record.media_id);
+    const mediaId = normalizeMediaId(record.media_id);
     const metadata =
       getCachedMediaMetadata(mediaType, mediaId) ||
       fetchedMaps[mediaType]?.get(mediaId) ||
@@ -800,7 +803,7 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
     .from('watchlist')
     .select('id')
     .eq('media_type', mediaType)
-    .eq('media_id', Number(mediaId));
+    .eq('media_id', normalizeMediaId(mediaId));
   if (profileId) existingQuery = existingQuery.eq('profile_id', profileId);
   const { data: existing, error: existingError } = await existingQuery.maybeSingle();
 
@@ -818,7 +821,7 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
       user_id: authUser.id,
       profile_id: profileId,
       media_type: mediaType,
-      media_id: Number(mediaId),
+      media_id: normalizeMediaId(mediaId),
       status,
     })
     .select('id, media_type, media_id, status, added_at')
@@ -969,7 +972,7 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
   const payload = {
     user_id: authUser.id,
     profile_id: profileId,
-    media_id: Number(mediaId),
+    media_id: normalizeMediaId(mediaId),
   };
 
   schema.columns.forEach((column) => {
@@ -1005,7 +1008,7 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
       .delete()
       .eq('user_id', authUser.id)
       .eq('media_type', mediaType)
-      .eq('media_id', Number(mediaId));
+      .eq('media_id', normalizeMediaId(mediaId));
     deleteQuery = profileId
       ? deleteQuery.eq('profile_id', profileId)
       : deleteQuery.is('profile_id', null);
@@ -1020,7 +1023,7 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
   // so any mounted screen showing this item's rating can update immediately
   // instead of only refreshing on its next full data fetch.
   window.dispatchEvent(new CustomEvent('binge:ratingSaved', {
-    detail: { mediaType, mediaId: Number(mediaId), categories },
+    detail: { mediaType, mediaId: normalizeMediaId(mediaId), categories },
   }));
 }
 
@@ -1172,7 +1175,7 @@ export async function upsertSupabaseContinueWatching({ mediaType, mediaId, curre
     user_id: authUser.id,
     profile_id: profileId,
     media_type: mediaType,
-    media_id: Number(mediaId),
+    media_id: normalizeMediaId(mediaId),
     updated_at: new Date().toISOString(),
   };
   if (currentSeason !== undefined)  row.current_season = currentSeason;

@@ -1,3 +1,4 @@
+import { normalizeMediaId } from '../utils/mediaId';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
@@ -32,6 +33,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 
 const PAGE_SIZE = 48;
+const NO_GENRES = [];
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
 // first visible row across common viewport widths so the browser starts
 // fetching what's actually on screen immediately instead of waiting on the
@@ -198,7 +200,7 @@ function CatalogView({
   }, [genreGroups]);
 
   const genreValues = useMemo(() => {
-    if (!activeLabel) return [];
+    if (!activeLabel) return NO_GENRES;
     const activeGroup = genreGroups.find((group) => group.label === activeLabel);
     return activeGroup ? activeGroup.values : [activeLabel];
   }, [genreGroups, activeLabel]);
@@ -206,9 +208,9 @@ function CatalogView({
   const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const maxOffset = Math.max(0, totalCount - windowSize);
-    const offsets = Array.from({ length: WINDOWS_PER_BATCH }, () => (
+    const offsets = [...new Set(Array.from({ length: WINDOWS_PER_BATCH }, () => (
       maxOffset > 0 ? Math.floor(Math.random() * (maxOffset + 1)) : 0
-    ));
+    )))];
 
     const results = await Promise.all(offsets.map((offset) => (
       fetchSupabaseMovieCatalogSegment({
@@ -343,7 +345,7 @@ function CatalogView({
       try {
         const probe = await fetchSupabaseMovieCatalogSegment({
           offset: 0,
-          limit: 1,
+          limit: VISIBLE_BATCH_SIZE,
           search: searchTerm,
           genre: genreValues,
           sortOrder: 'title-asc',
@@ -370,10 +372,20 @@ function CatalogView({
           return;
         }
 
+        // Render the first usable response instead of blocking on random windows.
+        const initialItems = orderBatch(normalizeMediaItems(probe));
+        setItems(initialItems);
+        setLoading(false);
+        persistCache(initialItems, totalCount, probe?.facets?.genres, false);
+        if (initialItems.length >= totalCount) return;
+
+        // Keep visible cards in place while discovery results arrive.
+        setLoadingMore(true);
         const firstBatch = await fetchSupabaseWindows({ totalCount, existingCount: 0 });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
-        const nextItems = appendUniqueItems([], firstBatch);
+        const nextItems = appendUniqueItems(initialItems, firstBatch);
+        setLoadingMore(false);
         setItems(nextItems);
         setLoading(false);
         persistCache(nextItems, totalCount, probe?.facets?.genres, false);
@@ -633,7 +645,7 @@ function CatalogView({
 
 export default function Movies() {
   const [searchParams] = useSearchParams();
-  const openId = Number(searchParams.get('open'));
+  const openId = normalizeMediaId(searchParams.get('open'));
   const initialGenre = searchParams.get('genre') || '';
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
 

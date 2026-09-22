@@ -25,6 +25,7 @@
     "helmet": "^8.1.0",
     "hls.js": "^1.6.16",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^10.0.10",
     "pg": "^8.20.0",
     "playwright": "^1.59.1",
     "react": "^19.2.4",
@@ -79,7 +80,10 @@
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
-    "clean:adult": "node clean_adult_content.js"
+    "clean:adult": "node clean_adult_content.js",
+    "export:supabase": "node scripts/export-supabase.js",
+    "export:supabase:public": "node scripts/export-supabase.js --public-only",
+    "test:export": "node --test scripts/export-supabase.test.js"
   },
   "eslintConfig": {
     "extends": [

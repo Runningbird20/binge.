@@ -9,6 +9,10 @@ const defaultEnvPath = path.resolve(process.cwd(), '.env');
 dotenv.config({ path: localEnvPath });
 dotenv.config({ path: defaultEnvPath });
 
+if (process.env.DATA_BACKEND === 'standalone') {
+  module.exports = require('./standalone/app');
+} else {
+
 const helmet = require('helmet');
 const rateLimit = require('./middleware/rateLimit');
 
@@ -132,3 +136,5 @@ app.use((error, _req, res, _next) => {
 });
 
 module.exports = app;
+
+}

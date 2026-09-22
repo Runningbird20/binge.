@@ -11,3 +11,10 @@ import '@testing-library/jest-dom';
 // unless they explicitly resize the window themselves.
 window.innerWidth = 1280;
 window.innerHeight = 800;
+
+// jsdom has no layout observer; components still receive their initial effect.
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};

@@ -1,3 +1,4 @@
+import { standaloneMode } from '../utils/backendClient';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -60,6 +61,7 @@ export default function Login() {
           </button>
         </form>
 
+        {standaloneMode && <p className="auth-switch"><Link to="/reset-password">Forgot password?</Link></p>}
         <p className="auth-switch">
           Don't have an account? <Link to="/signup">Sign up</Link>
         </p>

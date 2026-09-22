@@ -1,12 +1,15 @@
+import { standaloneMode } from './utils/backendClient';
+import { getActiveProfileId } from './utils/activeProfile';
 import { executeSupabaseRoute } from './utils/supabaseApi';
 
 function isLegacyBackendEnabled() {
-  return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
+  return standaloneMode || String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
     .trim()
     .toLowerCase() === 'true';
 }
 
 function resolveLegacyBaseUrl() {
+  if (standaloneMode) return '/api';
   const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
 
   if (!configuredApiUrl) {
@@ -47,7 +50,7 @@ async function fetchSupabaseToken() {
 }
 
 async function getAuthToken() {
-  const legacyToken = window.localStorage.getItem('token');
+  const legacyToken = standaloneMode ? null : window.localStorage.getItem('token');
   if (legacyToken) {
     return legacyToken;
   }
@@ -99,7 +102,7 @@ async function parseResponseBody(response) {
 
 function buildLegacyErrorMessage(response, data) {
   if (data && typeof data === 'object') {
-    return data.error || data.message || `Request failed with status ${response.status}`;
+    return data.error?.message || data.error || data.message || `Request failed with status ${response.status}`;
   }
 
   if (typeof data === 'string') {
@@ -136,6 +139,7 @@ async function requestLegacyApi(method, path, body) {
   const token = await getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
+    ...(standaloneMode ? { 'X-Binge-Request': '1', ...(getActiveProfileId() ? { 'X-Binge-Profile': getActiveProfileId() } : {}) } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
