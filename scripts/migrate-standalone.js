@@ -1,25 +1,42 @@
 #!/usr/bin/env node
-// Imports a verified export into an EMPTY, non-Supabase destination. Never changes source data.
+// Imports verified catalog/account backups into PostgreSQL.
 const fs=require('fs');
 const fsp=require('fs/promises');
 const path=require('path');
-const readline=require('readline');
 const crypto=require('crypto');
 const {Client}=require('pg');
 require('dotenv').config({path:'.env.local',quiet:true});
 require('dotenv').config({path:'.env',quiet:true});
-const {hashFile}=require('./export-supabase');
+async function hashFile(file){
+  const hash=crypto.createHash('sha256');
+  for await(const chunk of fs.createReadStream(file))hash.update(chunk);
+  return hash.digest('hex');
+}
 function parseRow(line){return JSON.parse(line,(key,value,ctx)=>{
   if(typeof value==='number' && (key==='id'||key.endsWith('_id')))return ctx.source;
   return value;
 });}
 function fileIn(root,relative){const file=path.resolve(root,relative);if(!file.startsWith(root+path.sep))throw new Error('Invalid manifest file path.');return file;}
+async function* readLines(filePath){
+  const stream=fs.createReadStream(filePath);
+  let rem='';
+  for await(const chunk of stream){
+    rem+=chunk.toString('utf8');
+    let idx;
+    while((idx=rem.indexOf('\n'))!==-1){
+      let line=rem.slice(0,idx);
+      if(line.endsWith('\r'))line=line.slice(0,-1);
+      yield line;
+      rem=rem.slice(idx+1);
+    }
+  }
+  if(rem.trim())yield rem;
+}
 async function initialize(client){await client.query(await fsp.readFile(path.join(__dirname,'../server/standalone/schema.sql'),'utf8'));}
-async function migrate(root,{catalogOnly=false}={}){
+async function migrate(root,{catalogOnly=false,truncate=false}={}){
   root=path.resolve(root);
   const url=process.env.DATABASE_URL;
-  if(!url)throw new Error('Set DATABASE_URL to the destination Neon/Postgres database.');
-  if(/supabase\.(co|com)$/.test(new URL(url).hostname)||url===process.env.SUPABASE_DB_URL)throw new Error('Destination must not be the Supabase source.');
+  if(!url)throw new Error('Set DATABASE_URL to the destination PostgreSQL database.');
   const manifest=JSON.parse(await fsp.readFile(path.join(root,'manifest.json'),'utf8'));
   if(!catalogOnly && !manifest.complete)throw new Error('Full migration requires a complete database/storage export. Use --catalog-only only for local/staging preparation.');
   const tables=manifest.tables.filter(t=>catalogOnly? t.schema==='public'&&['movies','tv_shows','books'].includes(t.table):t.schema==='public'||t.schema==='auth'&&t.table==='users');
@@ -37,6 +54,17 @@ async function migrate(root,{catalogOnly=false}={}){
     await client.query('BEGIN');
     await client.query("SELECT pg_advisory_xact_lock(hashtext('binge-migration'))");
     await initialize(client);
+    if(truncate){
+      for(const t of tables){
+        if(t.schema==='public'){
+          await client.query('DELETE FROM binge.records WHERE collection=$1',[t.table]);
+        }
+      }
+      if(!catalogOnly){
+        await client.query('TRUNCATE binge.accounts CASCADE');
+        await client.query('TRUNCATE binge.assets CASCADE');
+      }
+    }
     // Every destination collection being imported must be empty. Roll back on any conflict.
     if(!catalogOnly){const result=await client.query('SELECT count(*) FROM binge.accounts');if(Number(result.rows[0].count))throw new Error('Destination has accounts. Use an empty staging database.');}
     for(const t of tables){
@@ -63,8 +91,7 @@ async function migrate(root,{catalogOnly=false}={}){
         }
         rows+=batch.length;batch=[];
       };
-      const lines=readline.createInterface({input:fs.createReadStream(fileIn(root,table.file)),crlfDelay:Infinity});
-      for await(const line of lines){
+      for await(const line of readLines(fileIn(root,table.file))){
         if(!line.trim())continue;
         const row=parseRow(line);
         // Tables with composite primary keys are retained with deterministic document IDs.
@@ -113,12 +140,14 @@ async function migrate(root,{catalogOnly=false}={}){
 async function main(){
   if(process.argv.includes('--schema-only')){
     if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL is required.');
-    if(/supabase\.(co|com)$/.test(new URL(process.env.DATABASE_URL).hostname))throw new Error('Use the destination database.');
     const client=new Client({connectionString:process.env.DATABASE_URL});await client.connect();try{await initialize(client);}finally{await client.end();}console.log('Standalone schema initialized.');return;
   }
   const root=process.argv.slice(2).find(a=>!a.startsWith('--'));
-  if(!root)throw new Error('Usage: node scripts/migrate-standalone.js <export-directory> [--catalog-only] | --schema-only');
-  await migrate(root,{catalogOnly:process.argv.includes('--catalog-only')});
+  if(!root)throw new Error('Usage: node scripts/migrate-standalone.js <export-directory> [--catalog-only] [--truncate] | --schema-only');
+  await migrate(root,{
+    catalogOnly: process.argv.includes('--catalog-only'),
+    truncate: process.argv.includes('--truncate') || process.argv.includes('--clean'),
+  });
 }
 if(require.main===module)main().catch(error=>{console.error(error.code?`Database operation failed (${error.code}); transaction rolled back.`:error.message);process.exitCode=1;});
 module.exports={migrate,parseRow,initialize};

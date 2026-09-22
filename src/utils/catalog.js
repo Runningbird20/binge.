@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from './supabase';
+import { client as db } from './backendClient';
 import { api } from '../api';
 import { KIDS_SAFE_RATINGS } from './kidsMode';
 
@@ -140,13 +140,7 @@ function buildPopularOrFilter(titles) {
     .join(',');
 }
 
-function requireSupabaseCatalog() {
-  if (!isSupabaseConfigured || !supabase) {
-    throw new Error('Supabase is not configured.');
-  }
-
-  return supabase;
-}
+function requireSupabaseCatalog() { return db; }
 
 function normalizeMovie(movie) {
   if (!movie) return null;
@@ -823,3 +817,21 @@ export async function fetchSupabaseBookById(bookId) {
 
   return normalizeBook(data);
 }
+
+// Clean alias exports
+export {
+  fetchSupabaseMovieGenres as fetchMovieGenres,
+  fetchSupabaseTvShowGenres as fetchTvShowGenres,
+  fetchSupabaseBookGenres as fetchBookGenres,
+  fetchSupabaseMovieCatalogSegment as fetchMovieCatalogSegment,
+  fetchSupabaseMoviesPage as fetchMoviesPage,
+  fetchSupabaseMovieById as fetchMovieById,
+  fetchSupabaseRandomMoviePosters as fetchRandomMoviePosters,
+  fetchSupabaseMovieCuratedRows as fetchMovieCuratedRows,
+  fetchSupabaseTvShowsPage as fetchTvShowsPage,
+  fetchSupabaseTvShowCatalogSegment as fetchTvShowCatalogSegment,
+  fetchSupabaseTvShowById as fetchTvShowById,
+  fetchSupabaseTvShowCuratedRows as fetchTvShowCuratedRows,
+  fetchSupabaseBooksPage as fetchBooksPage,
+  fetchSupabaseBookById as fetchBookById,
+};

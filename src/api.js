@@ -1,27 +1,9 @@
-import { standaloneMode } from './utils/backendClient';
+import { standaloneMode, getSession } from './utils/backendClient';
 import { getActiveProfileId } from './utils/activeProfile';
-import { executeSupabaseRoute } from './utils/supabaseApi';
-
-function isLegacyBackendEnabled() {
-  return standaloneMode || String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
-    .trim()
-    .toLowerCase() === 'true';
-}
+import { executeLocalRoute } from './utils/localApi';
 
 function resolveLegacyBaseUrl() {
-  if (standaloneMode) return '/api';
-  const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
-
-  if (!configuredApiUrl) {
-    return isLegacyBackendEnabled() ? '/api' : null;
-  }
-
-  const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
-  if (normalizedApiUrl.endsWith('/api')) {
-    return normalizedApiUrl;
-  }
-
-  return `${normalizedApiUrl}/api`;
+  return '/api';
 }
 
 const LEGACY_BASE = resolveLegacyBaseUrl();
@@ -29,15 +11,10 @@ const LEGACY_BASE = resolveLegacyBaseUrl();
 let cachedToken = null;
 let tokenFetchPromise = null;
 
-async function fetchSupabaseToken() {
+async function fetchAuthToken() {
   try {
-    const { isSupabaseConfigured, getSupabaseSession } = await import('./utils/supabase');
-    if (!isSupabaseConfigured) {
-      return null;
-    }
-
     const result = await Promise.race([
-      getSupabaseSession(),
+      getSession(),
       new Promise((resolve) => {
         window.setTimeout(() => resolve({ data: null }), 3000);
       }),
@@ -63,7 +40,7 @@ async function getAuthToken() {
     return tokenFetchPromise;
   }
 
-  tokenFetchPromise = fetchSupabaseToken().then((token) => {
+  tokenFetchPromise = fetchAuthToken().then((token) => {
     cachedToken = token;
     tokenFetchPromise = null;
     return token;
@@ -169,7 +146,7 @@ async function requestLegacyApi(method, path, body) {
 }
 
 async function request(method, path, body) {
-  const directResult = await executeSupabaseRoute(method, path, body);
+  const directResult = await executeLocalRoute(method, path, body);
   if (directResult !== null) {
     return directResult;
   }

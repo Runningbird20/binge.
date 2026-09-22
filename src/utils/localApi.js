@@ -2,8 +2,8 @@ import {
   getSupabaseUser,
   requireSupabaseClient,
   toSupabaseError,
-} from './supabase';
-import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './supabaseData';
+} from './backendClient';
+import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './userData';
 import { generateSupabaseRecommendations } from './recommendations';
 import {
   fetchSupabaseBookById,
@@ -14,7 +14,7 @@ import {
   fetchSupabaseTvShowById,
   fetchSupabaseTvShowCuratedRows,
   fetchSupabaseTvShowsPage,
-} from './supabaseMovieCatalog';
+} from './catalog';
 
 const SEARCH_LIMIT = 8;
 const TMDB_API_KEY = (
@@ -211,12 +211,7 @@ async function fetchAniListId(title) {
 }
 
 async function handleMediaGet(pathname, searchParams) {
-  if (
-    pathname === '/media/popular-titles' ||
-    pathname === '/media/movies/curated' ||
-    pathname === '/media/tv-shows/curated' ||
-    ((pathname === '/media/movies' || pathname === '/media/tv-shows') && searchParams.get('sort') === 'relevance')
-  ) {
+  if (pathname === '/media/popular-titles') {
     return null;
   }
 
@@ -623,3 +618,5 @@ export async function executeSupabaseRoute(method, path, body) {
   // the Express backend has — fall through to it for all /admin/users routes.
   return null;
 }
+
+export { executeSupabaseRoute as executeLocalRoute };

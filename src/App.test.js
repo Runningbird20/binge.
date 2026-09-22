@@ -8,8 +8,8 @@ import Movies from './pages/Movies';
 import TVShows from './pages/TVShows';
 import * as AuthContextModule from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
-import * as supabaseDataModule from './utils/supabaseData';
-import * as supabaseCatalogModule from './utils/supabaseMovieCatalog';
+import * as userDataModule from './utils/userData';
+import * as catalogModule from './utils/catalog';
 
 const mockNavigate = jest.fn();
 let mockSearchParams = new URLSearchParams();
@@ -25,14 +25,14 @@ const WINDOWS_PER_BATCH = 3; // matches the constant in Movies.js/TVShows.js/Boo
 
 function mockBookCatalog(books) {
   // Books.js's loadCatalog always does exactly 1 probe call (pageSize: 1)
-  // followed by fetchSupabaseWindows's WINDOWS_PER_BATCH parallel calls —
+  // followed by fetchCatalogWindows's WINDOWS_PER_BATCH parallel calls —
   // every single time a load cycle starts, whether from mount, a genre
   // chip click, or the extra reload genre-discovery triggers (see below).
   // Track position-in-cycle by raw call count so it's correct regardless
   // of *why* a new cycle started, rather than trying to infer it from
   // args that are sometimes ambiguous for tiny fixture catalogs.
   let callCount = 0;
-  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
+  return jest.spyOn(catalogModule, 'fetchBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
     const positionInCycle = callCount % (WINDOWS_PER_BATCH + 1);
     callCount += 1;
 
@@ -55,7 +55,7 @@ function mockBookCatalog(books) {
 function mockMovieCatalog(items, { matchesGenre } = {}) {
   let sawItemsThisBatch = false;
   const allGenres = [...new Set(items.flatMap((item) => item.genre.split(',').map((g) => g.trim())))];
-  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseMovieCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
+  return jest.spyOn(catalogModule, 'fetchMovieCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
     const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
     const filtered = genreValues.length === 0
       ? items
@@ -76,7 +76,7 @@ function mockMovieCatalog(items, { matchesGenre } = {}) {
 function mockTvCatalog(items, { matchesGenre } = {}) {
   let sawItemsThisBatch = false;
   const allGenres = [...new Set(items.flatMap((item) => item.genre.split(',').map((g) => g.trim())))];
-  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseTvShowCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
+  return jest.spyOn(catalogModule, 'fetchTvShowCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
     const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
     const filtered = genreValues.length === 0
       ? items
@@ -175,11 +175,11 @@ test('uses an uploaded photo as the avatar preview', async () => {
 
 test('creates an account with bio and avatar details', async () => {
   // AuthProvider's mount-time session bootstrap otherwise races real
-  // Supabase network calls in this environment; short-circuit it so it
+  // backend network calls in this environment; short-circuit it so it
   // resolves deterministically instead of potentially clobbering the
   // profile signUp() writes to localStorage.
-  const sessionProfileSpy = jest.spyOn(supabaseDataModule, 'getSupabaseSessionProfile').mockResolvedValue(null);
-  const signUpSpy = jest.spyOn(supabaseDataModule, 'signUpWithSupabase').mockResolvedValue({
+  const sessionProfileSpy = jest.spyOn(userDataModule, 'getSessionProfile').mockResolvedValue(null);
+  const signUpSpy = jest.spyOn(userDataModule, 'signUp').mockResolvedValue({
     user: {
       id: 7,
       username: 'mediafan',
@@ -251,9 +251,9 @@ test('shows avatar and welcome message on the signed-in home page', async () => 
     },
     authLoading: false,
   });
-  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([]);
+  const ratingsSpy = jest.spyOn(userDataModule, 'fetchRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(userDataModule, 'fetchContinueWatching').mockResolvedValue([]);
 
   render(<Home />);
 
@@ -284,9 +284,9 @@ test('resume links for in-progress movies launch the player instead of the card'
     },
     authLoading: false,
   });
-  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([
+  const ratingsSpy = jest.spyOn(userDataModule, 'fetchRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(userDataModule, 'fetchContinueWatching').mockResolvedValue([
     {
       id: 12,
       media_type: 'movie',
@@ -320,9 +320,9 @@ test('shows an account settings gear link for signed-in users', async () => {
     },
     authLoading: false,
   });
-  const ratingsSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const continueWatchingSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([]);
+  const ratingsSpy = jest.spyOn(userDataModule, 'fetchRatings').mockResolvedValue([]);
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const continueWatchingSpy = jest.spyOn(userDataModule, 'fetchContinueWatching').mockResolvedValue([]);
 
   render(<Home />);
 
@@ -412,9 +412,9 @@ test('shows seeded books as clickable covers and adds a book to the library', as
       cover_url: 'https://covers.openlibrary.org/b/id/11481354-M.jpg',
     },
   ]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
-  const addToLibrarySpy = jest.spyOn(supabaseDataModule, 'addSupabaseWatchlistItem').mockResolvedValue({ id: 12 });
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
+  const addToLibrarySpy = jest.spyOn(userDataModule, 'addWatchlistItem').mockResolvedValue({ id: 12 });
 
   render(<Books />);
 
@@ -424,11 +424,12 @@ test('shows seeded books as clickable covers and adds a book to the library', as
 
   await userEvent.click(screen.getByRole('button', { name: /open details for dune/i }));
 
-  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  const dialog = await screen.findByRole('dialog');
+  expect(dialog).toBeInTheDocument();
   expect(screen.getByText(/set on the desert planet arrakis/i)).toBeInTheDocument();
   expect(document.body.style.overflow).toBe('hidden');
 
-  await userEvent.click(screen.getByRole('button', { name: /add to library/i }));
+  await userEvent.click(within(dialog).getByRole('button', { name: /add to library/i }));
 
   await waitFor(() => {
     expect(addToLibrarySpy).toHaveBeenCalledWith(
@@ -471,8 +472,8 @@ test('falls back to a placeholder when a book cover image fails to load', async 
       cover_url: 'https://covers.openlibrary.org/b/id/missing-cover.jpg',
     },
   ]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
 
   render(<Books />);
 
@@ -550,8 +551,8 @@ test('uses a genre chip filter bar on the books page', async () => {
     authLoading: false,
   });
   const booksPageSpy = mockBookCatalog(allBooks);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
 
   render(<Books />);
 
@@ -622,7 +623,7 @@ test('ignores a page-level search query on the movies page', async () => {
     matchesGenre: (movie, genreValues) =>
       movie.genre.split(',').map((value) => value.trim()).some((value) => genreValues.includes(value)),
   });
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
 
   render(<Movies />);
 
@@ -676,7 +677,7 @@ test('uses a genre chip filter bar on the movies page', async () => {
     matchesGenre: (movie, genreValues) =>
       movie.genre.split(',').map((value) => value.trim()).some((value) => genreValues.includes(value)),
   });
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
 
   render(<Movies />);
 
@@ -740,7 +741,7 @@ test('uses a genre chip filter bar on the TV shows page', async () => {
     matchesGenre: (show, genreValues) =>
       show.genre.split(',').map((value) => value.trim()).some((value) => genreValues.includes(value)),
   });
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
 
   render(<TVShows />);
 
@@ -800,8 +801,8 @@ test('shows a back to top arrow after scrolling the books page', async () => {
       cover_url: 'https://covers.openlibrary.org/b/id/11481354-M.jpg',
     },
   ]);
-  const watchlistSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]);
-  const ratingMapSpy = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  const watchlistSpy = jest.spyOn(userDataModule, 'fetchWatchlist').mockResolvedValue([]);
+  const ratingMapSpy = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
 
   render(<Books />);
 
@@ -826,8 +827,8 @@ test('shows a back to top arrow after scrolling the books page', async () => {
 });
 
 test.each([
-  ['movies', Movies, 'fetchSupabaseMovieCatalogSegment'],
-  ['series', TVShows, 'fetchSupabaseTvShowCatalogSegment'],
+  ['movies', Movies, 'fetchMovieCatalogSegment'],
+  ['series', TVShows, 'fetchTvShowCatalogSegment'],
 ])('shows %s before discovery requests finish without restarting after genre discovery', async (_, Page, fetchMethod) => {
   const previousObserver = global.ResizeObserver;
   global.ResizeObserver = class {
@@ -838,9 +839,9 @@ test.each([
   const auth = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
     user: { id: 'latency-test', username: 'Viewer' }, authLoading: false,
   });
-  const ratings = jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
-  const watchlist = jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlistStatusMap').mockResolvedValue({});
-  const catalog = jest.spyOn(supabaseCatalogModule, fetchMethod).mockImplementation(({ includeCount }) => (
+  const ratings = jest.spyOn(userDataModule, 'fetchRatingMap').mockResolvedValue({});
+  const watchlist = jest.spyOn(userDataModule, 'fetchWatchlistStatusMap').mockResolvedValue({});
+  const catalog = jest.spyOn(catalogModule, fetchMethod).mockImplementation(({ includeCount }) => (
     includeCount
       ? Promise.resolve({
         items: [{ id: 'fast-title', title: 'Immediately visible', genre: 'Drama', year: 2020 }],

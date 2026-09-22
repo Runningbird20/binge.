@@ -8,11 +8,11 @@ import RatingBadge from '../components/RatingBadge';
 import RatingArtifact, { computeStarRating, computeNormalizedScore } from '../components/RatingArtifact';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  fetchSupabaseWatchlist,
-  fetchSupabaseRatings,
-  updateSupabaseWatchlistStatus,
-  removeSupabaseWatchlistItem,
-} from '../utils/supabaseData';
+  fetchWatchlist,
+  fetchRatings,
+  updateWatchlistStatus,
+  removeWatchlistItem,
+} from '../utils/userData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import { computeProgressBadge } from '../utils/continueWatching';
 import { excludeRated, countCompleted } from '../utils/libraryStats';
@@ -346,8 +346,8 @@ export default function Profile() {
 
     async function load() {
       const [watchlistResult, ratingsResult] = await Promise.allSettled([
-        fetchSupabaseWatchlist(),
-        fetchSupabaseRatings(),
+        fetchWatchlist(),
+        fetchRatings(),
       ]);
       if (cancelled) return;
       const nextWatchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
@@ -366,7 +366,7 @@ export default function Profile() {
     setWatchlist((current) => current.map((entry) => (
       entry.id === item.id ? { ...entry, status: nextStatus } : entry
     )));
-    updateSupabaseWatchlistStatus(item.id, nextStatus).catch((error) => {
+    updateWatchlistStatus(item.id, nextStatus).catch((error) => {
       window.alert(error.message);
       setWatchlist((current) => current.map((entry) => (
         entry.id === item.id ? { ...entry, status: item.status } : entry
@@ -377,7 +377,7 @@ export default function Profile() {
   function handleRemove(item) {
     if (!window.confirm(`Remove "${item.title}" from your library?`)) return;
     setWatchlist((current) => current.filter((entry) => entry.id !== item.id));
-    removeSupabaseWatchlistItem(item.id).catch((error) => window.alert(error.message));
+    removeWatchlistItem(item.id).catch((error) => window.alert(error.message));
   }
 
   // Rated titles move to the Ratings & Reviews tab, so exclude them from the

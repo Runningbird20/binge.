@@ -25,9 +25,8 @@ function isBlockedAdRequest(url) {
   );
 }
 
-// Poster/cover art comes from third-party hosts (TMDB, Plex, Open Library,
-// Supabase storage), so it can't be caught by the same-origin static-asset
-// rule below — it needs its own origin-agnostic check.
+// Poster/cover art comes from external hosts (TMDB, Open Library, MangaDex),
+// so it can't be caught by the same-origin static-asset rule below.
 function isImageRequest(request, url) {
   if (request.destination === 'image') return true;
   return /\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(url.pathname);
@@ -97,7 +96,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Never intercept Supabase, API, or other cross-origin requests
+  // Never intercept API or cross-origin requests
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 

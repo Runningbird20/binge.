@@ -1,8 +1,8 @@
-import { buildSupabaseUserProfile } from './supabaseData';
+import { buildUserProfile, buildSupabaseUserProfile } from './userData';
 
-describe('buildSupabaseUserProfile', () => {
+describe('buildUserProfile', () => {
   test('keeps a dev role from the stored profile when auth metadata has no role flags', () => {
-    const profile = buildSupabaseUserProfile(
+    const profile = buildUserProfile(
       {
         id: 'dev-user',
         email: 'dev@example.com',
@@ -33,3 +33,4 @@ describe('buildSupabaseUserProfile', () => {
     );
   });
 });
+

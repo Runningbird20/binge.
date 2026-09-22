@@ -1,13 +1,19 @@
 let mockSupabaseClient;
 
-jest.mock('./supabase', () => ({
+jest.mock('./backendClient', () => ({
   isSupabaseConfigured: true,
   get supabase() {
     return mockSupabaseClient;
   },
+  get client() {
+    return mockSupabaseClient;
+  },
+  getSessionlessSupabaseClient: () => mockSupabaseClient,
+  getSupabaseSession: () => Promise.resolve({ data: { session: null } }),
+  getSupabaseUser: () => Promise.resolve({ data: { user: null } }),
 }));
 
-import { signInWithSupabase } from './supabaseData';
+import { signInWithSupabase } from './userData';
 
 function flushPromises() {
   return Promise.resolve();
@@ -87,3 +93,4 @@ describe('signInWithSupabase', () => {
     expect(console.warn).toHaveBeenCalledWith('[auth] Supabase sign-in timed out. Retrying request...');
   });
 });
+

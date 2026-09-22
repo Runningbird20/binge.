@@ -1,6 +1,6 @@
 import { standaloneMode } from './backendClient';
 import { normalizeMediaId } from './mediaId';
-import { getSessionlessSupabaseClient, getSupabaseSession, getSupabaseUser, isSupabaseConfigured, supabase } from './supabase';
+import { getSessionlessSupabaseClient, getSupabaseSession, getSupabaseUser, isSupabaseConfigured, supabase } from './backendClient';
 import { resolveUserType } from './userAccess';
 import {
   cacheMediaMetadata,
@@ -1203,3 +1203,31 @@ export async function removeSupabaseContinueWatching(id) {
     throw new Error(toFriendlyError(error, 'Unable to remove that from continue watching.'));
   }
 }
+
+// Clean alias exports
+export {
+  buildSupabaseUserProfile as buildUserProfile,
+  ensureSupabaseProfile as ensureProfile,
+  resolveSupabaseProfile as resolveProfile,
+  getSupabaseSessionProfile as getSessionProfile,
+  signInWithSupabase as signIn,
+  signUpWithSupabase as signUp,
+  createSupabaseUserAsAdmin as createUserAsAdmin,
+  signOutFromSupabase as signOut,
+  updateSupabaseProfile as updateProfile,
+  uploadSupabaseAvatar as uploadAvatar,
+  updateSupabasePassword as updatePassword,
+  fetchSupabaseProfiles as fetchProfiles,
+  fetchSupabaseWatchlist as fetchWatchlist,
+  addSupabaseWatchlistItem as addWatchlistItem,
+  fetchSupabaseWatchlistStatusMap as fetchWatchlistStatusMap,
+  updateSupabaseWatchlistStatus as updateWatchlistStatus,
+  removeSupabaseWatchlistItem as removeWatchlistItem,
+  fetchSupabaseRatings as fetchRatings,
+  fetchSupabaseRatingMap as fetchRatingMap,
+  saveSupabaseRating as saveRating,
+  fetchSupabaseDashboardCounts as fetchDashboardCounts,
+  fetchSupabaseContinueWatching as fetchContinueWatching,
+  upsertSupabaseContinueWatching as upsertContinueWatching,
+  removeSupabaseContinueWatching as removeContinueWatching,
+};

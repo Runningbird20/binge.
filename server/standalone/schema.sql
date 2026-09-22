@@ -1,4 +1,4 @@
--- Provider-independent PostgreSQL schema. Never writes to Supabase schemas.
+-- Standalone binge PostgreSQL database schema.
 CREATE SCHEMA IF NOT EXISTS binge;
 CREATE TABLE IF NOT EXISTS binge.accounts (
   id text PRIMARY KEY,
