@@ -18,3 +18,10 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+beforeEach(() => {
+  try {
+    const { invalidateCachedPrefix } = require('./utils/sessionCache');
+    invalidateCachedPrefix('');
+  } catch {}
+});

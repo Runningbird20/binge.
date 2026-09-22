@@ -13,17 +13,17 @@ import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import PullToRefresh from '../components/PullToRefresh';
 import {
-  addSupabaseWatchlistItem,
-  fetchSupabaseRatingMap,
-  fetchSupabaseWatchlistStatusMap,
-  updateSupabaseWatchlistStatus,
-  saveSupabaseRating,
-} from '../utils/supabaseData';
+  addWatchlistItem,
+  fetchRatingMap,
+  fetchWatchlistStatusMap,
+  updateWatchlistStatus,
+  saveRating,
+} from '../utils/userData';
 import WatchlistStatusControl from '../components/WatchlistStatusControl';
 import {
-  fetchSupabaseBookById,
-  fetchSupabaseBooksPage,
-} from '../utils/supabaseMovieCatalog';
+  fetchBookById,
+  fetchBooksPage,
+} from '../utils/catalog';
 import {
   buildMediaGenreFacets,
   filterBooksCatalog,
@@ -581,7 +581,7 @@ export default function Books() {
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const requestTokenRef = useRef(0);
-  const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
+  const sourceRef = useRef({ mode: 'catalog', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
   const loadMoreRef = useRef(null);
 
@@ -609,7 +609,7 @@ export default function Books() {
     };
   }, []);
 
-  const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
+  const fetchCatalogWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const totalWindowPages = Math.max(1, Math.ceil(totalCount / windowSize));
     const pages = Array.from({ length: WINDOWS_PER_BATCH }, () => (
@@ -617,7 +617,7 @@ export default function Books() {
     ));
 
     const results = await Promise.all(pages.map((page) => (
-      fetchSupabaseBooksPage({
+      fetchBooksPage({
         page,
         pageSize: windowSize,
         search: searchTerm,
@@ -630,9 +630,9 @@ export default function Books() {
   }, [genreValues, searchTerm]);
 
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
-  const fetchSupabaseSortedPage = useCallback(async (page) => {
+  const fetchCatalogSortedPage = useCallback(async (page) => {
     const { sortOrder } = sortModeToQuery(sortMode);
-    const result = await fetchSupabaseBooksPage({
+    const result = await fetchBooksPage({
       page,
       pageSize: API_PAGE_SIZE,
       search: searchTerm,
@@ -654,7 +654,7 @@ export default function Books() {
     });
 
     // The legacy API only supports a single genre substring; this tier only
-    // runs when Supabase is unreachable, so an approximate match is fine.
+    // runs when the catalog API is unreachable, so an approximate match is fine.
     if (genreValues[0]) params.set('genre', genreValues[0]);
     if (searchTerm) params.set('search', searchTerm);
 
@@ -721,7 +721,7 @@ export default function Books() {
     async function loadCatalog() {
       if (sortMode !== 'featured') {
         try {
-          const page = await fetchSupabaseSortedPage(1);
+          const page = await fetchCatalogSortedPage(1);
           const totalCount = Number(page.total) || 0;
           if (totalCount === 0 && !fetchHadFilter) {
             throw new Error('Book catalog is empty');
@@ -730,7 +730,7 @@ export default function Books() {
           if (cancelled || requestTokenRef.current !== requestToken) return;
 
           adoptGenres(page.facets?.genres);
-          sourceRef.current = { mode: 'supabase-sorted', nextPage: 2 };
+          sourceRef.current = { mode: 'catalog-sorted', nextPage: 2 };
           setTotal(totalCount);
           setBooks(page.items);
           setLoading(false);
@@ -741,7 +741,7 @@ export default function Books() {
         }
       } else {
       try {
-        const probe = await fetchSupabaseBooksPage({
+        const probe = await fetchBooksPage({
           page: 1,
           pageSize: 1,
           search: searchTerm,
@@ -756,7 +756,7 @@ export default function Books() {
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         adoptGenres(probe?.facets?.genres);
-        sourceRef.current = { mode: 'supabase' };
+        sourceRef.current = { mode: 'catalog' };
         setTotal(totalCount);
 
         if (totalCount === 0) {
@@ -766,7 +766,7 @@ export default function Books() {
           return;
         }
 
-        const firstBatch = await fetchSupabaseWindows({ totalCount });
+        const firstBatch = await fetchCatalogWindows({ totalCount });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         const nextBooks = appendUniqueBooks([], firstBatch);
@@ -832,7 +832,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, sortMode, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage, refreshKey]);
+  }, [genreValues, searchTerm, sortMode, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -840,8 +840,8 @@ export default function Books() {
     setLoadingMore(true);
 
     try {
-      if (source.mode === 'supabase') {
-        const batch = await fetchSupabaseWindows({ totalCount: total });
+      if (source.mode === 'catalog') {
+        const batch = await fetchCatalogWindows({ totalCount: total });
         if (requestTokenRef.current !== requestToken) return;
 
         setBooks((current) => {
@@ -854,8 +854,8 @@ export default function Books() {
         return;
       }
 
-      if (source.mode === 'supabase-sorted') {
-        const page = await fetchSupabaseSortedPage(source.nextPage);
+      if (source.mode === 'catalog-sorted') {
+        const page = await fetchCatalogSortedPage(source.nextPage);
         if (requestTokenRef.current !== requestToken) return;
 
         sourceRef.current = { ...source, nextPage: source.nextPage + 1 };
@@ -884,7 +884,7 @@ export default function Books() {
         setLoadingMore(false);
       }
     }
-  }, [total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
+  }, [total, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage]);
 
   const visibleBooks = books.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -937,7 +937,7 @@ export default function Books() {
 
     async function loadOpenBook() {
       try {
-        const book = await fetchSupabaseBookById(openId);
+        const book = await fetchBookById(openId);
         if (!cancelled && book?.id) {
           setSelectedBook(book);
           setSelectedBookBrowseOnly(false);
@@ -983,7 +983,7 @@ export default function Books() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchSupabaseWatchlistStatusMap('book')
+    fetchWatchlistStatusMap('book')
       .then((map) => { if (!cancelled) setWatchlistStatusMap(map); })
       .catch(() => {});
 
@@ -993,7 +993,7 @@ export default function Books() {
   }, []);
 
   useEffect(() => {
-    fetchSupabaseRatingMap('book')
+    fetchRatingMap('book')
       .then(setUserRatings)
       .catch(() => {});
   }, []);
@@ -1013,7 +1013,7 @@ export default function Books() {
 
   async function handleRate(book, categories, review) {
     try {
-      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book, review });
+      await saveRating({ mediaType: 'book', mediaId: book.id, categories, media: book, review });
       setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
@@ -1026,7 +1026,7 @@ export default function Books() {
     setAddingBookId(book.id);
 
     try {
-      const saved = await addSupabaseWatchlistItem({
+      const saved = await addWatchlistItem({
         mediaType: 'book',
         mediaId: book.id,
         status: 'plan_to_read',
@@ -1053,7 +1053,7 @@ export default function Books() {
   function handleQuickStatusChange(book, entry, nextStatus) {
     setWatchlistStatusMap((current) => ({ ...current, [book.id]: { ...current[book.id], status: nextStatus } }));
     if (!entry?.id) return;
-    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
+    updateWatchlistStatus(entry.id, nextStatus).catch(() => {
       setWatchlistStatusMap((current) => ({ ...current, [book.id]: entry }));
     });
   }

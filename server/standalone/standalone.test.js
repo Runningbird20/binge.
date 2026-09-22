@@ -17,12 +17,12 @@ test('standalone account, catalog, profile isolation, ratings, progress, storage
   process.env.DATABASE_URL=`postgresql://binge_test@127.0.0.1:${port}/postgres?sslmode=disable`;
   client=new Client({connectionString:process.env.DATABASE_URL});await client.connect();
   await require('../../scripts/migrate-standalone').initialize(client);
-  for(const [collection,data] of [
-   ['movies',{id:'1',title:'Safe movie',year:2020,genre:'Drama',age_rating:'G'}],
-   ['movies',{id:'2',title:'Adult movie',year:2024,genre:'Crime',age_rating:'R'}],
-   ['tv_shows',{id:'3',title:'A series',year:2020,age_rating:'PG'}],
-   ['books',{id:'1152880317676263401',title:'Big ID book',year:2000,genre:'Fiction'}],
-  ])await client.query('INSERT INTO binge.records VALUES($1,$2,$3)',[collection,data.id,JSON.stringify(data)]);
+   for(const [collection,data] of [
+    ['movies',{id:'1',title:'Safe movie',year:2020,genre:'Drama',age_rating:'G',poster_url:'https://example.com/safe.jpg',source_key:'tmdb:movie:1'}],
+    ['movies',{id:'2',title:'Adult movie',year:2024,genre:'Crime',age_rating:'R',poster_url:'https://example.com/adult.jpg'}],
+    ['tv_shows',{id:'3',title:'A series',year:2020,age_rating:'PG',genre:'Drama',poster_url:'https://example.com/series.jpg'}],
+    ['books',{id:'1152880317676263401',title:'Big ID book',year:2000,genre:'Fiction',cover_url:'https://example.com/book.jpg'}],
+   ])await client.query('INSERT INTO binge.records VALUES($1,$2,$3)',[collection,data.id,JSON.stringify(data)]);
   const app=require('./app');server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
   const base=`http://127.0.0.1:${server.address().port}`;
   async function request(route,{method='GET',body,cookie,profile,headers={},raw=false}={}){
@@ -44,6 +44,12 @@ test('standalone account, catalog, profile isolation, ratings, progress, storage
   const kid=await query('account_profiles',{action:'insert',values:{account_id:aliceId,name:'Kid',is_kids:true,avatar_url:'🐱'},single:'required'});
   assert.equal(kid.status,200,JSON.stringify(kid.data));const kidId=kid.data.data.id;
   const kidMovies=await query('movies',{},alice,kidId);assert.deepEqual(kidMovies.data.data.map(r=>r.id),['1']);
+  const moviesRes=await request('/api/media/movies?page=1&page_size=10');assert.equal(moviesRes.status,200);assert.equal(moviesRes.data.items.length,2);assert.equal(moviesRes.data.total_items,2);
+  const tvRes=await request('/api/media/tv-shows?page=1&page_size=10');assert.equal(tvRes.status,200);assert.equal(tvRes.data.items.length,1);
+  const booksRes=await request('/api/media/books?page=1&page_size=10');assert.equal(booksRes.status,200);assert.equal(booksRes.data.items.length,1);
+  const curatedBooks=await request('/api/media/books/curated');assert.equal(curatedBooks.status,200);assert(Array.isArray(curatedBooks.data.rows));
+  const movieDetail=await request('/api/media/movies/1');assert.equal(movieDetail.status,200);assert.equal(movieDetail.data.title,'Safe movie');
+  const embedId=await request('/api/media/embed-id?title=Safe%20movie&type=movie');assert.equal(embedId.status,200);assert.equal(embedId.data.value,'1');
   const foreign=await query('watchlist',{},bob,profile);assert.equal(foreign.status,403);
   const write=await query('watchlist',{action:'insert',values:{user_id:aliceId,profile_id:profile,media_type:'book',media_id:'1152880317676263401',status:'reading'}},alice,profile);
   assert.equal(write.status,200,JSON.stringify(write.data));

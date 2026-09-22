@@ -8,10 +8,10 @@ A media-tracking web app for movies, TV shows, and books. Users build a personal
 |---|---|
 | Frontend | React 19, React Router 7, custom CSS |
 | Backend | Express 5 (deployed as Vercel serverless functions) |
-| Database / Auth | Supabase (Postgres + Row Level Security + Auth) |
+| Database / Auth | PostgreSQL (standalone schema + auth + assets) |
 | Recommendations | Local taste-matching algorithm over your ratings (genre / type / recency weighting) |
 | Deployment | Vercel (frontend + API serverless functions in one project) |
-| Media Data | TMDB, Plex, Internet Archive, Open Library |
+| Media Data | TMDB, Open Library, MangaDex |
 
 ---
 
@@ -39,7 +39,7 @@ A media-tracking web app for movies, TV shows, and books. Users build a personal
 - A short "taste profile" summary plus a per-pick reason for each recommendation
 
 **Account & Settings**
-- Email / password authentication via Supabase Auth
+- Email / password authentication via standalone PostgreSQL backend
 - Username, email, and password management
 - Avatar and bio editing from profile
 

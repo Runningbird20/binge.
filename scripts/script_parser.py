@@ -55,8 +55,8 @@ MOVIE_SCRIPTS_AND_SCREENPLAYS_INDEX_URLS = [
 STUDIOBINDER_BASE_URL = "https://www.studiobinder.com/"
 STUDIOBINDER_TV_SCRIPTS_URL = urljoin(STUDIOBINDER_BASE_URL, "blog/tv-scripts/")
 SCRIPT_HIVE_BASE_URL = "https://www.scripthive.com/"
-SCRIPT_HIVE_SUPABASE_URL = "https://ceyhlqhetmcpzpzzrppv.supabase.co"
-SCRIPT_HIVE_FILES_API_URL = urljoin(SCRIPT_HIVE_SUPABASE_URL + "/", "rest/v1/files")
+SCRIPT_HIVE_API_BASE_URL = "https://ceyhlqhetmcpzpzzrppv.supabase.co"
+SCRIPT_HIVE_FILES_API_URL = urljoin(SCRIPT_HIVE_API_BASE_URL + "/", "rest/v1/files")
 SCRIPT_HIVE_ANON_KEY = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
     "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleWhscWhldG1jcHpwenpycHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI5MjE5MzIsImV4cCI6MjA1ODQ5NzkzMn0."

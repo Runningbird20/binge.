@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import { useAuth } from '../contexts/AuthContext';
-import { createSupabaseUserAsAdmin } from '../utils/supabaseData';
+import { createUserAsAdmin } from '../utils/userData';
 
 const NEW_USER_FORM = { username: '', email: '', password: '', bio: '', isAdmin: false };
 
@@ -21,7 +21,7 @@ function CreateUserForm({ onCreated, onCancel }) {
     setError('');
     setSaving(true);
     try {
-      const created = await createSupabaseUserAsAdmin(form);
+      const created = await createUserAsAdmin(form);
 
       if (form.isAdmin) {
         const updated = await api.patch(`/admin/users/${created.id}/toggle-admin`, {});

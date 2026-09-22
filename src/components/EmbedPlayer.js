@@ -5,17 +5,39 @@ import {
   fetchEpisodeProgress,
   markEpisodeWatched,
   unmarkEpisodeWatched,
-  upsertSupabaseContinueWatching,
+  upsertContinueWatching,
   updateWatchlistProgress,
-} from '../utils/supabaseData';
+} from '../utils/userData';
 import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
   {
+    id: 'vidsrc-io',
+    label: 'VidSrc (Official)',
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      if (isTV) {
+        return `https://vidsrc.io/embed/tv?${id.kind}=${id.value}&season=${season}&episode=${episode}`;
+      }
+      return `https://vidsrc.io/embed/movie?${id.kind}=${id.value}`;
+    },
+  },
+  {
+    id: 'vidsrc-to',
+    label: 'VidSrc (Fast)',
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      if (isTV) {
+        return `https://vidsrc.to/embed/tv/${id.value}/${season}/${episode}`;
+      }
+      return `https://vidsrc.to/embed/movie/${id.value}`;
+    },
+  },
+  {
     id: 'vidsrc-embed-ru',
-    label: 'Vidsrc',
+    label: 'VidSrc (Server 2)',
     buildUrl(id, mediaType, season, episode) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
@@ -26,46 +48,42 @@ const PROVIDERS = [
     },
   },
   {
-    id: 'vidsrc2',
-    label: 'Vidsrc 2',
+    id: 'vidsrc-in',
+    label: 'VidSrc (Mirror IN)',
     buildUrl(id, mediaType, season, episode) {
       const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.su');
-      url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
-      return url.toString();
+      if (isTV) {
+        return `https://vidsrc.in/embed/tv/${id.value}/${season}/${episode}`;
+      }
+      return `https://vidsrc.in/embed/movie/${id.value}`;
     },
   },
   {
-    id: '2embed',
-    label: '2Embed ★ anime',
+    id: 'vidsrc-pm',
+    label: 'VidSrc (Mirror PM)',
     buildUrl(id, mediaType, season, episode) {
-      // 2embed.stream — great anime coverage, uses TMDB or IMDB
       const isTV = mediaType === 'tv_show';
       if (isTV) {
-        return `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`;
+        return `https://vidsrc.pm/embed/tv/${id.value}/${season}/${episode}`;
       }
-      return `https://www.2embed.stream/embed/movie/${id.value}`;
+      return `https://vidsrc.pm/embed/movie/${id.value}`;
     },
   },
   {
-    id: 'autoembed',
-    label: 'AutoEmbed ★ anime',
+    id: 'vidsrc-su',
+    label: 'VidSrc (Mirror SU)',
     buildUrl(id, mediaType, season, episode) {
-      // autoembed.co — explicitly supports anime via TMDB or IMDB ID
       const isTV = mediaType === 'tv_show';
       if (isTV) {
-        return `https://autoembed.co/tv/${id.kind}/${id.value}-${season}-${episode}`;
+        return `https://vidsrc.su/embed/tv/${id.value}/${season}/${episode}`;
       }
-      return `https://autoembed.co/movie/${id.kind}/${id.value}`;
+      return `https://vidsrc.su/embed/movie/${id.value}`;
     },
   },
   {
     id: 'vidlink',
     label: 'VidLink',
     buildUrl(id, mediaType, season, episode) {
-      // vidlink.pro — clean player, good anime support
       const isTV = mediaType === 'tv_show';
       if (isTV) {
         return `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true`;
@@ -74,15 +92,25 @@ const PROVIDERS = [
     },
   },
   {
-    id: 'superembed',
-    label: 'SuperEmbed',
+    id: 'autoembed',
+    label: 'AutoEmbed ★ anime',
     buildUrl(id, mediaType, season, episode) {
       const isTV = mediaType === 'tv_show';
-      const tmdbFlag = id.kind === 'tmdb' ? '&tmdb=1' : '';
       if (isTV) {
-        return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}&s=${season}&e=${episode}`;
+        return `https://autoembed.co/tv/${id.kind}/${id.value}-${season}-${episode}`;
       }
-      return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}`;
+      return `https://autoembed.co/movie/${id.kind}/${id.value}`;
+    },
+  },
+  {
+    id: '2embed',
+    label: '2Embed ★ anime',
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      if (isTV) {
+        return `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`;
+      }
+      return `https://www.2embed.stream/embed/movie/${id.value}`;
     },
   },
 ];
@@ -124,6 +152,16 @@ function getEmbeddedId(item) {
         ? item.source_key.split(':')[2]
         : null
     ),
+    normalizeExternalId('tmdb', item?.external_id),
+    normalizeExternalId('imdb', item?.external_id),
+    normalizeExternalId('imdb', item?.id),
+    normalizeExternalId(
+      'tmdb',
+      typeof item?.id === 'string' && /^tmdb:(movie|tv):\d+$/i.test(item.id)
+        ? item.id.split(':')[2]
+        : null
+    ),
+    normalizeExternalId('tmdb', /^\d+$/.test(String(item?.id)) ? item.id : null),
   ];
 
   return candidates.find(Boolean) || null;
@@ -320,6 +358,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         const params = new URLSearchParams({
           title: item.title,
           type: mediaType,
+          ...(item.id ? { id: item.id } : {}),
           ...(item.year ? { year: item.year } : {}),
         });
         const data = await api.get(`/media/embed-id?${params}`);
@@ -430,7 +469,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
     const timer = setTimeout(() => {
       const progress = isTV ? { currentSeason: season, currentEpisode: episode } : {};
-      upsertSupabaseContinueWatching({ mediaType, mediaId: item.id, ...progress }).catch(() => {});
+      upsertContinueWatching({ mediaType, mediaId: item.id, ...progress }).catch(() => {});
       // Keeps the watchlist row's own progress columns in sync too, so a
       // title that's in BOTH the library and Continue Watching shows the
       // same up-to-date episode on both surfaces. No-ops if it's not in the

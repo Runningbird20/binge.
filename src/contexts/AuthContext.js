@@ -1,17 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { isSupabaseConfigured, supabase } from '../utils/supabase';
+import { client } from '../utils/backendClient';
 import { clearTokenCache, setTokenCache } from '../api';
 import {
-  getSupabaseSessionProfile,
-  resolveSupabaseProfile,
-  signInWithSupabase,
-  signOutFromSupabase,
-  signUpWithSupabase,
-  updateSupabasePassword,
-  updateSupabaseProfile,
+  getSessionProfile,
+  resolveProfile,
+  signIn as apiSignIn,
+  signOut as apiSignOut,
+  signUp as apiSignUp,
+  updatePassword as apiUpdatePassword,
+  updateProfile as apiUpdateProfile,
   fetchAccountProfiles,
   createAccountProfile,
-} from '../utils/supabaseData';
+} from '../utils/userData';
 import { normalizeUserType } from '../utils/userAccess';
 import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId } from '../utils/activeProfile';
 
@@ -87,7 +87,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (!isSupabaseConfigured || !supabase) {
+    if (!client) {
       const storedUser = readStoredUser();
       if (storedUser) {
         commitUser(storedUser);
@@ -99,7 +99,7 @@ export function AuthProvider({ children }) {
       return null;
     }
 
-    const nextUser = await getSupabaseSessionProfile();
+    const nextUser = await getSessionProfile();
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
@@ -112,7 +112,7 @@ export function AuthProvider({ children }) {
       commitUser(storedUser);
       setAuthLoading(false);
 
-      if (isSupabaseConfigured && supabase) {
+      if (client) {
         void refreshUser().catch(() => {});
       }
 
@@ -125,7 +125,7 @@ export function AuthProvider({ children }) {
       try {
         const restoredUser = await refreshUser();
         if (active && !restoredUser) {
-          // getSupabaseSessionProfile() resolved and confirmed there's no
+          // getSessionProfile() resolved and confirmed there's no
           // active session — a trustworthy "logged out" signal, not a
           // failure, so the cache should be cleared too.
           writeStoredUser(null);
@@ -153,13 +153,13 @@ export function AuthProvider({ children }) {
 
     bootstrapAuth();
 
-    if (!isSupabaseConfigured || !supabase) {
+    if (!client) {
       return () => {
         active = false;
       };
     }
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: authListener } = client.auth.onAuthStateChange(async (_event, session) => {
       if (!active) {
         return;
       }
@@ -187,7 +187,7 @@ export function AuthProvider({ children }) {
       if (session?.access_token) setTokenCache(session.access_token);
 
       try {
-        const nextUser = await resolveSupabaseProfile(session.user);
+        const nextUser = await resolveProfile(session.user);
         if (active) {
           commitUser(nextUser);
         }
@@ -204,7 +204,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       active = false;
-      authListener.subscription.unsubscribe();
+      authListener?.subscription?.unsubscribe?.();
     };
   }, [commitUser, refreshUser]);
 
@@ -263,13 +263,13 @@ export function AuthProvider({ children }) {
   );
 
   const signIn = useCallback(async (credentials) => {
-    const nextUser = await signInWithSupabase(credentials);
+    const nextUser = await apiSignIn(credentials);
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
 
   const signUp = useCallback(async (payload) => {
-    const result = await signUpWithSupabase(payload);
+    const result = await apiSignUp(payload);
     if (result.user) {
       commitUser(result.user);
     }
@@ -277,21 +277,16 @@ export function AuthProvider({ children }) {
   }, [commitUser]);
 
   const updateProfile = useCallback(async (payload) => {
-    const nextUser = await updateSupabaseProfile(payload);
+    const nextUser = await apiUpdateProfile(payload);
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
 
   const updatePassword = useCallback(async (newPassword) => {
-    await updateSupabasePassword(newPassword);
+    await apiUpdatePassword(newPassword);
   }, []);
 
   const logout = useCallback(async () => {
-    // Clear local state up front instead of waiting on the network
-    // round-trip to Supabase — the UI should leave the logged-in state
-    // immediately, not stall on server/network latency. The remote
-    // sign-out (revoking the session server-side) still happens, just
-    // in the background.
     clearTokenCache();
     clearActiveProfileId();
     setUser(null);
@@ -301,7 +296,7 @@ export function AuthProvider({ children }) {
       window.localStorage.removeItem('token');
       window.localStorage.removeItem('user');
     } catch {}
-    void signOutFromSupabase().catch(() => {});
+    void apiSignOut().catch(() => {});
   }, []);
 
   // Admin/dev privileges are account-level, but must not follow onto sub-

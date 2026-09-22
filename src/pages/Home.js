@@ -7,12 +7,12 @@ import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  fetchSupabaseRatings,
-  fetchSupabaseWatchlist,
-  fetchSupabaseContinueWatching,
-  removeSupabaseContinueWatching,
-} from '../utils/supabaseData';
-import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
+  fetchRatings,
+  fetchWatchlist,
+  fetchContinueWatching,
+  removeContinueWatching,
+} from '../utils/userData';
+import { generateTypeRecommendations } from '../utils/recommendations';
 import { detailsUrl, resumeUrl, computeProgressBadge } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
@@ -274,7 +274,7 @@ function ForYouRow({ mediaType, heading, ready, refreshSignal, kidsSafe }) {
     setState('loading');
     setError('');
     try {
-      const result = await generateSupabaseTypeRecommendations(mediaType, kidsSafe);
+      const result = await generateTypeRecommendations(mediaType, kidsSafe);
       setData(result);
       setState(result.recommendations?.length ? 'done' : 'empty');
     } catch (err) {
@@ -580,9 +580,9 @@ export default function Home() {
     if (!getCached(cacheKey)) setDataLoading(true);
     try {
       const [ratingsResult, watchlistResult, continueWatchingResult] = await Promise.allSettled([
-        fetchSupabaseRatings(),
-        fetchSupabaseWatchlist(),
-        fetchSupabaseContinueWatching(),
+        fetchRatings(),
+        fetchWatchlist(),
+        fetchContinueWatching(),
       ]);
 
       if (!mountedRef.current) return;
@@ -660,7 +660,7 @@ export default function Home() {
   async function handleRemoveContinueWatching(id) {
     setContinueWatchingItems(prev => prev.filter(item => item.id !== id));
     try {
-      await removeSupabaseContinueWatching(id);
+      await removeContinueWatching(id);
     } catch {
       // Re-fetching on next visit will reconcile if the delete failed.
     }

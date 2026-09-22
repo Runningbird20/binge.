@@ -61,7 +61,37 @@ app.delete('/api/admin/users/:id',async(req,res)=>{
   });res.json({ok:true});
 });
 app.use('/api/media',require('./media'));
-// These provider integrations do not use Supabase or the legacy SQLite database.
+app.get(['/api/search', '/api/search-related'], async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.json({ movies: [], tv: [], books: [], people: [] });
+  const pattern = `%${q}%`;
+  const types = String(req.query.types || 'movies,tv,books').split(',').map(s => s.trim());
+  const results = { movies: [], tv: [], books: [], people: [] };
+  if (types.includes('movies')) {
+    const { rows } = await database().query(
+      "SELECT data FROM binge.records WHERE collection='movies' AND (data->>'title' ILIKE $1 OR data->>'genre' ILIKE $1) AND data->>'poster_url' IS NOT NULL ORDER BY (data->>'year')::numeric DESC NULLS LAST LIMIT 8",
+      [pattern]
+    );
+    results.movies = rows.map(r => r.data);
+  }
+  if (types.includes('tv') || types.includes('tv_shows')) {
+    const { rows } = await database().query(
+      "SELECT data FROM binge.records WHERE collection='tv_shows' AND (data->>'title' ILIKE $1 OR data->>'genre' ILIKE $1) AND data->>'poster_url' IS NOT NULL ORDER BY (data->>'year')::numeric DESC NULLS LAST LIMIT 8",
+      [pattern]
+    );
+    results.tv = rows.map(r => r.data);
+  }
+  if (types.includes('books')) {
+    const { rows } = await database().query(
+      "SELECT data FROM binge.records WHERE collection='books' AND (data->>'title' ILIKE $1 OR data->>'author' ILIKE $1) LIMIT 8",
+      [pattern]
+    );
+    results.books = rows.map(r => r.data);
+  }
+  res.json(results);
+});
+
+// External streaming and scraper provider integrations.
 for(const name of ['sports','proxy','embed-proxy','manga','weebcentral','bato','books']){
   const filename=name==='embed-proxy'?'embedProxy':name;
   app.use(`/api/${name}`,require(`../routes/${filename}`));

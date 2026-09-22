@@ -10,17 +10,17 @@ import PullToRefresh from '../components/PullToRefresh';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import {
-  addSupabaseWatchlistItem,
-  fetchSupabaseRatingMap,
-  fetchSupabaseWatchlistStatusMap,
-  updateSupabaseWatchlistStatus,
-  saveSupabaseRating,
-} from '../utils/supabaseData';
+  addWatchlistItem,
+  fetchRatingMap,
+  fetchWatchlistStatusMap,
+  updateWatchlistStatus,
+  saveRating,
+} from '../utils/userData';
 import WatchlistStatusControl from '../components/WatchlistStatusControl';
 import {
-  fetchSupabaseTvShowById,
-  fetchSupabaseTvShowCatalogSegment,
-} from '../utils/supabaseMovieCatalog';
+  fetchTvShowById,
+  fetchTvShowCatalogSegment,
+} from '../utils/catalog';
 import {
   buildMediaGenreFacets,
   filterMediaItems,
@@ -173,7 +173,7 @@ function CatalogView({
   const { activeProfile } = useAuth();
   const kidsSafe = Boolean(activeProfile?.is_kids);
   const requestTokenRef = useRef(0);
-  const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
+  const sourceRef = useRef({ mode: 'catalog', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
   const loadMoreRef = useRef(null);
   const pendingInitialGenreRef = useRef(initialGenre || '');
@@ -205,7 +205,7 @@ function CatalogView({
     return activeGroup ? activeGroup.values : [activeLabel];
   }, [genreGroups, activeLabel]);
 
-  const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
+  const fetchCatalogWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const maxOffset = Math.max(0, totalCount - windowSize);
     const offsets = [...new Set(Array.from({ length: WINDOWS_PER_BATCH }, () => (
@@ -213,7 +213,7 @@ function CatalogView({
     )))];
 
     const results = await Promise.all(offsets.map((offset) => (
-      fetchSupabaseTvShowCatalogSegment({
+      fetchTvShowCatalogSegment({
         offset,
         limit: windowSize,
         search: searchTerm,
@@ -230,9 +230,9 @@ function CatalogView({
   }, [genreValues, searchTerm, kidsSafe]);
 
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
-  const fetchSupabaseSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
+  const fetchCatalogSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
     const { sortOrder, includeUpcoming } = sortModeToQuery(sortMode);
-    const result = await fetchSupabaseTvShowCatalogSegment({
+    const result = await fetchTvShowCatalogSegment({
       offset,
       limit: PAGE_SIZE,
       search: searchTerm,
@@ -254,7 +254,7 @@ function CatalogView({
     });
 
     // The legacy API only supports a single genre substring; this tier only
-    // runs when Supabase is unreachable, so an approximate match is fine.
+    // runs when the catalog API is unreachable, so an approximate match is fine.
     if (genreValues[0]) params.set('genre', genreValues[0]);
     if (searchTerm) params.set('search', searchTerm);
 
@@ -321,7 +321,7 @@ function CatalogView({
     async function loadCatalog() {
       if (sortMode !== 'featured') {
         try {
-          const page = await fetchSupabaseSortedPage(0, { includeCount: true, includeFacets: true });
+          const page = await fetchCatalogSortedPage(0, { includeCount: true, includeFacets: true });
           const totalCount = Number(page.total) || 0;
           if (totalCount === 0 && !fetchHadFilter) {
             throw new Error('TV catalog is empty');
@@ -330,7 +330,7 @@ function CatalogView({
           if (cancelled || requestTokenRef.current !== requestToken) return;
 
           adoptGenres(page.facets?.genres);
-          sourceRef.current = { mode: 'supabase-sorted', nextOffset: PAGE_SIZE };
+          sourceRef.current = { mode: 'catalog-sorted', nextOffset: PAGE_SIZE };
           setTotal(totalCount);
           setItems(page.items);
           setLoading(false);
@@ -341,7 +341,7 @@ function CatalogView({
         }
       } else {
       try {
-        const probe = await fetchSupabaseTvShowCatalogSegment({
+        const probe = await fetchTvShowCatalogSegment({
           offset: 0,
           limit: VISIBLE_BATCH_SIZE,
           search: searchTerm,
@@ -360,7 +360,7 @@ function CatalogView({
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         adoptGenres(probe?.facets?.genres);
-        sourceRef.current = { mode: 'supabase' };
+        sourceRef.current = { mode: 'catalog' };
         setTotal(totalCount);
 
         if (totalCount === 0) {
@@ -379,7 +379,7 @@ function CatalogView({
 
         // Keep visible cards in place while discovery results arrive.
         setLoadingMore(true);
-        const firstBatch = await fetchSupabaseWindows({ totalCount, existingCount: 0 });
+        const firstBatch = await fetchCatalogWindows({ totalCount, existingCount: 0 });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         const nextItems = appendUniqueItems(initialItems, firstBatch);
@@ -444,7 +444,7 @@ function CatalogView({
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, sortMode, kidsSafe, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage, refreshKey]);
+  }, [genreValues, searchTerm, sortMode, kidsSafe, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -452,8 +452,8 @@ function CatalogView({
     setLoadingMore(true);
 
     try {
-      if (source.mode === 'supabase') {
-        const batch = await fetchSupabaseWindows({ totalCount: total, existingCount: items.length });
+      if (source.mode === 'catalog') {
+        const batch = await fetchCatalogWindows({ totalCount: total, existingCount: items.length });
         if (requestTokenRef.current !== requestToken) return;
 
         setItems((current) => {
@@ -466,8 +466,8 @@ function CatalogView({
         return;
       }
 
-      if (source.mode === 'supabase-sorted') {
-        const page = await fetchSupabaseSortedPage(source.nextOffset);
+      if (source.mode === 'catalog-sorted') {
+        const page = await fetchCatalogSortedPage(source.nextOffset);
         if (requestTokenRef.current !== requestToken) return;
 
         sourceRef.current = { ...source, nextOffset: source.nextOffset + PAGE_SIZE };
@@ -496,7 +496,7 @@ function CatalogView({
         setLoadingMore(false);
       }
     }
-  }, [items.length, total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
+  }, [items.length, total, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage]);
 
   const visibleItems = items.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -658,14 +658,14 @@ export default function TVShows() {
   }
 
   useEffect(() => {
-    fetchSupabaseRatingMap('tv_show')
+    fetchRatingMap('tv_show')
       .then(setUserRatings)
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetchSupabaseWatchlistStatusMap('tv_show')
+    fetchWatchlistStatusMap('tv_show')
       .then((map) => { if (!cancelled) setWatchlistStatusMap(map); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -675,7 +675,7 @@ export default function TVShows() {
     setAddingWatchlistIds((prev) => new Set(prev).add(item.id));
     setDetailMessage('');
     try {
-      const saved = await addSupabaseWatchlistItem({ mediaType: 'tv_show', mediaId: item.id, media: item });
+      const saved = await addWatchlistItem({ mediaType: 'tv_show', mediaId: item.id, media: item });
       setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: { id: saved.id, status: saved.status } }));
       setDetailMessage(`"${item.title}" added to your watchlist.`);
     } catch (error) {
@@ -692,7 +692,7 @@ export default function TVShows() {
   const handleQuickStatusChange = useCallback((item, entry, nextStatus) => {
     setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: { ...prev[item.id], status: nextStatus } }));
     if (!entry?.id) return;
-    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
+    updateWatchlistStatus(entry.id, nextStatus).catch(() => {
       setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: entry }));
     });
   }, []);
@@ -704,7 +704,7 @@ export default function TVShows() {
 
     async function loadOpenItem() {
       try {
-        const item = await fetchSupabaseTvShowById(openId);
+        const item = await fetchTvShowById(openId);
         if (!cancelled && item?.id) {
           setSelectedItem(item);
           setSelectedItemBrowseOnly(false);
@@ -756,7 +756,7 @@ export default function TVShows() {
     }
 
     try {
-      const detailedItem = await fetchSupabaseTvShowById(item.id);
+      const detailedItem = await fetchTvShowById(item.id);
       if (detailedItem?.id) {
         setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
         return;
@@ -777,7 +777,7 @@ export default function TVShows() {
 
   async function handleRate(item, categories, review) {
     try {
-      await saveSupabaseRating({
+      await saveRating({
         mediaType: 'tv_show',
         mediaId: item.id,
         categories,

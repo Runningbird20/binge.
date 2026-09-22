@@ -2,16 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Baby, X } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
-import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
+import { deleteAccountProfile, signIn } from '../utils/userData';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileCreationWizard from '../components/ProfileCreationWizard';
 
 function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-  async function handleConfirm(event) {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setBusy(true);
     setError('');
@@ -19,7 +19,7 @@ function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
       // Re-authenticating with the typed password is the verification check —
       // it throws if the password is wrong, and just re-confirms the same
       // session (harmless) if it's right.
-      await signInWithSupabase({ email: userEmail, password });
+      await signIn({ email: userEmail, password });
       await deleteAccountProfile(profile.id);
       onDeleted();
     } catch (err) {
@@ -31,7 +31,7 @@ function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
 
   return (
     <div className="profile-delete-overlay" onClick={onCancel}>
-      <form className="profile-delete-card" onClick={(event) => event.stopPropagation()} onSubmit={handleConfirm}>
+      <form className="profile-delete-card" onClick={(event) => event.stopPropagation()} onSubmit={handleSubmit}>
         <h3>Delete "{profile.name}"?</h3>
         <p>This permanently removes this profile and everything saved under it — watchlist, ratings, and watch history. Enter your account password to confirm.</p>
         <input
