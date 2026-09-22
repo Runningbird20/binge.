@@ -17,7 +17,7 @@ describe('user access helpers', () => {
     }, ['dev', 'admin'])).toBe(true);
   });
 
-  test('treats raw Supabase-shaped is_dev flags as dev access', () => {
+  test('treats raw database is_dev flags as dev access', () => {
     expect(getDefaultRouteForUserType({
       user_type: null,
       is_admin: false,

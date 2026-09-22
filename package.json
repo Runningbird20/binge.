@@ -2,12 +2,12 @@
   "name": "project-3",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://runningbird20.github.io/binge.",
   "engines": {
     "node": "24.x"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
-    "@supabase/supabase-js": "^2.103.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -25,6 +25,7 @@
     "helmet": "^8.1.0",
     "hls.js": "^1.6.16",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^10.0.10",
     "pg": "^8.20.0",
     "playwright": "^1.59.1",
     "react": "^19.2.4",
@@ -32,7 +33,6 @@
     "react-router-dom": "^7.13.2",
     "react-scripts": "5.0.1",
     "sonner": "^2.0.7",
-    "supabase": "^2.90.0",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
@@ -60,13 +60,6 @@
     "import:plex": "node plex_importer.js --type both --limit 25",
     "import:plex:bulk": "node plex_importer.js --type both --all --max-items 100",
     "import:plex:resume": "node plex_importer.js --type both --all --resume --max-items 100",
-    "generate:supabase:movies": "node scripts/generate-supabase-movie-seed.js",
-    "generate:supabase:tv": "node scripts/generate-supabase-tv-seed.js",
-    "generate:supabase:books": "node scripts/generate-supabase-book-seed.js",
-    "generate:supabase:catalogs": "npm run generate:supabase:movies && npm run generate:supabase:tv && npm run generate:supabase:books",
-    "prepare:supabase:chunks": "node scripts/prepare-non-destructive-chunks.js",
-    "supabase:sql": "node scripts/run-supabase-sql.js",
-    "supabase:seed:catalogs": "node scripts/run-supabase-sql.js supabase/repeatable_schema.sql supabase/repeatable_movies_seed.sql supabase/repeatable_tv_shows_seed.sql supabase/repeatable_books_seed.sql",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
@@ -79,7 +72,16 @@
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
-    "clean:adult": "node clean_adult_content.js"
+    "clean:adult": "node clean_adult_content.js",
+    "test:standalone": "node --test server/standalone/standalone.test.js",
+    "db:start": "./scripts/db-local.sh start",
+    "db:stop": "./scripts/db-local.sh stop",
+    "db:status": "./scripts/db-local.sh status",
+    "db:init": "node scripts/migrate-standalone.js --schema-only",
+    "db:migrate:catalog": "node scripts/migrate-standalone.js backups/catalog-export-2026-09-22 --catalog-only",
+    "sync:catalog": "node scripts/sync-catalog.js",
+    "predeploy": "npm run build && cp build/index.html build/404.html",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -100,6 +102,7 @@
     ]
   },
   "devDependencies": {
+    "gh-pages": "^6.3.0",
     "patch-package": "^8.0.1"
   },
   "proxy": "http://localhost:5001"

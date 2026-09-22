@@ -19,6 +19,7 @@ import './theme-experiment.css';
 // small screens, so its overrides must win over both stylesheets above.
 import './mobile.css';
 
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
@@ -73,6 +74,7 @@ function AppRoutes() {
     <>
       <Routes location={backgroundLocation || location}>
         <Route path="/"          element={<Landing />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/signup"    element={<Signup />} />
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
@@ -131,7 +133,7 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <MiniPlayerProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={process.env.PUBLIC_URL || '/'}>
             <Suspense fallback={<AppRouteFallback />}>
               <AppShell>
                 <AdBlocker />

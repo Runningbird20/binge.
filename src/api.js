@@ -1,24 +1,10 @@
-import { executeSupabaseRoute } from './utils/supabaseApi';
-
-function isLegacyBackendEnabled() {
-  return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
-    .trim()
-    .toLowerCase() === 'true';
-}
+import { standaloneMode, getSession } from './utils/backendClient';
+import { getActiveProfileId } from './utils/activeProfile';
+import { executeLocalRoute } from './utils/localApi';
 
 function resolveLegacyBaseUrl() {
-  const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
-
-  if (!configuredApiUrl) {
-    return isLegacyBackendEnabled() ? '/api' : null;
-  }
-
-  const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
-  if (normalizedApiUrl.endsWith('/api')) {
-    return normalizedApiUrl;
-  }
-
-  return `${normalizedApiUrl}/api`;
+  const custom = (process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
+  return custom ? `${custom}/api` : '/api';
 }
 
 const LEGACY_BASE = resolveLegacyBaseUrl();
@@ -26,15 +12,10 @@ const LEGACY_BASE = resolveLegacyBaseUrl();
 let cachedToken = null;
 let tokenFetchPromise = null;
 
-async function fetchSupabaseToken() {
+async function fetchAuthToken() {
   try {
-    const { isSupabaseConfigured, getSupabaseSession } = await import('./utils/supabase');
-    if (!isSupabaseConfigured) {
-      return null;
-    }
-
     const result = await Promise.race([
-      getSupabaseSession(),
+      getSession(),
       new Promise((resolve) => {
         window.setTimeout(() => resolve({ data: null }), 3000);
       }),
@@ -47,7 +28,7 @@ async function fetchSupabaseToken() {
 }
 
 async function getAuthToken() {
-  const legacyToken = window.localStorage.getItem('token');
+  const legacyToken = standaloneMode ? null : window.localStorage.getItem('token');
   if (legacyToken) {
     return legacyToken;
   }
@@ -60,7 +41,7 @@ async function getAuthToken() {
     return tokenFetchPromise;
   }
 
-  tokenFetchPromise = fetchSupabaseToken().then((token) => {
+  tokenFetchPromise = fetchAuthToken().then((token) => {
     cachedToken = token;
     tokenFetchPromise = null;
     return token;
@@ -99,7 +80,7 @@ async function parseResponseBody(response) {
 
 function buildLegacyErrorMessage(response, data) {
   if (data && typeof data === 'object') {
-    return data.error || data.message || `Request failed with status ${response.status}`;
+    return data.error?.message || data.error || data.message || `Request failed with status ${response.status}`;
   }
 
   if (typeof data === 'string') {
@@ -136,6 +117,7 @@ async function requestLegacyApi(method, path, body) {
   const token = await getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
+    ...(standaloneMode ? { 'X-Binge-Request': '1', ...(getActiveProfileId() ? { 'X-Binge-Profile': getActiveProfileId() } : {}) } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
@@ -165,7 +147,7 @@ async function requestLegacyApi(method, path, body) {
 }
 
 async function request(method, path, body) {
-  const directResult = await executeSupabaseRoute(method, path, body);
+  const directResult = await executeLocalRoute(method, path, body);
   if (directResult !== null) {
     return directResult;
   }

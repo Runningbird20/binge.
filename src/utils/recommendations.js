@@ -1,12 +1,12 @@
 import {
-  fetchSupabaseRatings,
-  fetchSupabaseWatchlist,
-} from './supabaseData';
+  fetchRatings,
+  fetchWatchlist,
+} from './userData';
 import {
-  fetchSupabaseBooksPage,
-  fetchSupabaseMovieCatalogSegment,
-  fetchSupabaseTvShowCatalogSegment,
-} from './supabaseMovieCatalog';
+  fetchBooksPage,
+  fetchMovieCatalogSegment,
+  fetchTvShowCatalogSegment,
+} from './catalog';
 
 const THIS_YEAR = new Date().getFullYear();
 
@@ -249,7 +249,7 @@ async function sampleCatalogSegment(fetchSegment, { genre = '', limit, kidsSafe 
 }
 
 async function sampleBookSegment({ genre = '', limit } = {}) {
-  const probe = await fetchSupabaseBooksPage({ genre, page: 1, pageSize: 1 }).catch(() => null);
+  const probe = await fetchBooksPage({ genre, page: 1, pageSize: 1 }).catch(() => null);
   const total = probe?.total || 0;
   if (!total) return [];
 
@@ -257,22 +257,22 @@ async function sampleBookSegment({ genre = '', limit } = {}) {
   const totalPages = Math.max(1, Math.ceil(total / window));
   const page = 1 + Math.floor(Math.random() * totalPages);
 
-  const result = await fetchSupabaseBooksPage({ genre, page, pageSize: window }).catch(() => ({ items: [] }));
+  const result = await fetchBooksPage({ genre, page, pageSize: window }).catch(() => ({ items: [] }));
   return result.items || [];
 }
 
 async function sampleMoviePool(genres, kidsSafe = false) {
   const results = await Promise.all([
-    sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 60, kidsSafe }),
-    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { genre, limit: 60, kidsSafe })),
+    sampleCatalogSegment(fetchMovieCatalogSegment, { limit: 60, kidsSafe }),
+    ...genres.map((genre) => sampleCatalogSegment(fetchMovieCatalogSegment, { genre, limit: 60, kidsSafe })),
   ]);
   return dedupeById(results.flat());
 }
 
 async function sampleShowPool(genres, kidsSafe = false) {
   const results = await Promise.all([
-    sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 60, kidsSafe }),
-    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { genre, limit: 60, kidsSafe })),
+    sampleCatalogSegment(fetchTvShowCatalogSegment, { limit: 60, kidsSafe }),
+    ...genres.map((genre) => sampleCatalogSegment(fetchTvShowCatalogSegment, { genre, limit: 60, kidsSafe })),
   ]);
   return dedupeById(results.flat());
 }
@@ -295,14 +295,14 @@ function qualityScore(item) {
 // releases for TV/books.
 async function fetchPopularForType(mediaType, limit, kidsSafe = false) {
   if (mediaType === 'movie') {
-    const pool = await sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 80, kidsSafe });
+    const pool = await sampleCatalogSegment(fetchMovieCatalogSegment, { limit: 80, kidsSafe });
     return pool
       .map((item) => ({ ...item, media_type: 'movie' }))
       .sort((a, b) => qualityScore(b) - qualityScore(a))
       .slice(0, limit);
   }
   if (mediaType === 'tv_show') {
-    const pool = await sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 80, kidsSafe });
+    const pool = await sampleCatalogSegment(fetchTvShowCatalogSegment, { limit: 80, kidsSafe });
     return pool
       .map((item) => ({ ...item, media_type: 'tv_show' }))
       .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
@@ -331,8 +331,8 @@ const EMPTY_MESSAGE = 'Rate some movies, TV shows, or books — or add a few to 
 
 async function prepareRecommendationContext() {
   const [ratings, watchlist] = await Promise.all([
-    fetchSupabaseRatings(),
-    fetchSupabaseWatchlist(),
+    fetchRatings(),
+    fetchWatchlist(),
   ]);
 
   if (!ratings.length && !watchlist.length) {
@@ -374,7 +374,7 @@ function toRecommendation(candidate, signals) {
   };
 }
 
-export async function generateSupabaseRecommendations() {
+export async function generateRecommendations() {
   const context = await prepareRecommendationContext();
   if (!context) {
     const [movies, shows, books] = await Promise.all([
@@ -429,6 +429,11 @@ export async function generateSupabaseRecommendations() {
   };
 }
 
+export {
+  generateRecommendations as generateSupabaseRecommendations,
+  generateTypeRecommendations as generateSupabaseTypeRecommendations,
+};
+
 const TYPE_POOL_CONFIG = {
   movie: { sample: sampleMoviePool, genreSlice: 3 },
   tv_show: { sample: sampleShowPool, genreSlice: 3 },
@@ -439,7 +444,7 @@ const TYPE_POOL_CONFIG = {
 // tabs so they surface a real top-12 for that type instead of duplicating the mixed Home list.
 // kidsSafe restricts movie/tv_show pools to the same age_rating allowlist as
 // the catalog browse pages — books have no rating data to filter on.
-export async function generateSupabaseTypeRecommendations(mediaType, kidsSafe = false) {
+export async function generateTypeRecommendations(mediaType, kidsSafe = false) {
   const config = TYPE_POOL_CONFIG[mediaType];
   if (!config) {
     throw new Error(`Unsupported media type: ${mediaType}`);
