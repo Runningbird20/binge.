@@ -184,6 +184,9 @@ export function rankServers(providerIds, { prefs, originalLanguage, summary = []
       if (memory?.provider === id) score += 4;
       const brokenAt = memory?.[`broken:${id}`];
       if (brokenAt && Date.now() - brokenAt < RECENT_BROKEN_MS) score -= 6;
+      // Kept buffering for this title recently (2h): rank it lower.
+      const slowAt = memory?.[`slow:${id}`];
+      if (slowAt && Date.now() - slowAt < 2 * 60 * 60 * 1000) score -= 3;
       if (want && audio) score += audio === want ? 5 : -4;
 
       let note = '';

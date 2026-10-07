@@ -12,8 +12,10 @@ import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
+import { formatClock, getResumePosition, positionKey, savePosition } from '../utils/playbackPositions';
 import {
   fetchReportSummary,
+  rememberServer,
   getPlaybackPrefs,
   getServerMemory,
   rankServers,
@@ -66,11 +68,12 @@ const PROVIDERS = [
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidy.st');
       url.searchParams.set('color', 'F4F6F8');
       url.searchParams.set('autoplay', 'true');
+      if (startAt > 0) url.searchParams.set('progress', String(startAt));
       if (isTV) {
         url.searchParams.set('nextEpisode', 'true');
         url.searchParams.set('autoplayNextEpisode', 'true');
@@ -84,11 +87,13 @@ const PROVIDERS = [
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
       const isTV = mediaType === 'tv_show';
-      return isTV
+      const base = isTV
         ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
         : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+      // Documented startAt (seconds).
+      return startAt > 0 ? `${base}&startAt=${startAt}` : base;
     },
   },
   {
@@ -101,11 +106,16 @@ const PROVIDERS = [
     subtitles: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang) {
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/embed/tv/${id.value}` : `/embed/movie/${id.value}`, 'https://cinesrc.st');
       if (isTV) { url.searchParams.set('s', season); url.searchParams.set('e', episode); }
       url.searchParams.set('autoplay', 'true');
+      if (startAt > 0) {
+        url.searchParams.set('t', String(startAt));
+        url.searchParams.set('continueprompt', 'false');
+      }
+      if (lowBandwidth) url.searchParams.set('quality', '720');
       url.searchParams.set('color', '#f4f6f8');
       url.searchParams.set('prioritize', 'true');
       if (subtitleLang) {
@@ -202,12 +212,12 @@ const AUTO_WATCH_SECONDS = 5 * 60;
 // immediately closed (misclick, browsing) shouldn't leave a row behind.
 const CONTINUE_WATCHING_DELAY_SECONDS = 20;
 
-function buildUrl(providerId, externalId, mediaType, season, episode, subtitleLang = null) {
+function buildUrl(providerId, externalId, mediaType, season, episode, subtitleLang = null, options = {}) {
   const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
   if (!provider) return null;
   if (!externalId) return null;
   try {
-    return provider.buildUrl(externalId, mediaType, season, episode, subtitleLang);
+    return provider.buildUrl(externalId, mediaType, season, episode, subtitleLang, options);
   } catch {
     return null;
   }
@@ -229,6 +239,59 @@ const SERVER_CONFIRM_SECONDS = 60;
 // No playback time from an event-capable server after this long = it
 // doesn't have this title; fail over automatically.
 const FAILOVER_SECONDS = 25;
+// Servers that report pause/play as well as time, so "time stopped moving"
+// can be told apart from "viewer paused" — buffering detection only runs
+// for these.
+const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'videasy']);
+// Servers that can start at a given second (URL param or message), so a
+// mid-play switch keeps the viewer's place.
+const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink']);
+const STALL_SECONDS = 12;      // no progress while playing -> buffering
+const STALL_SWITCH_SECONDS = 30; // still stuck -> switch servers automatically
+
+function prefersLowBandwidth() {
+  const connection = typeof navigator !== 'undefined' ? navigator.connection : null;
+  return Boolean(connection && (connection.saveData || (connection.downlink && connection.downlink < 3)));
+}
+
+// One normalized reading from any server's postMessage, or null.
+function readPlayback(raw) {
+  let data = raw;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch { return null; }
+  }
+  if (!data || typeof data !== 'object') return null;
+  const type = data.type || '';
+  if (type.startsWith('vidrift:')) {
+    if (type === 'vidrift:progress') return { time: Number(data.currentTime), duration: Number(data.duration) };
+    if (type === 'vidrift:paused') return { state: 'pause', time: Number(data.currentTime) };
+    if (type === 'vidrift:unpaused') return { state: 'play', time: Number(data.currentTime) };
+    if (type === 'vidrift:ended') return { state: 'ended' };
+    return null;
+  }
+  if (type.startsWith('cinesrc:')) {
+    if (type === 'cinesrc:timeupdate' || type === 'cinesrc:seeked') return { time: Number(data.currentTime), duration: Number(data.duration) };
+    if (type === 'cinesrc:play') return { state: 'play' };
+    if (type === 'cinesrc:pause') return { state: 'pause' };
+    if (type === 'cinesrc:ended') return { state: 'ended' };
+    return null;
+  }
+  if (type === 'PLAYER_EVENT') {
+    const event = data.data || {};
+    const reading = { time: Number(event.currentTime), duration: Number(event.duration) };
+    if (event.event === 'play') reading.state = 'play';
+    if (event.event === 'pause') reading.state = 'pause';
+    if (event.event === 'ended') reading.state = 'ended';
+    return reading;
+  }
+  if (type === 'MEDIA_DATA') {
+    const media = typeof data.data === 'string' ? (() => { try { return JSON.parse(data.data); } catch { return null; } })() : data.data;
+    const progress = media?.progress || (media && Object.values(media)[0]?.progress);
+    if (!progress) return null;
+    return { time: Number(progress.watched), duration: Number(progress.duration) };
+  }
+  return null;
+}
 
 function normalizeStartAt(value) {
   const n = Number(value);
@@ -261,6 +324,13 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const playbackSeenRef = useRef(false);
   const triedRef = useRef(new Set());
   const [failoverNotice, setFailoverNotice] = useState(null);
+  const [stall, setStall] = useState(null);
+  const playbackRef = useRef({ time: 0, duration: 0, playing: false, lastAdvanceAt: Date.now(), lastSavedAt: 0 });
+  // Start position per load (provider + episode), frozen when the load
+  // begins so saving progress every few seconds never changes the iframe
+  // URL (which would reload the player).
+  const pendingStartRef = useRef(null);
+  const frozenStartRef = useRef({ key: '', value: null });
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
@@ -364,39 +434,67 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   useEffect(() => {
     if (!EVENT_PROVIDERS.has(provider)) return undefined;
+    playbackRef.current = { time: 0, duration: 0, playing: false, lastAdvanceAt: Date.now(), lastSavedAt: 0 };
     function onMessage(event) {
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
-      let data = event.data;
-      if (typeof data === 'string') {
-        try { data = JSON.parse(data); } catch { return; }
-      }
-      // VidRift: { type: 'vidrift:progress', currentTime } / CineSrc:
-      // { type: 'cinesrc:timeupdate', currentTime }
-      if (data?.type === 'vidrift:progress' || data?.type === 'cinesrc:timeupdate') {
-        const time = Number(data.currentTime);
-        if (time > 0) playbackSeenRef.current = true;
-        if (time > 3) confirmServer();
-        return;
-      }
-      if (data?.type === 'PLAYER_EVENT') {
-        const playback = data.data || {};
-        if (Number(playback.currentTime) > 0) playbackSeenRef.current = true;
-        if (Number(playback.currentTime) > 3 || (playback.event === 'timeupdate' && Number(playback.currentTime) > 0)) {
-          confirmServer();
+      const reading = readPlayback(event.data);
+      if (!reading) return;
+      const now = Date.now();
+      const state = playbackRef.current;
+
+      if (reading.state === 'pause' || reading.state === 'ended') state.playing = false;
+      if (reading.state === 'play') { state.playing = true; state.lastAdvanceAt = now; }
+      if (reading.duration > 0) state.duration = reading.duration;
+
+      if (Number.isFinite(reading.time) && reading.time > 0) {
+        if (Math.abs(reading.time - state.time) > 0.25) {
+          state.lastAdvanceAt = now;
+          if (reading.state !== 'pause') state.playing = true;
+          setStall(null);
         }
-        return;
-      }
-      // vidsrc.ru / vidsrc.su: { type: 'MEDIA_DATA', data: { progress: { watched, duration } } }
-      if (data?.type === 'MEDIA_DATA') {
-        const media = typeof data.data === 'string' ? (() => { try { return JSON.parse(data.data); } catch { return null; } })() : data.data;
-        const watchedSeconds = Number(media?.progress?.watched);
-        if (watchedSeconds > 0) playbackSeenRef.current = true;
-        if (watchedSeconds > 3) confirmServer();
+        state.time = reading.time;
+        playbackSeenRef.current = true;
+        if (reading.time > 3) confirmServer();
+        if (now - state.lastSavedAt > 10000 && item?.id) {
+          state.lastSavedAt = now;
+          savePosition(positionKey(mediaType, item.id, season, episode), reading.time, state.duration);
+        }
       }
     }
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [provider, confirmServer]);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      const state = playbackRef.current;
+      if (item?.id && state.time > 0) savePosition(positionKey(mediaType, item.id, season, episode), state.time, state.duration);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, confirmServer, season, episode]);
+
+  // Buffering: a server that's supposed to be playing but whose time has
+  // stopped moving. Offer a same-timestamp switch after STALL_SECONDS and
+  // make it automatically after STALL_SWITCH_SECONDS (never for a server
+  // the viewer picked by hand).
+  useEffect(() => {
+    if (!PAUSE_AWARE.has(provider)) return undefined;
+    const timer = setInterval(() => {
+      const state = playbackRef.current;
+      if (!state.playing || !(state.time > 0)) return;
+      const stuckFor = (Date.now() - state.lastAdvanceAt) / 1000;
+      if (stuckFor < STALL_SECONDS) return;
+      const ranking = rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: getServerMemory(memoryType, item?.id) });
+      const next = ranking.find((server) => server.id !== provider && RESUMABLE.has(server.id))
+        || ranking.find((server) => server.id !== provider);
+      if (!next) return;
+      setStall({ provider, next: next.id, at: state.time });
+      if (stuckFor >= STALL_SWITCH_SECONDS && !manualPickRef.current) {
+        rememberServer(memoryType, item?.id, { [`slow:${provider}`]: Date.now() });
+        setServerMemory(getServerMemory(memoryType, item?.id));
+        switchServer(next.id, { at: state.time, reason: 'buffering' });
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, availableIds, prefs, originalLanguage, reportSummary]);
 
   // Automatic failover. Servers can load fine and still not have a given
   // episode (their catalogs differ), which looks identical from outside —
@@ -447,24 +545,46 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     return (candidates.find((server) => !avoidAudio || server.audio !== avoidAudio) || candidates[0])?.id || currentId;
   }
 
-  function selectServer(id) {
-    serverLockedRef.current = true;
-    manualPickRef.current = true;
-    setFailoverNotice(null);
+  // Change server, carrying the current position across when possible.
+  function switchServer(id, { at = null, reason = null, manual = false } = {}) {
+    const position = at ?? (playbackRef.current.time > 5 ? playbackRef.current.time : null);
+    if (position) pendingStartRef.current = Math.floor(position);
+    if (manual) {
+      serverLockedRef.current = true;
+      manualPickRef.current = true;
+    }
+    setStall(null);
+    setFailoverNotice(reason ? { from: provider, to: id, reason, at: position } : null);
     setProvider(id);
   }
 
-  const failoverBar = failoverNotice && (
+  function selectServer(id) {
+    switchServer(id, { manual: true });
+  }
+
+  const stallBar = stall && !failoverNotice && (
+    <div className="st-failover st-failover--stall" role="status">
+      <span className="st-stall-dot" aria-hidden="true" />
+      <span>Buffering on {SERVER_LABELS[stall.provider]?.label || stall.provider}…</span>
+      <button type="button" onClick={() => switchServer(stall.next, { at: stall.at, reason: 'buffering' })}>
+        Switch to {SERVER_LABELS[stall.next]?.label || stall.next}{RESUMABLE.has(stall.next) && stall.at ? ` at ${formatClock(stall.at)}` : ''}
+      </button>
+    </div>
+  );
+
+  const failoverBar = stallBar || (failoverNotice && (
     <div className="st-failover" role="status">
       <span>
-        {SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} couldn&apos;t play this {isTV ? 'episode' : 'title'}, so we switched to {SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}.
+        {failoverNotice.reason === 'buffering'
+          ? `${SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} kept buffering, so we switched to ${SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}${failoverNotice.at ? ` at ${formatClock(failoverNotice.at)}` : ''}.`
+          : `${SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} couldn't play this ${isTV ? 'episode' : 'title'}, so we switched to ${SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}.`}
       </span>
       <button type="button" onClick={() => selectServer(failoverNotice.from)}>Try {SERVER_LABELS[failoverNotice.from]?.label || 'it'} anyway</button>
       <button type="button" className="st-failover-dismiss" onClick={() => setFailoverNotice(null)} aria-label="Dismiss">
         <X size={14} weight="bold" />
       </button>
     </div>
-  );
+  ));
 
   function changePrefs(patch) {
     const next = savePlaybackPrefs(patch);
@@ -839,7 +959,28 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     }
   }
 
-  const embedUrl = buildUrl(provider, externalId, mediaType, season, episode, subtitleLang);
+  const loadKey = `${provider}|${item?.id}|${season}|${episode}`;
+  if (frozenStartRef.current.key !== loadKey) {
+    const pending = pendingStartRef.current;
+    pendingStartRef.current = null;
+    frozenStartRef.current = {
+      key: loadKey,
+      value: pending ?? (item?.id ? getResumePosition(positionKey(mediaType, item.id, season, episode)) : null),
+    };
+  }
+  const startAt = frozenStartRef.current.value;
+  const embedUrl = buildUrl(provider, externalId, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth() });
+
+  // VidRift takes its start position (and quality hint) as messages.
+  function handleFrameLoad() {
+    if (provider !== 'vidrift') return;
+    const frame = iframeRef.current;
+    setTimeout(() => {
+      if (!frame?.contentWindow) return;
+      if (startAt > 0) frame.contentWindow.postMessage({ type: 'vidrift:resume', currentTime: startAt }, 'https://embed.vidrift.net');
+      if (prefersLowBandwidth()) frame.contentWindow.postMessage({ type: 'vidrift:quality-preference', label: '720p' }, 'https://embed.vidrift.net');
+    }, 1500);
+  }
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
@@ -894,6 +1035,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
               title={`Watch ${item.title}`}
+              onLoad={handleFrameLoad}
             />
           ) : (
             <div className="mp-no-url">
@@ -1136,6 +1278,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
               title={`Watch ${item.title}`}
+              onLoad={handleFrameLoad}
             />
           ) : (
             <div className="player-no-url">
