@@ -1950,3 +1950,75 @@
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
 }
 @media (max-width: 768px) { .st-sp-feature-poster { display: none; } }
+
+/* Player: automatic server failover notice */
+.st-failover {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.6rem 0 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--exp-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--exp-text);
+  font-size: 0.9rem;
+}
+.st-failover span { flex: 1 1 260px; }
+.st-failover button {
+  min-height: 34px;
+  padding: 0 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--exp-border-strong);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.st-failover button:hover { background: rgba(255, 255, 255, 0.16); }
+.st-failover .st-failover-dismiss { width: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; background: none; }
+.mp-shell .st-failover { margin: 0.6rem 0.75rem 0; }
+
+/* Detail modal: the saved-status pill IS the dropdown (no box inside a box). */
+.td-status {
+  gap: 0;
+  padding: 0 0.15rem 0 0.95rem;
+  color: var(--st-match);
+}
+.td-status .themed-select { min-width: 0; background: none; border: none; }
+.td-status .themed-select-control {
+  min-height: 40px;
+  padding: 0 0.85rem 0 0.5rem;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.td-status .themed-select-chevron { color: rgba(255, 255, 255, 0.8); }
+.td-status:hover { border-color: #fff; background: rgba(255, 255, 255, 0.12); }
+
+/* Rows scroll horizontally only. overflow-x:auto silently made the track
+   scroll vertically too (hover-scaled cards are taller than the track), so
+   trackpads could nudge the whole Top 10 row around. Padding leaves room
+   for the 1.05 hover scale instead. */
+.st-row-track {
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.st-row-arrow { top: 14px; bottom: calc(14px + 1.8rem); }
+.st-row--ranked .st-row-arrow { bottom: 14px; }
+/* Top 10 numerals hang slightly below the posters — give them room. */
+.st-row--ranked .st-row-track { padding-bottom: 30px; }
+.st-row--ranked .st-row-arrow { bottom: 30px; }
+/* Full line box so the numeral glyphs aren't cut at the box edge; the
+   negative margin keeps their baseline on the poster's bottom edge. */
+.st-card-rank { line-height: 1; margin-bottom: -0.16em; }
+/* The body font's "2" has overlapping contours that text-stroke draws as a
+   little star inside the glyph; system Helvetica/Arial digits are clean. */
+.st-card-rank { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }

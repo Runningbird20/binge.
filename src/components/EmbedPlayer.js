@@ -23,7 +23,10 @@ import {
 } from '../utils/streamPreferences';
 import PlaybackOptions, { PlaybackOptionsPanel } from './PlaybackOptions';
 
-// Embed servers, best first. Verified 2026-10-07 by loading each in a real
+// Embed servers, best first. VidLink leads because it had the broadest
+// coverage of new episodes when tested (e.g. a 2026 K-drama that vidsrc.ru
+// and 2Embed didn't have yet — confirmed identical on their own sites, so
+// it's catalog coverage, not our embed). Verified 2026-10-07 by loading each in a real
 // browser, embedded in an iframe on a non-provider origin, and watching for
 // an actual HLS/MP4 stream (a 200 page proves nothing — vsembed.ru serves
 // its page but shows "This media is unavailable": its stream backend,
@@ -37,6 +40,19 @@ import PlaybackOptions, { PlaybackOptionsPanel } from './PlaybackOptions';
 //   idKinds:   which external ids the URL accepts
 //   types:     media types it actually streams
 const PROVIDERS = [
+  {
+    id: 'vidlink',
+    label: 'VidLink',
+    events: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      return isTV
+        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
+        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+    },
+  },
   {
     // https://vidsrc.ru/docs — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
     // MEDIA_DATA progress messages to the parent window.
@@ -53,19 +69,6 @@ const PROVIDERS = [
       url.searchParams.set('pausescreen', 'true');
       if (isTV) url.searchParams.set('autonextepisode', 'true');
       return url.toString();
-    },
-  },
-  {
-    id: 'vidlink',
-    label: 'VidLink',
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
-      const isTV = mediaType === 'tv_show';
-      return isTV
-        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
-        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
     },
   },
   {
@@ -161,6 +164,9 @@ const SERVER_LABELS = Object.fromEntries(PROVIDERS.map((entry) => [entry.id, { l
 // How long a server has to stay open before it counts as "works" for this
 // title (and the one-time audio check appears).
 const SERVER_CONFIRM_SECONDS = 60;
+// No playback time from an event-capable server after this long = it
+// doesn't have this title; fail over automatically.
+const FAILOVER_SECONDS = 25;
 
 function normalizeStartAt(value) {
   const n = Number(value);
@@ -189,6 +195,10 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // enough to count as working, late-arriving community reports must not
   // yank them onto a different server mid-episode.
   const serverLockedRef = useRef(false);
+  const manualPickRef = useRef(false);
+  const playbackSeenRef = useRef(false);
+  const triedRef = useRef(new Set());
+  const [failoverNotice, setFailoverNotice] = useState(null);
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
@@ -220,6 +230,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   useEffect(() => {
     serverLockedRef.current = false;
+    manualPickRef.current = false;
     setProvider(bestServerFor(item, mediaType, getPlaybackPrefs()));
     setServerMemory(getServerMemory(mediaType === 'tv_show' ? 'tv_show' : 'movie', item?.id));
     setOriginalLanguage(item?.original_language || null);
@@ -299,6 +310,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       }
       if (data?.type === 'PLAYER_EVENT') {
         const playback = data.data || {};
+        if (Number(playback.currentTime) > 0) playbackSeenRef.current = true;
         if (Number(playback.currentTime) > 3 || (playback.event === 'timeupdate' && Number(playback.currentTime) > 0)) {
           confirmServer();
         }
@@ -308,12 +320,43 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       if (data?.type === 'MEDIA_DATA') {
         const media = typeof data.data === 'string' ? (() => { try { return JSON.parse(data.data); } catch { return null; } })() : data.data;
         const watchedSeconds = Number(media?.progress?.watched);
+        if (watchedSeconds > 0) playbackSeenRef.current = true;
         if (watchedSeconds > 3) confirmServer();
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [provider, confirmServer]);
+
+  // Automatic failover. Servers can load fine and still not have a given
+  // episode (their catalogs differ), which looks identical from outside —
+  // except that the event-capable ones never report playback time moving.
+  // If a server we picked automatically shows no playback within
+  // FAILOVER_SECONDS, mark it dead for this title and move to the next
+  // ranked server. A server the viewer chose by hand is never skipped.
+  useEffect(() => {
+    triedRef.current = new Set();
+    setFailoverNotice(null);
+  }, [item?.id, season, episode]);
+
+  useEffect(() => {
+    playbackSeenRef.current = false;
+    if (!item?.id || !externalId || manualPickRef.current || !EVENT_PROVIDERS.has(provider)) return undefined;
+    const timer = setTimeout(() => {
+      if (playbackSeenRef.current) return;
+      triedRef.current.add(provider);
+      submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: false }).catch(() => {});
+      const memory = getServerMemory(memoryType, item.id);
+      const ranking = rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory });
+      const next = ranking.find((server) => !triedRef.current.has(server.id) && server.id !== provider);
+      if (!next) return;
+      setServerMemory(memory);
+      setFailoverNotice({ from: provider, to: next.id });
+      setProvider(next.id);
+    }, FAILOVER_SECONDS * 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, season, episode, externalId, item?.id]);
 
   // Optional, from the panel: "the audio on this server is X".
   async function reportServerAudio(language) {
@@ -336,8 +379,22 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   function selectServer(id) {
     serverLockedRef.current = true;
+    manualPickRef.current = true;
+    setFailoverNotice(null);
     setProvider(id);
   }
+
+  const failoverBar = failoverNotice && (
+    <div className="st-failover" role="status">
+      <span>
+        {SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} couldn&apos;t play this {isTV ? 'episode' : 'title'}, so we switched to {SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}.
+      </span>
+      <button type="button" onClick={() => selectServer(failoverNotice.from)}>Try {SERVER_LABELS[failoverNotice.from]?.label || 'it'} anyway</button>
+      <button type="button" className="st-failover-dismiss" onClick={() => setFailoverNotice(null)} aria-label="Dismiss">
+        <X size={14} weight="bold" />
+      </button>
+    </div>
+  );
 
   function changePrefs(patch) {
     const next = savePlaybackPrefs(patch);
@@ -855,6 +912,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
           )}
         </div>
 
+        {failoverBar}
+
         {/* Controls */}
         <div className="mp-controls">
           {lookupState === 'loading' && (
@@ -1110,6 +1169,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           </div>
         </div>
+        {failoverBar}
       </div>
     </div>
   );
