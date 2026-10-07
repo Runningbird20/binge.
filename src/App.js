@@ -18,6 +18,9 @@ import './theme-experiment.css';
 // mobile.css loads last: it adapts the theme-experiment design language to
 // small screens, so its overrides must win over both stylesheets above.
 import './mobile.css';
+// streaming.css (Netflix-style rows/hero/sports/player bar) builds on the
+// theme-experiment tokens, so it loads after everything else.
+import './streaming.css';
 
 const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));

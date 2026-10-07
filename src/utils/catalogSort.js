@@ -3,7 +3,8 @@
 // (unchanged); every other option switches to a real sequential, sorted
 // paginated fetch — see sortModeToQuery().
 export const SORT_OPTIONS = [
-  { value: 'featured', label: 'Featured' },
+  { value: 'popular', label: 'Most Popular' },
+  { value: 'featured', label: 'Shuffle' },
   { value: 'newest', label: 'Newest Release' },
   { value: 'oldest', label: 'Oldest Release' },
   { value: 'az', label: 'Title A–Z' },
@@ -12,6 +13,8 @@ export const SORT_OPTIONS = [
 
 export function sortModeToQuery(sortMode) {
   switch (sortMode) {
+    case 'popular':
+      return { sortOrder: 'popularity-desc', includeUpcoming: false };
     case 'newest':
       // Surface upcoming/announced titles too, not just already-released ones.
       return { sortOrder: 'year-desc', includeUpcoming: true };

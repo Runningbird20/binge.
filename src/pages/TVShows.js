@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import BrowseView from '../components/BrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { SkeletonGrid } from '../components/SkeletonCard';
@@ -30,6 +31,8 @@ import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
+import { identityKey } from '../utils/mediaIdentity';
+import { isBrowseable, isComingSoon } from '../utils/releaseWindow';
 
 const PAGE_SIZE = 48;
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
@@ -51,13 +54,19 @@ function normalizeMediaItems(data) {
   return [];
 }
 
+// Dedupes by id and by title identity (the Plex importer can create one
+// row per file for what's really one release), and drops titles releasing
+// more than 30 days out.
 function appendUniqueItems(currentItems, nextItems) {
   const seenIds = new Set(currentItems.map((item) => item.id));
+  const seenTitles = new Set(currentItems.map((item) => identityKey(item)));
   const deduped = [];
 
   for (const item of nextItems) {
-    if (seenIds.has(item.id)) continue;
+    const titleKey = identityKey(item);
+    if (seenIds.has(item.id) || seenTitles.has(titleKey) || !isBrowseable(item)) continue;
     seenIds.add(item.id);
+    seenTitles.add(titleKey);
     deduped.push(item);
   }
 
@@ -106,7 +115,8 @@ function resolvePosterUrl(url) {
 function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange, priority }) {
   const [imgError, setImgError] = useState(false);
   const posterUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
-  const isNew = Number(item.year) >= new Date().getFullYear();
+  const comingSoon = isComingSoon(item);
+  const isNew = !comingSoon && Number(item.year) >= new Date().getFullYear();
 
   return (
     <div className="poster-tile-wrap">
@@ -127,6 +137,7 @@ function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatch
               <span>{item.title?.charAt(0)}</span>
             </div>
           )}
+          {comingSoon && <span className="st-badge st-badge--soon">Coming Soon</span>}
           {isNew && <span className="poster-tile-badge">New</span>}
         </div>
         <p className="poster-tile-title">{item.title}</p>
@@ -167,7 +178,7 @@ function CatalogView({
   const [total, setTotal] = useState(0);
   const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
-  const [sortMode, setSortMode] = useState('featured');
+  const [sortMode, setSortMode] = useState('popular');
   const { activeProfile } = useAuth();
   const kidsSafe = Boolean(activeProfile?.is_kids);
   const requestTokenRef = useRef(0);
@@ -630,6 +641,9 @@ export default function TVShows() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
   const initialGenre = searchParams.get('genre') || '';
+  // Rows landing by default (Netflix-style); the filterable grid is one
+  // click away via "Browse all" (?view=all) or any ?genre= deep link.
+  const showGrid = searchParams.get('view') === 'all' || Boolean(initialGenre);
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
 
   const [selectedItem, setSelectedItem] = useState(null);
@@ -793,8 +807,13 @@ export default function TVShows() {
       <Navbar />
       <main className="page-content curated-page">
         <PullToRefresh onRefresh={handleRefresh}>
+          {!showGrid ? (
+            <BrowseView mediaType="tv_show" refreshKey={refreshKey} />
+          ) : (
+          <>
           <div className="catalog-header">
             <h1 className="catalog-title">Series</h1>
+            <Link className="st-btn st-btn--ghost" to="/tv-shows">Back to highlights</Link>
           </div>
 
           <CatalogView
@@ -806,6 +825,8 @@ export default function TVShows() {
             onQuickAdd={handleQuickAdd}
             onQuickStatusChange={handleQuickStatusChange}
           />
+          </>
+          )}
         </PullToRefresh>
       </main>
 

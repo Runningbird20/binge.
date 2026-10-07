@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import PullToRefresh from '../components/PullToRefresh';
+import BrowseHero from '../components/BrowseHero';
+import TitleRow from '../components/TitleRow';
+import TitleCard from '../components/TitleCard';
 import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -13,414 +17,78 @@ import {
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
-import { detailsUrl, resumeUrl, computeProgressBadge } from '../utils/continueWatching';
+import { buildPersonalizedRows } from '../utils/personalization';
+import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
+import { resumeUrl, computeProgressBadge } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
-import { FilmSlate, MonitorPlay, BookOpen, X } from '@phosphor-icons/react';
+import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 
-const MEDIA_ICONS = {
-  movie: FilmSlate,
-  tv_show: MonitorPlay,
-  book: BookOpen,
-};
-
-function MediaTypeIcon({ type, size = 16 }) {
-  const Icon = MEDIA_ICONS[type];
-  if (!Icon) return null;
-  return <Icon size={size} weight="bold" aria-hidden="true" />;
+// Library/continue-watching rows carry media_id; cards key off id.
+function asTitle(record) {
+  return {
+    ...record,
+    id: record.media_id,
+    poster_url: record.poster_url || record.image_url,
+  };
 }
 
-// Edge fade — matches the genre-bar scroll fade, but only shown when the
-// row actually has enough items to scroll (checked on mount, on scroll,
-// and whenever the row resizes or its item count changes).
-function useEdgeFade(items) {
-  const ref = useRef(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
-  const checkScroll = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 8);
-    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 8);
-  }, []);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    checkScroll();
-    el.addEventListener('scroll', checkScroll, { passive: true });
-
-    // Not every environment has ResizeObserver (e.g. jsdom in tests) —
-    // the scroll listener + the mount/items-change check above still
-    // cover the cases that matter, this just adds live resize tracking.
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(checkScroll) : null;
-    ro?.observe(el);
-
-    return () => {
-      el.removeEventListener('scroll', checkScroll);
-      ro?.disconnect();
-    };
-  }, [items, checkScroll]);
-
-  return { ref, canLeft, canRight };
-}
-
-function resolvePosterUrl(url) {
-  if (!url) return null;
-
-  try {
-    if (url.includes('plex.tv')) {
-      const parsed = new URL(url);
-      const inner = parsed.searchParams.get('url');
-      if (inner) {
-        try {
-          return decodeURIComponent(inner);
-        } catch {
-          return inner;
-        }
-      }
-    }
-  } catch {
-    return url;
-  }
-
-  return url;
-}
-
-const HERO_TYPE_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
-
-function StreamHero({ user, activeProfile, continueWatchingItems, watchlistItems }) {
-  const location = useLocation();
-  const inProgressItem = continueWatchingItems.find(
-    (item) => resolvePosterUrl(item.image_url || item.poster_url)
-  ) || null;
-  const libraryItem = watchlistItems.find(
-    (item) => resolvePosterUrl(item.image_url || item.poster_url)
-  ) || null;
-  const heroItem = inProgressItem || libraryItem;
-  const poster = heroItem ? resolvePosterUrl(heroItem.image_url || heroItem.poster_url) : null;
-  const inProgress = Boolean(inProgressItem) && heroItem === inProgressItem;
-
-  return (
-    <section className="stream-hero">
-      {poster && (
-        <div
-          className="stream-hero-backdrop"
-          style={{ backgroundImage: `url(${poster})` }}
-          aria-hidden="true"
-        />
-      )}
-      <div className="stream-hero-scrim" aria-hidden="true" />
-      <div className="stream-hero-content">
-        <p className="stream-hero-kicker">Welcome back, {activeProfile?.name || user.username}</p>
-        <h1 className="stream-hero-title">
-          {heroItem ? heroItem.title : 'What will you binge tonight?'}
-        </h1>
-        <div className="stream-hero-meta">
-          {heroItem ? (
-            <>
-              <span className="stream-hero-chip">
-                {HERO_TYPE_LABELS[heroItem.media_type] || 'Title'}
-              </span>
-              {heroItem.year && <span>{heroItem.year}</span>}
-              <span className="stream-hero-dot">•</span>
-              <span>{inProgress ? 'Continue where you left off' : 'From your library'}</span>
-            </>
-          ) : (
-            <span>Pick up where you left off or discover something new.</span>
-          )}
-        </div>
-        <div className="stream-hero-actions">
-          {heroItem ? (
-            <>
-              <Link
-                className="btn-primary"
-                to={inProgress ? resumeUrl(heroItem) : detailsUrl(heroItem)}
-                state={{ backgroundLocation: location }}
-              >
-                {inProgress ? 'Resume' : 'Details'}
-              </Link>
-              <Link className="btn-secondary" to="/profile">My Library</Link>
-            </>
-          ) : (
-            <>
-              <Link className="btn-primary" to="/movies">Browse Movies</Link>
-              <Link className="btn-secondary" to="/tv-shows">Browse Series</Link>
-            </>
-          )}
-        </div>
-      </div>
-      {poster && (
-        <img
-          className="stream-hero-poster"
-          src={poster}
-          alt={heroItem.title}
-          referrerPolicy="no-referrer"
-          loading="eager"
-          fetchPriority="high"
-        />
-      )}
-    </section>
-  );
+// Continue Watching has no backdrop art of its own — fetch TMDB's so the
+// hero gets a proper wide image instead of a stretched poster.
+async function withBackdrop(item) {
+  const tmdbId = tmdbIdFromItem(item);
+  if (!tmdbId || item.media_type === 'book') return item;
+  const details = await tmdbGet(`/${tmdbKind(item.media_type)}/${tmdbId}`);
+  return details?.backdrop_path
+    ? { ...item, backdrop_url: tmdbImage(details.backdrop_path, 'w1280'), overview: details.overview || item.overview }
+    : item;
 }
 
 function ContinueWatchingCard({ item, onRemove, priority }) {
-  const location = useLocation();
-  const poster = resolvePosterUrl(item.image_url || item.poster_url);
-  const url = resumeUrl(item);
-  const progressBadge = computeProgressBadge(item);
-
+  const progress = computeProgressBadge(item);
   return (
-    <div className="cw-card-wrap">
-      <Link to={url} className="profile-wl-card profile-wl-card--own" state={{ backgroundLocation: location }}>
-        <div className="profile-wl-poster">
-          {poster
-            ? (
-              <img
-                src={poster}
-                alt={item.title}
-                referrerPolicy="no-referrer"
-                loading={priority ? 'eager' : 'lazy'}
-                fetchPriority={priority ? 'high' : 'auto'}
-                decoding="async"
-              />
-            )
-            : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>
-          }
-          {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
-        </div>
-        <p className="profile-wl-title">{item.title || '—'}</p>
-        {item.year && <p className="profile-wl-year">{item.year}</p>}
-      </Link>
+    <div className="st-cw-cell">
+      <TitleCard
+        item={{ ...asTitle(item), _progressLabel: progress, _match: null }}
+        to={resumeUrl(item)}
+        priority={priority}
+        showMatch={false}
+      />
       <button
         type="button"
-        className="cw-remove-btn"
+        className="st-cw-remove"
         title="Remove from Continue Watching"
         aria-label={`Remove ${item.title} from Continue Watching`}
         onClick={(event) => { event.preventDefault(); onRemove(item.id); }}
       >
-        <X size={11} weight="bold" />
+        <X size={14} weight="bold" />
       </button>
     </div>
   );
 }
 
-// Uses the same card markup as the Library section below it (LibraryCard /
-// .profile-wl-card) rather than ForYouSection's cards, minus the Library
-// section's type filter bar — clicking a card resumes playback directly
-// (see resumeUrl) instead of opening the details view.
-function ContinueWatching({ items, onRemove }) {
-  const { ref: cwRowRef, canLeft: cwCanLeft, canRight: cwCanRight } = useEdgeFade(items);
-  if (!items.length) return null;
-
-  return (
-    <section className="home-section">
-      <div className="section-header">
-        <h2>Continue Watching</h2>
-      </div>
-      <div className="mr-track-wrap">
-        <div className="profile-watchlist-row" ref={cwRowRef}>
-          {items.map((item, index) => (
-            <ContinueWatchingCard key={item.id} item={item} onRemove={onRemove} priority={index < 4} />
-          ))}
-        </div>
-        {cwCanLeft && <div className="mr-fade mr-fade-left" />}
-        {cwCanRight && <div className="mr-fade mr-fade-right" />}
-      </div>
-    </section>
-  );
+// Home's mixed (movies + series) taste rows: the first two language/genre
+// rows this profile leans toward for each type.
+function tasteRowDefinitions(taste, kidsSafe) {
+  if (kidsSafe) return [];
+  const pick = (mediaType) => orderRowsForTaste(rowsFor(mediaType), taste)
+    .filter((definition) => definition.kind)
+    .slice(0, 2)
+    .map((definition) => ({ ...definition, mediaType }));
+  return [...pick('tv_show'), ...pick('movie')];
 }
 
-const FOR_YOU_LABELS = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
-const FOR_YOU_ROWS = [
-  { mediaType: 'movie', heading: 'Movies For You' },
-  { mediaType: 'tv_show', heading: 'Series For You' },
-  { mediaType: 'book', heading: 'Books For You' },
-];
-
-function ForYouCard({ rec }) {
-  const location = useLocation();
-  return (
-    <Link to={rec.siteUrl} className="foryou-card" state={{ backgroundLocation: location }}>
-      <div className="foryou-card-poster">
-        {rec.posterUrl ? (
-          <img src={rec.posterUrl} alt={rec.title} loading="lazy" decoding="async" />
-        ) : (
-          <div className="foryou-card-placeholder"><MediaTypeIcon type={rec.media_type} size={28} /></div>
-        )}
-      </div>
-      <div className="foryou-card-body">
-        <div className="foryou-card-type">
-          <MediaTypeIcon type={rec.media_type} /> {FOR_YOU_LABELS[rec.media_type]}
-          {rec.year && <span className="foryou-card-year">{rec.year}</span>}
-        </div>
-        <h4 className="foryou-card-title">{rec.title}</h4>
-        {rec.genre && <p className="foryou-card-genre">{rec.genre.split(',')[0].trim()}</p>}
-      </div>
-    </Link>
-  );
-}
-
-// One row per media type, fetched and shown independently and simultaneously
-// (Netflix/Hulu-style sectioned rows) rather than one mixed list behind a tab
-// switcher — so "Movies", "Series", and "Books" never blur into one pile.
-function ForYouRow({ mediaType, heading, ready, refreshSignal, kidsSafe }) {
-  const [state, setState] = useState('idle');
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
-
-  const fetchData = useCallback(async () => {
-    setState('loading');
-    setError('');
-    try {
-      const result = await generateSupabaseTypeRecommendations(mediaType, kidsSafe);
-      setData(result);
-      setState(result.recommendations?.length ? 'done' : 'empty');
-    } catch (err) {
-      setError(String(err?.message || '').trim() || 'Something went wrong.');
-      setState('error');
-    }
-  }, [mediaType, kidsSafe]);
-
-  useEffect(() => {
-    if (ready && state === 'idle') fetchData();
-  }, [ready, state, fetchData]);
-
-  // activeProfile (and so kidsSafe) resolves asynchronously after mount —
-  // often after the 'idle' fetch above has already fired with the wrong
-  // (stale) kidsSafe value. Re-fetch specifically when kidsSafe changes post-
-  // mount so switching into/out of a kids profile actually re-filters this
-  // row instead of leaving it showing whatever the first, pre-resolution
-  // fetch returned.
-  const previousKidsSafe = useRef(kidsSafe);
-  useEffect(() => {
-    if (previousKidsSafe.current === kidsSafe) return;
-    previousKidsSafe.current = kidsSafe;
-    if (ready && state !== 'idle') fetchData();
-  }, [kidsSafe, ready, state, fetchData]);
-
-  // Pull-to-refresh signal — re-run on demand. The ref skips the very first
-  // run (mount), which the effect above already covers via the 'idle' check.
-  const skippedFirstRefresh = useRef(true);
-  useEffect(() => {
-    if (skippedFirstRefresh.current) {
-      skippedFirstRefresh.current = false;
-      return;
-    }
-    if (!ready) return;
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshSignal]);
-
-  const { ref: foryouRowRef, canLeft: foryouCanLeft, canRight: foryouCanRight } = useEdgeFade(data?.recommendations);
-
-  if (state === 'idle') return null;
-
-  return (
-    <section className="home-section">
-      <div className="section-header">
-        <h2>{heading}</h2>
-      </div>
-
-      <div className="foryou-section">
-        {state === 'loading' && (
-          <div className="foryou-loading">
-            <div className="foryou-loading-owl">🍿</div>
-            <p>Matching your taste...</p>
-            <div className="foryou-loading-dots"><span /><span /><span /></div>
-          </div>
-        )}
-
-        {state === 'error' && (
-          <div className="foryou-error">
-            <p>⚠️ {error}</p>
-            <button type="button" className="foryou-generate-btn" onClick={fetchData}>Try again</button>
-          </div>
-        )}
-
-        {state === 'empty' && (
-          <div className="foryou-idle">
-            <p className="foryou-idle-text">
-              {data?.message || 'Rate some movies, TV shows, or books first to unlock personalized recommendations!'}
-            </p>
-            <Link to="/movies" className="foryou-generate-btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
-              Browse & Rate Media
-            </Link>
-          </div>
-        )}
-
-        {state === 'done' && data && (
-          <div className="mr-track-wrap">
-            <div className="foryou-grid" ref={foryouRowRef}>
-              {data.recommendations.map((rec) => (
-                <ForYouCard key={`${rec.media_type}:${rec.id}`} rec={rec} />
-              ))}
-            </div>
-            {foryouCanLeft && <div className="mr-fade mr-fade-left" />}
-            {foryouCanRight && <div className="mr-fade mr-fade-right" />}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ForYouSection({ ready, refreshSignal, kidsSafe }) {
-  return (
-    <div id="for-you">
-      {FOR_YOU_ROWS.map((row) => (
-        <ForYouRow
-          key={row.mediaType}
-          mediaType={row.mediaType}
-          heading={row.heading}
-          ready={ready}
-          refreshSignal={refreshSignal}
-          kidsSafe={kidsSafe}
-        />
-      ))}
-    </div>
-  );
-}
-
-function LibraryCard({ item, ratingScore }) {
-  const location = useLocation();
-
-  // Library always opens the media card (details view) — auto-play is
-  // reserved for the Continue Watching row, which resumes at the saved point.
-  const mediaUrl = item.media_type === 'movie'
-    ? `/movie/${item.media_id}`
-    : item.media_type === 'tv_show'
-    ? `/tv-show/${item.media_id}`
-    : `/book/${item.media_id}`;
-
-  const poster = resolvePosterUrl(item.poster_url || item.image_url);
-  const progressBadge = computeProgressBadge(item);
-
-  const ratingOutOfFive = ratingScore != null ? ratingScore.toFixed(1) : null;
-
-  return (
-    <Link
-      to={mediaUrl}
-      className="profile-wl-card profile-wl-card--own"
-      state={{ backgroundLocation: location }}
-    >
-      <div className="profile-wl-poster">
-        {poster
-          ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" loading="lazy" decoding="async" />
-          : <div className="profile-wl-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>}
-        {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
-        {ratingOutOfFive != null && (
-          <span className="profile-wl-status-ind profile-wl-status-ind--rated" title={`Rated ${ratingOutOfFive}/5`}>
-            <span className="profile-wl-status-ind-num">{ratingOutOfFive}</span>
-            <span className="profile-wl-status-ind-den">/5</span>
-          </span>
-        )}
-      </div>
-      <p className="profile-wl-title">{item.title || '—'}</p>
-      {item.year && <p className="profile-wl-year">{item.year}</p>}
-    </Link>
-  );
+async function loadBookPicks() {
+  const result = await generateSupabaseTypeRecommendations('book');
+  return (result.recommendations || []).map((rec) => ({
+    id: rec.id,
+    title: rec.title,
+    media_type: 'book',
+    year: rec.year,
+    genre: rec.genre,
+    poster_url: rec.posterUrl,
+    _reason: rec.reason,
+  }));
 }
 
 function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
@@ -485,74 +153,6 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
   );
 }
 
-function LibrarySection({ watchlist, ratings, loading }) {
-  const [wlTypeFilter, setWlTypeFilter] = useState('');
-
-  // Rated titles belong to Ratings & Reviews, not the library grid.
-  const libraryWatchlist = excludeRated(watchlist, ratings);
-  const filteredWatchlist = libraryWatchlist.filter(item => {
-    return !wlTypeFilter || item.media_type === wlTypeFilter;
-  });
-
-  const { ref: libraryRowRef, canLeft: libraryCanLeft, canRight: libraryCanRight } = useEdgeFade(filteredWatchlist);
-
-  const ratingScores = useMemo(() => {
-    const map = new Map();
-    ratings.forEach(r => {
-      const score = computeStarRating(r.media_type, r);
-      if (score != null) map.set(`${r.media_type}:${r.media_id}`, score);
-    });
-    return map;
-  }, [ratings]);
-
-  return (
-    <section className="home-section">
-      <div className="section-header">
-        <h2>Library</h2>
-      </div>
-
-      <div className="profile-wl-filters">
-        <div className="books-tab-bar books-tab-bar--inline">
-          {[
-            { value: '', label: 'All', Icon: null },
-            { value: 'movie', label: 'Movies', Icon: FilmSlate },
-            { value: 'tv_show', label: 'Series', Icon: MonitorPlay },
-            { value: 'book', label: 'Books', Icon: BookOpen },
-          ].map(t => (
-            <button key={t.value} className={`books-tab ${wlTypeFilter === t.value ? 'active' : ''}`} onClick={() => setWlTypeFilter(t.value)} type="button">
-              {t.Icon && <t.Icon size={16} weight="bold" aria-hidden="true" />} {t.label}
-            </button>
-          ))}
-        </div>
-        <span className="profile-filter-count">{filteredWatchlist.length} items</span>
-      </div>
-
-      {loading ? (
-        <div className="loading-state">Loading library...</div>
-      ) : filteredWatchlist.length === 0 ? (
-        <div className="empty-state">
-          <p>Your library is empty.</p>
-          <Link to="/movies" className="btn-secondary" style={{ marginTop: '1rem', display: 'inline-block' }}>Browse the catalog</Link>
-        </div>
-      ) : (
-        <div className="mr-track-wrap">
-          <div className="profile-watchlist-row" ref={libraryRowRef}>
-            {filteredWatchlist.map((item, i) => (
-              <LibraryCard
-                key={item.id ?? i}
-                item={item}
-                ratingScore={ratingScores.get(`${item.media_type}:${item.media_id}`) ?? null}
-              />
-            ))}
-          </div>
-          {libraryCanLeft && <div className="mr-fade mr-fade-left" />}
-          {libraryCanRight && <div className="mr-fade mr-fade-right" />}
-        </div>
-      )}
-    </section>
-  );
-}
-
 export default function Home() {
   const { user, authLoading, activeProfile, profilesLoading } = useAuth();
   const location = useLocation();
@@ -560,8 +160,12 @@ export default function Home() {
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [personal, setPersonal] = useState(null);
+  const [heroItems, setHeroItems] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const userId = user?.id;
+  const kidsSafe = Boolean(activeProfile?.is_kids);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -570,11 +174,9 @@ export default function Home() {
 
   const profileId = activeProfile?.id || null;
 
-  // Lifted out of the mount effect (rather than an inline async function
-  // inside it) so pull-to-refresh can call the exact same fetch again later.
   // Stale-while-revalidate: the mount effect below hydrates instantly from
-  // cache when there's a hit, but this function always does the real fetch
-  // and re-caches the result, so data self-heals within a session.
+  // cache when there's a hit, but this always does the real fetch and
+  // re-caches, so data self-heals within a session.
   const fetchStats = useCallback(async () => {
     const cacheKey = buildUserDataCacheKey('home-stats', userId, profileId);
     if (!getCached(cacheKey)) setDataLoading(true);
@@ -587,12 +189,10 @@ export default function Home() {
 
       if (!mountedRef.current) return;
 
-      const ratingsData = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
-      const watchlistData = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
-      const continueWatchingData = continueWatchingResult.status === 'fulfilled' ? continueWatchingResult.value : [];
-      const nextRatings = Array.isArray(ratingsData) ? ratingsData : [];
-      const nextWatchlist = Array.isArray(watchlistData) ? watchlistData : [];
-      const nextContinueWatching = Array.isArray(continueWatchingData) ? continueWatchingData : [];
+      const pick = (result) => (result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []);
+      const nextRatings = pick(ratingsResult);
+      const nextWatchlist = pick(watchlistResult);
+      const nextContinueWatching = pick(continueWatchingResult);
       setWatchlistItems(nextWatchlist);
       setRatingsItems(nextRatings);
       setContinueWatchingItems(nextContinueWatching);
@@ -624,18 +224,43 @@ export default function Home() {
     fetchStats();
   }, [authLoading, userId, profileId, fetchStats]);
 
-  const [foryouRefreshSignal, setForyouRefreshSignal] = useState(0);
+  // Personalized rows (Top Picks, Because you watched...) across both types.
+  useEffect(() => {
+    if (authLoading || !userId || profilesLoading) return undefined;
+    let cancelled = false;
+    buildPersonalizedRows({ mediaTypes: ['movie', 'tv_show'], kidsSafe, becauseLimit: 4 })
+      .then((result) => { if (!cancelled) setPersonal(result); })
+      .catch(() => { if (!cancelled) setPersonal({ hasHistory: false, topPicks: [], becauseYouWatched: [], taste: {} }); });
+    return () => { cancelled = true; };
+  }, [authLoading, userId, profilesLoading, kidsSafe, refreshKey]);
+
+  // Hero: resume what you were watching first, then your top picks — or
+  // trending for a brand-new profile.
+  useEffect(() => {
+    let cancelled = false;
+    async function buildHero() {
+      const resume = continueWatchingItems
+        .filter((item) => item.media_type !== 'book')
+        .slice(0, 1)
+        .map((item) => ({ ...asTitle(item), _playUrl: resumeUrl(item), _playLabel: 'Resume', _reason: computeProgressBadge(item) ? `Continue ${computeProgressBadge(item)}` : 'Continue where you left off' }));
+      let picks = personal?.topPicks?.slice(0, 4) || [];
+      if (!picks.length && personal) {
+        picks = (await loadRowItems(rowsFor('movie', { kidsSafe })[0], 'movie', { kidsSafe }).catch(() => [])).slice(0, 4);
+      }
+      const withArt = await Promise.all(resume.map(withBackdrop));
+      if (!cancelled) setHeroItems([...withArt, ...picks]);
+    }
+    buildHero();
+    return () => { cancelled = true; };
+  }, [continueWatchingItems, personal, kidsSafe]);
 
   async function handleRefresh() {
-    setForyouRefreshSignal((n) => n + 1);
+    setRefreshKey((n) => n + 1);
     await fetchStats();
   }
 
   // The details overlay that saves a rating is a separately-mounted screen
-  // on top of Home (background-location routing), so it can't update Home's
-  // own state directly — it broadcasts instead. Merge the new rating in
-  // immediately so the Library hover-rating badge reflects it right away,
-  // rather than only after Home's next full data fetch.
+  // on top of Home, so it broadcasts instead of updating Home's state.
   useEffect(() => {
     function onRatingSaved(event) {
       const { mediaType, mediaId, categories } = event.detail || {};
@@ -666,43 +291,126 @@ export default function Home() {
     }
   }
 
-  // Bottom-nav "For You" tab links to /home#for-you — scroll it into view
-  // once the section has actually mounted (gated behind authLoading below).
+  // Bottom-nav "For You" tab links to /home#for-you.
   useEffect(() => {
     if (location.hash !== '#for-you' || authLoading || !userId) return;
     document.getElementById('for-you')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [location.hash, authLoading, userId]);
+  }, [location.hash, authLoading, userId, personal]);
+
+  const myList = useMemo(
+    () => excludeRated(watchlistItems, ratingsItems)
+      .filter((item) => item.status !== 'watched' && item.status !== 'read')
+      .map((item) => ({ ...asTitle(item), _progressLabel: computeProgressBadge(item) })),
+    [watchlistItems, ratingsItems]
+  );
+
+  const tasteRows = useMemo(() => tasteRowDefinitions(personal?.taste, kidsSafe), [personal?.taste, kidsSafe]);
+  const headlineRows = useMemo(() => ({
+    movie: rowsFor('movie', { kidsSafe })[0],
+    tv_show: rowsFor('tv_show', { kidsSafe })[0],
+    newMovies: rowsFor('movie', { kidsSafe }).find((definition) => definition.id === 'new'),
+  }), [kidsSafe]);
+
+  const name = activeProfile?.name || user?.username;
 
   return (
-    <>
     <div className="app-layout">
       <Navbar />
-      <main className="page-content">
+      <main className="page-content st-home">
         <PullToRefresh onRefresh={handleRefresh} disabled={authLoading || !user}>
         {(authLoading || !user) ? (
           <div className="loading-state">Loading dashboard...</div>
         ) : (
         <>
-        <StreamHero user={user} activeProfile={activeProfile} continueWatchingItems={continueWatchingItems} watchlistItems={watchlistItems} />
+        <BrowseHero items={heroItems} kicker={`Welcome back, ${name}`} />
 
-        <div className="home-sections">
-          <ProfileStatsHeader user={user} activeProfile={activeProfile} watchlist={watchlistItems} ratings={ratingsItems} />
+        <div className="st-rows">
+          {continueWatchingItems.length > 0 && (
+            <TitleRow
+              title={`Continue Watching for ${name}`}
+              items={continueWatchingItems}
+              eager
+              renderItem={(item, index) => (
+                <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} />
+              )}
+            />
+          )}
 
-          <ContinueWatching items={continueWatchingItems} onRemove={handleRemoveContinueWatching} />
+          <div id="for-you" />
+          {personal?.hasHistory && personal.topPicks.length > 0 && (
+            <TitleRow
+              title={`Top Picks for ${name}`}
+              subtitle="Based on what you watch and how you rate it"
+              items={personal.topPicks}
+              eager
+            />
+          )}
+          {personal && !personal.hasHistory && (
+            <div className="st-coldstart">
+              <p>Rate or watch a few titles and binge. will start building rows just for you.</p>
+              <Link className="st-btn st-btn--ghost" to="/movies">Find something to watch</Link>
+            </div>
+          )}
 
-          <LibrarySection
-            watchlist={watchlistItems}
-            ratings={ratingsItems}
-            loading={dataLoading}
+          {personal?.becauseYouWatched?.[0] && (
+            <TitleRow title={personal.becauseYouWatched[0].title} items={personal.becauseYouWatched[0].items} />
+          )}
+
+          <TitleRow
+            key={`top10-tv-${refreshKey}`}
+            title={kidsSafe ? 'Popular Kids Series' : 'Top 10 Series This Week'}
+            ranked={!kidsSafe}
+            load={() => loadRowItems(headlineRows.tv_show, 'tv_show', { kidsSafe }).then((items) => items.slice(0, kidsSafe ? 30 : 10))}
           />
 
-          <ForYouSection ready={!authLoading && !!user && !profilesLoading} refreshSignal={foryouRefreshSignal} kidsSafe={Boolean(activeProfile?.is_kids)} />
+          {myList.length > 0 && <TitleRow title="My List" items={myList} />}
+
+          {personal?.becauseYouWatched?.slice(1, 3).map((row) => (
+            <TitleRow key={row.id} title={row.title} items={row.items} />
+          ))}
+
+          <TitleRow
+            key={`top10-movie-${refreshKey}`}
+            title={kidsSafe ? 'Popular Kids Movies' : 'Top 10 Movies This Week'}
+            ranked={!kidsSafe}
+            load={() => loadRowItems(headlineRows.movie, 'movie', { kidsSafe }).then((items) => items.slice(0, kidsSafe ? 30 : 10))}
+          />
+
+          {tasteRows.map((definition) => (
+            <TitleRow
+              key={`${definition.mediaType}-${definition.id}-${refreshKey}`}
+              title={definition.title}
+              load={() => loadRowItems(definition, definition.mediaType, { kidsSafe })}
+              minItems={5}
+            />
+          ))}
+
+          {personal?.becauseYouWatched?.slice(3).map((row) => (
+            <TitleRow key={row.id} title={row.title} items={row.items} />
+          ))}
+
+          {headlineRows.newMovies && (
+            <TitleRow
+              key={`new-movies-${refreshKey}`}
+              title="New Movies"
+              load={() => loadRowItems(headlineRows.newMovies, 'movie', { kidsSafe })}
+              minItems={5}
+            />
+          )}
+
+          {!kidsSafe && (
+            <TitleRow key={`books-${refreshKey}`} title="Books for You" load={loadBookPicks} minItems={3} />
+          )}
+        </div>
+
+        <div className="home-sections st-home-stats">
+          <ProfileStatsHeader user={user} activeProfile={activeProfile} watchlist={watchlistItems} ratings={ratingsItems} />
+          {dataLoading && <div className="loading-state">Loading your library…</div>}
         </div>
         </>
         )}
         </PullToRefresh>
       </main>
     </div>
-    </>
   );
 }

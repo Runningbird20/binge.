@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabase';
 import { api } from '../api';
 import { KIDS_SAFE_RATINGS } from './kidsMode';
+import { comingSoonCutoffIso } from './releaseWindow';
 
 const MOVIE_COLUMNS = [
   'id',
@@ -24,6 +25,7 @@ const MOVIE_COLUMNS = [
   'imdb_rating',
   'metacritic_score',
   'ratings_enriched_at',
+  'original_language',
 ].join(', ');
 
 const MOVIE_BROWSE_COLUMNS = [
@@ -43,6 +45,8 @@ const MOVIE_BROWSE_COLUMNS = [
   'imdb_rating',
   'metacritic_score',
   'ratings_enriched_at',
+  'original_language',
+  'age_rating',
 ].join(', ');
 
 const TV_SHOW_COLUMNS = [
@@ -60,6 +64,9 @@ const TV_SHOW_COLUMNS = [
   'seasons',
   'source_key',
   'external_id',
+  'original_language',
+  'popularity',
+  'vote_average',
 ].join(', ');
 
 const TV_SHOW_BROWSE_COLUMNS = [
@@ -72,6 +79,10 @@ const TV_SHOW_BROWSE_COLUMNS = [
   'seasons',
   'source_key',
   'external_id',
+  'original_language',
+  'popularity',
+  'vote_average',
+  'age_rating',
 ].join(', ');
 
 const BOOK_COLUMNS = [
@@ -303,6 +314,12 @@ function applyBookFilters(query, { search = '', genre = '' } = {}) {
 }
 
 function applyBrowseSort(query, sortOrder = 'title-asc') {
+  if (sortOrder === 'popularity-desc') {
+    return query
+      .order('popularity', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true });
+  }
+
   if (sortOrder === 'year-desc') {
     return query
       .order('year', { ascending: false, nullsFirst: false })
@@ -391,16 +408,21 @@ export async function fetchSupabaseMovieCatalogSegment({
 
   let moviesQuery = client
     .from('movies')
-    .select(MOVIE_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
+    .select(MOVIE_BROWSE_COLUMNS, includeCount ? { count: 'estimated' } : undefined);
 
   moviesQuery = applyTitleGenreFilters(moviesQuery, { search, genre });
-  // Hide future releases from browse unless explicitly requested (e.g. upcoming sort)
+  // Hide future releases from browse unless explicitly requested (e.g.
+  // upcoming sort); anything more than 30 days out is hidden either way.
   if (!includeUpcoming) {
     moviesQuery = moviesQuery.lte('year', THIS_YEAR);
   }
+  moviesQuery = moviesQuery.or(`release_date.is.null,release_date.lte.${comingSoonCutoffIso()}`);
   if (kidsSafe) {
     moviesQuery = moviesQuery.in('age_rating', KIDS_SAFE_RATINGS);
   }
+  // The popularity index is partial on poster_url (see the streaming
+  // redesign migration); filtering the same way lets the sort use it.
+  if (sortOrder === 'popularity-desc') moviesQuery = moviesQuery.not('poster_url', 'is', null);
   moviesQuery = applyBrowseSort(moviesQuery, sortOrder);
 
   const tasks = [
@@ -638,12 +660,11 @@ export async function fetchSupabaseTvShowCatalogSegment({
 } = {}) {
   const client = requireSupabaseCatalog();
 
-  // tv_shows has no 'popularity' column — map relevance to newest-first as best proxy.
-  const effectiveSort = sortOrder === 'relevance' ? 'year-desc' : sortOrder;
+  const effectiveSort = sortOrder === 'relevance' ? 'popularity-desc' : sortOrder;
 
   let showsQuery = client
     .from('tv_shows')
-    .select(TV_SHOW_BROWSE_COLUMNS, includeCount ? { count: 'exact' } : undefined);
+    .select(TV_SHOW_BROWSE_COLUMNS, includeCount ? { count: 'estimated' } : undefined);
 
   showsQuery = applyTitleGenreFilters(showsQuery, { search, genre });
   if (!includeUpcoming) {
@@ -652,6 +673,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
   if (kidsSafe) {
     showsQuery = showsQuery.in('age_rating', KIDS_SAFE_RATINGS);
   }
+  if (effectiveSort === 'popularity-desc') showsQuery = showsQuery.not('poster_url', 'is', null);
   showsQuery = applyBrowseSort(showsQuery, effectiveSort);
 
   const tasks = [
@@ -822,4 +844,152 @@ export async function fetchSupabaseBookById(bookId) {
   }
 
   return normalizeBook(data);
+}
+
+const RECOMMENDATION_SAMPLE_SOURCES = {
+  movie: { table: 'movies', columns: MOVIE_BROWSE_COLUMNS, normalize: normalizeMovieBrowseEntry, filterReleased: true },
+  tv_show: { table: 'tv_shows', columns: TV_SHOW_BROWSE_COLUMNS, normalize: normalizeTvShowBrowseEntry, filterReleased: true },
+  book: { table: 'books', columns: BOOK_COLUMNS, normalize: normalizeBook, filterReleased: false },
+};
+
+// The planner's row estimate for a `genre ilike` filter is unreliable (it
+// reported ~240 Drama movies), so genre-filtered samples pick an offset from
+// this fixed range and step back toward 0 if it overshoots.
+const GENRE_SAMPLE_MAX_OFFSET = 1500;
+// An unsorted OFFSET still scans every skipped row, so very deep offsets into
+// the 100k+ row tables run past the statement timeout.
+const SAMPLE_MAX_OFFSET = 20000;
+
+// Random catalog window for the recommender, built to stay under the
+// database's statement timeout on the large catalog tables: no `count: 'exact'`
+// (times out on every table) and no ORDER BY (a sorted genre-filtered scan
+// also times out). The browse fetchers above need both, so they can't be
+// reused here. Never throws — a failed sample just contributes no candidates.
+export async function sampleSupabaseCatalogForRecommendations(mediaType, { genre = '', limit = 60, kidsSafe = false } = {}) {
+  const source = RECOMMENDATION_SAMPLE_SOURCES[mediaType];
+  if (!source) return [];
+
+  const client = requireSupabaseCatalog();
+
+  function applyFilters(query) {
+    let nextQuery = applyGenreFilter(query, genre);
+    if (source.filterReleased) {
+      nextQuery = nextQuery.lte('year', THIS_YEAR);
+      if (kidsSafe) {
+        nextQuery = nextQuery.in('age_rating', KIDS_SAFE_RATINGS);
+      }
+    }
+    return nextQuery;
+  }
+
+  let maxOffset = GENRE_SAMPLE_MAX_OFFSET;
+  if (!genre) {
+    const { count } = await applyFilters(
+      client.from(source.table).select('id', { count: 'planned', head: true })
+    ).then((result) => result, () => ({ count: null }));
+    maxOffset = Math.min(SAMPLE_MAX_OFFSET, Math.max(0, (Number(count) || 0) - limit));
+  }
+
+  const offset = Math.floor(Math.random() * (maxOffset + 1));
+  const offsets = [...new Set([offset, Math.floor(offset / 8), 0])];
+
+  for (const nextOffset of offsets) {
+    const { data, error } = await applyFilters(client.from(source.table).select(source.columns))
+      .range(nextOffset, nextOffset + limit - 1)
+      .then((result) => result, () => ({ data: null, error: true }));
+    if (!error && data?.length) {
+      return data.map((item) => source.normalize(item));
+    }
+  }
+
+  return [];
+}
+
+const BROWSE_SOURCES = {
+  movie: { table: 'movies', columns: MOVIE_BROWSE_COLUMNS, normalize: normalizeMovieBrowseEntry },
+  tv_show: { table: 'tv_shows', columns: TV_SHOW_BROWSE_COLUMNS, normalize: normalizeTvShowBrowseEntry },
+};
+
+// Catalog rows for a batch of TMDB ids (via the unique source_key index).
+// Used to turn TMDB trending/discover/recommendation lists into titles the
+// app can actually open. Returns a Map of tmdbId -> catalog item.
+export async function fetchCatalogByTmdbIds(mediaType, tmdbIds = []) {
+  const source = BROWSE_SOURCES[mediaType];
+  const ids = [...new Set(tmdbIds.filter((id) => Number.isFinite(Number(id))))];
+  if (!source || ids.length === 0) return new Map();
+
+  const kind = mediaType === 'tv_show' ? 'tv' : 'movie';
+  const client = requireSupabaseCatalog();
+  const out = new Map();
+
+  // PostgREST puts .in() values in the URL, so chunk to keep it short.
+  const chunks = [];
+  for (let index = 0; index < ids.length; index += 80) chunks.push(ids.slice(index, index + 80));
+
+  await Promise.all(chunks.map(async (chunk) => {
+    const { data, error } = await client
+      .from(source.table)
+      .select(source.columns)
+      .in('source_key', chunk.map((id) => `tmdb:${kind}:${id}`));
+    if (error) return;
+    (data || []).forEach((row) => {
+      const tmdbId = Number(String(row.source_key).split(':')[2]);
+      if (tmdbId) out.set(tmdbId, source.normalize(row));
+    });
+  }));
+
+  return out;
+}
+
+// Database-only browse row, sorted by the stored popularity / rating /
+// release columns. The fallback when TMDB is unreachable, and the primary
+// source for filters TMDB can't express against our catalog. Backed by the
+// idx_*_popularity_poster / idx_*_lang_popularity indexes.
+export async function fetchCatalogBrowseRow(mediaType, {
+  genre = '',
+  language = '',
+  sort = 'popularity',
+  releasedAfter = '',
+  limit = 30,
+  kidsSafe = false,
+} = {}) {
+  const source = BROWSE_SOURCES[mediaType];
+  if (!source) return [];
+
+  const client = requireSupabaseCatalog();
+  const today = new Date().toISOString().slice(0, 10);
+
+  let query = client
+    .from(source.table)
+    .select(source.columns)
+    .not('poster_url', 'is', null)
+    .not('source_key', 'is', null);
+
+  query = applyGenreFilter(query, genre);
+  if (language) query = query.eq('original_language', language);
+  if (kidsSafe) query = query.in('age_rating', KIDS_SAFE_RATINGS);
+
+  if (mediaType === 'movie') {
+    query = query.lte('release_date', today);
+    if (releasedAfter) query = query.gte('release_date', releasedAfter);
+  } else {
+    query = query.lte('year', THIS_YEAR);
+    if (releasedAfter) query = query.gte('year', Number(releasedAfter.slice(0, 4)));
+  }
+
+  if (sort === 'rating') {
+    // vote_average alone favors obscure 10/10s with three votes; requiring
+    // some popularity keeps "Top Rated" to titles people have heard of.
+    query = query.gte('popularity', 8).order('vote_average', { ascending: false, nullsFirst: false });
+  } else if (sort === 'newest') {
+    query = mediaType === 'movie'
+      ? query.order('release_date', { ascending: false, nullsFirst: false })
+      : query.order('year', { ascending: false, nullsFirst: false });
+  } else {
+    query = query.order('popularity', { ascending: false, nullsFirst: false });
+  }
+
+  const { data, error } = await query.limit(limit);
+  if (error) return [];
+  return (data || []).map((row) => source.normalize(row));
 }
