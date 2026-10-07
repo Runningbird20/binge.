@@ -2088,3 +2088,114 @@
   .st-sp-feature .st-hero-title { font-size: 1.6rem; }
 }
 @media (max-width: 768px) { .st-hero-dot { width: 32px; } }
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOK READER (br-*)
+═══════════════════════════════════════════════════════════════ */
+
+.br-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  background: #0d0f14;
+  color: var(--exp-text);
+}
+.br-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: calc(0.6rem + env(safe-area-inset-top, 0px)) clamp(12px, 3vw, 28px) 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(13, 15, 20, 0.96);
+}
+.br-title { display: flex; flex-direction: column; min-width: 0; }
+.br-title strong { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-title span { font-size: 0.82rem; color: var(--exp-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.br-tools { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.br-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--exp-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+.br-group button,
+.br-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font: inherit;
+}
+.br-group button:hover,
+.br-icon:hover { background: rgba(255, 255, 255, 0.1); }
+.br-group button:focus-visible,
+.br-icon:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.br-icon { border: 1px solid var(--exp-border-strong); }
+.br-size { font-family: Georgia, serif; font-size: 0.95rem; color: var(--exp-text-dim); padding: 0 0.2rem; }
+.br-swatch.br-swatch { width: 30px; height: 30px; font-family: Georgia, serif; font-weight: 700; font-size: 0.85rem; border: 1px solid rgba(255, 255, 255, 0.25); }
+.br-swatch.active { box-shadow: 0 0 0 2px #fff; }
+
+.br-body { position: relative; flex: 1; min-height: 0; background: #0d0f14; }
+.br-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+
+.br-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--exp-text-dim);
+}
+.br-state--overlay { z-index: 1; background: rgba(13, 15, 20, 0.6); }
+.br-state--card { color: var(--exp-text); }
+.br-state--card h2 { margin: 0.25rem 0 0; font-size: 1.5rem; white-space: normal; }
+.br-state--card p { margin: 0; max-width: 34rem; color: var(--exp-text-dim); line-height: 1.55; }
+.br-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; margin-top: 0.75rem; }
+.br-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #fff;
+  animation: st-spin 0.9s linear infinite;
+}
+.br-note {
+  padding: 0.45rem 1rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+  font-size: 0.78rem;
+  text-align: center;
+  color: var(--exp-text-faint);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(13, 15, 20, 0.96);
+}
+
+.td-availability { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--exp-text-dim); }
+.td-availability--free { color: var(--st-match); }
+.td-availability--preview,
+.td-availability--borrow { color: var(--st-soon); }
+
+@media (max-width: 600px) {
+  .br-group:first-child { display: none; } /* phones: pinch-zoom instead of size buttons */
+  .br-swatch.br-swatch { width: 28px; height: 28px; }
+}
+
+/* Manga & Comics */
+.st-badge--origin { background: rgba(11, 13, 18, 0.82); color: var(--exp-text); }
+.st-manga-search { margin: 1rem 0 0.25rem; }
+.st-manga .st-row-title { white-space: normal; }
+.st-official { position: relative; flex: 1; min-height: 60vh; background: #0d0f14; }

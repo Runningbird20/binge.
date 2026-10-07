@@ -31,7 +31,8 @@ import {
 import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
-import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
+import BookReader from '../components/BookReader';
+import { findReadableEdition, findReadableEditionQueued, isFreeToRead } from '../utils/bookAccess';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 import { posterSrc } from '../utils/imageQuality';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
@@ -128,8 +129,8 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
 
   useEffect(() => {
     let cancelled = false;
-    checkFreeEditionCached(book).then((match) => {
-      if (!cancelled) setFreeEdition(Boolean(match));
+    findReadableEditionQueued(book).then((access) => {
+      if (!cancelled) setFreeEdition(isFreeToRead(access));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,8 +173,14 @@ export function BookDetailsModal({
     : null;
   const isOlRecord = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
   const archiveId = rawId && !isOlRecord ? rawId : null;
-  const itemUrl = book?.item_url || book?.itemUrl || null;
-  const canRead = Boolean(book?.title); // Reader searches Gutenberg if no direct source
+  // How (and whether) this book can be read, shown before anyone clicks.
+  const [access, setAccess] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setAccess(null);
+    if (book) findReadableEdition(book).then((result) => { if (!cancelled) setAccess(result); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [book]);
 
   useEffect(() => {
     if (!book) {
@@ -268,16 +275,31 @@ export function BookDetailsModal({
               <p className="st-page-kicker">Book</p>
               <h2 id="book-detail-title" className="td-title">{book.title}</h2>
               {book.author && <p className="td-book-author">by {book.author}</p>}
+              {access && (
+                <p className={`td-availability td-availability--${isFreeToRead(access) ? 'free' : access.kind}`}>
+                  {isFreeToRead(access) ? `Free to read · ${access.label}`
+                    : access.kind === 'preview' ? 'Preview available · Google Books'
+                    : access.kind === 'borrow' ? 'Free to borrow · Internet Archive'
+                    : 'Not free to read online'}
+                </p>
+              )}
               <div className="td-meta">
                 {book.year && <span>{book.year}</span>}
                 {genres.slice(0, 3).map((genre) => <span key={genre} className="td-cert">{genre}</span>)}
               </div>
               <div className="td-actions">
-                {canRead && (
-                  <button type="button" className="st-btn st-btn--primary td-play" onClick={() => setShowReader(true)}>
-                    <BookOpen size={20} weight="fill" /> Read Now
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`st-btn ${access && !access.embedUrl && access.kind !== 'borrow' ? 'st-btn--secondary' : 'st-btn--primary'} td-play`}
+                  onClick={() => setShowReader(true)}
+                >
+                  <BookOpen size={20} weight="fill" />
+                  {!access ? 'Read'
+                    : access.kind === 'preview' ? (access.full ? 'Read free' : 'Read preview')
+                    : access.embedUrl ? 'Read free'
+                    : access.kind === 'borrow' ? 'Borrow free'
+                    : 'Find at your library'}
+                </button>
                 {allowActions && (
                   <button
                     type="button"
@@ -339,14 +361,7 @@ export function BookDetailsModal({
         </div>
       </div>
 
-      {showReader && canRead && (
-        <BookReader
-          book={book}
-          archiveId={archiveId}
-          itemUrl={itemUrl}
-          onClose={() => setShowReader(false)}
-        />
-      )}
+      {showReader && <BookReader book={book} onClose={() => setShowReader(false)} />}
     </>
   );
 }
@@ -404,142 +419,6 @@ function BookShelfSection({ title, load }) {
         ))}
       </div>
     </section>
-  );
-}
-
-function BookReader({ book, archiveId, itemUrl, onClose }) {
-  const iframeRef = useRef(null);
-  const modalRef  = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Resolved reading source
-  const [embedUrl,  setEmbedUrl]  = useState(archiveId ? `https://archive.org/embed/${archiveId}` : null);
-  const [source,    setSource]    = useState(archiveId ? 'archive' : null);
-  const [searching, setSearching] = useState(!archiveId);
-  const [notFound,  setNotFound]  = useState(false);
-
-  useEffect(() => {
-    if (archiveId) return; // Archive.org already resolved
-
-    // Try Gutenberg URL in itemUrl first (fast path — no search needed)
-    if (itemUrl) {
-      const gutMatch = itemUrl.match(/gutenberg\.org\/(?:ebooks\/|files\/)(\d+)/);
-      if (gutMatch) {
-        setEmbedUrl(`/api/books/gutenberg/read/${gutMatch[1]}`);
-        setSource('gutenberg');
-        setSearching(false);
-        return;
-      }
-    }
-
-    // Otherwise search both free providers for a confidently-matching
-    // public-domain edition (title + author, not just a title guess).
-    // StrictMode double-invokes this effect once in dev — use a local
-    // `cancelled` flag (reset naturally on every re-run) rather than an
-    // AbortController, so the throwaway first run's cancellation can't get
-    // misread as "no match found" and clobber the real run's result.
-    let cancelled = false;
-    findFreeEdition(book)
-      .then((match) => {
-        if (cancelled) return;
-        if (match) {
-          setEmbedUrl(match.embedUrl);
-          setSource(match.source);
-          setNotFound(false);
-        } else {
-          setNotFound(true);
-        }
-      })
-      .catch(() => { if (!cancelled) setNotFound(true); })
-      .finally(() => { if (!cancelled) setSearching(false); });
-
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    function onFsChange() { setIsFullscreen(Boolean(document.fullscreenElement)); }
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      (iframeRef.current || modalRef.current)?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  }
-
-  const noteText = source === 'archive'
-    ? 'Powered by Internet Archive. Some books may require a free borrow.'
-    : source === 'gutenberg'
-    ? 'Powered by Project Gutenberg — free public domain reading.'
-    : '';
-
-  return (
-    <div className="player-overlay" onClick={onClose}>
-      <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
-        <div className="player-header">
-          <div className="player-title">
-            <span>Book</span>
-            <div>
-              <strong>{book.title}</strong>
-              {book.author && <span className="player-year">by {book.author}</span>}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.4rem' }}>
-            {embedUrl && (
-              <button className="player-close" onClick={toggleFullscreen}
-                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                {isFullscreen ? '⊠' : '⊞'}
-              </button>
-            )}
-            <button className="player-close" onClick={onClose} title="Close"><X size={16} weight="bold" /></button>
-          </div>
-        </div>
-
-        <div className="player-frame-wrap">
-          {searching ? (
-            <div className="book-reader-state">
-              <div className="manga-reader-spinner" />
-              <p>Finding a readable version of <em>{book.title}</em>…</p>
-            </div>
-          ) : notFound ? (
-            <div className="book-reader-state">
-              <p style={{ fontSize: '2.5rem', margin: 0 }}>📚</p>
-              <p style={{ fontWeight: 600, marginTop: '0.75rem' }}>
-                No free online version found
-              </p>
-              <p style={{ color: '#888', fontSize: '0.87rem', maxWidth: '340px', textAlign: 'center' }}>
-                <strong>{book.title}</strong> may be under copyright or not yet
-                digitized by Project Gutenberg or the Internet Archive.
-              </p>
-              {itemUrl && (
-                <a href={itemUrl} target="_blank" rel="noopener noreferrer"
-                  className="btn-watch"
-                  style={{ display: 'inline-block', marginTop: '1.25rem' }}>
-                  View on Goodreads ↗
-                </a>
-              )}
-            </div>
-          ) : (
-            <iframe
-              ref={iframeRef}
-              src={embedUrl || ''}
-              className="player-frame"
-              allowFullScreen
-              allow="fullscreen"
-              title={`Read ${book.title}`}
-              style={{ minHeight: '600px' }}
-            />
-          )}
-        </div>
-
-        {noteText && !searching && !notFound && (
-          <p className="player-note">{noteText}</p>
-        )}
-      </div>
-    </div>
   );
 }
 

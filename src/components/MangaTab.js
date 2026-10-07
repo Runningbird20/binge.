@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { X } from '@phosphor-icons/react';
-import { SOURCES, searchBySource, popularBySource, chaptersBySource, pagesBySource } from '../utils/mangaSources';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { BookOpen, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { SOURCES, browseManga, searchBySource, popularBySource, chaptersBySource, pagesBySource } from '../utils/mangaSources';
+import BrowseHero from './BrowseHero';
+import TitleRow from './TitleRow';
 import RatingInput from './RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from './RatingArtifact';
 import BottomSheet from './BottomSheet';
@@ -109,22 +111,21 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
 
       {/* External chapter: full-height iframe embed */}
       {isExternal ? (
-        <div className="manga-reader-external">
-          <div className="manga-external-banner">
-            <span>Hosted by <strong>{hostname}</strong></span>
-            <a href={chapter.externalUrl} target="_blank" rel="noopener noreferrer"
-              className="manga-external-newtab">
-              Open in new tab ↗
-            </a>
+        <div className="manga-reader-external st-official">
+          <div className="br-state br-state--card">
+            <BookOpen size={40} weight="duotone" />
+            <h2>Read this chapter on {hostname || 'the official site'}</h2>
+            <p>
+              {comic.title} is officially licensed, so this chapter is published by {hostname || 'the publisher'} rather than
+              hosted on MangaDex. Official platforms don’t allow embedding, so it opens in a new tab.
+            </p>
+            <div className="br-actions">
+              <a className="st-btn st-btn--primary" href={chapter.externalUrl} target="_blank" rel="noopener noreferrer">
+                Open on {hostname || 'official site'}
+              </a>
+              {hasNext && <button type="button" className="st-btn st-btn--ghost" onClick={onNext}>Next chapter</button>}
+            </div>
           </div>
-          {/* sandbox intentionally omitted — the embedded reader detects sandbox attributes and stops working if one is present */}
-          <iframe
-            src={chapter.externalUrl}
-            className="manga-external-iframe"
-            allow="fullscreen; autoplay"
-            allowFullScreen
-            title={chapterLabel}
-          />
         </div>
       ) : (
         /* MangaDex-hosted pages */
@@ -504,29 +505,75 @@ function ChapterModal({ comic, source, onClose, onRead }) {
 }
 
 // ─── MangaCard ────────────────────────────────────────────────
-function MangaCard({ manga, onClick }) {
-  const [imgErr, setImgErr] = useState(false);
+
+// ─── Landing rows ─────────────────────────────────────────────
+const LANDING_ROWS = [
+  { id: 'popular', title: 'Popular Right Now', query: { order: 'popular' }, ranked: true },
+  { id: 'latest', title: 'Fresh Chapters', query: { order: 'latest' } },
+  { id: 'manhwa', title: 'Top Manhwa', subtitle: 'Korean webtoons', query: { order: 'popular', lang: 'ko' } },
+  { id: 'rated', title: 'Highest Rated', query: { order: 'rating' } },
+  { id: 'manga', title: 'Top Manga', subtitle: 'From Japan', query: { order: 'popular', lang: 'ja' } },
+  { id: 'manhua', title: 'Top Manhua', subtitle: 'Chinese webcomics', query: { order: 'popular', lang: 'zh' } },
+  { id: 'action', title: 'Action & Battles', query: { tags: ['Action'] } },
+  { id: 'romance', title: 'Romance', query: { tags: ['Romance'] } },
+  { id: 'isekai', title: 'Isekai', query: { tags: ['Isekai'] } },
+  { id: 'fantasy', title: 'Fantasy Worlds', query: { tags: ['Fantasy'] } },
+  { id: 'comedy', title: 'Comedy', query: { tags: ['Comedy'] } },
+  { id: 'slice', title: 'Slice of Life', query: { tags: ['Slice of Life'] } },
+  { id: 'horror', title: 'Horror & Thriller', query: { tags: ['Horror'] } },
+  { id: 'sports', title: 'Sports', query: { tags: ['Sports'] } },
+  { id: 'new', title: 'New on MangaDex', query: { order: 'new' } },
+];
+
+const ORIGIN_LABELS = { ko: 'Manhwa', zh: 'Manhua', 'zh-hk': 'Manhua', ja: 'Manga', en: 'Comic' };
+
+function MangaRowCard({ manga, onOpen, rank = null, priority = false }) {
+  const [imgError, setImgError] = useState(false);
+  const origin = ORIGIN_LABELS[manga.originalLanguage];
+  const progress = manga._progressLabel;
   return (
-    <button type="button" className="manga-card" onClick={() => onClick(manga)}>
-      <div className="manga-card-cover">
-        {manga.cover && !imgErr ? (
-          <img src={manga.cover} alt={manga.title} loading="lazy" decoding="async"
-            referrerPolicy="no-referrer" onError={() => setImgErr(true)} />
+    <button
+      type="button"
+      className={`st-card st-card--button${rank ? ' st-card--ranked' : ''}`}
+      onClick={() => onOpen(manga)}
+      aria-label={`${manga.title}${origin ? `, ${origin}` : ''}`}
+    >
+      {rank && <span className="st-card-rank" aria-hidden="true">{rank}</span>}
+      <div className="st-card-poster">
+        {manga.cover && !imgError ? (
+          <img src={manga.cover} alt="" loading={priority ? 'eager' : 'lazy'} decoding="async" referrerPolicy="no-referrer" onError={() => setImgError(true)} />
         ) : (
-          <div className="manga-card-placeholder">
-            <span>{manga.title?.charAt(0) || '?'}</span>
+          <div className="st-card-placeholder"><span>{manga.title?.charAt(0)}</span></div>
+        )}
+        {progress ? <span className="st-badge">{progress}</span> : origin && <span className="st-badge st-badge--origin">{origin}</span>}
+        <div className="st-card-hover" aria-hidden="true">
+          <div className="st-card-hover-meta">
+            {manga.status && <span style={{ textTransform: 'capitalize' }}>{manga.status}</span>}
+            {manga.latestChapter && <span>Ch. {manga.latestChapter}</span>}
+            {(manga.tags || []).slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}
           </div>
-        )}
-        {manga.latestChapter && (
-          <span className="manga-card-status">Ch. {manga.latestChapter}</span>
-        )}
+          {manga.description && <p className="st-card-reason">{manga.description}</p>}
+        </div>
       </div>
-      <div className="manga-card-copy">
-        <p className="manga-card-title">{manga.title}</p>
-        {manga.author && <p className="manga-card-author">{manga.author}</p>}
-      </div>
+      <p className="st-card-title">{manga.title}</p>
+      {manga.author && <p className="st-card-sub">{manga.author}</p>}
     </button>
   );
+}
+
+function asHeroItem(manga, onOpen) {
+  return {
+    id: manga.id,
+    media_type: 'manga',
+    title: manga.title,
+    cover_url: manga.cover,
+    overview: manga.description,
+    genre: (manga.tags || []).join(', '),
+    year: manga.year,
+    author: manga.author,
+    _playLabel: 'Read',
+    _onOpen: () => onOpen(manga),
+  };
 }
 
 // ─── MangaTab ─────────────────────────────────────────────────
@@ -534,9 +581,8 @@ export default function MangaTab() {
   const [query, setQuery]           = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [results, setResults]       = useState([]);
-  const [popular, setPopular]       = useState([]);
+  const [popular, setPopular]       = useState(null);
   const [loading, setLoading]       = useState(false);
-  const [popularLoading, setPopularLoading] = useState(true);
   const [error, setError]           = useState('');
   const source = SOURCES[0].key;
   const [selected, setSelected]     = useState(null);
@@ -545,10 +591,10 @@ export default function MangaTab() {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    popularBySource(source, ctrl.signal)
-      .then(setPopular)
-      .catch(() => {})
-      .finally(() => setPopularLoading(false));
+    browseManga({ order: 'popular', limit: 24 }, ctrl.signal)
+      .catch(() => popularBySource(source, ctrl.signal))
+      .then((items) => setPopular(items || []))
+      .catch(() => setPopular([]));
     return () => ctrl.abort();
   }, [source]);
 
@@ -558,7 +604,7 @@ export default function MangaTab() {
   }, [query]);
 
   useEffect(() => {
-    if (!debouncedQ) { setResults([]); setError(''); return; }
+    if (!debouncedQ) { setResults([]); setError(''); return undefined; }
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -577,6 +623,20 @@ export default function MangaTab() {
     setSelected(null);
   }, [selected]);
 
+  const continueReading = useMemo(() => {
+    const list = getLS(LS_LIST);
+    return Object.values(list)
+      .filter((entry) => entry && (entry.status === 'reading' || entry.status === 'plan_to_read'))
+      .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))
+      .map((entry) => ({ ...entry, _progressLabel: entry.status === 'reading' ? 'Reading' : null }));
+  }, [reader, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loaders = useMemo(() => {
+    const map = new Map();
+    LANDING_ROWS.forEach((row) => map.set(row.id, () => browseManga({ ...row.query, limit: row.ranked ? 10 : 24 })));
+    return map;
+  }, []);
+
   if (reader) {
     return (
       <MangaReader
@@ -591,66 +651,75 @@ export default function MangaTab() {
     );
   }
 
-  const displayList  = debouncedQ ? results : popular;
-  const isSearching  = Boolean(debouncedQ);
-  const showSkeleton = isSearching ? loading : popularLoading;
+  const isSearching = Boolean(debouncedQ);
+  const renderCard = (rank) => (manga, index) => (
+    <MangaRowCard manga={manga} onOpen={setSelected} rank={rank ? index + 1 : null} priority={index < 6} />
+  );
 
   return (
-    <>
-      <section className="surface-panel">
-        <div className="surface-panel-header">
-          <div>
-            <h2>Manga, Manhwa &amp; Comics</h2>
-            <p className="surface-panel-copy">
-              Powered by MangaDex — search or browse popular titles, then read chapters right here.
-            </p>
-          </div>
-        </div>
-        <div className="filter-bar">
+    <div className="st-browse st-manga">
+      {!isSearching && (
+        <BrowseHero
+          items={(popular || []).filter((m) => m.cover && m.description).slice(0, 6).map((m) => asHeroItem(m, setSelected))}
+          kicker="Popular this week"
+          emptyTitle="Manga, manhwa & comics"
+          playLabel="Read"
+        />
+      )}
+
+      <div className="catalog-search-row st-manga-search">
+        <div className="catalog-search-bar">
+          <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
           <input
-            className="search-input"
             type="text"
-            placeholder="Search manga, manhwa, comics…"
+            className="catalog-search-input"
+            placeholder="Search manga, manhwa, manhua…"
             value={query}
             onChange={e => setQuery(e.target.value)}
+            aria-label="Search manga"
           />
+          {query && (
+            <button type="button" className="catalog-search-clear" onClick={() => setQuery('')} aria-label="Clear search">
+              <X size={14} weight="bold" />
+            </button>
+          )}
         </div>
-      </section>
+      </div>
 
-      <section className="surface-panel surface-panel-spacious">
-        {error && <div className="manga-error-banner">⚠️ {error}</div>}
+      {error && <div className="st-coldstart"><p>{error}</p></div>}
 
-        {showSkeleton && (
-          <div className="manga-skeleton-grid">
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="manga-skeleton-card">
-                <div className="manga-skeleton-cover" />
-                <div className="manga-skeleton-line" />
-                <div className="manga-skeleton-line short" />
+      {isSearching ? (
+        <section className="st-search-section" aria-label="Search results">
+          <h2 className="st-row-title">{loading ? 'Searching…' : `Results for “${debouncedQ}”`}</h2>
+          {!loading && results.length === 0 && !error && (
+            <div className="pf-empty"><p>No results for “{debouncedQ}”.</p><p className="td-muted">Try the English or original title.</p></div>
+          )}
+          <div className="st-grid">
+            {(loading ? [] : results).map((manga, index) => (
+              <div className="st-grid-cell" key={manga.id || index}>
+                <MangaRowCard manga={manga} onOpen={setSelected} priority={index < 6} />
               </div>
             ))}
           </div>
-        )}
-
-        {!showSkeleton && isSearching && results.length === 0 && !error && (
-          <div className="empty-state">
-            <p style={{ fontSize: '2rem', margin: 0 }}>🔍</p>
-            <p>No results for "{debouncedQ}".</p>
-            <p className="empty-hint">Try a different title.</p>
-          </div>
-        )}
-
-        {!showSkeleton && displayList.length > 0 && (
-          <>
-            {!isSearching && <h3 className="manga-section-heading">Popular Right Now</h3>}
-            <div className="manga-grid">
-              {displayList.map((manga, i) => (
-                <MangaCard key={manga.id || i} manga={manga} onClick={setSelected} />
-              ))}
-            </div>
-          </>
-        )}
-      </section>
+        </section>
+      ) : (
+        <div className="st-rows">
+          {continueReading.length > 0 && (
+            <TitleRow title="Continue Reading" items={continueReading} renderItem={renderCard(false)} />
+          )}
+          {LANDING_ROWS.map((row) => (
+            <TitleRow
+              key={row.id}
+              title={row.title}
+              subtitle={row.subtitle}
+              ranked={row.ranked}
+              load={loaders.get(row.id)}
+              renderItem={renderCard(row.ranked)}
+              minItems={4}
+            />
+          ))}
+        </div>
+      )}
 
       {selected && (
         <ChapterModal
@@ -660,6 +729,6 @@ export default function MangaTab() {
           onRead={openReader}
         />
       )}
-    </>
+    </div>
   );
 }

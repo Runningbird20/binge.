@@ -102,16 +102,30 @@ export default function BrowseHero({ items = [], kicker, emptyTitle = 'What will
         {item._reason && <p className="st-hero-reason">{item._reason}</p>}
         {overview && <p className="st-hero-overview">{overview}</p>}
         <div className="st-hero-actions">
-          {item._comingSoon ? (
-            <span className="st-badge st-badge--soon st-badge--lg">Coming soon</span>
+          {item._onOpen ? (
+            // Items that open in-page (e.g. manga) instead of a route.
+            <>
+              <button type="button" className="st-btn st-btn--primary" onClick={() => item._onOpen(item)}>
+                <Play size={18} weight="fill" /> {item._playLabel || playLabel}
+              </button>
+              <button type="button" className="st-btn st-btn--secondary" onClick={() => item._onOpen(item)}>
+                <Info size={18} weight="bold" /> More Info
+              </button>
+            </>
           ) : (
-            <Link className="st-btn st-btn--primary" to={item._playUrl || titleUrl(item, { play: true })} state={{ backgroundLocation: location }}>
-              <Play size={18} weight="fill" /> {item._playLabel || playLabel}
-            </Link>
+            <>
+              {item._comingSoon ? (
+                <span className="st-badge st-badge--soon st-badge--lg">Coming soon</span>
+              ) : (
+                <Link className="st-btn st-btn--primary" to={item._playUrl || titleUrl(item, { play: true })} state={{ backgroundLocation: location }}>
+                  <Play size={18} weight="fill" /> {item._playLabel || playLabel}
+                </Link>
+              )}
+              <Link className="st-btn st-btn--secondary" to={titleUrl(item)} state={{ backgroundLocation: location }}>
+                <Info size={18} weight="bold" /> More Info
+              </Link>
+            </>
           )}
-          <Link className="st-btn st-btn--secondary" to={titleUrl(item)} state={{ backgroundLocation: location }}>
-            <Info size={18} weight="bold" /> More Info
-          </Link>
         </div>
       </div>
 

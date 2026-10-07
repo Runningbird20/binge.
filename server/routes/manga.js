@@ -24,7 +24,13 @@ async function mdx(path, params = {}) {
 
 function normalizeManga(m) {
   const attrs  = m.attributes || {};
-  const title  = attrs.title?.en || Object.values(attrs.title || {})[0] || 'Unknown';
+  // MangaDex's main title is often romanized ("Na Honjaman Level-Up");
+  // prefer an English alternate title ("Solo Leveling") when there is one.
+  const englishAlt = (attrs.altTitles || []).find((alt) => alt.en)?.en;
+  const original = attrs.title?.en || Object.values(attrs.title || {})[0] || 'Unknown';
+  const isRomanized = attrs.originalLanguage && attrs.originalLanguage !== 'en' && !attrs.title?.en?.match(/[^\x00-\x7F]/)
+    && englishAlt && englishAlt.toLowerCase() !== original.toLowerCase();
+  const title  = isRomanized ? englishAlt : original;
   const desc   = attrs.description?.en || Object.values(attrs.description || {})[0] || '';
   const cover  = (m.relationships || []).find(r => r.type === 'cover_art');
   const author = (m.relationships || []).find(r => r.type === 'author');
@@ -44,6 +50,8 @@ function normalizeManga(m) {
                      .slice(0, 5),
     latestChapter: attrs.lastChapter,
     contentRating: attrs.contentRating,
+    originalLanguage: attrs.originalLanguage,
+    originalTitle: isRomanized ? original : null,
   };
 }
 
@@ -59,6 +67,9 @@ function normalizeChapter(c) {
     publishAt: attrs.publishAt,
     group:     group?.attributes?.name || '',
     lang:      attrs.translatedLanguage,
+    // Officially licensed chapters live on the publisher's platform
+    // (TappyToon, Webnovel, MANGA Plus…) and have no pages on MangaDex.
+    externalUrl: attrs.externalUrl || null,
   };
 }
 
@@ -73,7 +84,7 @@ router.get('/search', async (req, res) => {
       title: q,
       limit: Math.min(Number(limit), 40),
       'includes[]':          ['cover_art', 'author'],
-      'contentRating[]':     CONTENT,
+      'contentRating[]':     ['safe', 'suggestive'],
       'order[relevance]':    'desc',
     });
     res.setHeader('Cache-Control', 'public, max-age=60');
@@ -95,6 +106,58 @@ router.get('/popular', async (req, res) => {
     });
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.json({ results: (data.data || []).map(normalizeManga) });
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
+});
+
+// Browse rows: original language, genre and sort, for the Manga & Comics
+// landing page. Genre names map to MangaDex tag ids (fetched once, cached).
+let tagCache = null;
+async function tagIdsByName() {
+  if (tagCache && Date.now() - tagCache.time < 24 * 60 * 60 * 1000) return tagCache.map;
+  const data = await mdx('/manga/tag');
+  const map = new Map((data.data || []).map((tag) => [String(tag.attributes?.name?.en || '').toLowerCase(), tag.id]));
+  tagCache = { map, time: Date.now() };
+  return map;
+}
+
+const BROWSE_ORDERS = {
+  popular: { 'order[followedCount]': 'desc' },
+  rating: { 'order[rating]': 'desc' },
+  latest: { 'order[latestUploadedChapter]': 'desc' },
+  new: { 'order[createdAt]': 'desc' },
+};
+const browseCache = new Map();
+
+router.get('/browse', async (req, res) => {
+  const { lang = '', tags = '', order = 'popular' } = req.query;
+  const limit = Math.min(Number(req.query.limit) || 24, 40);
+  const cacheKey = `${lang}|${tags}|${order}|${limit}`;
+  const cached = browseCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < 10 * 60 * 1000) return res.json({ results: cached.results });
+  try {
+    const params = {
+      limit,
+      'includes[]': ['cover_art', 'author'],
+      'contentRating[]': ['safe', 'suggestive'],
+      'availableTranslatedLanguage[]': ['en'],
+      'hasAvailableChapters': 'true',
+      ...(BROWSE_ORDERS[order] || BROWSE_ORDERS.popular),
+    };
+    if (/^[a-z]{2}(-[a-z]{2})?$/.test(lang)) params['originalLanguage[]'] = [lang];
+    const names = String(tags).split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (names.length) {
+      const ids = await tagIdsByName();
+      const tagIds = names.map((name) => ids.get(name)).filter(Boolean);
+      if (tagIds.length) params['includedTags[]'] = tagIds;
+    }
+    const data = await mdx('/manga', params);
+    const results = (data.data || []).map(normalizeManga);
+    browseCache.set(cacheKey, { results, time: Date.now() });
+    if (browseCache.size > 200) browseCache.delete(browseCache.keys().next().value);
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.json({ results });
   } catch (err) {
     res.status(err.status || 502).json({ error: err.message });
   }
