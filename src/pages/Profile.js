@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FilmSlate, MonitorPlay, BookOpen } from '@phosphor-icons/react';
+import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
+import ProfileAvatar from '../components/ProfileAvatar';
 import ThemedSelect from '../components/ThemedSelect';
-import RatingBadge from '../components/RatingBadge';
 import RatingArtifact, { computeStarRating, computeNormalizedScore } from '../components/RatingArtifact';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -15,7 +15,9 @@ import {
 } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import { computeProgressBadge } from '../utils/continueWatching';
-import { excludeRated, countCompleted } from '../utils/libraryStats';
+import { excludeRated, countCompleted, computeWatchMinutes } from '../utils/libraryStats';
+import { posterSrc, posterSrcSet } from '../utils/imageQuality';
+import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
@@ -57,45 +59,49 @@ function resolvePosterUrl(url) {
 
 function TypeFilterBar({ value, onChange }) {
   return (
-    <div className="books-tab-bar books-tab-bar--inline">
+    <div className="st-tabs st-tabs--sm" role="group" aria-label="Filter by type">
       {TYPE_FILTERS.map((t) => (
         <button
           key={t.value}
           type="button"
-          className={`books-tab ${value === t.value ? 'active' : ''}`}
+          aria-pressed={value === t.value}
+          className={`st-tab ${value === t.value ? 'active' : ''}`}
           onClick={() => onChange(t.value)}
         >
-          {t.Icon && <t.Icon size={16} weight="bold" aria-hidden="true" />} {t.label}
+          {t.Icon && <t.Icon size={15} weight="bold" aria-hidden="true" />} {t.label}
         </button>
       ))}
     </div>
   );
 }
 
+function CardPoster({ item, children }) {
+  const raw = resolvePosterUrl(item.poster_url || item.image_url);
+  return (
+    <div className="st-card-poster">
+      {raw
+        ? <img src={posterSrc(raw)} srcSet={posterSrcSet(raw)} sizes="(max-width: 768px) 46vw, 210px" alt="" loading="lazy" referrerPolicy="no-referrer" />
+        : <div className="st-card-placeholder"><MediaTypeIcon type={item.media_type} size={28} /></div>}
+      {children}
+    </div>
+  );
+}
+
 function WatchlistCard({ item, location, onStatusChange, onRemove }) {
-  const poster = resolvePosterUrl(item.poster_url || item.image_url);
   const progressBadge = computeProgressBadge(item);
 
   return (
-    <article className="profile-card">
-      <Link
-        to={getMediaUrl(item)}
-        state={{ backgroundLocation: location }}
-        className="poster-tile profile-card-link"
-      >
-        <div className="poster-tile-frame profile-card-poster">
-          {poster
-            ? <img src={poster} alt={item.title} referrerPolicy="no-referrer" />
-            : <div className="poster-tile-placeholder"><MediaTypeIcon type={item.media_type} size={24} /></div>}
-          {progressBadge && <span className="profile-wl-progress-badge">{progressBadge}</span>}
-        </div>
-        <p className="poster-tile-title">{item.title || '—'}</p>
-        {item.year && <p className="poster-tile-year">{item.year}</p>}
+    <article className="st-grid-cell pf-card">
+      <Link to={getMediaUrl(item)} state={{ backgroundLocation: location }} className="st-card" aria-label={item.title}>
+        <CardPoster item={item}>
+          {progressBadge && <span className="st-badge">{progressBadge}</span>}
+        </CardPoster>
+        <p className="st-card-title">{item.title || '—'}</p>
       </Link>
 
-      <div className="profile-card-controls">
+      <div className="pf-card-controls">
         <ThemedSelect
-          className="status-select"
+          className="pf-status-select"
           value={item.status}
           aria-label={`Status for ${item.title}`}
           options={getStatusOptions(item.media_type).map((status) => ({
@@ -106,11 +112,12 @@ function WatchlistCard({ item, location, onStatusChange, onRemove }) {
         />
         <button
           type="button"
-          className="btn-ghost btn-sm profile-card-remove"
+          className="pf-icon-btn"
           onClick={() => onRemove(item)}
           title={`Remove ${item.title}`}
+          aria-label={`Remove ${item.title}`}
         >
-          Remove
+          <Trash size={16} weight="bold" />
         </button>
       </div>
     </article>
@@ -177,7 +184,7 @@ function WatchlistTab({
 
   return (
     <>
-      <div className="profile-tab-controls">
+      <div className="pf-controls">
         <TypeFilterBar value={typeFilter} onChange={onTypeFilterChange} />
         <ThemedSelect
           className="filter-input"
@@ -187,25 +194,25 @@ function WatchlistTab({
           onChange={(event) => onStatusFilterChange(event.target.value)}
         />
       </div>
-      <p className="profile-filter-count">{filtered.length} item{filtered.length === 1 ? '' : 's'}</p>
+      <p className="pf-count">{filtered.length} title{filtered.length === 1 ? '' : 's'}</p>
 
       {loading ? (
         <div className="loading-state">Loading your library...</div>
       ) : filtered.length === 0 ? (
-        <div className="empty-state">
-          <p>{items.length === 0 ? 'Your library is empty.' : 'No saved titles match this filter.'}</p>
+        <div className="pf-empty">
+          <p>{items.length === 0 ? 'Your list is empty.' : 'No saved titles match this filter.'}</p>
           {items.length === 0 && (
-            <div className="cta-buttons" style={{ marginTop: '1rem' }}>
-              <Link to="/movies" className="btn-secondary">Browse movies</Link>
-              <Link to="/tv-shows" className="btn-secondary">Browse TV shows</Link>
-              <Link to="/books" className="btn-secondary">Browse books</Link>
+            <div className="pf-empty-actions">
+              <Link to="/movies" className="st-btn st-btn--ghost">Browse movies</Link>
+              <Link to="/tv-shows" className="st-btn st-btn--ghost">Browse series</Link>
+              <Link to="/books" className="st-btn st-btn--ghost">Browse books</Link>
             </div>
           )}
         </div>
       ) : (
         <>
           <PaginationBar page={clampedPage} totalPages={totalPages} onPageChange={setPage} />
-          <div className="poster-grid">
+          <div className="st-grid">
             {pageItems.map((item) => (
               <WatchlistCard
                 key={item.id}
@@ -225,39 +232,25 @@ function WatchlistTab({
 
 function RatingCard({ rating, location }) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  const poster = resolvePosterUrl(rating.poster_url || rating.image_url);
   const stars = computeStarRating(rating.media_type, rating);
 
   return (
-    <article className="profile-card">
-      <Link
-        to={getMediaUrl(rating)}
-        state={{ backgroundLocation: location }}
-        className="poster-tile profile-card-link"
-      >
-        <div className="poster-tile-frame profile-card-poster">
-          {poster
-            ? <img src={poster} alt={rating.title} referrerPolicy="no-referrer" />
-            : <div className="poster-tile-placeholder"><MediaTypeIcon type={rating.media_type} size={24} /></div>}
-          {stars != null && <RatingBadge value={stars} corner />}
-        </div>
-        <p className="poster-tile-title">{rating.title || '—'}</p>
-        {rating.year && <p className="poster-tile-year">{rating.year}</p>}
+    <article className="st-grid-cell pf-card">
+      <Link to={getMediaUrl(rating)} state={{ backgroundLocation: location }} className="st-card" aria-label={rating.title}>
+        <CardPoster item={rating}>
+          {stars != null && (
+            <span className="pf-stars" aria-label={`Rated ${stars} out of 5`}>
+              <Star size={13} weight="fill" /> {Number(stars).toFixed(1)}
+            </span>
+          )}
+        </CardPoster>
+        <p className="st-card-title">{rating.title || '—'}</p>
       </Link>
-
-      <div className="profile-card-controls">
-        <button
-          type="button"
-          className="rate-review-detail-toggle"
-          onClick={() => setBreakdownOpen((open) => !open)}
-        >
-          {breakdownOpen ? 'Hide breakdown' : 'View breakdown'}
-        </button>
-        {breakdownOpen && (
-          <RatingArtifact mediaType={rating.media_type} scores={rating} size={180} />
-        )}
-        {rating.review && <p className="profile-card-review">{rating.review}</p>}
-      </div>
+      {rating.review && <p className="pf-review">“{rating.review}”</p>}
+      <button type="button" className="pf-link-btn" onClick={() => setBreakdownOpen((open) => !open)}>
+        {breakdownOpen ? 'Hide breakdown' : 'View breakdown'}
+      </button>
+      {breakdownOpen && <RatingArtifact mediaType={rating.media_type} scores={rating} size={170} />}
     </article>
   );
 }
@@ -280,7 +273,7 @@ function RatingsTab({ items, loading, location, typeFilter, onTypeFilterChange, 
 
   return (
     <>
-      <div className="profile-tab-controls">
+      <div className="pf-controls">
         <TypeFilterBar value={typeFilter} onChange={onTypeFilterChange} />
         <ThemedSelect
           className="filter-input"
@@ -299,12 +292,12 @@ function RatingsTab({ items, loading, location, typeFilter, onTypeFilterChange, 
       {loading ? (
         <div className="loading-state">Loading your ratings...</div>
       ) : filtered.length === 0 ? (
-        <div className="empty-state">
+        <div className="pf-empty">
           <p>No ratings yet{typeFilter ? ' for this type' : ''}.</p>
-          <p className="empty-hint">Rate a title from the Movies, TV Shows, or Books pages.</p>
+          <p className="td-muted">Open any title and tap the star to rate it — ratings shape your recommendations.</p>
         </div>
       ) : (
-        <div className="poster-grid">
+        <div className="st-grid">
           {filtered.map((rating) => (
             <RatingCard key={`${rating.media_type}-${rating.media_id}`} rating={rating} location={location} />
           ))}
@@ -389,59 +382,92 @@ export default function Profile() {
     const inProgress = libraryWatchlist.filter((i) => i.status === 'watching' || i.status === 'reading').length;
     const scores = ratings.map((r) => computeStarRating(r.media_type, r)).filter((s) => s != null);
     const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
-    return { completed, inProgress, avg, totalRatings: ratings.length };
+    return { completed, inProgress, avg, totalRatings: ratings.length, minutes: computeWatchMinutes(watchlist, ratings) };
   }, [watchlist, ratings, libraryWatchlist]);
+
+  // Top genres across highly rated + finished titles — a quick "taste DNA".
+  const taste = useMemo(() => {
+    const weights = new Map();
+    const add = (genreText, weight) => String(genreText || '').split(',').map((g) => g.trim()).filter(Boolean)
+      .forEach((genre) => weights.set(genre, (weights.get(genre) || 0) + weight));
+    ratings.forEach((rating) => add(rating.genre, (computeStarRating(rating.media_type, rating) || 3) - 2.5));
+    watchlist.forEach((item) => add(item.genre, item.status === 'watched' || item.status === 'read' ? 1 : 0.3));
+    return [...weights.entries()].filter(([, w]) => w > 0).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([g]) => g);
+  }, [ratings, watchlist]);
+
+  // Banner art from the profile's top-rated movie/series.
+  const [bannerUrl, setBannerUrl] = useState(null);
+  const favorite = useMemo(() => [...ratings]
+    .filter((rating) => rating.media_type !== 'book' && tmdbIdFromItem(rating))
+    .sort((a, b) => (computeStarRating(b.media_type, b) || 0) - (computeStarRating(a.media_type, a) || 0))[0] || null, [ratings]);
+  useEffect(() => {
+    if (!favorite) { setBannerUrl(null); return undefined; }
+    let cancelled = false;
+    tmdbGet(`/${tmdbKind(favorite.media_type)}/${tmdbIdFromItem(favorite)}`).then((data) => {
+      if (!cancelled) setBannerUrl(data?.backdrop_path ? tmdbImage(data.backdrop_path, 'w1280') : null);
+    });
+    return () => { cancelled = true; };
+  }, [favorite]);
+
+  const displayName = activeProfile?.name || user?.username;
 
   return (
     <div className="app-layout">
       <Navbar />
       <main className="page-content">
-        <div className="profile-header">
-          <div className="profile-avatar-wrap">
-            <UserAvatar avatarUrl={user?.avatarUrl} name={user?.username} size="lg" />
-          </div>
-          <div className="profile-info">
-            <h1 className="profile-username">{user?.username}</h1>
-            {user?.bio && <p className="profile-bio-line">{user.bio}</p>}
-          </div>
-          <div className="profile-actions profile-actions--stacked">
-            <Link to="/account-settings" className="btn-ghost">Edit Profile</Link>
-            <div className="profile-stat-squares">
-              <div className="profile-stat-square">
-                <span className="profile-stat-square-num">{stats.completed}</span>
-                <span className="profile-stat-square-label">Completed</span>
-              </div>
-              <div className="profile-stat-square">
-                <span className="profile-stat-square-num">{stats.inProgress}</span>
-                <span className="profile-stat-square-label">In Progress</span>
-              </div>
-              <div className="profile-stat-square">
-                <span className="profile-stat-square-num">{stats.totalRatings}</span>
-                <span className="profile-stat-square-label">Ratings</span>
-              </div>
-              <div className="profile-stat-square">
-                <span className="profile-stat-square-num">{stats.avg}</span>
-                <span className="profile-stat-square-label">Avg Score</span>
+        <header className="pf-hero">
+          {bannerUrl && <img className="pf-hero-bg" src={bannerUrl} alt="" aria-hidden="true" referrerPolicy="no-referrer" />}
+          <div className="pf-hero-scrim" aria-hidden="true" />
+          <div className="pf-hero-main">
+            <div className="pf-avatar">
+              {activeProfile
+                ? <ProfileAvatar profile={activeProfile} size={104} />
+                : <UserAvatar avatarUrl={user?.avatarUrl} name={user?.username} size="lg" />}
+            </div>
+            <div className="pf-identity">
+              <p className="st-page-kicker">Profile</p>
+              <h1 className="pf-name">{displayName}</h1>
+              {user?.bio && <p className="pf-bio">{user.bio}</p>}
+              <div className="pf-actions">
+                <Link to="/account-settings" className="st-btn st-btn--ghost"><PencilSimple size={16} weight="bold" /> Edit profile</Link>
+                <Link to="/profiles" className="st-btn st-btn--ghost"><Users size={16} weight="bold" /> Switch profile</Link>
               </div>
             </div>
           </div>
-        </div>
+          <dl className="pf-stats">
+            <div><dt>Minutes watched</dt><dd>{stats.minutes.toLocaleString()}</dd></div>
+            <div><dt>Completed</dt><dd>{stats.completed}</dd></div>
+            <div><dt>In progress</dt><dd>{stats.inProgress}</dd></div>
+            <div><dt>Ratings</dt><dd>{stats.totalRatings}</dd></div>
+            <div><dt>Avg score</dt><dd>{stats.avg}</dd></div>
+          </dl>
+          {taste.length > 0 && (
+            <div className="pf-taste">
+              <span className="pf-taste-label">Your taste</span>
+              {taste.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}
+            </div>
+          )}
+        </header>
 
-        <section className="surface-panel">
-          <div className="tabs">
+        <section className="pf-section">
+          <div className="st-tabs" role="tablist" aria-label="Library">
             <button
               type="button"
-              className={`tab-btn ${activeTab === 'watchlist' ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'watchlist'}
+              className={`st-tab ${activeTab === 'watchlist' ? 'active' : ''}`}
               onClick={() => setActiveTab('watchlist')}
             >
-              Watchlist <span className="tab-count">{libraryWatchlist.length}</span>
+              My List <span className="pf-tab-count">{libraryWatchlist.length}</span>
             </button>
             <button
               type="button"
-              className={`tab-btn ${activeTab === 'ratings' ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'ratings'}
+              className={`st-tab ${activeTab === 'ratings' ? 'active' : ''}`}
               onClick={() => setActiveTab('ratings')}
             >
-              Ratings &amp; Reviews <span className="tab-count">{ratings.length}</span>
+              Ratings &amp; Reviews <span className="pf-tab-count">{ratings.length}</span>
             </button>
           </div>
 

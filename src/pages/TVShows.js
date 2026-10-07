@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import GridTitleTile from '../components/GridTitleTile';
 import BrowseView from '../components/BrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
@@ -16,7 +17,6 @@ import {
   updateSupabaseWatchlistStatus,
   saveSupabaseRating,
 } from '../utils/supabaseData';
-import WatchlistStatusControl from '../components/WatchlistStatusControl';
 import {
   fetchSupabaseTvShowById,
   fetchSupabaseTvShowCatalogSegment,
@@ -32,7 +32,7 @@ import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 import { identityKey } from '../utils/mediaIdentity';
-import { isBrowseable, isComingSoon } from '../utils/releaseWindow';
+import { isBrowseable } from '../utils/releaseWindow';
 
 const PAGE_SIZE = 48;
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
@@ -93,70 +93,8 @@ function orderBatch(items) {
   return [...shuffled.filter(hasPoster), ...shuffled.filter((item) => !hasPoster(item))];
 }
 
-function resolvePosterUrl(url) {
-  if (!url) return null;
-  try {
-    if (url.includes('plex.tv')) {
-      const inner = new URL(url).searchParams.get('url');
-      if (inner) {
-        try {
-          return decodeURIComponent(inner);
-        } catch {
-          return inner;
-        }
-      }
-    }
-  } catch {
-    return url;
-  }
-  return url;
-}
-
-function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange, priority }) {
-  const [imgError, setImgError] = useState(false);
-  const posterUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
-  const comingSoon = isComingSoon(item);
-  const isNew = !comingSoon && Number(item.year) >= new Date().getFullYear();
-
-  return (
-    <div className="poster-tile-wrap">
-      <button type="button" className="poster-tile" onClick={() => onClick(item)} title={item.title}>
-        <div className="poster-tile-frame">
-          {posterUrl && !imgError ? (
-            <img
-              src={posterUrl}
-              alt={item.title}
-              loading={priority ? 'eager' : 'lazy'}
-              fetchPriority={priority ? 'high' : 'auto'}
-              decoding="async"
-              referrerPolicy="no-referrer"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="poster-tile-placeholder">
-              <span>{item.title?.charAt(0)}</span>
-            </div>
-          )}
-          {comingSoon && <span className="st-badge st-badge--soon">Coming Soon</span>}
-          {isNew && <span className="poster-tile-badge">New</span>}
-        </div>
-        <p className="poster-tile-title">{item.title}</p>
-        {item.year && <p className="poster-tile-year">{item.year}</p>}
-      </button>
-
-      {onAddWatchlist && (
-        <div className="poster-tile-status" onClick={(event) => event.stopPropagation()}>
-          <WatchlistStatusControl
-            mediaType="tv_show"
-            status={watchlistEntry?.status}
-            adding={addingWatchlist}
-            onAdd={() => onAddWatchlist(item)}
-            onChange={(nextStatus) => onStatusChange(item, watchlistEntry, nextStatus)}
-          />
-        </div>
-      )}
-    </div>
-  );
+function PosterTile(props) {
+  return <GridTitleTile mediaType="tv_show" {...props} />;
 }
 
 function CatalogView({
@@ -604,7 +542,7 @@ function CatalogView({
         </div>
       ) : (
         <>
-          <div className="poster-grid">
+          <div className="st-grid">
             {visibleItems.map((movie, index) => (
               <PosterTile
                 key={movie.id}
@@ -811,10 +749,13 @@ export default function TVShows() {
             <BrowseView mediaType="tv_show" refreshKey={refreshKey} />
           ) : (
           <>
-          <div className="catalog-header">
-            <h1 className="catalog-title">Series</h1>
+          <header className="st-page-head">
+            <div>
+              <p className="st-page-kicker">Browse all</p>
+              <h1 className="st-page-title">Series</h1>
+            </div>
             <Link className="st-btn st-btn--ghost" to="/tv-shows">Back to highlights</Link>
-          </div>
+          </header>
 
           <CatalogView
             onItemClick={openItemDetails}

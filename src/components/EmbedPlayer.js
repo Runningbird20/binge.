@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X } from '@phosphor-icons/react';
+import { ArrowsIn, CaretDown, Check, Plus, X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   fetchEpisodeProgress,
@@ -21,14 +21,94 @@ import {
   submitStreamReport,
   wantedAudio,
 } from '../utils/streamPreferences';
-import PlaybackOptions, { AudioCheckPrompt, PlaybackOptionsPanel } from './PlaybackOptions';
+import PlaybackOptions, { PlaybackOptionsPanel } from './PlaybackOptions';
 
-// Each provider has a buildUrl function for full control over URL format
+// Embed servers, best first. Verified 2026-10-07 by loading each in a real
+// browser, embedded in an iframe on a non-provider origin, and watching for
+// an actual HLS/MP4 stream (a 200 page proves nothing — vsembed.ru serves
+// its page but shows "This media is unavailable": its stream backend,
+// data.vidsrc.sh, resets every connection). vidsrc.ru is a different
+// service from vsembed.ru despite the name.
+// Removed that day: vsembed.su (domain now DNS-sinkholed as malicious),
+// multiembed.mov (connection reset), autoembed.co (no stream).
+//   events:    sends PLAYER_EVENT postMessages (play/timeupdate), so the
+//              player can confirm real playback instead of guessing
+//   subtitles: accepts a default subtitle language parameter
+//   idKinds:   which external ids the URL accepts
+//   types:     media types it actually streams
 const PROVIDERS = [
   {
+    // https://vidsrc.ru/docs — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
+    // MEDIA_DATA progress messages to the parent window.
+    id: 'vidsrc-ru',
+    label: 'VidSrc',
+    events: true,
+    idKinds: ['tmdb', 'imdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidsrc.ru');
+      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('colour', 'f4f6f8');
+      url.searchParams.set('pausescreen', 'true');
+      if (isTV) url.searchParams.set('autonextepisode', 'true');
+      return url.toString();
+    },
+  },
+  {
+    id: 'vidlink',
+    label: 'VidLink',
+    events: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      return isTV
+        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
+        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+    },
+  },
+  {
+    id: 'vidsrc-su',
+    label: 'VidSrc SU',
+    events: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://vidsrc.su/embed/tv/${id.value}/${season}/${episode}`
+        : `https://vidsrc.su/embed/movie/${id.value}`;
+    },
+  },
+  {
+    id: 'videasy',
+    label: 'Videasy',
+    events: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://player.videasy.net/tv/${id.value}/${season}/${episode}?nextEpisode=true&autoplayNextEpisode=true`
+        : `https://player.videasy.net/movie/${id.value}`;
+    },
+  },
+  {
+    id: '2embed',
+    label: '2Embed',
+    idKinds: ['tmdb', 'imdb'],
+    types: ['tv_show', 'movie'],
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`
+        : `https://www.2embed.stream/embed/movie/${id.value}`;
+    },
+  },
+  {
     id: 'vidsrc-embed-ru',
-    label: 'Vidsrc',
+    label: 'VidSrc Classic',
     subtitles: true,
+    idKinds: ['tmdb', 'imdb'],
+    types: ['movie', 'tv_show'],
     buildUrl(id, mediaType, season, episode, subtitleLang) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
@@ -41,65 +121,12 @@ const PROVIDERS = [
     },
   },
   {
-    id: 'vidsrc2',
-    label: 'Vidsrc 2',
-    subtitles: true,
-    buildUrl(id, mediaType, season, episode, subtitleLang) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.su');
-      url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
-      if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
-      return url.toString();
-    },
-  },
-  {
-    id: '2embed',
-    label: '2Embed ★ anime',
-    buildUrl(id, mediaType, season, episode) {
-      // 2embed.stream — great anime coverage, uses TMDB or IMDB
-      const isTV = mediaType === 'tv_show';
-      if (isTV) {
-        return `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`;
-      }
-      return `https://www.2embed.stream/embed/movie/${id.value}`;
-    },
-  },
-  {
-    id: 'autoembed',
-    label: 'AutoEmbed ★ anime',
-    buildUrl(id, mediaType, season, episode) {
-      // autoembed.co — explicitly supports anime via TMDB or IMDB ID
-      const isTV = mediaType === 'tv_show';
-      if (isTV) {
-        return `https://autoembed.co/tv/${id.kind}/${id.value}-${season}-${episode}`;
-      }
-      return `https://autoembed.co/movie/${id.kind}/${id.value}`;
-    },
-  },
-  {
-    id: 'vidlink',
-    label: 'VidLink',
-    buildUrl(id, mediaType, season, episode) {
-      // vidlink.pro — clean player, good anime support
-      const isTV = mediaType === 'tv_show';
-      if (isTV) {
-        return `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true`;
-      }
-      return `https://vidlink.pro/movie/${id.value}?autoplay=true`;
-    },
-  },
-  {
-    id: 'superembed',
-    label: 'SuperEmbed',
-    buildUrl(id, mediaType, season, episode) {
-      const isTV = mediaType === 'tv_show';
-      const tmdbFlag = id.kind === 'tmdb' ? '&tmdb=1' : '';
-      if (isTV) {
-        return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}&s=${season}&e=${episode}`;
-      }
-      return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}`;
+    id: 'vidsrc-rip',
+    label: 'VidSrc RIP',
+    idKinds: ['tmdb'],
+    types: ['movie'],
+    buildUrl(id) {
+      return `https://vidsrc.rip/embed/movie/${id.value}`;
     },
   },
 ];
@@ -121,7 +148,15 @@ function buildUrl(providerId, externalId, mediaType, season, episode, subtitleLa
   }
 }
 
-const PROVIDER_IDS = PROVIDERS.map((entry) => entry.id);
+// Servers that can play this title at all (media type + id kind).
+function providerIdsFor(mediaType, externalId) {
+  const type = mediaType === 'tv_show' ? 'tv_show' : 'movie';
+  const ids = PROVIDERS
+    .filter((entry) => entry.types.includes(type) && (!externalId || entry.idKinds.includes(externalId.kind)))
+    .map((entry) => entry.id);
+  return ids.length ? ids : PROVIDERS.map((entry) => entry.id);
+}
+const EVENT_PROVIDERS = new Set(PROVIDERS.filter((entry) => entry.events).map((entry) => entry.id));
 const SERVER_LABELS = Object.fromEntries(PROVIDERS.map((entry) => [entry.id, { label: entry.label, subtitles: Boolean(entry.subtitles) }]));
 // How long a server has to stay open before it counts as "works" for this
 // title (and the one-time audio check appears).
@@ -134,7 +169,7 @@ function normalizeStartAt(value) {
 
 function bestServerFor(item, mediaType, prefs) {
   const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
-  return rankServers(PROVIDER_IDS, {
+  return rankServers(providerIdsFor(mediaType, getEmbeddedId(item)), {
     prefs,
     originalLanguage: item?.original_language || null,
     memory: getServerMemory(memoryType, item?.id),
@@ -150,7 +185,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [originalLanguage, setOriginalLanguage] = useState(item?.original_language || null);
   const [reportSummary, setReportSummary] = useState([]);
   const [serverMemory, setServerMemory] = useState(() => getServerMemory(memoryType, item?.id));
-  const [audioCheck, setAudioCheck] = useState(false);
   // Once the viewer picks a server themselves, or one has played long
   // enough to count as working, late-arriving community reports must not
   // yank them onto a different server mid-episode.
@@ -190,7 +224,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     setServerMemory(getServerMemory(mediaType === 'tv_show' ? 'tv_show' : 'movie', item?.id));
     setOriginalLanguage(item?.original_language || null);
     setReportSummary([]);
-    setAudioCheck(false);
     setSeason(normalizeStartAt(initialSeason));
     setEpisode(normalizeStartAt(initialEpisode));
     setSeasonEpisodeCounts({});
@@ -202,11 +235,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   }, [item?.id, item?.title, mediaType, initialSeason, initialEpisode]);
 
   // ── Smart server choice (see utils/streamPreferences.js) ──────────────
+  const availableIds = useMemo(() => providerIdsFor(mediaType, externalId), [mediaType, externalId]);
   const rankedServers = useMemo(
-    () => rankServers(PROVIDER_IDS, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory }),
-    [prefs, originalLanguage, reportSummary, serverMemory]
+    () => rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory }),
+    [availableIds, prefs, originalLanguage, reportSummary, serverMemory]
   );
-  const audioWanted = wantedAudio(prefs, originalLanguage);
 
   // Original language: from the catalog row, else TMDB.
   useEffect(() => {
@@ -235,21 +268,66 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedServers]);
 
-  // A server that stays open for SERVER_CONFIRM_SECONDS counts as working
-  // for this title; then ask once whether the audio is what they wanted.
+  // Confirming a server works for this title. Servers that post
+  // PLAYER_EVENT messages (VidLink, Videasy) are confirmed by real playback
+  // (time actually advancing); for the rest, staying open for
+  // SERVER_CONFIRM_SECONDS is the best available signal.
+  const confirmedRef = useRef('');
+  const confirmServer = useCallback(() => {
+    const key = `${provider}|${item?.id}`;
+    if (!item?.id || confirmedRef.current === key) return;
+    confirmedRef.current = key;
+    serverLockedRef.current = true;
+    submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: true })
+      .then(() => setServerMemory(getServerMemory(memoryType, item.id)))
+      .catch(() => {});
+  }, [provider, item?.id, memoryType]);
+
   useEffect(() => {
-    if (!item?.id || !externalId) return undefined;
-    const timer = setTimeout(() => {
-      serverLockedRef.current = true;
-      submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: true }).catch(() => {});
-      const memory = getServerMemory(memoryType, item.id);
-      setServerMemory(memory);
-      const knownAudio = memory?.provider === provider ? memory.audio : null;
-      if (audioWanted && !knownAudio) setAudioCheck(true);
-    }, SERVER_CONFIRM_SECONDS * 1000);
+    if (!item?.id || !externalId || EVENT_PROVIDERS.has(provider)) return undefined;
+    const timer = setTimeout(confirmServer, SERVER_CONFIRM_SECONDS * 1000);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, item?.id, externalId]);
+  }, [provider, item?.id, externalId, confirmServer]);
+
+  useEffect(() => {
+    if (!EVENT_PROVIDERS.has(provider)) return undefined;
+    function onMessage(event) {
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
+      let data = event.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch { return; }
+      }
+      if (data?.type === 'PLAYER_EVENT') {
+        const playback = data.data || {};
+        if (Number(playback.currentTime) > 3 || (playback.event === 'timeupdate' && Number(playback.currentTime) > 0)) {
+          confirmServer();
+        }
+        return;
+      }
+      // vidsrc.ru / vidsrc.su: { type: 'MEDIA_DATA', data: { progress: { watched, duration } } }
+      if (data?.type === 'MEDIA_DATA') {
+        const media = typeof data.data === 'string' ? (() => { try { return JSON.parse(data.data); } catch { return null; } })() : data.data;
+        const watchedSeconds = Number(media?.progress?.watched);
+        if (watchedSeconds > 3) confirmServer();
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [provider, confirmServer]);
+
+  // Optional, from the panel: "the audio on this server is X".
+  async function reportServerAudio(language) {
+    if (!item?.id || !language) return;
+    await submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: true, audioLang: language }).catch(() => {});
+    const memory = getServerMemory(memoryType, item.id);
+    setServerMemory(memory);
+    const want = wantedAudio(prefs, originalLanguage);
+    if (want && language !== want) {
+      const ranking = rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory });
+      serverLockedRef.current = false;
+      setProvider(nextServerAfter(provider, ranking, language));
+    }
+  }
 
   function nextServerAfter(currentId, ranking, avoidAudio = null) {
     const candidates = ranking.filter((server) => server.id !== currentId);
@@ -258,7 +336,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   function selectServer(id) {
     serverLockedRef.current = true;
-    setAudioCheck(false);
     setProvider(id);
   }
 
@@ -268,7 +345,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     if (patch.audio) {
       // New audio language: let the ranking pick again, unless the current
       // server is already known to have it.
-      const ranking = rankServers(PROVIDER_IDS, { prefs: next, originalLanguage, summary: reportSummary, memory: serverMemory });
+      const ranking = rankServers(availableIds, { prefs: next, originalLanguage, summary: reportSummary, memory: serverMemory });
       const current = ranking.find((server) => server.id === provider);
       const want = wantedAudio(next, originalLanguage);
       if (!(current?.audio && current.audio === want)) {
@@ -282,23 +359,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     if (item?.id) await submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: false }).catch(() => {});
     const memory = getServerMemory(memoryType, item?.id);
     setServerMemory(memory);
-    const ranking = rankServers(PROVIDER_IDS, { prefs, originalLanguage, summary: reportSummary, memory });
+    const ranking = rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory });
     serverLockedRef.current = true;
-    setAudioCheck(false);
     setProvider(nextServerAfter(provider, ranking));
-  }
-
-  async function answerAudioCheck(matches, heardLanguage) {
-    setAudioCheck(false);
-    if (matches === null || !item?.id) return;
-    await submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: true, audioLang: heardLanguage }).catch(() => {});
-    const memory = getServerMemory(memoryType, item.id);
-    setServerMemory(memory);
-    if (matches === false) {
-      const ranking = rankServers(PROVIDER_IDS, { prefs, originalLanguage, summary: reportSummary, memory });
-      serverLockedRef.current = false;
-      setProvider(nextServerAfter(provider, ranking, heardLanguage));
-    }
   }
 
   const playbackOptionProps = {
@@ -310,6 +373,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     serverLabels: SERVER_LABELS,
     onSelectServer: selectServer,
     onReportBroken: reportBroken,
+    onReportAudio: reportServerAudio,
   };
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
 
@@ -683,7 +747,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             {isTV && <span className="mp-title-ep">S{season} E{episode}</span>}
           </div>
           <div className="mp-header-btns">
-            <button className="mp-btn" onClick={handleMinimize} type="button" title="Minimize">⌄</button>
+            <button className="mp-btn" onClick={handleMinimize} type="button" title="Minimize" aria-label="Minimize player"><CaretDown size={16} weight="bold" /></button>
             <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape">
               ⤢
             </button>
@@ -865,9 +929,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
           <div className="mp-divider" />
 
-          {audioCheck && (
-            <AudioCheckPrompt key={provider} language={audioWanted} onAnswer={answerAudioCheck} />
-          )}
           {/* Audio, subtitles and server — same panel as desktop, inline. */}
           <PlaybackOptionsPanel {...playbackOptionProps} />
         </div>
@@ -881,13 +942,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
         <div className="player-header">
           <div className="player-title">
-            <span>{isTV ? 'TV' : 'Movie'}</span>
             <div>
               <strong>{item.title}</strong>
-              {item.year && <span className="player-year">{item.year}</span>}
-              {externalId && (
-                <span className="player-tmdb-badge">{externalId.kind.toUpperCase()} OK</span>
-              )}
+              {isTV
+                ? <span className="player-year">S{season} · E{episode}</span>
+                : item.year && <span className="player-year">{item.year}</span>}
               {isTV && (
                 <button
                   className={`player-mark-btn ${watched.has(currentEpisodeKey) ? 'player-mark-btn--watched' : ''}`}
@@ -902,17 +961,17 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
                   }
                   type="button"
                 >
-                  {watched.has(currentEpisodeKey) ? '✓ Watched' : '+ Mark as watched'}
+                  {watched.has(currentEpisodeKey) ? <><Check size={14} weight="bold" /> Watched</> : <><Plus size={14} weight="bold" /> Mark as watched</>}
                 </button>
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.4rem' }}>
-            <button className="player-close" onClick={handleMinimize} title="Minimize" type="button">
-              ⌄
+          <div className="player-header-btns">
+            <button className="player-close" onClick={handleMinimize} title="Minimize" aria-label="Minimize player" type="button">
+              <CaretDown size={18} weight="bold" />
             </button>
-            <button className="player-close" onClick={onClose} title="Close" type="button">
-              X
+            <button className="player-close" onClick={onClose} title="Close" aria-label="Close player" type="button">
+              <X size={18} weight="bold" />
             </button>
           </div>
         </div>
@@ -966,12 +1025,13 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
                   className="player-close"
                   onClick={toggleFullscreen}
                   title="Exit fullscreen"
+                  aria-label="Exit fullscreen"
                   type="button"
                 >
-                  {'<'}
+                  <ArrowsIn size={18} weight="bold" />
                 </button>
-                <button className="player-close" onClick={onClose} title="Close" type="button">
-                  X
+                <button className="player-close" onClick={onClose} title="Close" aria-label="Close player" type="button">
+                  <X size={18} weight="bold" />
                 </button>
               </div>
             )}
@@ -1050,9 +1110,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           </div>
         </div>
-        {audioCheck && (
-          <AudioCheckPrompt key={provider} language={audioWanted} onAnswer={answerAudioCheck} />
-        )}
       </div>
     </div>
   );

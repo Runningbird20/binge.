@@ -45,6 +45,14 @@ Supabase Auth (email/password) is the identity system. A Postgres trigger, `hand
 
 `src/contexts/AuthContext.js` wraps Supabase auth-state changes and exposes `user` (with `isAdmin`/`isDev` resolved via `src/utils/userAccess.js`), `signIn`, `signUp`, `logout`, etc. `src/components/ProtectedRoute.js` gates routes; `allowedUserTypes` restricts by role (see `/admin/requests` in `src/App.js` for an admin-only route).
 
+### Title / book detail modals
+
+`MediaDetailsModal.js` (movies/TV) and `BookDetailsModal` in `Books.js` are single responsive components (`td-*` classes in `src/streaming.css`) — the separate `MobileMediaDetail`/`MobileBookDetail` forks were removed. The movie/TV modal pulls backdrop, logo art, cast, certification, trailer and season/episode lists from TMDB (`src/hooks/useTitleDetails.js`). Image sizing goes through `src/utils/imageQuality.js` (TMDB srcsets, full-size Goodreads/Open Library covers).
+
+### Book ids must stay below 2^53
+
+Book ids were SHA-1-derived 60-bit numbers that JavaScript silently rounds (opening/saving books hit the wrong id). `scripts/generate-supabase-book-seed.js` now emits 52-bit ids; `supabase/migrations/20261007140000_book_ids_js_safe.sql` remaps existing rows (`id >> 8`). Any new id scheme must stay within `Number.MAX_SAFE_INTEGER`.
+
 ### Desktop / mobile component pairs
 
 Several components render a completely different implementation on mobile rather than just using responsive CSS: `MediaCard.js` → `MobileMediaCard.js`, `MediaDetailsModal.js` → `MobileMediaDetail.js`, and book details have their own `MobileBookDetail.js`. The split is driven by `useIsMobile()` / `useDeviceType()` (`src/hooks/`). When changing behavior on one of these (e.g. adding/removing an action button), check whether the mobile counterpart needs the same change — they don't share implementation.
@@ -64,7 +72,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: `Br
 
 ### Player servers, audio & subtitles
 
-Embed servers are cross-origin iframes — the app cannot detect which audio track a server plays or whether it actually loaded. `src/utils/streamPreferences.js` ranks servers per title from (1) this profile's last working server for that title (localStorage, so episode 2 starts where episode 1 ended up), (2) community reports in `stream_reports` aggregated by the `stream_report_summary` RPC, (3) default order. `EmbedPlayer.js` auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?"; the "Audio & Subtitles" panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. Subtitle language is passed to servers that support it (Vidsrc `ds_lang`) — mark new providers with `subtitles: true` only if documented.
+Embed servers are cross-origin iframes — the app cannot detect which audio track a server plays or whether it actually loaded. `src/utils/streamPreferences.js` ranks servers per title from (1) this profile's last working server for that title (localStorage, so episode 2 starts where episode 1 ended up), (2) community reports in `stream_reports` aggregated by the `stream_report_summary` RPC, (3) default order. `EmbedPlayer.js` auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?"; the "Audio & Subtitles" panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. Subtitle language is passed to servers that support it (`subtitles: true`, only if documented). Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy `PLAYER_EVENT`) are confirmed as working by real playback rather than a timer. **Before adding/removing a server, test it embedded in an iframe on a non-provider origin and watch for actual HLS/MP4 requests** — a 200 page proves nothing (vsembed.ru serves its page but shows "This media is unavailable"; vidsrc.ru is a different, working service).
 
 ### Sports
 

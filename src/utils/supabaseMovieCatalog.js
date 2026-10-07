@@ -126,6 +126,13 @@ const CURATED_TV_GENRE_PREFERENCES = [
 
 const THIS_YEAR = new Date().getFullYear();
 
+// Stored TMDB popularity is gamed by crawler spikes on unrated softcore
+// titles (e.g. "Siren" 2004 sat in the top 10 with a 4.5 score and no age
+// rating). Popularity-sorted views require a real age rating or a decent
+// score; TMDB-driven rows instead filter on vote counts.
+const QUALITY_GATE = 'age_rating.not.is.null,vote_average.gte.6';
+
+
 // Client-side cache for popular titles so we only call the API once per session
 const _popularCache = {};
 
@@ -422,7 +429,9 @@ export async function fetchSupabaseMovieCatalogSegment({
   }
   // The popularity index is partial on poster_url (see the streaming
   // redesign migration); filtering the same way lets the sort use it.
-  if (sortOrder === 'popularity-desc') moviesQuery = moviesQuery.not('poster_url', 'is', null);
+  if (sortOrder === 'popularity-desc') {
+    moviesQuery = moviesQuery.not('poster_url', 'is', null).or(QUALITY_GATE);
+  }
   moviesQuery = applyBrowseSort(moviesQuery, sortOrder);
 
   const tasks = [
@@ -673,7 +682,9 @@ export async function fetchSupabaseTvShowCatalogSegment({
   if (kidsSafe) {
     showsQuery = showsQuery.in('age_rating', KIDS_SAFE_RATINGS);
   }
-  if (effectiveSort === 'popularity-desc') showsQuery = showsQuery.not('poster_url', 'is', null);
+  if (effectiveSort === 'popularity-desc') {
+    showsQuery = showsQuery.not('poster_url', 'is', null).or(QUALITY_GATE);
+  }
   showsQuery = applyBrowseSort(showsQuery, effectiveSort);
 
   const tasks = [
@@ -968,6 +979,7 @@ export async function fetchCatalogBrowseRow(mediaType, {
   query = applyGenreFilter(query, genre);
   if (language) query = query.eq('original_language', language);
   if (kidsSafe) query = query.in('age_rating', KIDS_SAFE_RATINGS);
+  else query = query.or(QUALITY_GATE);
 
   if (mediaType === 'movie') {
     query = query.lte('release_date', today);

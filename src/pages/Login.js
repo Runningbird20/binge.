@@ -25,7 +25,7 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-page" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` }}>
       <div className="auth-card">
         <Link to="/" className="auth-logo">binge.</Link>
         <h1>Welcome back</h1>

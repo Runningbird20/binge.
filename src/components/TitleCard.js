@@ -3,21 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Play } from '@phosphor-icons/react';
 import { formatReleaseDay } from '../utils/releaseWindow';
 import { languageName } from '../utils/tmdb';
-
-function resolvePosterUrl(url) {
-  if (!url) return null;
-  try {
-    if (url.includes('plex.tv')) {
-      const inner = new URL(url).searchParams.get('url');
-      if (inner) {
-        try { return decodeURIComponent(inner); } catch { return inner; }
-      }
-    }
-  } catch {
-    return url;
-  }
-  return url;
-}
+import { posterSrc, posterSrcSet } from '../utils/imageQuality';
 
 export function titleUrl(item, { play = false } = {}) {
   const id = item.media_id ?? item.id;
@@ -35,7 +21,9 @@ function primaryGenre(item) {
 export default function TitleCard({ item, priority = false, rank = null, showMatch = true, to = null }) {
   const location = useLocation();
   const [imgError, setImgError] = useState(false);
-  const poster = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url || item.posterUrl);
+  const rawPoster = item.poster_url || item.cover_url || item.image_url || item.posterUrl;
+  const poster = posterSrc(rawPoster);
+  const posterSet = posterSrcSet(rawPoster);
   const year = item.year || (item.release_date ? String(item.release_date).slice(0, 4) : '');
   const genre = primaryGenre(item);
   const language = item.original_language && item.original_language !== 'en' ? languageName(item.original_language) : '';
@@ -54,6 +42,8 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         {poster && !imgError ? (
           <img
             src={poster}
+            srcSet={posterSet}
+            sizes="(max-width: 768px) 34vw, 200px"
             alt=""
             loading={priority ? 'eager' : 'lazy'}
             fetchPriority={priority ? 'high' : 'auto'}
@@ -84,6 +74,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         )}
       </div>
       <p className="st-card-title">{item.title}</p>
+      {item.author && <p className="st-card-sub">{item.author}</p>}
     </Link>
   );
 }
