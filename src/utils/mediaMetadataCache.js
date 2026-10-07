@@ -1,4 +1,7 @@
-const STORAGE_KEY = 'binge.mediaMetadata.v1';
+// v2 added source_key/original_language/director/creator — bumping the key
+// drops v1 entries that lack them so they're refetched instead of serving
+// records the recommender can't map to a TMDB id.
+const STORAGE_KEY = 'binge.mediaMetadata.v2';
 const memoryCache = new Map();
 
 function normalizeText(value) {
@@ -70,6 +73,10 @@ function normalizeMediaMetadata(mediaType, item) {
     year: normalizeYear(item?.year),
     genre: normalizeText(item?.genre) || null,
     image_url: imageUrl || null,
+    source_key: normalizeText(item?.source_key) || null,
+    original_language: normalizeText(item?.original_language) || null,
+    director: normalizeText(item?.director) || null,
+    creator: normalizeText(item?.creator) || null,
   };
 }
 

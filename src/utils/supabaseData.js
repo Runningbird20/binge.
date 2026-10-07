@@ -29,11 +29,11 @@ const RATING_TABLES = {
 const MEDIA_METADATA_TABLES = {
   movie: {
     table: 'movies',
-    columns: 'id, title, year, genre, poster_url, director',
+    columns: 'id, title, year, genre, poster_url, director, source_key, original_language',
   },
   tv_show: {
     table: 'tv_shows',
-    columns: 'id, title, year, genre, poster_url, creator',
+    columns: 'id, title, year, genre, poster_url, creator, source_key, original_language',
   },
   book: {
     table: 'books',
@@ -638,7 +638,7 @@ export function calculateTasteMatch(currentRatings = [], otherRatings = []) {
   return Math.round((totalSimilarity / shared.length) * 100);
 }
 
-function averageRatingValue(rating) {
+export function averageRatingValue(rating) {
   const schema = RATING_TABLES[rating.media_type];
   if (!schema) {
     return 0;
@@ -667,6 +667,8 @@ function enrichMediaRecord(record, mediaType, metadata) {
     image_url: item?.image_url || null,
     director: item?.director ?? null,
     creator: item?.creator ?? null,
+    source_key: item?.source_key ?? null,
+    original_language: item?.original_language ?? null,
   };
 }
 
@@ -1070,6 +1072,29 @@ export async function fetchEpisodeProgress(mediaId) {
   const { data, error } = await query;
   if (error) throw toFriendlyError(error, 'Failed to fetch episode progress');
   return data || [];
+}
+
+// media_id -> number of episodes watched, across every show — an engagement
+// signal for recommendations (binging 30 episodes says more than one).
+export async function fetchEpisodeProgressCounts() {
+  const supabase = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) return new Map();
+  const profileId = getActiveProfileId();
+  let query = supabase
+    .from('episode_progress')
+    .select('media_id')
+    .eq('user_id', user.id)
+    .limit(5000);
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
+  if (error) return new Map();
+  const counts = new Map();
+  (data || []).forEach((row) => {
+    const id = Number(row.media_id);
+    counts.set(id, (counts.get(id) || 0) + 1);
+  });
+  return counts;
 }
 
 export async function markEpisodeWatched({ mediaId, season, episode }) {

@@ -53,9 +53,22 @@ Several components render a completely different implementation on mobile rather
 
 `src/App.js` is the single route table. All page components are `React.lazy`-loaded. Routes needing auth are wrapped in `<ProtectedRoute>`; admin-only routes additionally pass `allowedUserTypes={['admin']}`.
 
-### Recommendations
+### Browse rows, recommendations & release window
 
-`src/utils/recommendations.js` implements the "For You" taste-matching purely client-side (or Supabase-function-side) over a user's own ratings — no external ML service. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
+Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: `BrowseHero` spotlight + `TitleRow`s of `TitleCard`s); `?view=all` or `?genre=` switches those pages to the older filterable grid (`CatalogView` inside `Movies.js`/`TVShows.js`). Home uses the same components.
+
+- **Rows come from live TMDB lists, matched back to catalog rows.** The catalog's own `popularity`/`vote_average` are a stale import snapshot and null for many big titles, so `src/utils/browseRows.js` defines each row as a TMDB query (`src/utils/tmdb.js`, browser-side, public `REACT_APP_TMDB_API_KEY`, 30-min sessionStorage cache) plus a catalog-table fallback (`fetchCatalogBrowseRow`). `src/utils/catalogLookup.js` maps TMDB ids to catalog rows via `source_key = 'tmdb:{movie|tv}:{id}'` (unique index), dedupes, applies the release window and kids filtering. Coverage measured ~95–100%.
+- **Personalization** (`src/utils/personalization.js`): history = ratings (signed — low ratings push similar titles down) + Continue Watching + episodes watched + watchlist, recency-weighted. Strongest recent positives become "Because you watched X" seeds that pull TMDB `/recommendations` for that exact title; a genre + original-language taste profile scores candidates and also orders the taste rows (`orderRowsForTaste`). Already watched/rated/saved titles are excluded. `src/utils/recommendations.js` is the older genre-sampling engine, still used for books and the chat route.
+- **Release window** (`src/utils/releaseWindow.js`): released → shown; releasing within 30 days → shown with a "Coming Soon" badge; later → hidden. Apply it to any new browse surface.
+- **Mouse-only rule:** every horizontal scroller must have real ‹ › buttons (`TitleRow`, `BrowseHero`, `GenreScrollBar`), not just swipe/trackpad scrolling.
+
+### Player servers, audio & subtitles
+
+Embed servers are cross-origin iframes — the app cannot detect which audio track a server plays or whether it actually loaded. `src/utils/streamPreferences.js` ranks servers per title from (1) this profile's last working server for that title (localStorage, so episode 2 starts where episode 1 ended up), (2) community reports in `stream_reports` aggregated by the `stream_report_summary` RPC, (3) default order. `EmbedPlayer.js` auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?"; the "Audio & Subtitles" panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. Subtitle language is passed to servers that support it (Vidsrc `ds_lang`) — mark new providers with `subtitles: true` only if documented.
+
+### Sports
+
+`src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge (fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, ±3h window, league inference). `server/routes/sports.js` only fetches + normalizes and returns `{ raw }`; the client merges. Each game's provider feeds are its selectable servers. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
 
 ### Caching & load performance
 

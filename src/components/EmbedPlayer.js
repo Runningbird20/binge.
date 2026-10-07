@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
@@ -10,30 +10,47 @@ import {
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
+import { getEmbeddedId } from '../utils/embedPlayability';
+import { fetchTmdbLanguageInfo } from '../utils/tmdb';
+import {
+  fetchReportSummary,
+  getPlaybackPrefs,
+  getServerMemory,
+  rankServers,
+  savePlaybackPrefs,
+  submitStreamReport,
+  wantedAudio,
+} from '../utils/streamPreferences';
+import PlaybackOptions, { AudioCheckPrompt, PlaybackOptionsPanel } from './PlaybackOptions';
 
 // Each provider has a buildUrl function for full control over URL format
 const PROVIDERS = [
   {
     id: 'vidsrc-embed-ru',
     label: 'Vidsrc',
-    buildUrl(id, mediaType, season, episode) {
+    subtitles: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
       url.searchParams.set(id.kind, id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); url.searchParams.set('autonext', '1'); }
       url.searchParams.set('autoplay', '1');
+      // Documented: default subtitle language, ISO 639-1.
+      if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
       return url.toString();
     },
   },
   {
     id: 'vidsrc2',
     label: 'Vidsrc 2',
-    buildUrl(id, mediaType, season, episode) {
+    subtitles: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.su');
       url.searchParams.set(id.kind, id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
       url.searchParams.set('autoplay', '1');
+      if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
       return url.toString();
     },
   },
@@ -93,62 +110,51 @@ const AUTO_WATCH_SECONDS = 5 * 60;
 // immediately closed (misclick, browsing) shouldn't leave a row behind.
 const CONTINUE_WATCHING_DELAY_SECONDS = 20;
 
-function normalizeExternalId(kind, value) {
-  if (value == null) return null;
-
-  const normalized = String(value).trim();
-  if (!normalized) return null;
-
-  if (kind === 'tmdb' && /^\d+$/.test(normalized)) {
-    return { kind: 'tmdb', value: normalized };
-  }
-
-  if (kind === 'imdb' && /^tt\d+$/i.test(normalized)) {
-    return { kind: 'imdb', value: normalized.toLowerCase() };
-  }
-
-  return null;
-}
-
-function getEmbeddedId(item) {
-  const candidates = [
-    normalizeExternalId('tmdb', item?.tmdbId),
-    normalizeExternalId('tmdb', item?.tmdb_id),
-    normalizeExternalId('tmdb', item?.tmdb),
-    normalizeExternalId('imdb', item?.imdbId),
-    normalizeExternalId('imdb', item?.imdb_id),
-    normalizeExternalId('imdb', item?.imdb),
-    normalizeExternalId(
-      'tmdb',
-      typeof item?.source_key === 'string' && /^tmdb:(movie|tv):\d+$/i.test(item.source_key)
-        ? item.source_key.split(':')[2]
-        : null
-    ),
-  ];
-
-  return candidates.find(Boolean) || null;
-}
-
-function buildUrl(providerId, externalId, mediaType, season, episode) {
+function buildUrl(providerId, externalId, mediaType, season, episode, subtitleLang = null) {
   const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
   if (!provider) return null;
   if (!externalId) return null;
   try {
-    return provider.buildUrl(externalId, mediaType, season, episode, null);
+    return provider.buildUrl(externalId, mediaType, season, episode, subtitleLang);
   } catch {
     return null;
   }
 }
+
+const PROVIDER_IDS = PROVIDERS.map((entry) => entry.id);
+const SERVER_LABELS = Object.fromEntries(PROVIDERS.map((entry) => [entry.id, { label: entry.label, subtitles: Boolean(entry.subtitles) }]));
+// How long a server has to stay open before it counts as "works" for this
+// title (and the one-time audio check appears).
+const SERVER_CONFIRM_SECONDS = 60;
 
 function normalizeStartAt(value) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
+function bestServerFor(item, mediaType, prefs) {
+  const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
+  return rankServers(PROVIDER_IDS, {
+    prefs,
+    originalLanguage: item?.original_language || null,
+    memory: getServerMemory(memoryType, item?.id),
+  })[0]?.id || PROVIDERS[0].id;
+}
+
 export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
   const { isMobile, isLandscape } = useDeviceType();
   const { showMini, closeMini } = useMiniPlayer();
-  const [provider, setProvider] = useState(PROVIDERS[0].id);
+  const [prefs, setPrefs] = useState(() => getPlaybackPrefs());
+  const [provider, setProvider] = useState(() => bestServerFor(item, mediaType, getPlaybackPrefs()));
+  const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
+  const [originalLanguage, setOriginalLanguage] = useState(item?.original_language || null);
+  const [reportSummary, setReportSummary] = useState([]);
+  const [serverMemory, setServerMemory] = useState(() => getServerMemory(memoryType, item?.id));
+  const [audioCheck, setAudioCheck] = useState(false);
+  // Once the viewer picks a server themselves, or one has played long
+  // enough to count as working, late-arriving community reports must not
+  // yank them onto a different server mid-episode.
+  const serverLockedRef = useRef(false);
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
   const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
@@ -179,7 +185,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const canTrackEpisodes = Boolean(item?.id);
 
   useEffect(() => {
-    setProvider(PROVIDERS[0].id);
+    serverLockedRef.current = false;
+    setProvider(bestServerFor(item, mediaType, getPlaybackPrefs()));
+    setServerMemory(getServerMemory(mediaType === 'tv_show' ? 'tv_show' : 'movie', item?.id));
+    setOriginalLanguage(item?.original_language || null);
+    setReportSummary([]);
+    setAudioCheck(false);
     setSeason(normalizeStartAt(initialSeason));
     setEpisode(normalizeStartAt(initialEpisode));
     setSeasonEpisodeCounts({});
@@ -187,7 +198,120 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     setWatched(new Set());
     setMetadataWarning('');
     setEpPopoverOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, item?.title, mediaType, initialSeason, initialEpisode]);
+
+  // ── Smart server choice (see utils/streamPreferences.js) ──────────────
+  const rankedServers = useMemo(
+    () => rankServers(PROVIDER_IDS, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory }),
+    [prefs, originalLanguage, reportSummary, serverMemory]
+  );
+  const audioWanted = wantedAudio(prefs, originalLanguage);
+
+  // Original language: from the catalog row, else TMDB.
+  useEffect(() => {
+    if (item?.original_language) return undefined;
+    const tmdbLookupId = externalId?.kind === 'tmdb' ? externalId.value : null;
+    if (!tmdbLookupId) return undefined;
+    let cancelled = false;
+    fetchTmdbLanguageInfo(mediaType, tmdbLookupId).then((info) => {
+      if (!cancelled && info?.originalLanguage) setOriginalLanguage(info.originalLanguage);
+    });
+    return () => { cancelled = true; };
+  }, [item?.original_language, externalId, mediaType]);
+
+  useEffect(() => {
+    if (!item?.id) return undefined;
+    let cancelled = false;
+    fetchReportSummary(memoryType, item.id).then((rows) => { if (!cancelled) setReportSummary(rows); });
+    return () => { cancelled = true; };
+  }, [item?.id, memoryType]);
+
+  // Follow the ranking until the viewer commits to a server.
+  useEffect(() => {
+    if (serverLockedRef.current) return;
+    const best = rankedServers[0]?.id;
+    if (best && best !== provider) setProvider(best);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankedServers]);
+
+  // A server that stays open for SERVER_CONFIRM_SECONDS counts as working
+  // for this title; then ask once whether the audio is what they wanted.
+  useEffect(() => {
+    if (!item?.id || !externalId) return undefined;
+    const timer = setTimeout(() => {
+      serverLockedRef.current = true;
+      submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: true }).catch(() => {});
+      const memory = getServerMemory(memoryType, item.id);
+      setServerMemory(memory);
+      const knownAudio = memory?.provider === provider ? memory.audio : null;
+      if (audioWanted && !knownAudio) setAudioCheck(true);
+    }, SERVER_CONFIRM_SECONDS * 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, item?.id, externalId]);
+
+  function nextServerAfter(currentId, ranking, avoidAudio = null) {
+    const candidates = ranking.filter((server) => server.id !== currentId);
+    return (candidates.find((server) => !avoidAudio || server.audio !== avoidAudio) || candidates[0])?.id || currentId;
+  }
+
+  function selectServer(id) {
+    serverLockedRef.current = true;
+    setAudioCheck(false);
+    setProvider(id);
+  }
+
+  function changePrefs(patch) {
+    const next = savePlaybackPrefs(patch);
+    setPrefs(next);
+    if (patch.audio) {
+      // New audio language: let the ranking pick again, unless the current
+      // server is already known to have it.
+      const ranking = rankServers(PROVIDER_IDS, { prefs: next, originalLanguage, summary: reportSummary, memory: serverMemory });
+      const current = ranking.find((server) => server.id === provider);
+      const want = wantedAudio(next, originalLanguage);
+      if (!(current?.audio && current.audio === want)) {
+        serverLockedRef.current = false;
+        if (ranking[0]?.id) setProvider(ranking[0].id);
+      }
+    }
+  }
+
+  async function reportBroken() {
+    if (item?.id) await submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: false }).catch(() => {});
+    const memory = getServerMemory(memoryType, item?.id);
+    setServerMemory(memory);
+    const ranking = rankServers(PROVIDER_IDS, { prefs, originalLanguage, summary: reportSummary, memory });
+    serverLockedRef.current = true;
+    setAudioCheck(false);
+    setProvider(nextServerAfter(provider, ranking));
+  }
+
+  async function answerAudioCheck(matches, heardLanguage) {
+    setAudioCheck(false);
+    if (matches === null || !item?.id) return;
+    await submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: true, audioLang: heardLanguage }).catch(() => {});
+    const memory = getServerMemory(memoryType, item.id);
+    setServerMemory(memory);
+    if (matches === false) {
+      const ranking = rankServers(PROVIDER_IDS, { prefs, originalLanguage, summary: reportSummary, memory });
+      serverLockedRef.current = false;
+      setProvider(nextServerAfter(provider, ranking, heardLanguage));
+    }
+  }
+
+  const playbackOptionProps = {
+    prefs,
+    onPrefsChange: changePrefs,
+    originalLanguage,
+    servers: rankedServers,
+    currentServer: provider,
+    serverLabels: SERVER_LABELS,
+    onSelectServer: selectServer,
+    onReportBroken: reportBroken,
+  };
+  const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
 
   useEffect(() => {
     function onFsChange() {
@@ -426,7 +550,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // resolves a stream URL — a misclick or quick "let me check this out" close
   // shouldn't create (or bump) a Continue Watching entry.
   useEffect(() => {
-    if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode)) return undefined;
+    if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode, subtitleLang)) return undefined;
 
     const timer = setTimeout(() => {
       const progress = isTV ? { currentSeason: season, currentEpisode: episode } : {};
@@ -441,7 +565,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     }, CONTINUE_WATCHING_DELAY_SECONDS * 1000);
 
     return () => clearTimeout(timer);
-  }, [item?.id, mediaType, isTV, season, episode, provider, externalId]);
+  }, [item?.id, mediaType, isTV, season, episode, provider, externalId, subtitleLang]);
 
   // Floating controls overlay (desktop only) — auto-hides a few seconds after
   // the cursor enters the video area, matching Netflix/YouTube-style players.
@@ -524,7 +648,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     }
   }
 
-  const embedUrl = buildUrl(provider, externalId, mediaType, season, episode);
+  const embedUrl = buildUrl(provider, externalId, mediaType, season, episode, subtitleLang);
   const episodeCount = isTV ? (seasonEpisodeCounts[season] ?? undefined) : undefined;
   const watchedInSeason = Array.from(watched).filter((key) => key.startsWith(`${season}:`)).length;
 
@@ -651,15 +775,15 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               )}
 
               <div className="mp-row">
-                <span className="mp-row-label">Source</span>
+                <span className="mp-row-label">Server</span>
                 <div className="mp-chips">
-                  {PROVIDERS.map((p) => (
+                  {rankedServers.map((server) => (
                     <button
-                      key={p.id}
-                      className={`mp-chip ${provider === p.id ? 'active' : ''}`}
-                      onClick={() => setProvider(p.id)}
+                      key={server.id}
+                      className={`mp-chip ${provider === server.id ? 'active' : ''}`}
+                      onClick={() => selectServer(server.id)}
                       type="button"
-                    >{p.label}</button>
+                    >{SERVER_LABELS[server.id]?.label || server.id}</button>
                   ))}
                 </div>
               </div>
@@ -741,22 +865,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
           <div className="mp-divider" />
 
-          {/* Source */}
-          <div className="mp-row">
-            <span className="mp-row-label">Source</span>
-            <div className="mp-chips">
-              {PROVIDERS.map((p) => (
-                <button
-                  key={p.id}
-                  className={`mp-chip ${provider === p.id ? 'active' : ''}`}
-                  onClick={() => setProvider(p.id)}
-                  type="button"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {audioCheck && (
+            <AudioCheckPrompt key={provider} language={audioWanted} onAnswer={answerAudioCheck} />
+          )}
+          {/* Audio, subtitles and server — same panel as desktop, inline. */}
+          <PlaybackOptionsPanel {...playbackOptionProps} />
         </div>
       </div>
     );
@@ -864,18 +977,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             )}
 
             <div className="player-controls-top-row">
-              <div className="player-providers">
-                {PROVIDERS.map((entry) => (
-                  <button
-                    key={entry.id}
-                    className={`player-provider-btn ${provider === entry.id ? 'active' : ''}`}
-                    onClick={() => setProvider(entry.id)}
-                    type="button"
-                  >
-                    {entry.label}
-                  </button>
-                ))}
-              </div>
+              <PlaybackOptions {...playbackOptionProps} />
 
               {isTV && (
                 <div className="player-ep-selector" ref={epSelectorRef}>
@@ -948,6 +1050,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           </div>
         </div>
+        {audioCheck && (
+          <AudioCheckPrompt key={provider} language={audioWanted} onAnswer={answerAudioCheck} />
+        )}
       </div>
     </div>
   );

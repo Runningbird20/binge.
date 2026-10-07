@@ -67,7 +67,14 @@ export default function GlobalSearch() {
     ...results.movies.map((r) => ({ ...r, _type: 'movie', _label: r.title, _sub: r.year ? String(r.year) : 'Movie', _poster: r.poster_url, _url: `/movie/${r.id}`, _overlay: true })),
     ...results.tv.map((r) => ({ ...r, _type: 'tv', _label: r.title, _sub: r.year ? String(r.year) : 'TV Show', _poster: r.poster_url, _url: `/tv-show/${r.id}`, _overlay: true })),
     ...results.books.map((r) => ({ ...r, _type: 'book', _label: r.title, _sub: r.author || 'Book', _poster: r.cover_url, _url: `/book/${r.id}`, _overlay: true })),
-  ] : [];
+  ]
+    // Ranked results carry a relevance score: blend all types into one
+    // best-first list (a strong TV match shouldn't sit under weak movie
+    // matches). Unranked fallback results keep their grouped order.
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (Number(b.item.relevance) || 0) - (Number(a.item.relevance) || 0) || a.index - b.index)
+    .map(({ item }) => item)
+    .slice(0, 10) : [];
 
   function handleSelect(item) {
     navigate(item._url, item._overlay ? { state: { backgroundLocation: location } } : undefined);

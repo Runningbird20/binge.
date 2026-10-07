@@ -1,19 +1,11 @@
 import {
+  averageRatingValue,
   fetchSupabaseRatings,
   fetchSupabaseWatchlist,
 } from './supabaseData';
-import {
-  fetchSupabaseBooksPage,
-  fetchSupabaseMovieCatalogSegment,
-  fetchSupabaseTvShowCatalogSegment,
-} from './supabaseMovieCatalog';
+import { sampleSupabaseCatalogForRecommendations } from './supabaseMovieCatalog';
 
 const THIS_YEAR = new Date().getFullYear();
-
-function average(values = []) {
-  if (!values.length) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
 
 function splitGenres(value) {
   return String(value || '')
@@ -22,13 +14,12 @@ function splitGenres(value) {
     .filter(Boolean);
 }
 
+// Average only the type's actual rating criteria. Enriched rating rows also
+// carry nullable metadata (director/creator/etc.), and Number(null) === 0, so
+// averaging "every numeric-looking field" silently dragged scores down — a
+// 5-star book came out at 3.75 and never counted as liked.
 function getRatingStrength(rating) {
-  const numericValues = Object.entries(rating || {})
-    .filter(([key]) => !['id', 'user_id', 'media_id', 'review', 'created_at', 'media_type', 'title', 'year', 'genre', 'image_url'].includes(key))
-    .map(([, value]) => Number(value))
-    .filter(Number.isFinite);
-
-  return average(numericValues);
+  return averageRatingValue(rating || {});
 }
 
 // Watchlist status has no 1-5 scale, so map it onto the same strength axis ratings use.
@@ -232,58 +223,19 @@ function dedupeById(items) {
   return out;
 }
 
-// Instead of always scoring the same alphabetically-first slice of the catalog, probe the
-// genre-filtered count and jump to a random window within it — every call can reach the
-// full catalog, not just the first page.
-async function sampleCatalogSegment(fetchSegment, { genre = '', limit, kidsSafe = false } = {}) {
-  const probe = await fetchSegment({ genre, offset: 0, limit: 1, includeCount: true, includeFacets: false, kidsSafe }).catch(() => null);
-  const total = probe?.total || 0;
-  if (!total) return [];
-
-  const window = Math.min(limit, total);
-  const maxOffset = Math.max(0, total - window);
-  const offset = maxOffset > 0 ? Math.floor(Math.random() * (maxOffset + 1)) : 0;
-
-  const page = await fetchSegment({ genre, offset, limit: window, includeCount: false, includeFacets: false, kidsSafe }).catch(() => ({ items: [] }));
-  return page.items || [];
-}
-
-async function sampleBookSegment({ genre = '', limit } = {}) {
-  const probe = await fetchSupabaseBooksPage({ genre, page: 1, pageSize: 1 }).catch(() => null);
-  const total = probe?.total || 0;
-  if (!total) return [];
-
-  const window = Math.min(limit, total);
-  const totalPages = Math.max(1, Math.ceil(total / window));
-  const page = 1 + Math.floor(Math.random() * totalPages);
-
-  const result = await fetchSupabaseBooksPage({ genre, page, pageSize: window }).catch(() => ({ items: [] }));
-  return result.items || [];
-}
-
-async function sampleMoviePool(genres, kidsSafe = false) {
+// Each pool is one random window over the whole catalog plus one per favorite
+// genre, so every call can reach the full catalog rather than the same first page.
+async function sampleTypePool(mediaType, genres, limit, kidsSafe = false) {
   const results = await Promise.all([
-    sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 60, kidsSafe }),
-    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { genre, limit: 60, kidsSafe })),
+    sampleSupabaseCatalogForRecommendations(mediaType, { limit, kidsSafe }),
+    ...genres.map((genre) => sampleSupabaseCatalogForRecommendations(mediaType, { genre, limit, kidsSafe })),
   ]);
   return dedupeById(results.flat());
 }
 
-async function sampleShowPool(genres, kidsSafe = false) {
-  const results = await Promise.all([
-    sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 60, kidsSafe }),
-    ...genres.map((genre) => sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { genre, limit: 60, kidsSafe })),
-  ]);
-  return dedupeById(results.flat());
-}
-
-async function sampleBookPool(genres) {
-  const results = await Promise.all([
-    sampleBookSegment({ limit: 40 }),
-    ...genres.map((genre) => sampleBookSegment({ genre, limit: 40 })),
-  ]);
-  return dedupeById(results.flat());
-}
+const sampleMoviePool = (genres, kidsSafe = false) => sampleTypePool('movie', genres, 60, kidsSafe);
+const sampleShowPool = (genres, kidsSafe = false) => sampleTypePool('tv_show', genres, 60, kidsSafe);
+const sampleBookPool = (genres) => sampleTypePool('book', genres, 40);
 
 function qualityScore(item) {
   return Number(item.vote_average) || (Number(item.popularity) ? Math.min(Number(item.popularity), 100) / 10 : 0);
@@ -295,20 +247,20 @@ function qualityScore(item) {
 // releases for TV/books.
 async function fetchPopularForType(mediaType, limit, kidsSafe = false) {
   if (mediaType === 'movie') {
-    const pool = await sampleCatalogSegment(fetchSupabaseMovieCatalogSegment, { limit: 80, kidsSafe });
+    const pool = await sampleSupabaseCatalogForRecommendations('movie', { limit: 80, kidsSafe });
     return pool
       .map((item) => ({ ...item, media_type: 'movie' }))
       .sort((a, b) => qualityScore(b) - qualityScore(a))
       .slice(0, limit);
   }
   if (mediaType === 'tv_show') {
-    const pool = await sampleCatalogSegment(fetchSupabaseTvShowCatalogSegment, { limit: 80, kidsSafe });
+    const pool = await sampleSupabaseCatalogForRecommendations('tv_show', { limit: 80, kidsSafe });
     return pool
       .map((item) => ({ ...item, media_type: 'tv_show' }))
       .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
       .slice(0, limit);
   }
-  const pool = await sampleBookSegment({ limit: 60 });
+  const pool = await sampleSupabaseCatalogForRecommendations('book', { limit: 60 });
   return pool
     .map((item) => ({ ...item, media_type: 'book' }))
     .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
@@ -351,7 +303,10 @@ async function prepareRecommendationContext() {
 function topScored(items, mediaType, signals, excludedKeys, n) {
   return items
     .map((item) => ({ ...item, media_type: mediaType, _score: scoreCandidate({ ...item, media_type: mediaType }, signals, excludedKeys) }))
-    .filter((candidate) => Number.isFinite(candidate._score) && candidate._score > 0)
+    // Only drop already-rated/tracked titles (-Infinity). A low score just means a
+    // weaker match — still rank it rather than returning an empty list to someone
+    // with a large history whose dislikes happen to outweigh the pool.
+    .filter((candidate) => Number.isFinite(candidate._score))
     .sort((a, b) => b._score - a._score)
     .slice(0, n);
 }

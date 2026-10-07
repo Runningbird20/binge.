@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { FilmSlate, MonitorPlay, BookOpen, MagnifyingGlass } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import { api } from '../api';
+import TitleRow from '../components/TitleRow';
+import { fetchTmdbRecommendations, tmdbIdFromItem } from '../utils/tmdb';
+import { resolveTmdbItems } from '../utils/catalogLookup';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv: MonitorPlay, book: BookOpen };
 
@@ -128,6 +131,19 @@ export default function SearchResults() {
   const relatedTv = tagType(related?.tvRelated, 'tv').filter((r) => !primaryTvIds.has(r.id));
   const relatedBooks = tagType(related?.booksRelated, 'book').filter((r) => !primaryBookIds.has(r.id));
 
+  // The single best video match drives a "More like X" row — searching
+  // for a show you like should also answer "what else is like this?".
+  const topMatch = [...primaryMovies, ...primaryTv]
+    .filter((item) => tmdbIdFromItem(item))
+    .sort((a, b) => (Number(b.relevance) || 0) - (Number(a.relevance) || 0))[0] || null;
+  const topMatchType = topMatch?._type === 'tv' ? 'tv_show' : 'movie';
+  const topMatchTmdbId = topMatch ? tmdbIdFromItem(topMatch) : null;
+  const loadMoreLike = useCallback(async () => {
+    if (!topMatchTmdbId) return [];
+    const list = await fetchTmdbRecommendations(topMatchType, topMatchTmdbId);
+    return resolveTmdbItems(list || [], topMatchType);
+  }, [topMatchType, topMatchTmdbId]);
+
   const primaryTotal = primaryMovies.length + primaryTv.length + primaryBooks.length;
   const relatedTotal = relatedMovies.length + relatedTv.length + relatedBooks.length;
   const nothingFound = primaryState === 'done' && relatedState === 'done' && primaryTotal === 0 && relatedTotal === 0;
@@ -163,6 +179,16 @@ export default function SearchResults() {
             <ResultRow heading={TYPE_LABELS.movie} items={primaryMovies} />
             <ResultRow heading={TYPE_LABELS.tv} items={primaryTv} />
             <ResultRow heading={TYPE_LABELS.book} items={primaryBooks} />
+
+            {topMatch && (
+              <TitleRow
+                key={`${topMatchType}:${topMatchTmdbId}`}
+                title={`More like ${topMatch.title}`}
+                subtitle="Titles people who watched it went on to watch"
+                load={loadMoreLike}
+                minItems={3}
+              />
+            )}
 
             {(relatedState === 'loading' || relatedMovies.length > 0) && (
               <ResultRow heading={`More movies like "${query}"`} items={relatedMovies} loading={relatedState === 'loading'} />

@@ -1,181 +1,204 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { ArrowLeft, ArrowsOut, CaretDown, Play, SkipForward } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import GenreScrollBar from '../components/GenreScrollBar';
-import useDeviceType from '../hooks/useDeviceType';
+import TitleRow from '../components/TitleRow';
 import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel } from '../utils/sportsProviders';
 
 const POLL_MS = 60_000;
-// Failover timeout: how long we give a provider's iframe to fire `load`
-// before silently advancing to the next one. This only catches network-
-// level failures (DNS, connection refused, timeout) — a cross-origin iframe
-// that loads successfully but shows a dead/ad-only player looks identical
-// to a working one from the outside, so that residual case still needs the
-// manual "next source" control.
+// How long a server's iframe gets to fire `load` before we silently move to
+// the next one. Only catches network-level failures — a cross-origin player
+// that loads but shows a dead stream looks identical from outside, which is
+// what the "Next server" button is for.
 const LOAD_TIMEOUT_MS = 8_000;
 
+// League rows, in the order a US-centric sports home would show them; any
+// league not listed follows, biggest first.
+const LEAGUE_ORDER = [
+  'NFL', 'College Football', 'NBA', 'WNBA', 'NHL', 'MLB', 'MLS', 'Premier League', 'LaLiga', 'Champions League',
+  'Serie A', 'Bundesliga', 'Ligue 1', 'Liga MX', 'Formula 1', 'UFC', 'Wrestling', 'Combat Sports',
+];
+
 const CAT_ICONS = {
-  'American Football': '🏈', 'Australian Football': '🏉',
-  Basketball: '🏀', Soccer: '⚽', Football: '⚽', Baseball: '⚾',
-  Hockey: '🏒', Boxing: '🥊', MMA: '🥊', 'Combat Sports': '🥊',
-  Wrestling: '🤼', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
-  Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Olympics: '🏅',
-  Esports: '🎮', Athletics: '🏃', Cycling: '🚴', Motorsport: '🏎️',
-  Billiards: '🎱', Darts: '🎯',
+  'American Football': '🏈', 'Australian Football': '🏉', Basketball: '🏀', Soccer: '⚽',
+  Baseball: '⚾', Hockey: '🏒', 'Combat Sports': '🥊', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
+  Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Billiards: '🎱', Darts: '🎯',
 };
 
-function catIcon(cat) {
-  if (!cat) return '🏆';
-  for (const [k, v] of Object.entries(CAT_ICONS)) {
-    if (cat.toLowerCase().includes(k.toLowerCase())) return v;
-  }
-  return '🏆';
+function catIcon(category) {
+  return CAT_ICONS[category] || '🏆';
 }
 
 function fmtTime(unix) {
   if (!unix) return '';
-  return new Date(unix * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(unix * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-function fmtDate(unix) {
+function fmtDay(unix) {
   if (!unix) return '';
-  const d = new Date(unix * 1000);
+  const date = new Date(unix * 1000);
   const today = new Date();
-  const tom   = new Date(today); tom.setDate(today.getDate() + 1);
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  if (d.toDateString() === tom.toDateString())   return 'Tomorrow';
-  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+  return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function timeUntil(unix) {
   const diff = unix * 1000 - Date.now();
   if (diff <= 0) return null;
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor((diff % 3_600_000) / 60_000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const hours = Math.floor(diff / 3_600_000);
+  const minutes = Math.floor((diff % 3_600_000) / 60_000);
+  if (hours >= 24) return null;
+  return hours > 0 ? `in ${hours}h ${minutes}m` : `in ${minutes}m`;
 }
 
-function getStatus(s, nowMs) {
+function getStatus(stream, nowMs) {
   const nowSec = Math.floor(nowMs / 1000);
-  if (s.alwaysLive) return 'live';
-  if (s.startsAt <= nowSec && s.endsAt >= nowSec) return 'live';
-  if (s.startsAt > nowSec) return 'upcoming';
+  if (stream.alwaysLive) return 'live';
+  if (stream.startsAt <= nowSec && stream.endsAt >= nowSec) return 'live';
+  if (stream.startsAt > nowSec) return 'upcoming';
   return 'replay';
 }
 
-function StreamListCard({ stream, nowMs, onSelect }) {
+function statusLabel(stream, nowMs) {
   const status = getStatus(stream, nowMs);
+  if (status === 'live') return stream.alwaysLive ? '24/7' : 'LIVE';
+  if (status === 'replay') return 'REPLAY';
+  return `${fmtDay(stream.startsAt)} · ${fmtTime(stream.startsAt)}`;
+}
+
+// Team-logo art for games without a provider thumbnail, tinted with the
+// teams' colors when PPV provides them.
+function GameArt({ stream }) {
+  const [posterFailed, setPosterFailed] = useState(false);
+  const colors = stream.colors?.length >= 2 ? stream.colors : ['#26304a', '#121620'];
+
+  if (stream.poster && !posterFailed) {
+    return (
+      <img
+        className="st-game-img"
+        src={stream.poster}
+        alt=""
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setPosterFailed(true)}
+      />
+    );
+  }
+
   return (
-    <button className="sp-card" onClick={() => onSelect(stream)} type="button">
-      <div className="sp-card-left">
-        {stream.poster ? (
-          <img src={stream.poster} alt={stream.name} className="sp-card-poster"
-            onError={e => { e.target.style.display = 'none'; }} />
-        ) : (
-          <div className="sp-card-poster sp-card-poster--icon">
-            {catIcon(stream.category)}
-          </div>
-        )}
+    <div className="st-game-art" style={{ background: `linear-gradient(120deg, ${colors[0]} 0%, ${colors[0]} 48%, ${colors[1]} 52%, ${colors[1]} 100%)` }}>
+      {stream.logos?.home && stream.logos?.away ? (
+        <>
+          <img src={stream.logos.home} alt="" loading="lazy" referrerPolicy="no-referrer" />
+          <span>vs</span>
+          <img src={stream.logos.away} alt="" loading="lazy" referrerPolicy="no-referrer" />
+        </>
+      ) : (
+        <span className="st-game-art-icon">{catIcon(stream.category)}</span>
+      )}
+    </div>
+  );
+}
+
+function GameCard({ stream, nowMs, onSelect, active = false }) {
+  const status = getStatus(stream, nowMs);
+  const countdown = status === 'upcoming' ? timeUntil(stream.startsAt) : null;
+  return (
+    <button
+      type="button"
+      className={`st-game${active ? ' active' : ''}`}
+      onClick={() => onSelect(stream)}
+      aria-label={`${stream.name}, ${statusLabel(stream, nowMs)}, ${stream.providers.length} server${stream.providers.length === 1 ? '' : 's'}`}
+    >
+      <div className="st-game-thumb">
+        <GameArt stream={stream} />
+        <span className={`st-game-status st-game-status--${status}`}>
+          {status === 'live' && <span className="st-live-dot" aria-hidden="true" />}
+          {statusLabel(stream, nowMs)}
+        </span>
+        {countdown && <span className="st-game-countdown">{countdown}</span>}
+        <span className="st-game-play" aria-hidden="true"><Play size={20} weight="fill" /></span>
       </div>
-      <div className="sp-card-body">
-        <div className="sp-card-badges">
-          {status === 'live' && <span className="sp-badge-live">● LIVE</span>}
-          {status === 'replay' && <span className="sp-badge-replay">REPLAY</span>}
-          {status === 'upcoming' && (
-            <span className="sp-badge-upcoming">
-              {fmtDate(stream.startsAt)} · {fmtTime(stream.startsAt)}
-              {timeUntil(stream.startsAt) && ` · ${timeUntil(stream.startsAt)}`}
-            </span>
-          )}
-        </div>
-        <p className="sp-card-name">{stream.name}</p>
-        <p className="sp-card-cat">{catIcon(stream.category)} {stream.category}</p>
-      </div>
-      <span className="sp-card-arrow">›</span>
+      <p className="st-game-title">{stream.name}</p>
+      <p className="st-game-meta">
+        {catIcon(stream.category)} {stream.league}
+        <span aria-hidden="true"> · </span>
+        {stream.providers.length} server{stream.providers.length === 1 ? '' : 's'}
+      </p>
     </button>
   );
 }
 
-export default function Sports() {
-  const { isMobile } = useDeviceType();
-  const [streams, setStreams]           = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState('');
-  const [selected, setSelected]         = useState(null);
-  const [category, setCategory]         = useState('All');
-  const [fullscreen, setFullscreen]     = useState(false);
-  const [nowMs, setNowMs]               = useState(Date.now());
-  const [showReplays, setShowReplays] = useState(false);
-  const iframeRef = useRef(null);
-  const playerRef = useRef(null);
+function sortForRow(streams, nowMs) {
+  const rank = { live: 0, upcoming: 1, replay: 2 };
+  return [...streams].sort((a, b) => {
+    const statusDiff = rank[getStatus(a, nowMs)] - rank[getStatus(b, nowMs)];
+    if (statusDiff) return statusDiff;
+    if (b.providers.length !== a.providers.length && getStatus(a, nowMs) === 'live') return b.providers.length - a.providers.length;
+    return a.startsAt - b.startsAt;
+  });
+}
 
-  // Provider failover — each merged stream carries a `providers` array
-  // (1-3 entries: PPV.st, Streamed.pk, StreamFree, and Streamed.pk itself
-  // can contribute more than one). providerIndex is which one we're
-  // currently trying; retryNonce forces an iframe remount without changing
-  // providers (used when there's only one, or to re-try from scratch).
-  const [providerIndex, setProviderIndex] = useState(0);
-  const [retryNonce, setRetryNonce]       = useState(0);
-  const [embedUrl, setEmbedUrl]           = useState(null);
-  const [resolving, setResolving]         = useState(false);
-  const [exhausted, setExhausted]         = useState(false);
+function buildLeagueRows(streams, nowMs) {
+  const byLeague = new Map();
+  streams.forEach((stream) => {
+    if (stream.alwaysLive) return;
+    const list = byLeague.get(stream.league) || [];
+    list.push(stream);
+    byLeague.set(stream.league, list);
+  });
+  return [...byLeague.entries()]
+    .map(([league, list]) => ({
+      league,
+      items: sortForRow(list, nowMs),
+      liveCount: list.filter((stream) => getStatus(stream, nowMs) === 'live').length,
+      order: LEAGUE_ORDER.indexOf(league) === -1 ? 100 : LEAGUE_ORDER.indexOf(league),
+    }))
+    .sort((a, b) => (b.liveCount > 0) - (a.liveCount > 0) || a.order - b.order || b.items.length - a.items.length);
+}
+
+// ── Player ─────────────────────────────────────────────────────────────
+
+function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect }) {
+  const [serverIndex, setServerIndex] = useState(0);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [embedUrl, setEmbedUrl] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [failed, setFailed] = useState(new Set());
   const loadedRef = useRef(false);
-
-  const load = useCallback(async () => {
-    try {
-      const streams = await fetchSportsStreams();
-      setStreams(streams);
-      setError('');
-    } catch (e) {
-      setError('Could not load sports streams. ' + (e.message || ''));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const frameRef = useRef(null);
+  const servers = stream.providers;
+  const status = getStatus(stream, nowMs);
 
   useEffect(() => {
-    load();
-    const tick  = setInterval(() => setNowMs(Date.now()), 30_000);
-    const poll  = setInterval(load, POLL_MS);
-    return () => { clearInterval(tick); clearInterval(poll); };
-  }, [load]);
-
-  useEffect(() => {
-    const fn = () => setFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', fn);
-    return () => document.removeEventListener('fullscreenchange', fn);
-  }, []);
-
-  function toggleFs() {
-    if (!document.fullscreenElement) {
-      (iframeRef.current || playerRef.current)?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  }
-
-  // Reset failover state whenever a different event is selected.
-  useEffect(() => {
-    setProviderIndex(0);
+    setServerIndex(0);
+    setFailed(new Set());
     setRetryNonce(0);
-    setExhausted(false);
-  }, [selected?.id]);
+  }, [stream.id]);
 
-  const advanceProvider = useCallback(() => {
-    setProviderIndex((i) => {
-      const providers = selected?.providers || [];
-      if (i + 1 < providers.length) return i + 1;
-      setExhausted(true);
-      return i;
+  // Auto-advance past a server that failed, unless every server has.
+  const advance = useCallback(() => {
+    setFailed((current) => {
+      const next = new Set(current);
+      next.add(serverIndex);
+      return next;
     });
-  }, [selected]);
+    setServerIndex((index) => {
+      for (let step = 1; step <= servers.length; step += 1) {
+        const candidate = (index + step) % servers.length;
+        if (!failed.has(candidate) && candidate !== index) return candidate;
+      }
+      return index;
+    });
+  }, [serverIndex, servers.length, failed]);
 
-  // Resolve the current provider's actual embed URL (instant for PPV.st /
-  // StreamFree, one extra request for Streamed.pk) whenever the selection
-  // or the active provider changes.
   useEffect(() => {
-    const providers = selected?.providers || [];
-    const provider = providers[providerIndex];
-    if (!provider) { setEmbedUrl(null); return undefined; }
+    const provider = servers[serverIndex];
+    if (!provider || status === 'upcoming') { setEmbedUrl(null); return undefined; }
     let cancelled = false;
     setResolving(true);
     setEmbedUrl(null);
@@ -183,460 +206,282 @@ export default function Sports() {
       if (cancelled) return;
       setResolving(false);
       if (url) setEmbedUrl(url);
-      else advanceProvider();
+      else advance();
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, providerIndex]);
+  }, [stream.id, serverIndex, retryNonce, status === 'upcoming']);
 
-  // Failover watchdog — if the iframe never fires `load` within
-  // LOAD_TIMEOUT_MS, treat this provider as dead and silently move on.
   useEffect(() => {
     loadedRef.current = false;
     if (!embedUrl) return undefined;
     const timer = setTimeout(() => {
-      if (!loadedRef.current) advanceProvider();
+      if (!loadedRef.current) advance();
     }, LOAD_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [embedUrl, advanceProvider]);
+  }, [embedUrl, advance]);
 
-  function handlePlayerLoad() { loadedRef.current = true; }
-  function handlePlayerError() { advanceProvider(); }
+  const allFailed = failed.size >= servers.length;
 
-  const currentProviders = selected?.providers || [];
-  const currentProvider = currentProviders[providerIndex] || null;
-  const sourceLabel = currentProvider ? providerLabel(currentProvider) : '';
-  const sourceCountLabel = currentProviders.length > 1
-    ? `${sourceLabel} · ${providerIndex + 1}/${currentProviders.length}`
-    : null;
-
-  // Manually cycle to the next known source for this event (wrapping back
-  // to the first), or just force a fresh connection attempt if there's only
-  // one — covers the case a provider "loads" but shows a dead/blank player,
-  // which the load-timeout watchdog above can't detect on its own.
-  function switchSource() {
-    if (currentProviders.length > 1) {
-      setExhausted(false);
-      setProviderIndex((i) => (i + 1) % currentProviders.length);
-    } else {
-      setRetryNonce((n) => n + 1);
-    }
+  function chooseServer(index) {
+    setFailed((current) => {
+      const next = new Set(current);
+      next.delete(index);
+      return next;
+    });
+    if (index === serverIndex) setRetryNonce((n) => n + 1);
+    else setServerIndex(index);
   }
 
-  function retryFromStart() {
-    setExhausted(false);
-    setProviderIndex(0);
-    setRetryNonce((n) => n + 1);
+  function nextServer() {
+    if (servers.length > 1) chooseServer((serverIndex + 1) % servers.length);
+    else setRetryNonce((n) => n + 1);
   }
 
-  const categories = ['All', ...Array.from(
-    new Set(streams.map(s => s.category).filter(Boolean))
-  ).sort()];
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else frameRef.current?.requestFullscreen?.().catch(() => {});
+  }
 
-  const liveCount = streams.filter(s => getStatus(s, nowMs) === 'live').length;
-
-  const filtered = category === 'All'
-    ? streams
-    : streams.filter(s => s.category === category);
-
-  const liveNow    = filtered.filter(s => getStatus(s, nowMs) === 'live');
-  const upcoming   = filtered.filter(s => getStatus(s, nowMs) === 'upcoming');
-  const replays    = filtered.filter(s => getStatus(s, nowMs) === 'replay');
-
-  // ── Mobile layout ────────────────────────────────────────────
-  if (isMobile) {
-    // Full-screen player when a stream is selected
-    if (selected) {
-      const status = getStatus(selected, nowMs);
-      const otherStreams = filtered.filter(s => s.id !== selected.id);
-      return (
-        <div className="sp-shell">
-          {/* Header bar */}
-          <div className="sp-header">
-            <button className="sp-back-btn" onClick={() => setSelected(null)} type="button">
-              ← Back
-            </button>
-            <div className="sp-header-title">
-              {status === 'live' && <span className="sp-badge-live">● LIVE</span>}
-              <span className="sp-title-text">{selected.name}</span>
-            </div>
-            <button className="mp-btn" onClick={toggleFs} type="button">
-              {fullscreen ? '↙' : '↗'}
-            </button>
-          </div>
-
-          {/* Video */}
-          <div className="sp-video-wrap" ref={playerRef}>
-            {embedUrl ? (
-              <iframe
-                key={`${selected.id}-${providerIndex}-${retryNonce}`}
-                ref={iframeRef}
-                src={embedUrl}
-                className="mp-iframe"
-                allowFullScreen
-                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                referrerPolicy="no-referrer-when-downgrade"
-                title={selected.name}
-                onLoad={handlePlayerLoad}
-                onError={handlePlayerError}
-              />
-            ) : resolving ? (
-              <div className="mp-no-url">
-                <span style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</span>
-                <p>Connecting{sourceLabel ? ` via ${sourceLabel}` : ''}...</p>
-              </div>
-            ) : (
-              <div className="mp-no-url">
-                <span style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</span>
-                {status === 'upcoming' ? (
-                  <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}</p>
-                ) : exhausted ? (
-                  <p>All sources unavailable right now.</p>
-                ) : (
-                  <p>Stream unavailable — try refreshing.</p>
-                )}
-                <button className="sp-refresh-btn" onClick={exhausted ? retryFromStart : load} type="button">↻ Refresh</button>
-              </div>
-            )}
-          </div>
-
-          {/* Event info + other streams */}
-          <div className="sp-player-info">
-            <div className="sp-now-meta">
-              <span className="sp-cat-pill">{catIcon(selected.category)} {selected.category}</span>
-              {selected.tag && <span className="sp-tag">{selected.tag}</span>}
-              {status === 'upcoming' && (
-                <span className="sp-upcoming-time">{fmtDate(selected.startsAt)} {fmtTime(selected.startsAt)}</span>
-              )}
-            </div>
-            <button
-              type="button"
-              className="sp-source-btn"
-              onClick={switchSource}
-            >
-              {sourceCountLabel ? `↻ Next source (${sourceCountLabel})` : '↻ Retry connection'}
-            </button>
-            {otherStreams.length > 0 && (
-              <>
-                <p className="sp-section-label">More Streams</p>
-                {otherStreams.map(s => {
-                  const st = getStatus(s, nowMs);
-                  return (
-                    <button key={s.id} className="sp-mini-card" onClick={() => setSelected(s)} type="button">
-                      <span className={`sp-dot ${st === 'live' ? 'live' : st === 'upcoming' ? 'upcoming' : 'replay'}`} />
-                      <span className="sp-mini-name">{s.name}</span>
-                      <span className="sp-mini-cat">{catIcon(s.category)}</span>
-                    </button>
-                  );
-                })}
-              </>
-            )}
-          </div>
+  return (
+    <div className="st-sp-player">
+      <div className="st-sp-player-head">
+        <button type="button" className="st-btn st-btn--ghost" onClick={onBack}>
+          <ArrowLeft size={18} weight="bold" /> All games
+        </button>
+        <div className="st-sp-player-title">
+          {status === 'live' && <span className="st-game-status st-game-status--live"><span className="st-live-dot" aria-hidden="true" />{stream.alwaysLive ? '24/7' : 'LIVE'}</span>}
+          <h1>{stream.name}</h1>
+          <span className="st-sp-player-league">{catIcon(stream.category)} {stream.league}</span>
         </div>
-      );
-    }
+      </div>
 
-    // Stream list view — grouped by status like a "Live TV" streaming home
+      <div className="st-sp-frame" ref={frameRef}>
+        {embedUrl ? (
+          <iframe
+            key={`${stream.id}-${serverIndex}-${retryNonce}`}
+            src={embedUrl}
+            title={stream.name}
+            allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            referrerPolicy="no-referrer-when-downgrade"
+            scrolling="no"
+            onLoad={() => { loadedRef.current = true; }}
+            onError={advance}
+          />
+        ) : (
+          <div className="st-sp-frame-empty">
+            <span className="st-game-art-icon">{catIcon(stream.category)}</span>
+            {status === 'upcoming' ? (
+              <>
+                <p>Starts {fmtDay(stream.startsAt)} at {fmtTime(stream.startsAt)}{timeUntil(stream.startsAt) ? ` (${timeUntil(stream.startsAt)})` : ''}</p>
+                <p className="st-muted">The stream appears here when the game goes live.</p>
+              </>
+            ) : resolving ? (
+              <p>Connecting to {providerLabel(servers[serverIndex])}…</p>
+            ) : allFailed ? (
+              <>
+                <p>None of the {servers.length} servers responded.</p>
+                <button type="button" className="st-btn st-btn--primary" onClick={() => { setFailed(new Set()); chooseServer(0); }}>Try again</button>
+              </>
+            ) : (
+              <p>Loading stream…</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="st-sp-controls">
+        <label className="st-select" htmlFor="st-server-select">
+          <span className="st-select-label">Server</span>
+          <select
+            id="st-server-select"
+            value={serverIndex}
+            onChange={(event) => chooseServer(Number(event.target.value))}
+            disabled={status === 'upcoming'}
+          >
+            {servers.map((provider, index) => (
+              <option key={`${provider.id}-${provider.source || ''}-${index}`} value={index}>
+                {`Server ${index + 1} — ${providerLabel(provider)}${failed.has(index) ? ' (not responding)' : ''}`}
+              </option>
+            ))}
+          </select>
+          <CaretDown size={16} weight="bold" className="st-select-caret" aria-hidden="true" />
+        </label>
+        <button type="button" className="st-btn st-btn--ghost" onClick={nextServer} disabled={status === 'upcoming'}>
+          <SkipForward size={18} weight="bold" /> {servers.length > 1 ? 'Not working? Next server' : 'Reload stream'}
+        </button>
+        <button type="button" className="st-btn st-btn--ghost" onClick={toggleFullscreen} disabled={!embedUrl}>
+          <ArrowsOut size={18} weight="bold" /> Fullscreen
+        </button>
+      </div>
+
+      {otherStreams.length > 0 && (
+        <TitleRow
+          className="st-row--wide"
+          title="More live & upcoming"
+          items={otherStreams}
+          renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={onSelect} />}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────
+
+export default function Sports() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [streams, setStreams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [category, setCategory] = useState('All');
+  const [nowMs, setNowMs] = useState(Date.now());
+  const selectedId = searchParams.get('game');
+
+  const load = useCallback(async () => {
+    try {
+      const next = await fetchSportsStreams();
+      setStreams(next);
+      setError('');
+    } catch (e) {
+      setError(`Could not load sports streams. ${e.message || ''}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const tick = setInterval(() => setNowMs(Date.now()), 30_000);
+    const poll = setInterval(load, POLL_MS);
+    return () => { clearInterval(tick); clearInterval(poll); };
+  }, [load]);
+
+  const selected = selectedId ? streams.find((stream) => stream.id === selectedId) || null : null;
+
+  const select = useCallback((stream) => {
+    setSearchParams({ game: stream.id });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [setSearchParams]);
+
+  const categories = useMemo(() => ['All', ...Array.from(new Set(streams.map((stream) => stream.category).filter(Boolean))).sort()], [streams]);
+  const filtered = useMemo(() => (category === 'All' ? streams : streams.filter((stream) => stream.category === category)), [streams, category]);
+  const live = useMemo(() => sortForRow(filtered.filter((stream) => getStatus(stream, nowMs) === 'live' && !stream.alwaysLive), nowMs), [filtered, nowMs]);
+  const channels = useMemo(() => filtered.filter((stream) => stream.alwaysLive), [filtered]);
+  const leagueRows = useMemo(() => buildLeagueRows(filtered, nowMs), [filtered, nowMs]);
+  const featured = live[0] || leagueRows[0]?.items[0] || null;
+
+  if (selected) {
+    const others = sortForRow(streams.filter((stream) => stream.id !== selected.id && getStatus(stream, nowMs) !== 'replay'), nowMs).slice(0, 24);
     return (
       <div className="app-layout">
         <Navbar />
-        <div className="sp-feed-shell">
-          {/* Category filter chips */}
-          <div className="sp-cat-strip-wrap">
-            <div className="sp-cat-strip">
-              {liveCount > 0 && (
-                <span className="sp-live-pill">● {liveCount} LIVE</span>
-              )}
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  className={`sp-cat-chip ${category === cat ? 'active' : ''}`}
-                  onClick={() => setCategory(cat)}
-                  type="button"
-                >
-                  {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {loading && (
-            <>
-              <div className="sp-skeleton-hero" />
-              <div className="sp-skeleton-rail">
-                {[1, 2, 3].map(i => <div key={i} className="sp-skeleton-rail-card" />)}
-              </div>
-              <div className="sp-feed-loading">
-                {[1, 2, 3].map(i => <div key={i} className="sp-skeleton-card" />)}
-              </div>
-            </>
-          )}
-          {error && (
-            <div className="sp-feed-error">
-              <p>⚠️ {error}</p>
-              <button className="sp-refresh-btn" onClick={load} type="button">↻ Retry</button>
-            </div>
-          )}
-          {!loading && !error && filtered.length === 0 && (
-            <div className="sp-feed-empty">
-              <p style={{ fontSize: '2.5rem', margin: 0 }}>🏆</p>
-              <p>No streams in this category.</p>
-            </div>
-          )}
-
-          {!loading && !error && liveNow.length > 0 && (
-            <div className="sp-live-section">
-              <p className="sp-section-label" style={{ paddingLeft: '1rem' }}>Live Now</p>
-              <button type="button" className="sp-live-hero" onClick={() => setSelected(liveNow[0])}>
-                {liveNow[0].poster ? (
-                  <img src={liveNow[0].poster} alt={liveNow[0].name} className="sp-live-hero-img"
-                    onError={e => { e.target.style.display = 'none'; }} />
-                ) : (
-                  <div className="sp-live-hero-icon">{catIcon(liveNow[0].category)}</div>
-                )}
-                <div className="sp-live-hero-grad" />
-                <div className="sp-live-hero-info">
-                  <span className="sp-badge-live">● LIVE</span>
-                  <p className="sp-live-hero-name">{liveNow[0].name}</p>
-                  <p className="sp-live-hero-cat">{catIcon(liveNow[0].category)} {liveNow[0].category}</p>
-                </div>
-              </button>
-
-              {liveNow.length > 1 && (
-                <div className="sp-live-row-wrap">
-                  <div className="sp-live-row">
-                    {liveNow.slice(1).map(s => (
-                      <button key={s.id} type="button" className="sp-live-card" onClick={() => setSelected(s)}>
-                        {s.poster ? (
-                          <img src={s.poster} alt={s.name}
-                            onError={e => { e.target.style.display = 'none'; }} />
-                        ) : (
-                          <div className="sp-live-card-icon">{catIcon(s.category)}</div>
-                        )}
-                        <span className="sp-badge-live sp-badge-live--sm">● LIVE</span>
-                        <p className="sp-live-card-name">{s.name}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {!loading && !error && upcoming.length > 0 && (
-            <div className="sp-section">
-              <p className="sp-section-label" style={{ paddingLeft: '1rem' }}>Upcoming</p>
-              <div className="sp-list">
-                {upcoming.map(s => (
-                  <StreamListCard key={s.id} stream={s} nowMs={nowMs} onSelect={setSelected} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!loading && !error && replays.length > 0 && (
-            <div className="sp-section">
-              <button
-                type="button"
-                className="sp-disclosure"
-                onClick={() => setShowReplays(v => !v)}
-              >
-                <span>Replays ({replays.length})</span>
-                <span className={`sp-disclosure-chevron${showReplays ? ' open' : ''}`}>›</span>
-              </button>
-              {showReplays && (
-                <div className="sp-list">
-                  {replays.map(s => (
-                    <StreamListCard key={s.id} stream={s} nowMs={nowMs} onSelect={setSelected} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <main className="page-content st-sports">
+          <GamePlayer
+            stream={selected}
+            nowMs={nowMs}
+            onBack={() => setSearchParams({})}
+            otherStreams={others}
+            onSelect={select}
+          />
+        </main>
       </div>
     );
   }
 
-  // ── Desktop layout ───────────────────────────────────────────
   return (
     <div className="app-layout">
       <Navbar />
-      <div className="sports-shell">
+      <main className="page-content st-sports">
+        {selectedId && !loading && (
+          <div className="st-coldstart">
+            <p>That game isn't in the schedule anymore — it may have ended.</p>
+            <button type="button" className="st-btn st-btn--ghost" onClick={() => setSearchParams({})}>See all games</button>
+          </div>
+        )}
 
-        {/* ── Sport type filter, along the top like the genre bar ── */}
-        <GenreScrollBar ariaLabel="Sport categories">
-          {liveCount > 0 && (
-            <span className="sports-live-pill">● {liveCount} LIVE</span>
-          )}
-          {categories.map(cat => (
+        {featured && (
+          <section className="st-sp-feature">
+            <div className="st-sp-feature-art"><GameArt stream={featured} /></div>
+            <div className="st-sp-feature-scrim" aria-hidden="true" />
+            <div className="st-sp-feature-content">
+              <span className={`st-game-status st-game-status--${getStatus(featured, nowMs)}`}>
+                {getStatus(featured, nowMs) === 'live' && <span className="st-live-dot" aria-hidden="true" />}
+                {statusLabel(featured, nowMs)}
+              </span>
+              <h1 className="st-hero-title">{featured.name}</h1>
+              <p className="st-sp-feature-meta">{catIcon(featured.category)} {featured.league} · {featured.providers.length} server{featured.providers.length === 1 ? '' : 's'}</p>
+              <button type="button" className="st-btn st-btn--primary" onClick={() => select(featured)}>
+                <Play size={18} weight="fill" /> {getStatus(featured, nowMs) === 'live' ? 'Watch live' : 'View game'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        <GenreScrollBar ariaLabel="Sports">
+          {categories.map((cat) => (
             <button
               key={cat}
               type="button"
               className={`genre-chip${category === cat ? ' active' : ''}`}
               onClick={() => setCategory(cat)}
             >
-              {cat !== 'All' ? catIcon(cat) + ' ' : ''}{cat}
+              {cat !== 'All' ? `${catIcon(cat)} ` : ''}{cat}
             </button>
           ))}
         </GenreScrollBar>
 
-        <div className="sports-main">
+        {loading && (
+          <div className="st-rows">
+            <TitleRow className="st-row--wide" title="Live Now" loading />
+            <TitleRow className="st-row--wide" title="Loading schedule" loading />
+          </div>
+        )}
 
-          {/* ── Games, on the left ── */}
-          <aside className="sports-games-panel">
-            <div className="sports-games-header">
-              <h2>Games</h2>
-              <button className="sports-refresh-btn" onClick={load} title="Refresh" type="button">↻</button>
-            </div>
+        {error && !loading && (
+          <div className="st-coldstart">
+            <p>{error}</p>
+            <button type="button" className="st-btn st-btn--ghost" onClick={load}>Retry</button>
+          </div>
+        )}
 
-            <div className="sports-games-divider" />
+        {!loading && !error && filtered.length === 0 && (
+          <div className="st-coldstart"><p>No games in this sport right now.</p></div>
+        )}
 
-            <div className="sports-stream-list">
-              {loading ? (
-                <div className="sports-loading">
-                  <div className="sports-loading-dots"><span /><span /><span /></div>
-                  <p>Loading streams...</p>
-                </div>
-              ) : error ? (
-                <div className="sports-error">
-                  <p>⚠️ {error}</p>
-                  <button className="sports-retry-btn" onClick={load}>Retry</button>
-                </div>
-              ) : filtered.length === 0 ? (
-                <p className="sports-empty">No streams in this category.</p>
-              ) : (
-                filtered.map(s => {
-                  const status = getStatus(s, nowMs);
-                  return (
-                    <button
-                      key={s.id}
-                      className={`sports-stream-btn ${selected?.id === s.id ? 'active' : ''}`}
-                      onClick={() => setSelected(s)}
-                    >
-                      {s.poster ? (
-                        <img src={s.poster} alt={s.name} className="sports-stream-poster"
-                          onError={e => { e.target.style.display = 'none'; }} />
-                      ) : (
-                        <div className="sports-stream-poster sports-stream-poster--placeholder">
-                          {catIcon(s.category)}
-                        </div>
-                      )}
-                      <div className="sports-stream-info">
-                        <span className="sports-stream-name">{s.name}</span>
-                        {s.tag && <span className="sports-stream-tag">{s.tag}</span>}
-                        <div className="sports-stream-meta">
-                          {status === 'live' && (
-                            <span className="sports-badge sports-badge--live">● LIVE</span>
-                          )}
-                          {status === 'upcoming' && (
-                            <span className="sports-badge sports-badge--upcoming">
-                              {fmtDate(s.startsAt)} {fmtTime(s.startsAt)}
-                              {timeUntil(s.startsAt) && ` · ${timeUntil(s.startsAt)}`}
-                            </span>
-                          )}
-                          {status === 'replay' && (
-                            <span className="sports-badge sports-badge--replay">REPLAY</span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
-
-          {/* ── Player, on the right ── */}
-          <main className="sports-player-area" ref={playerRef}>
-            {selected ? (
-              <>
-                <div className="sports-now-playing">
-                  <div className="sports-now-info">
-                    {getStatus(selected, nowMs) === 'live' && (
-                      <span className="sports-live-badge">● LIVE</span>
-                    )}
-                    <span className="sports-now-name">{selected.name}</span>
-                    {selected.tag && <span className="sports-now-tag">{selected.tag}</span>}
-                    <span className="sports-now-cat">
-                      {catIcon(selected.category)} {selected.category}
-                    </span>
-                  </div>
-                  <button
-                    className="sports-fullscreen-btn"
-                    onClick={switchSource}
-                    title={sourceCountLabel ? `Next source (${sourceCountLabel})` : 'Retry connection'}
-                  >
-                    ↻
-                  </button>
-                  <button className="sports-fullscreen-btn" onClick={toggleFs}
-                    title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                    {fullscreen ? '↙' : '↗'}
-                  </button>
-                </div>
-
-                {sourceCountLabel && (
-                  <p className="sports-source-indicator">Source: {sourceCountLabel}</p>
-                )}
-
-                <div className="sports-frame-wrap">
-                  {embedUrl ? (
-                    <iframe
-                      key={`${selected.id}-${providerIndex}-${retryNonce}`}
-                      ref={iframeRef}
-                      src={embedUrl}
-                      className="sports-frame"
-                      allowFullScreen
-                      allow="autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      scrolling="no"
-                      title={selected.name}
-                      onLoad={handlePlayerLoad}
-                      onError={handlePlayerError}
-                    />
-                  ) : resolving ? (
-                    <div className="sports-no-stream">
-                      <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
-                      <h3>{selected.name}</h3>
-                      <p className="sports-no-stream-note">Connecting{sourceLabel ? ` via ${sourceLabel}` : ''}...</p>
-                    </div>
-                  ) : (
-                    <div className="sports-no-stream">
-                      <div style={{ fontSize: '3rem' }}>{catIcon(selected.category)}</div>
-                      <h3>{selected.name}</h3>
-                      {getStatus(selected, nowMs) === 'upcoming' ? (
-                        <>
-                          <p>Starts {fmtDate(selected.startsAt)} at {fmtTime(selected.startsAt)}
-                            {timeUntil(selected.startsAt) && ` (in ${timeUntil(selected.startsAt)})`}
-                          </p>
-                          <p className="sports-no-stream-note">Stream link will appear when the event goes live.</p>
-                        </>
-                      ) : exhausted ? (
-                        <>
-                          <p className="sports-no-stream-note">All sources unavailable right now.</p>
-                          <button className="sports-retry-btn" onClick={retryFromStart} type="button">↻ Try again</button>
-                        </>
-                      ) : (
-                        <p className="sports-no-stream-note">Stream unavailable — try refreshing.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : !loading && (
-              <div className="sports-no-selection">
-                <div style={{ fontSize: '5rem' }}>🏆</div>
-                <h2>Live Sports</h2>
-                <p>Select a game from the list to start watching.</p>
-                {liveCount > 0 && (
-                  <p className="sports-live-hint">{liveCount} event{liveCount !== 1 ? 's' : ''} live now</p>
-                )}
-              </div>
+        {!loading && (
+          <div className="st-rows">
+            {live.length > 0 && (
+              <TitleRow
+                className="st-row--wide"
+                title={`Live Now · ${live.length}`}
+                items={live}
+                eager
+                renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} />}
+              />
             )}
-          </main>
-
-        </div>
-      </div>
+            {leagueRows.map((row) => (
+              <TitleRow
+                key={row.league}
+                className="st-row--wide"
+                title={row.league}
+                subtitle={row.liveCount ? `${row.liveCount} live now` : `Next: ${fmtDay(row.items[0].startsAt)} ${fmtTime(row.items[0].startsAt)}`}
+                items={row.items}
+                renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} />}
+              />
+            ))}
+            {channels.length > 0 && (
+              <TitleRow
+                className="st-row--wide"
+                title="24/7 Sports Channels"
+                items={channels}
+                renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} />}
+              />
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }

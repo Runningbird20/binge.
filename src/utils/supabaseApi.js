@@ -14,7 +14,11 @@ import {
   fetchSupabaseTvShowById,
   fetchSupabaseTvShowCuratedRows,
   fetchSupabaseTvShowsPage,
+  fetchCatalogByTmdbIds,
 } from './supabaseMovieCatalog';
+import { searchTmdbMulti } from './tmdb';
+import { identityKey } from './mediaIdentity';
+import { isBrowseable } from './releaseWindow';
 
 const SEARCH_LIMIT = 8;
 const TMDB_API_KEY = (
@@ -314,6 +318,80 @@ async function handleMediaGet(pathname, searchParams) {
 const _searchCache = new Map(); // key → { ts, payload }
 const SEARCH_CACHE_TTL = 60_000;
 
+const RANKED_LIMIT = 24;
+
+// search_catalog ranks by trigram similarity + exact/prefix bonus + stored
+// popularity. Stored popularity is missing for many big titles, so TMDB's
+// own search (ordered by live popularity) is blended in: a catalog title
+// TMDB also returns gets a rank-based boost. That's what puts the US
+// "The Office" above the dozen other shows with the same name.
+async function rankedSearch(client, rawQuery, types) {
+  const [rpcResult, tmdbResults] = await Promise.all([
+    client.rpc('search_catalog', { q: rawQuery, lim: RANKED_LIMIT }),
+    searchTmdbMulti(rawQuery).catch(() => null),
+  ]);
+  if (rpcResult.error) return null;
+
+  const tmdbBoost = new Map();
+  (tmdbResults || []).forEach((result, index) => {
+    const key = `${result.mediaType === 'tv_show' ? 'tv' : 'movie'}:${result.tmdbId}`;
+    if (!tmdbBoost.has(key)) tmdbBoost.set(key, 1.4 * (1 - index / 20));
+  });
+
+  // TMDB hits that the trigram search missed (e.g. an alternate title).
+  const tmdbByType = { movie: [], tv_show: [] };
+  (tmdbResults || []).slice(0, 12).forEach((result) => tmdbByType[result.mediaType]?.push(result.tmdbId));
+  const [movieMatches, tvMatches] = await Promise.all([
+    fetchCatalogByTmdbIds('movie', tmdbByType.movie).catch(() => new Map()),
+    fetchCatalogByTmdbIds('tv_show', tmdbByType.tv_show).catch(() => new Map()),
+  ]);
+
+  const buckets = { movies: new Map(), tv: new Map(), books: new Map() };
+  function add(bucket, row, score) {
+    const existing = buckets[bucket].get(row.id);
+    if (!existing || existing._score < score) buckets[bucket].set(row.id, { ...row, _score: score });
+  }
+
+  (rpcResult.data || []).forEach((row) => {
+    const bucket = row.result_type === 'movie' ? 'movies' : row.result_type === 'tv' ? 'tv' : 'books';
+    const tmdbId = String(row.source_key || '').split(':')[2];
+    const boost = tmdbBoost.get(`${row.result_type}:${tmdbId}`) || 0;
+    const item = row.result_type === 'book' ? { ...row, cover_url: row.poster_url, poster_url: undefined } : row;
+    add(bucket, item, Number(row.score) + boost);
+  });
+  movieMatches.forEach((row, tmdbId) => add('movies', row, 0.9 + (tmdbBoost.get(`movie:${tmdbId}`) || 0)));
+  tvMatches.forEach((row, tmdbId) => add('tv', row, 0.9 + (tmdbBoost.get(`tv:${tmdbId}`) || 0)));
+
+  function finalize(bucket) {
+    const seen = new Set();
+    return [...buckets[bucket].values()]
+      .filter((item) => isBrowseable(item))
+      .sort((a, b) => b._score - a._score)
+      .filter((item) => {
+        const key = identityKey(item);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, RANKED_LIMIT)
+      .map(({ _score, result_type: _type, score: _raw, ...item }) => ({ ...item, relevance: _score }));
+  }
+
+  let people = [];
+  if (types.has('people')) {
+    const { data } = await client.from('profiles').select('id, username, avatar_url, bio')
+      .ilike('username', `%${normalizeSearchTerm(rawQuery)}%`).limit(SEARCH_LIMIT);
+    people = data || [];
+  }
+
+  return {
+    movies: types.has('movies') ? finalize('movies') : [],
+    tv: types.has('tv') ? finalize('tv') : [],
+    books: types.has('books') ? finalize('books') : [],
+    people,
+  };
+}
+
 async function handleSearch(searchParams) {
   const client = requireSupabaseClient();
   const rawQuery = searchParams.get('q') || '';
@@ -329,6 +407,14 @@ async function handleSearch(searchParams) {
   const cacheKey = `${rawQuery.toLowerCase().trim()}|${typesRaw}`;
   const cached = _searchCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < SEARCH_CACHE_TTL) return cached.payload;
+
+  // Ranked search (search_catalog RPC + TMDB popularity) first; the plain
+  // ILIKE path below only runs if that RPC isn't deployed yet.
+  const ranked = await rankedSearch(client, rawQuery, types).catch(() => null);
+  if (ranked) {
+    _searchCache.set(cacheKey, { ts: Date.now(), payload: ranked });
+    return ranked;
+  }
 
   // Build fuzzy OR filter: covers punctuation-stripped variants so e.g.
   // "jojos" matches "JoJo's Bizarre Adventure" via the %jojo%s% pattern.
