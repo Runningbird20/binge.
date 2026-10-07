@@ -11,11 +11,64 @@ import {
 import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 
-// Each provider has a buildUrl function for full control over URL format
+// Embed servers, best first. Verified 2026-10-07 by loading each in a real
+// browser and watching for an actual stream. Removed: vsembed.su (domain
+// DNS-sinkholed), multiembed.mov (connection reset), autoembed.co (no
+// stream). vsembed.ru still serves a page but rarely streams — kept last.
 const PROVIDERS = [
   {
+    // https://vidsrc.ru/docs — a different service from vsembed.ru, whose
+    // stream backend (data.vidsrc.sh) is down: "This media is unavailable".
+    id: 'vidsrc-ru',
+    label: 'VidSrc',
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidsrc.ru');
+      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('pausescreen', 'true');
+      if (isTV) url.searchParams.set('autonextepisode', 'true');
+      return url.toString();
+    },
+  },
+  {
+    id: 'vidlink',
+    label: 'VidLink',
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
+        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+    },
+  },
+  {
+    id: 'vidsrc-su',
+    label: 'VidSrc SU',
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://vidsrc.su/embed/tv/${id.value}/${season}/${episode}`
+        : `https://vidsrc.su/embed/movie/${id.value}`;
+    },
+  },
+  {
+    id: 'videasy',
+    label: 'Videasy',
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://player.videasy.net/tv/${id.value}/${season}/${episode}?nextEpisode=true&autoplayNextEpisode=true`
+        : `https://player.videasy.net/movie/${id.value}`;
+    },
+  },
+  {
+    id: '2embed',
+    label: '2Embed',
+    buildUrl(id, mediaType, season, episode) {
+      return mediaType === 'tv_show'
+        ? `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`
+        : `https://www.2embed.stream/embed/movie/${id.value}`;
+    },
+  },
+  {
     id: 'vidsrc-embed-ru',
-    label: 'Vidsrc',
+    label: 'VidSrc Classic',
     buildUrl(id, mediaType, season, episode) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
@@ -23,66 +76,6 @@ const PROVIDERS = [
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); url.searchParams.set('autonext', '1'); }
       url.searchParams.set('autoplay', '1');
       return url.toString();
-    },
-  },
-  {
-    id: 'vidsrc2',
-    label: 'Vidsrc 2',
-    buildUrl(id, mediaType, season, episode) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.su');
-      url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
-      return url.toString();
-    },
-  },
-  {
-    id: '2embed',
-    label: '2Embed ★ anime',
-    buildUrl(id, mediaType, season, episode) {
-      // 2embed.stream — great anime coverage, uses TMDB or IMDB
-      const isTV = mediaType === 'tv_show';
-      if (isTV) {
-        return `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`;
-      }
-      return `https://www.2embed.stream/embed/movie/${id.value}`;
-    },
-  },
-  {
-    id: 'autoembed',
-    label: 'AutoEmbed ★ anime',
-    buildUrl(id, mediaType, season, episode) {
-      // autoembed.co — explicitly supports anime via TMDB or IMDB ID
-      const isTV = mediaType === 'tv_show';
-      if (isTV) {
-        return `https://autoembed.co/tv/${id.kind}/${id.value}-${season}-${episode}`;
-      }
-      return `https://autoembed.co/movie/${id.kind}/${id.value}`;
-    },
-  },
-  {
-    id: 'vidlink',
-    label: 'VidLink',
-    buildUrl(id, mediaType, season, episode) {
-      // vidlink.pro — clean player, good anime support
-      const isTV = mediaType === 'tv_show';
-      if (isTV) {
-        return `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true`;
-      }
-      return `https://vidlink.pro/movie/${id.value}?autoplay=true`;
-    },
-  },
-  {
-    id: 'superembed',
-    label: 'SuperEmbed',
-    buildUrl(id, mediaType, season, episode) {
-      const isTV = mediaType === 'tv_show';
-      const tmdbFlag = id.kind === 'tmdb' ? '&tmdb=1' : '';
-      if (isTV) {
-        return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}&s=${season}&e=${episode}`;
-      }
-      return `https://multiembed.mov/?video_id=${id.value}${tmdbFlag}`;
     },
   },
 ];
