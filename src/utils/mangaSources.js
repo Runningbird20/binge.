@@ -120,3 +120,13 @@ export async function pagesBySource(source, chapterId, signal) {
     default: return { pages: [], dataSaverPages: [] };
   }
 }
+
+// Landing-page rows (MangaDex via the server: original language, genre,
+// sort). See server/routes/manga.js /browse.
+export async function browseManga({ lang = '', tags = [], order = 'popular', limit = 24 } = {}, signal) {
+  const params = new URLSearchParams({ order, limit: String(limit) });
+  if (lang) params.set('lang', lang);
+  if (tags.length) params.set('tags', tags.join(','));
+  const d = await serverGet(`/api/manga/browse?${params}`, signal);
+  return d.results || [];
+}
