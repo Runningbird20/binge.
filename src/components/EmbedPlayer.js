@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowsIn, CaretDown, Check, Plus, X } from '@phosphor-icons/react';
+import { ArrowsIn, ArrowsOut, CaretDown, Check, Plus, X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   fetchEpisodeProgress,
@@ -7,12 +7,13 @@ import {
   unmarkEpisodeWatched,
   upsertSupabaseContinueWatching,
   updateWatchlistProgress,
+  fetchSupabaseResumePoint,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
-import { formatClock, getResumePosition, positionKey, savePosition } from '../utils/playbackPositions';
+import { formatClock, getResumePosition, mergeRemotePosition, positionKey, savePosition } from '../utils/playbackPositions';
 import {
   fetchReportSummary,
   rememberServer,
@@ -307,7 +308,7 @@ function bestServerFor(item, mediaType, prefs) {
   })[0]?.id || PROVIDERS[0].id;
 }
 
-export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode }) {
+export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode, initialPosition }) {
   const { isMobile, isLandscape } = useDeviceType();
   const { showMini, closeMini } = useMiniPlayer();
   const [prefs, setPrefs] = useState(() => getPlaybackPrefs());
@@ -329,7 +330,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // Start position per load (provider + episode), frozen when the load
   // begins so saving progress every few seconds never changes the iframe
   // URL (which would reload the player).
-  const pendingStartRef = useRef(null);
+  const pendingStartRef = useRef(Number(initialPosition) > 0 ? Math.floor(Number(initialPosition)) : null);
+  const [resumeNonce, setResumeNonce] = useState(0);
+  const lastRemoteSaveRef = useRef(0);
   const frozenStartRef = useRef({ key: '', value: null });
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
@@ -459,16 +462,59 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
           state.lastSavedAt = now;
           savePosition(positionKey(mediaType, item.id, season, episode), reading.time, state.duration);
         }
+        // Synced copy (other devices) every 30s once there's something to
+        // resume. Upserting Continue Watching also keeps it fresh.
+        if (now - lastRemoteSaveRef.current > 30000 && item?.id && reading.time > 30) {
+          lastRemoteSaveRef.current = now;
+          syncPosition(reading.time, state.duration);
+        }
       }
     }
     window.addEventListener('message', onMessage);
     return () => {
       window.removeEventListener('message', onMessage);
       const state = playbackRef.current;
-      if (item?.id && state.time > 0) savePosition(positionKey(mediaType, item.id, season, episode), state.time, state.duration);
+      if (item?.id && state.time > 0) {
+        savePosition(positionKey(mediaType, item.id, season, episode), state.time, state.duration);
+        if (state.time > 30) syncPosition(state.time, state.duration);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, confirmServer, season, episode]);
+
+  function syncPosition(seconds, duration) {
+    upsertSupabaseContinueWatching({
+      mediaType,
+      mediaId: item.id,
+      ...(isTV ? { currentSeason: season, currentEpisode: episode } : {}),
+      positionSeconds: seconds,
+      durationSeconds: duration,
+    }).catch(() => {});
+  }
+
+  // Position from another device: if the synced copy is newer than this
+  // device's and the player has barely started, jump there.
+  useEffect(() => {
+    if (!item?.id) return undefined;
+    let cancelled = false;
+    fetchSupabaseResumePoint({ mediaType, mediaId: item.id }).then((remote) => {
+      if (cancelled || !remote || !(remote.position > 30)) return;
+      if (isTV && (Number(remote.season) !== Number(season) || Number(remote.episode) !== Number(episode))) return;
+      const key = positionKey(mediaType, item.id, season, episode);
+      const adopted = mergeRemotePosition(key, remote.position, remote.duration, remote.updatedAt);
+      if (!adopted || playbackRef.current.time > 10) return;
+      const target = getResumePosition(key);
+      if (!target || Math.abs(target - (frozenStartRef.current.value || 0)) < 30) return;
+      if (provider === 'vidrift' && iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'vidrift:resume', currentTime: target }, 'https://embed.vidrift.net');
+      } else if (RESUMABLE.has(provider)) {
+        pendingStartRef.current = target;
+        setResumeNonce((n) => n + 1);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, season, episode]);
 
   // Buffering: a server that's supposed to be playing but whose time has
   // stopped moving. Offer a same-timestamp switch after STALL_SECONDS and
@@ -959,7 +1005,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     }
   }
 
-  const loadKey = `${provider}|${item?.id}|${season}|${episode}`;
+  const loadKey = `${provider}|${item?.id}|${season}|${episode}|${resumeNonce}`;
   if (frozenStartRef.current.key !== loadKey) {
     const pending = pendingStartRef.current;
     pendingStartRef.current = null;
@@ -1016,8 +1062,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
           </div>
           <div className="mp-header-btns">
             <button className="mp-btn" onClick={handleMinimize} type="button" title="Minimize" aria-label="Minimize player"><CaretDown size={16} weight="bold" /></button>
-            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape">
-              ⤢
+            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape" aria-label="Rotate to landscape">
+              <ArrowsOut size={16} weight="bold" />
             </button>
             <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close"><X size={16} weight="bold" /></button>
           </div>
@@ -1027,7 +1073,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         <div className="mp-video-wrap" ref={modalRef}>
           {embedUrl ? (
             <iframe
-              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
+              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}-${resumeNonce}`}
               ref={iframeRef}
               src={embedUrl}
               className="mp-iframe"
@@ -1270,7 +1316,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         >
           {embedUrl ? (
             <iframe
-              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}`}
+              key={`${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}-${resumeNonce}`}
               ref={iframeRef}
               src={embedUrl}
               className="player-frame"

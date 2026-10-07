@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import { api } from '../api';
 import TitleRow from '../components/TitleRow';
+import TitleCard from '../components/TitleCard';
 import { fetchTmdbRecommendations, tmdbIdFromItem } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
 
@@ -144,6 +145,13 @@ export default function SearchResults() {
     return resolveTmdbItems(list || [], topMatchType);
   }, [topMatchType, topMatchTmdbId]);
 
+  // One best-first grid (movies + series by relevance), Netflix-style;
+  // books get their own row below.
+  const topResults = [...primaryMovies, ...primaryTv]
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (Number(b.item.relevance) || 0) - (Number(a.item.relevance) || 0) || a.index - b.index)
+    .map(({ item }) => ({ ...item, media_type: item._type === 'tv' ? 'tv_show' : 'movie' }));
+
   const primaryTotal = primaryMovies.length + primaryTv.length + primaryBooks.length;
   const relatedTotal = relatedMovies.length + relatedTv.length + relatedBooks.length;
   const nothingFound = primaryState === 'done' && relatedState === 'done' && primaryTotal === 0 && relatedTotal === 0;
@@ -151,12 +159,13 @@ export default function SearchResults() {
   return (
     <div className="app-layout">
       <Navbar />
-      <main className="page-content curated-page">
-        <div className="catalog-header">
-          <h1 className="catalog-title">
-            {query ? `Results for "${query}"` : 'Search'}
-          </h1>
-        </div>
+      <main className="page-content">
+        <header className="st-page-head">
+          <div>
+            <p className="st-page-kicker">Search</p>
+            <h1 className="st-page-title">{query ? `“${query}”` : 'Search'}</h1>
+          </div>
+        </header>
 
         {primaryState === 'loading' && <SkeletonGrid count={12} />}
 
@@ -176,9 +185,22 @@ export default function SearchResults() {
 
         {primaryState === 'done' && (
           <div className="home-sections">
-            <ResultRow heading={TYPE_LABELS.movie} items={primaryMovies} />
-            <ResultRow heading={TYPE_LABELS.tv} items={primaryTv} />
-            <ResultRow heading={TYPE_LABELS.book} items={primaryBooks} />
+            {topResults.length > 0 && (
+              <section className="st-search-section" aria-label="Top results">
+                <h2 className="st-row-title">Top results</h2>
+                <div className="st-grid">
+                  {topResults.map((item, index) => (
+                    <div className="st-grid-cell" key={`${item.media_type}:${item.id}`}>
+                      <TitleCard item={item} priority={index < 6} showMatch={false} />
+                      <p className="st-card-sub">{[item.year, item.media_type === 'tv_show' ? 'Series' : 'Movie'].filter(Boolean).join(' · ')}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {primaryBooks.length > 0 && (
+              <TitleRow title={TYPE_LABELS.book} items={primaryBooks.map((book) => ({ ...book, media_type: 'book' }))} />
+            )}
 
             {topMatch && (
               <TitleRow

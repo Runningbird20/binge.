@@ -37,6 +37,7 @@ export default function MediaOverlay({ mediaType }) {
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
   const initialSeason = searchParams.get('season') || undefined;
   const initialEpisode = searchParams.get('episode') || undefined;
+  const initialPosition = Number(searchParams.get('t')) || undefined;
   const numericId = Number(id);
   const config = CONFIG[mediaType];
 
@@ -196,6 +197,7 @@ export default function MediaOverlay({ mediaType }) {
       autoPlay={playImmediately}
       initialSeason={initialSeason}
       initialEpisode={initialEpisode}
+      initialPosition={initialPosition}
     />
   );
 }
