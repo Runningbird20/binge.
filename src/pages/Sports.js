@@ -266,7 +266,7 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect }) {
             src={embedUrl}
             title={stream.name}
             allowFullScreen
-            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
             referrerPolicy="no-referrer-when-downgrade"
             scrolling="no"
             onLoad={() => { loadedRef.current = true; }}
