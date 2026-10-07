@@ -2022,3 +2022,16 @@
 /* The body font's "2" has overlapping contours that text-stroke draws as a
    little star inside the glyph; system Helvetica/Arial digits are clean. */
 .st-card-rank { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+
+/* Buffering notice */
+.st-failover--stall { border-color: rgba(245, 196, 81, 0.35); background: rgba(245, 196, 81, 0.08); }
+.st-stall-dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--st-soon);
+  border-right-color: transparent;
+  animation: st-spin 0.9s linear infinite;
+}
+@keyframes st-spin { to { transform: rotate(360deg); } }
