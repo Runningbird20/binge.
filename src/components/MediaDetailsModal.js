@@ -159,6 +159,7 @@ export default function MediaDetailsModal({
   autoPlay = false,
   initialSeason,
   initialEpisode,
+  initialPosition,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [playerStart, setPlayerStart] = useState(null);
@@ -421,6 +422,7 @@ export default function MediaDetailsModal({
           onClose={() => setShowPlayer(false)}
           initialSeason={playerStart?.season ?? resumeSeason}
           initialEpisode={playerStart?.episode ?? resumeEpisode}
+          initialPosition={playerStart ? undefined : initialPosition}
         />
       )}
     </>

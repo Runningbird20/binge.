@@ -2035,3 +2035,56 @@
   animation: st-spin 0.9s linear infinite;
 }
 @keyframes st-spin { to { transform: rotate(360deg); } }
+
+/* Installed app (iOS black-translucent status bar): keep fixed controls in
+   full-screen sheets clear of the notch / home indicator. */
+.td-close { top: calc(14px + env(safe-area-inset-top, 0px)); }
+@media (max-width: 768px) {
+  .td-modal { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .td-hero-content { bottom: 18px; }
+  .td-actions { gap: 0.5rem; }
+  .td-actions .st-btn { min-height: 44px; }
+  .td-round-btn { width: 44px; height: 44px; }
+}
+
+/* ── Mobile polish pass ───────────────────────────────────────── */
+
+/* Segmented tabs never push the page wider than the phone. */
+.st-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.st-tabs::-webkit-scrollbar { display: none; }
+.st-tab { flex-shrink: 0; white-space: nowrap; }
+
+/* Hero dots: same look, 24px-tall touch targets. */
+.st-hero-dot { height: 24px; background: none; position: relative; }
+.st-hero-dot::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+}
+.st-hero-dot.active::before { background: #fff; }
+.st-hero-dot.active { background: none; }
+
+/* Mobile player: inline language panel gets the same side padding as the
+   rest of the controls. */
+.mp-controls .st-pb-panel { padding: 0.9rem 0.25rem; }
+.mp-controls .st-pb-col h3 { padding-left: 0.5rem; }
+
+/* Search results */
+.st-search-section { margin-bottom: 1.5rem; }
+.st-search-section .st-grid { margin-top: 0.75rem; }
+.st-search-section .st-card-sub { margin-top: 0.1rem; }
+
+@media (max-width: 768px) {
+  /* Sports spotlight: readable title over busy team art. */
+  .st-sp-feature-scrim {
+    background: linear-gradient(0deg, rgba(11, 13, 18, 0.95) 0%, rgba(11, 13, 18, 0.75) 45%, rgba(11, 13, 18, 0.35) 100%);
+  }
+  .st-sp-feature { min-height: 320px; }
+  .st-sp-feature .st-hero-title { font-size: 1.6rem; }
+}
+@media (max-width: 768px) { .st-hero-dot { width: 32px; } }

@@ -1,5 +1,7 @@
-const CACHE_NAME = 'binge-shell-v2';
-const IMAGE_CACHE_NAME = 'binge-images-v1';
+// v3: streaming redesign — drop shells/assets cached before it.
+const CACHE_NAME = 'binge-shell-v3';
+// v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
+const IMAGE_CACHE_NAME = 'binge-images-v2';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
 const VALID_CACHE_NAMES = [CACHE_NAME, IMAGE_CACHE_NAME];
 const SHELL_ASSETS = ['/', '/index.html', '/manifest.json'];
@@ -29,6 +31,10 @@ function isBlockedAdRequest(url) {
 // Supabase storage), so it can't be caught by the same-origin static-asset
 // rule below — it needs its own origin-agnostic check.
 function isImageRequest(request, url) {
+  // Hero/backdrop art at TMDB "original" size is 1-3 MB a file; caching up
+  // to IMAGE_CACHE_MAX_ENTRIES of those would eat device storage. Let the
+  // browser's HTTP cache handle them; posters/thumbnails still cache here.
+  if (url.hostname === 'image.tmdb.org' && url.pathname.includes('/original/')) return false;
   if (request.destination === 'image') return true;
   return /\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(url.pathname);
 }

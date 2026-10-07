@@ -1175,7 +1175,7 @@ export async function fetchSupabaseContinueWatching() {
 
   let query = client
     .from('continue_watching')
-    .select('id, media_type, media_id, current_season, current_episode, current_page, current_chapter, updated_at')
+    .select('id, media_type, media_id, current_season, current_episode, current_page, current_chapter, position_seconds, duration_seconds, updated_at')
     .eq('user_id', authUser.id)
     .order('updated_at', { ascending: false });
   if (profileId) query = query.eq('profile_id', profileId);
@@ -1188,7 +1188,7 @@ export async function fetchSupabaseContinueWatching() {
   return enrichMediaRecords(data || []);
 }
 
-export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter }) {
+export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, positionSeconds, durationSeconds }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -1204,6 +1204,8 @@ export async function upsertSupabaseContinueWatching({ mediaType, mediaId, curre
   if (currentEpisode !== undefined) row.current_episode = currentEpisode;
   if (currentPage !== undefined)    row.current_page = currentPage;
   if (currentChapter !== undefined) row.current_chapter = currentChapter;
+  if (positionSeconds !== undefined) row.position_seconds = Math.max(0, Math.floor(positionSeconds));
+  if (durationSeconds !== undefined && durationSeconds > 0) row.duration_seconds = Math.floor(durationSeconds);
 
   const { error } = await client
     .from('continue_watching')
@@ -1212,6 +1214,33 @@ export async function upsertSupabaseContinueWatching({ mediaType, mediaId, curre
   if (error) {
     throw new Error(toFriendlyError(error, 'Unable to update continue watching.'));
   }
+}
+
+// The synced resume point for one title: { season, episode, position,
+// duration, updatedAt } or null. Lets playback pick up on another device.
+export async function fetchSupabaseResumePoint({ mediaType, mediaId }) {
+  if (!isSupabaseConfigured || !supabase || !mediaId) return null;
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) return null;
+  const profileId = getActiveProfileId();
+  let query = supabase
+    .from('continue_watching')
+    .select('current_season, current_episode, position_seconds, duration_seconds, updated_at')
+    .eq('user_id', user.id)
+    .eq('media_type', mediaType)
+    .eq('media_id', Number(mediaId))
+    .limit(1);
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
+  if (error || !data?.[0]) return null;
+  const row = data[0];
+  return {
+    season: row.current_season,
+    episode: row.current_episode,
+    position: row.position_seconds,
+    duration: row.duration_seconds,
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : 0,
+  };
 }
 
 export async function removeSupabaseContinueWatching(id) {

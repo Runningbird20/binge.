@@ -39,6 +39,22 @@ export function getResumePosition(key) {
   return Math.floor(entry.t);
 }
 
+// Raw entry ({ t, d, at }) — used to compare against the synced copy.
+export function getPositionEntry(key) {
+  return readAll()[key] || null;
+}
+
+// Adopt a position from another device if it's newer than ours.
+export function mergeRemotePosition(key, seconds, duration, updatedAt) {
+  if (!(seconds > 0)) return false;
+  const local = readAll()[key];
+  if (local && (local.at || 0) >= (updatedAt || 0)) return false;
+  const store = readAll();
+  store[key] = { t: Math.floor(seconds), d: duration || local?.d || null, at: updatedAt || Date.now() };
+  writeAll(store);
+  return true;
+}
+
 export function savePosition(key, seconds, duration) {
   if (!(seconds > 0)) return;
   const store = readAll();

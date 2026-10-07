@@ -1,7 +1,7 @@
 {
   "short_name": "binge.",
-  "name": "binge. — Track what you watch & read",
-  "description": "A media journal for tracking movies, TV shows, and books with friends.",
+  "name": "binge. — Movies, series, books & sports",
+  "description": "Movies, series, books and live sports — with picks made for you, synced across your devices.",
   "icons": [
     {
       "src": "favicon.svg",
@@ -35,7 +35,11 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "theme_color": "#111111",
-  "background_color": "#111111",
-  "categories": ["entertainment", "lifestyle", "social"]
+  "theme_color": "#0b0d12",
+  "background_color": "#0b0d12",
+  "categories": [
+    "entertainment",
+    "lifestyle",
+    "social"
+  ]
 }
