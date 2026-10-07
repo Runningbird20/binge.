@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { MagnifyingGlass, X } from '@phosphor-icons/react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { BookOpen, Check, DownloadSimple, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import GridTitleTile from '../components/GridTitleTile';
+import BookBrowseView from '../components/BookBrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
-import MobileBookDetail from '../components/MobileBookDetail';
-import useDeviceType from '../hooks/useDeviceType';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
@@ -18,10 +18,10 @@ import {
   updateSupabaseWatchlistStatus,
   saveSupabaseRating,
 } from '../utils/supabaseData';
-import WatchlistStatusControl from '../components/WatchlistStatusControl';
 import {
   fetchSupabaseBookById,
   fetchSupabaseBooksPage,
+  sampleSupabaseCatalogForRecommendations,
 } from '../utils/supabaseMovieCatalog';
 import {
   buildMediaGenreFacets,
@@ -33,6 +33,8 @@ import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
+import { posterSrc } from '../utils/imageQuality';
+import { isSupabaseConfigured, supabase } from '../utils/supabase';
 
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
 // first visible row across common viewport widths so the browser starts
@@ -134,46 +136,18 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
   }, [book.title, book.author]);
 
   return (
-    <div className="poster-tile-wrap">
-      <button
-        type="button"
-        className="poster-tile"
-        onClick={onClick}
-        title={book.title}
-        aria-label={`Open details for ${book.title}`}
-      >
-        <div className="poster-tile-frame">
-          <BookCoverImage
-            book={book}
-            imageClassName=""
-            placeholderClassName="poster-tile-placeholder"
-            priority={priority}
-          />
-          {freeEdition && (
-            <span
-              className="poster-tile-badge poster-tile-badge--free"
-              title="Free to read on Project Gutenberg or Internet Archive"
-            >
-              Free to Read
-            </span>
-          )}
-        </div>
-        <p className="poster-tile-title">{book.title}</p>
-        {book.author && <p className="poster-tile-year">{book.author}</p>}
-      </button>
-
-      {onAddWatchlist && (
-        <div className="poster-tile-status" onClick={(event) => event.stopPropagation()}>
-          <WatchlistStatusControl
-            mediaType="book"
-            status={watchlistEntry?.status}
-            adding={addingWatchlist}
-            onAdd={() => onAddWatchlist(book)}
-            onChange={(nextStatus) => onStatusChange(book, watchlistEntry, nextStatus)}
-          />
-        </div>
-      )}
-    </div>
+    <GridTitleTile
+      item={book}
+      mediaType="book"
+      onClick={onClick}
+      watchlistEntry={watchlistEntry}
+      addingWatchlist={addingWatchlist}
+      onAddWatchlist={onAddWatchlist}
+      onStatusChange={onStatusChange}
+      priority={priority}
+      subtitle={book.author || ''}
+      badge={freeEdition ? 'Free to read' : null}
+    />
   );
 }
 
@@ -189,7 +163,6 @@ export function BookDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
 }) {
-  const { isMobile } = useDeviceType();
   const [showReader, setShowReader] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
@@ -267,143 +240,102 @@ export function BookDetailsModal({
     await onRate(book, categories, review);
   }
 
-  // Mobile gets the dedicated native-feeling layout
-  if (isMobile) {
-    return (
-      <>
-        <MobileBookDetail
-          book={book}
-          onClose={onClose}
-          onAddToLibrary={onAddToLibrary}
-          isInLibrary={isInLibrary}
-          isAddingToLibrary={isAddingToLibrary}
-          onRate={onRate}
-          userRating={userRating}
-          detailMessage={detailMessage}
-          allowActions={allowActions}
-          browseOnlyMessage={browseOnlyMessage}
-          onReadNow={() => setShowReader(true)}
-        />
-        {showReader && (
-          <BookReader
-            book={book}
-            archiveId={archiveId}
-            itemUrl={itemUrl}
-            onClose={() => setShowReader(false)}
-          />
-        )}
-      </>
-    );
-  }
+  const cover = posterSrc(getCoverUrl(book));
+  const genres = String(book.genre || '').split(',').map((genre) => genre.trim()).filter(Boolean);
+  const synopsis = book.synopsis && book.synopsis !== 'No description available yet.' ? book.synopsis : '';
 
   return (
     <>
-      <div className="book-detail-overlay" onClick={onClose}>
+      <div className="td-overlay" onClick={onClose}>
         <div
-          className="book-detail-modal book-detail-modal-wide"
+          className="td-modal td-modal--book"
           role="dialog"
           aria-modal="true"
           aria-labelledby="book-detail-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            className="book-detail-close"
-            onClick={onClose}
-            aria-label="Close book details"
-          >
-            <X size={18} weight="bold" />
+          <button type="button" className="td-close" onClick={onClose} aria-label="Close book details">
+            <X size={20} weight="bold" />
           </button>
 
-          <div className="book-detail-cover-panel">
-            <div className="book-detail-cover-frame">
-              <BookCoverImage
-                book={book}
-                imageClassName="book-detail-cover-image"
-                placeholderClassName="book-detail-cover-placeholder"
-              />
+          <header className="td-book-hero">
+            {cover && <img className="td-book-hero-bg" src={cover} alt="" aria-hidden="true" referrerPolicy="no-referrer" />}
+            <div className="td-book-hero-scrim" aria-hidden="true" />
+            <div className="td-book-cover">
+              <BookCoverImage book={book} imageClassName="" placeholderClassName="st-card-placeholder" priority />
             </div>
-            {canRead && (
-              <button
-                type="button"
-                className="btn-watch book-detail-watch-now"
-                onClick={() => setShowReader(true)}
-              >
-                Read Now
-              </button>
-            )}
-          </div>
-
-          <div className="book-detail-content">
-            <p className="book-detail-kicker">Book Details</p>
-            <h2 id="book-detail-title">{book.title}</h2>
-            <p className="book-detail-author">by {book.author}</p>
-
-            <div className="book-detail-meta">
-              {book.genre && <span className="book-detail-meta-chip">{book.genre}</span>}
-              {book.year && <span className="book-detail-meta-chip">{book.year}</span>}
-            </div>
-
-            {book.synopsis && <p className="book-detail-description">{book.synopsis}</p>}
-
-            <div className="book-detail-summary">
-              <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Author</span>
-                <span>{book.author}</span>
+            <div className="td-book-head">
+              <p className="st-page-kicker">Book</p>
+              <h2 id="book-detail-title" className="td-title">{book.title}</h2>
+              {book.author && <p className="td-book-author">by {book.author}</p>}
+              <div className="td-meta">
+                {book.year && <span>{book.year}</span>}
+                {genres.slice(0, 3).map((genre) => <span key={genre} className="td-cert">{genre}</span>)}
               </div>
-              <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Genre</span>
-                <span>{book.genre || 'General Fiction'}</span>
-              </div>
-            </div>
-
-            <div className="rating-section">
-              <p className="rating-section-title">Your Rating</p>
-              <RateReviewPanel
-                mediaType="book"
-                value={userRating}
-                onSave={handleRatingSave}
-                allowActions={allowActions}
-                size="lg"
-                actions={allowActions && (
+              <div className="td-actions">
+                {canRead && (
+                  <button type="button" className="st-btn st-btn--primary td-play" onClick={() => setShowReader(true)}>
+                    <BookOpen size={20} weight="fill" /> Read Now
+                  </button>
+                )}
+                {allowActions && (
                   <button
                     type="button"
-                    className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
+                    className={`st-btn ${isInLibrary ? 'st-btn--ghost' : 'st-btn--secondary'}`}
                     onClick={() => onAddToLibrary(book)}
                     disabled={isInLibrary || isAddingToLibrary}
                   >
+                    {isInLibrary ? <Check size={18} weight="bold" /> : <Plus size={18} weight="bold" />}
                     {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
                   </button>
                 )}
-              />
-              {!allowActions && browseOnlyMessage && (
-                <p className="book-detail-status">{browseOnlyMessage}</p>
-              )}
-              {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
+              </div>
             </div>
+          </header>
 
-            {archiveId && (
-              <div className="book-detail-actions">
-                <div className="book-download-row">
-                  <span className="book-download-label">Download:</span>
+          <div className="td-body">
+            <div className="td-main">
+              {synopsis ? <p className="td-overview">{synopsis}</p> : <p className="td-muted">No synopsis yet.</p>}
+              {archiveId && (
+                <div className="td-downloads">
+                  <span className="td-muted">Download</span>
                   {['pdf', 'epub', 'txt'].map((fmt) => (
                     <button
                       key={fmt}
                       type="button"
-                      className="book-download-btn"
+                      className="st-btn st-btn--ghost"
                       onClick={() => handleDownload(fmt)}
                       disabled={downloading !== null}
                     >
-                      {downloading === fmt ? '...' : 'Download'} {fmt.toUpperCase()}
+                      <DownloadSimple size={16} weight="bold" /> {downloading === fmt ? '…' : fmt.toUpperCase()}
                     </button>
                   ))}
+                  {downloadError && <p className="book-download-error">{downloadError}</p>}
                 </div>
-                {downloadError && (
-                  <p className="book-download-error">{downloadError}</p>
-                )}
-              </div>
-            )}
+              )}
+            </div>
+            <dl className="td-facts">
+              {book.author && (<><dt>Author</dt><dd>{book.author}</dd></>)}
+              <dt>Genre</dt><dd>{genres.join(', ') || 'General Fiction'}</dd>
+              {book.year && (<><dt>Published</dt><dd>{book.year}</dd></>)}
+            </dl>
           </div>
+
+          {book.author && <BookShelfSection title={`More by ${book.author}`} load={() => fetchBooksByAuthor(book)} />}
+          <BookShelfSection title="Readers Also Enjoyed" load={() => fetchSimilarBooks(book)} />
+
+          <section className="td-section td-rate" aria-label="Your rating and review">
+            <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
+            <RateReviewPanel
+              mediaType="book"
+              value={userRating}
+              onSave={handleRatingSave}
+              allowActions={allowActions}
+              size="lg"
+            />
+            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
+            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+          </section>
         </div>
       </div>
 
@@ -416,6 +348,62 @@ export function BookDetailsModal({
         />
       )}
     </>
+  );
+}
+
+async function fetchBooksByAuthor(book) {
+  if (!book.author || !isSupabaseConfigured || !supabase) return [];
+  const { data } = await supabase
+    .from('books')
+    .select('id, title, author, year, genre, cover_url')
+    .ilike('author', book.author)
+    .neq('id', book.id)
+    .not('cover_url', 'is', null)
+    .limit(12);
+  return data || [];
+}
+
+async function fetchSimilarBooks(book) {
+  const genre = String(book.genre || '').split(',')[0].trim();
+  if (!genre) return [];
+  const rows = await sampleSupabaseCatalogForRecommendations('book', { genre, limit: 16 });
+  return rows.filter((row) => row.id !== book.id && row.cover_url).slice(0, 12);
+}
+
+// Small cover shelf inside the book modal; each cover opens that book.
+function BookShelfSection({ title, load }) {
+  const location = useLocation();
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    load().then((rows) => { if (!cancelled) setItems(rows); }).catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title]);
+
+  if (!items || items.length === 0) return null;
+  const background = location.state?.backgroundLocation || location;
+
+  return (
+    <section className="td-section" aria-label={title}>
+      <div className="td-section-head"><h3>{title}</h3></div>
+      <div className="td-shelf">
+        {items.map((entry) => (
+          <Link
+            key={entry.id}
+            to={`/book/${entry.id}`}
+            state={{ backgroundLocation: background }}
+            replace={Boolean(location.state?.backgroundLocation)}
+            className="td-shelf-item"
+            title={entry.title}
+          >
+            <img src={posterSrc(getCoverUrl(entry))} alt="" loading="lazy" referrerPolicy="no-referrer" />
+            <span>{entry.title}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -558,6 +546,7 @@ function BookReader({ book, archiveId, itemUrl, onClose }) {
 export default function Books() {
   const [searchParams] = useSearchParams();
   const openId = Number(searchParams.get('open'));
+  const showGrid = searchParams.get('view') === 'all';
   const [activeTab, setActiveTab] = useState('books');
 
   const [books, setBooks] = useState([]);
@@ -1071,31 +1060,40 @@ export default function Books() {
       <Navbar />
       <main className="page-content curated-page">
         <PullToRefresh onRefresh={activeTab === 'books' ? handleRefresh : (() => {})}>
-        <div className="catalog-header">
-          <h1 className="catalog-title">{activeTab === 'manga' ? 'Manga & Comics' : 'Books'}</h1>
-        </div>
-
-        <div className="books-tab-bar">
+        <div className="st-tabs" role="tablist" aria-label="Reading">
           <button
             type="button"
-            className={`books-tab ${activeTab === 'books' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'books'}
+            className={`st-tab${activeTab === 'books' ? ' active' : ''}`}
             onClick={() => setActiveTab('books')}
           >
-            📚 Books
+            Books
           </button>
           <button
             type="button"
-            className={`books-tab ${activeTab === 'manga' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'manga'}
+            className={`st-tab${activeTab === 'manga' ? ' active' : ''}`}
             onClick={() => setActiveTab('manga')}
           >
-            📖 Manga & Comics
+            Manga &amp; Comics
           </button>
         </div>
 
         {activeTab === 'manga' && <MangaTab />}
 
-        {activeTab === 'books' && (
+        {activeTab === 'books' && !showGrid && <BookBrowseView refreshKey={refreshKey} />}
+
+        {activeTab === 'books' && showGrid && (
           <div className="catalog-view">
+            <header className="st-page-head">
+              <div>
+                <p className="st-page-kicker">Browse all</p>
+                <h1 className="st-page-title">Books</h1>
+              </div>
+              <Link className="st-btn st-btn--ghost" to="/books">Back to highlights</Link>
+            </header>
             <div className="catalog-search-row">
               <div className="catalog-search-bar">
                 <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
@@ -1157,7 +1155,7 @@ export default function Books() {
               </div>
             ) : (
               <>
-                <div className="poster-grid">
+                <div className="st-grid">
                   {visibleBooks.map((book, index) => (
                     <BookPosterTile
                       key={book.id}

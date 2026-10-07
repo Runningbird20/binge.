@@ -76,7 +76,10 @@ function GameArt({ stream }) {
   const [posterFailed, setPosterFailed] = useState(false);
   const colors = stream.colors?.length >= 2 ? stream.colors : ['#26304a', '#121620'];
 
-  if (stream.poster && !posterFailed) {
+  // Crisp team logos beat the providers' low-res thumbnails whenever we
+  // have both teams' logos.
+  const hasLogos = Boolean(stream.logos?.home && stream.logos?.away);
+  if (!hasLogos && stream.poster && !posterFailed) {
     return (
       <img
         className="st-game-img"
@@ -403,7 +406,18 @@ export default function Sports() {
 
         {featured && (
           <section className="st-sp-feature">
-            <div className="st-sp-feature-art"><GameArt stream={featured} /></div>
+            <div className="st-sp-feature-art">
+              {featured.poster && !(featured.logos?.home && featured.logos?.away) ? (
+                <>
+                  {/* Provider thumbnails are small: blurred copy as the
+                      backdrop, the real image at a size it stays sharp. */}
+                  <img className="st-sp-feature-blur" src={featured.poster} alt="" aria-hidden="true" referrerPolicy="no-referrer" />
+                  <img className="st-sp-feature-poster" src={featured.poster} alt="" referrerPolicy="no-referrer" />
+                </>
+              ) : (
+                <GameArt stream={featured} />
+              )}
+            </div>
             <div className="st-sp-feature-scrim" aria-hidden="true" />
             <div className="st-sp-feature-content">
               <span className={`st-game-status st-game-status--${getStatus(featured, nowMs)}`}>

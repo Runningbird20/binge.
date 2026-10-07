@@ -49,7 +49,10 @@ function buildBookKey(sourceKey, title, author, year) {
 
 function buildStableBookId(sourceKey, title, author, year) {
   const digest = crypto.createHash('sha1').update(buildBookKey(sourceKey, title, author, year)).digest('hex');
-  return BigInt(`0x${digest.slice(0, 15)}`).toString();
+  // 13 hex digits = 52 bits, so the id survives a round-trip through a
+  // JavaScript number (15 digits = 60 bits got silently rounded in the
+  // browser). Matches migration 20261007140000_book_ids_js_safe.sql.
+  return BigInt(`0x${digest.slice(0, 13)}`).toString();
 }
 
 function escapeSqlString(value) {

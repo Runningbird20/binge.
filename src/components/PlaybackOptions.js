@@ -15,9 +15,11 @@ export function PlaybackOptionsPanel({
   serverLabels,
   onSelectServer,
   onReportBroken,
+  onReportAudio,
   onClose,
 }) {
   const originalName = languageName(originalLanguage);
+  const current = servers.find((server) => server.id === currentServer);
 
   return (
     <div className="st-pb-panel" role="dialog" aria-label="Audio, subtitles and server">
@@ -79,6 +81,21 @@ export function PlaybackOptionsPanel({
             );
           })}
         </ul>
+        {onReportAudio && (
+          <label className="st-pb-report">
+            <span>Audio on this server</span>
+            <select
+              value={current?.audio || ''}
+              onChange={(event) => onReportAudio(event.target.value)}
+              aria-label="Report the audio language on the current server"
+            >
+              <option value="" disabled>Tell us…</option>
+              {['en', 'ko', 'ja', 'es', 'fr', 'hi', 'zh', 'de', 'it', 'pt'].map((code) => (
+                <option key={code} value={code}>{languageName(code)}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <button type="button" className="st-btn st-btn--ghost st-pb-broken" onClick={onReportBroken}>
           <WarningCircle size={16} weight="bold" /> Not playing? Try the next server
         </button>
@@ -124,34 +141,6 @@ export default function PlaybackOptions(props) {
         <Subtitles size={18} weight="bold" /> Audio &amp; Subtitles
       </button>
       {open && <PlaybackOptionsPanel {...props} onClose={() => setOpen(false)} />}
-    </div>
-  );
-}
-
-// One-tap check that teaches the ranking: "Hearing Korean?" Yes / No.
-export function AudioCheckPrompt({ language, onAnswer }) {
-  const name = languageName(language);
-  const [step, setStep] = useState('ask');
-  if (!language) return null;
-
-  if (step === 'which') {
-    return (
-      <div className="st-pb-ask" role="group" aria-label="Which audio language is playing?">
-        <span>What are you hearing?</span>
-        {['en', 'es', 'fr', 'hi', 'ja', 'ko'].filter((code) => code !== language).slice(0, 4).map((code) => (
-          <button key={code} type="button" onClick={() => onAnswer(false, code)}>{languageName(code)}</button>
-        ))}
-        <button type="button" onClick={() => onAnswer(false, null)}>Other</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="st-pb-ask" role="group" aria-label={`Is the audio in ${name}?`}>
-      <span>Hearing {name} audio?</span>
-      <button type="button" onClick={() => onAnswer(true, language)}>Yes</button>
-      <button type="button" onClick={() => setStep('which')}>No — find another server</button>
-      <button type="button" className="st-pb-ask-dismiss" onClick={() => onAnswer(null, null)} aria-label="Dismiss">✕</button>
     </div>
   );
 }
