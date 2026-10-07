@@ -11,7 +11,7 @@ import {
 import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
-import { fetchTmdbLanguageInfo } from '../utils/tmdb';
+import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
 import {
   fetchReportSummary,
   getPlaybackPrefs,
@@ -23,10 +23,12 @@ import {
 } from '../utils/streamPreferences';
 import PlaybackOptions, { PlaybackOptionsPanel } from './PlaybackOptions';
 
-// Embed servers, best first. VidLink leads because it had the broadest
-// coverage of new episodes when tested (e.g. a 2026 K-drama that vidsrc.ru
-// and 2Embed didn't have yet — confirmed identical on their own sites, so
-// it's catalog coverage, not our embed). Verified 2026-10-07 by loading each in a real
+// Embed servers, best first. VidRift and Vidy lead: in testing they played
+// every title tried, including a new 2026 K-drama episode that vidsrc.ru
+// and 2Embed didn't have (identical on their own sites, so it's catalog
+// coverage, not our embed), and both report playback time for failover.
+// VidRift, Vidy and CineSrc were found via the sites they power
+// (7movies.ac, movy.sx, shuttletv.su) and are documented embed APIs. Verified 2026-10-07 by loading each in a real
 // browser, embedded in an iframe on a non-provider origin, and watching for
 // an actual HLS/MP4 stream (a 200 page proves nothing — vsembed.ru serves
 // its page but shows "This media is unavailable": its stream backend,
@@ -41,6 +43,42 @@ import PlaybackOptions, { PlaybackOptionsPanel } from './PlaybackOptions';
 //   types:     media types it actually streams
 const PROVIDERS = [
   {
+    // https://vidrift.net/docs — TMDB ids only; posts vidrift:progress
+    // (currentTime) every 5s while playing. Played every title tested,
+    // including new K-drama episodes other servers lacked.
+    id: 'vidrift',
+    label: 'VidRift',
+    events: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const path = mediaType === 'tv_show' ? `/embed/tv/${id.value}/${season}/${episode}` : `/embed/movie/${id.value}`;
+      const url = new URL(path, 'https://embed.vidrift.net');
+      url.searchParams.set('brand', 'binge.');
+      url.searchParams.set('brandColor', 'f4f6f8');
+      return url.toString();
+    },
+  },
+  {
+    // https://www.vidy.st (#docs) — posts PLAYER_EVENT play/timeupdate.
+    id: 'vidy',
+    label: 'Vidy',
+    events: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidy.st');
+      url.searchParams.set('color', 'F4F6F8');
+      url.searchParams.set('autoplay', 'true');
+      if (isTV) {
+        url.searchParams.set('nextEpisode', 'true');
+        url.searchParams.set('autoplayNextEpisode', 'true');
+      }
+      return url.toString();
+    },
+  },
+  {
     id: 'vidlink',
     label: 'VidLink',
     events: true,
@@ -51,6 +89,30 @@ const PROVIDERS = [
       return isTV
         ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
         : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+    },
+  },
+  {
+    // https://cinesrc.st/docs — posts cinesrc:timeupdate { currentTime }.
+    // subtitlelang (a language name) is undocumented but is what
+    // shuttletv.su sends; harmless if ignored.
+    id: 'cinesrc',
+    label: 'CineSrc',
+    events: true,
+    subtitles: true,
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode, subtitleLang) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? `/embed/tv/${id.value}` : `/embed/movie/${id.value}`, 'https://cinesrc.st');
+      if (isTV) { url.searchParams.set('s', season); url.searchParams.set('e', episode); }
+      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('color', '#f4f6f8');
+      url.searchParams.set('prioritize', 'true');
+      if (subtitleLang) {
+        url.searchParams.set('subtitles', 'auto');
+        url.searchParams.set('subtitlelang', languageName(subtitleLang));
+      }
+      return url.toString();
     },
   },
   {
@@ -307,6 +369,14 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       let data = event.data;
       if (typeof data === 'string') {
         try { data = JSON.parse(data); } catch { return; }
+      }
+      // VidRift: { type: 'vidrift:progress', currentTime } / CineSrc:
+      // { type: 'cinesrc:timeupdate', currentTime }
+      if (data?.type === 'vidrift:progress' || data?.type === 'cinesrc:timeupdate') {
+        const time = Number(data.currentTime);
+        if (time > 0) playbackSeenRef.current = true;
+        if (time > 3) confirmServer();
+        return;
       }
       if (data?.type === 'PLAYER_EVENT') {
         const playback = data.data || {};
@@ -820,7 +890,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               ref={iframeRef}
               src={embedUrl}
               className="mp-iframe"
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
+              allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *; web-share *"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
               title={`Watch ${item.title}`}
@@ -1062,7 +1132,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               ref={iframeRef}
               src={embedUrl}
               className="player-frame"
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; web-share"
+              allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *; web-share *"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
               title={`Watch ${item.title}`}

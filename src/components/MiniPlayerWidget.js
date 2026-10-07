@@ -19,7 +19,7 @@ export default function MiniPlayerWidget({ nowPlaying, minimized, onExpand, onMi
             <iframe
               src={embedUrl}
               className="mini-player-iframe"
-              allow="autoplay; encrypted-media"
+              allow="autoplay *; encrypted-media *"
               referrerPolicy="no-referrer-when-downgrade"
               title={title}
               tabIndex={-1}
@@ -64,7 +64,7 @@ export default function MiniPlayerWidget({ nowPlaying, minimized, onExpand, onMi
           <iframe
             src={embedUrl}
             className="mini-player-iframe"
-            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
             allowFullScreen
             referrerPolicy="no-referrer-when-downgrade"
             title={title}
