@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ClockCounterClockwise, MagnifyingGlass, Trophy, User, X } from '@phosphor-icons/react';
+import { ClockCounterClockwise, MagnifyingGlass, Sparkle, Trophy, User, X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, removeRecentSearch, searchGames, searchPerson,
@@ -161,6 +161,13 @@ export default function GlobalSearch() {
 
           {query.trim().length >= 2 && (
             <>
+              <button type="button" className="global-search-dropdown-item gs-ask" onClick={() => { addRecentSearch(query); navigate(`/search?q=${encodeURIComponent(query.trim())}&ai=1`); close(); }}>
+                <span className="global-search-dropdown-item-icon"><Sparkle size={16} weight="fill" /></span>
+                <span className="global-search-dropdown-item-text">
+                  <span className="global-search-dropdown-item-title">Ask binge.</span>
+                  <span className="global-search-dropdown-item-sub">“{query.trim()}” — describe what you’re in the mood for</span>
+                </span>
+              </button>
               {loading && !results && <div className="global-search-dropdown-hint">Searching…</div>}
               {results && !hasAny && !loading && <div className="global-search-dropdown-hint">No results for "{query}"</div>}
 

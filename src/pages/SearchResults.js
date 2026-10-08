@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Trophy, X } from '@phosphor-icons/react';
+import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
+import { askBinge, isConversational } from '../utils/aiSearch';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import TitleRow from '../components/TitleRow';
@@ -12,6 +13,57 @@ import { backdropSrc, posterSrc } from '../utils/imageQuality';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, isGameLive, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
+
+// "Ask binge." picks for a natural-language request, with reasons.
+function AiPicks({ query, auto }) {
+  const [state, setState] = useState(auto ? 'loading' : 'idle');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setResult(null);
+    setError('');
+    setState(auto ? 'loading' : 'idle');
+  }, [query, auto]);
+
+  useEffect(() => {
+    if (state !== 'loading') return undefined;
+    let cancelled = false;
+    askBinge(query)
+      .then((next) => { if (!cancelled) { setResult(next); setState('done'); } })
+      .catch((err) => { if (!cancelled) { setError(err.message || 'The AI search didn’t respond.'); setState('error'); } });
+    return () => { cancelled = true; };
+  }, [state, query]);
+
+  if (state === 'idle') {
+    return (
+      <button type="button" className="sr-ask" onClick={() => setState('loading')}>
+        <Sparkle size={16} weight="fill" /> Ask binge. for picks like “{query}”
+      </button>
+    );
+  }
+  return (
+    <section className="sr-ai" aria-label="Ask binge. picks" aria-busy={state === 'loading'}>
+      <div className="sr-ai-head">
+        <Sparkle size={18} weight="fill" aria-hidden="true" />
+        <div>
+          <h2 className="st-row-title">binge. picks</h2>
+          <p className="st-row-subtitle">{state === 'loading' ? 'Thinking about what fits…' : result?.summary || `For “${query}”`}</p>
+        </div>
+      </div>
+      {state === 'error' && <p className="sr-ai-error">{error}</p>}
+      {state === 'done' && result.items.length === 0 && <p className="sr-ai-error">Nothing in the binge. catalog fit that — try wording it differently.</p>}
+      {(state === 'loading' || result?.items?.length > 0) && (
+        <TitleRow title="binge. picks" loading={state === 'loading'} items={state === 'done' ? result.items : undefined} />
+      )}
+      {state === 'done' && result.items.length > 0 && (
+        <ul className="sr-ai-reasons">
+          {result.items.slice(0, 6).map((item) => <li key={`${item.media_type}:${item.id}`}><strong>{item.title}</strong> — {item._reason}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 const MEDIA_TYPE = { movie: 'movie', tv: 'tv_show', book: 'book' };
 
@@ -259,6 +311,7 @@ export default function SearchResults() {
           </div>
         </header>
         <SearchBox query={query} />
+        {query && <AiPicks key={query} query={query} auto={isConversational(query) || searchParams.get('ai') === '1'} />}
 
         {primaryState === 'loading' && <GridSkeleton />}
 

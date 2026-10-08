@@ -8,6 +8,28 @@ import { comingSoonCutoffIso, daysAgoIso, todayIso } from './releaseWindow';
 
 const MIN_ROW_ITEMS = 6;
 
+// "Hidden gems": rated highly by the people who saw them, but seen by few —
+// the titles a popularity-ranked service never surfaces. A random page of
+// the result each visit keeps the row fresh.
+function hiddenGemsRow(mediaType) {
+  return row(
+    'hidden-gems',
+    'Hidden Gems',
+    () => fetchDiscover(mediaType, {
+      sort_by: 'vote_average.desc',
+      'vote_average.gte': mediaType === 'movie' ? '7.3' : '7.8',
+      'vote_count.gte': mediaType === 'movie' ? '300' : '60',
+      ...(mediaType === 'movie' ? { 'with_runtime.gte': '75' } : {}), // no shorts
+      'vote_count.lte': mediaType === 'movie' ? '2500' : '900',
+      without_genres: '10770|99|10767|10763',
+      page: String(1 + Math.floor(Math.random() * 3)),
+      ...dateParams(mediaType, null, todayIso()),
+    }),
+    { sort: 'rating' },
+    { subtitle: 'Loved by the few who found them' }
+  );
+}
+
 function tomorrowIso() {
   const date = new Date();
   date.setDate(date.getDate() + 1);
@@ -70,6 +92,7 @@ export const MOVIE_ROWS = [
   row('new', 'New Releases', () => fetchDiscover('movie', { ...dateParams('movie', daysAgoIso(75), todayIso()), 'vote_count.gte': '15' }), { sort: 'newest', releasedAfter: daysAgoIso(75) }),
   row('popular', 'Popular on binge.', () => fetchDiscover('movie', { 'vote_count.gte': '300', ...dateParams('movie', null, todayIso()) }), { sort: 'popularity' }),
   row('top-rated', 'Critically Acclaimed', () => fetchDiscover('movie', { sort_by: 'vote_average.desc', 'vote_count.gte': '3000' }), { sort: 'rating' }),
+  hiddenGemsRow('movie'),
   row('coming-soon', 'Coming Soon', () => fetchDiscover('movie', { ...dateParams('movie', tomorrowIso(), comingSoonCutoffIso()), sort_by: 'popularity.desc' }), null, { comingSoon: true }),
   languageRow('movie', 'ko', 'Korean Movies'),
   languageRow('movie', 'hi', 'Bollywood Hits'),
@@ -94,6 +117,7 @@ export const TV_ROWS = [
   row('new', 'New Series', () => fetchDiscover('tv_show', { ...dateParams('tv_show', daysAgoIso(120), todayIso()), 'vote_count.gte': '5' }), { sort: 'newest', releasedAfter: daysAgoIso(365) }),
   row('popular', 'Popular on binge.', () => fetchDiscover('tv_show', { 'vote_count.gte': '200' }), { sort: 'popularity' }),
   row('top-rated', 'Bingeworthy Classics', () => fetchDiscover('tv_show', { sort_by: 'vote_average.desc', 'vote_count.gte': '1500' }), { sort: 'rating' }),
+  hiddenGemsRow('tv_show'),
   languageRow('tv_show', 'ko', 'K-Dramas', { with_genres: '18', 'vote_count.gte': '40' }, 'Drama'),
   languageRow('tv_show', 'ja', 'Anime Series', { with_genres: '16', 'vote_count.gte': '300' }, 'Animation'),
   languageRow('tv_show', 'zh', 'C-Dramas', { with_genres: '18' }, 'Drama'),

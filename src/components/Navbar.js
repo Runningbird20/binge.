@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
+  CalendarBlank,
   SlidersHorizontal,
   House,
   FilmSlate,
@@ -114,6 +115,9 @@ export default function Navbar() {
                             <Gear size={17} weight="bold" aria-hidden="true" /> Account Settings
                           </NavLink>
                         )}
+                        <NavLink to="/calendar" className={profileDrawerLink}>
+                          <CalendarBlank size={17} weight="bold" aria-hidden="true" /> Release Calendar
+                        </NavLink>
                         <NavLink to="/settings" className={profileDrawerLink}>
                           <SlidersHorizontal size={17} weight="bold" aria-hidden="true" /> Settings
                         </NavLink>

@@ -3,6 +3,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
 import RemindButton from './RemindButton';
+import OutsideRatings from './OutsideRatings';
+import EpisodeHeatmap from './EpisodeHeatmap';
+import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
 import RateReviewPanel from './RateReviewPanel';
 import ThemedSelect from './ThemedSelect';
@@ -521,6 +524,7 @@ export default function MediaDetailsModal({
                   : (details?.runtime ? <span>{formatRuntime(details.runtime)}</span> : null)}
                 <span className="td-hd">HD</span>
               </div>
+              <OutsideRatings item={item} tmdbScore={score} tmdbVotes={details?.voteCount || 0} />
               {details?.tagline && <p className="td-tagline">{details.tagline}</p>}
               {overview && <p className="td-overview">{overview}</p>}
               {item._reason && <p className="td-reason">{item._reason}</p>}
@@ -546,6 +550,12 @@ export default function MediaDetailsModal({
               onPlay={play}
             />
           )}
+
+          {isTV && details?.seasons?.length > 0 && (
+            <EpisodeHeatmap tmdbId={details.tmdbId} seasons={details.seasons} onPlay={play} />
+          )}
+
+          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} />}
 
           <SourceBooks mediaType={mediaType} tmdbId={details?.tmdbId} title={item.title} />
 

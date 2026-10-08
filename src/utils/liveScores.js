@@ -156,3 +156,16 @@ export async function fetchGameSummary({ path, eventId }, { fresh = false } = {}
     plays,
   };
 }
+
+// All teams in a league (for the "follow a team" picker).
+export async function fetchLeagueTeams(path) {
+  const data = await getJson(`${BASE}/${path}/teams?limit=500`, 86400000);
+  return (data?.sports?.[0]?.leagues?.[0]?.teams || [])
+    .map(({ team }) => ({
+      id: team.id,
+      name: team.displayName,
+      short: team.abbreviation,
+      logo: (team.logos || []).find((logo) => (logo.rel || []).includes('dark'))?.href || team.logos?.[0]?.href || null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
