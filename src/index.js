@@ -4,6 +4,9 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { register as registerSW } from './serviceWorkerRegistration';
+import { applyTvMode } from './utils/tvMode';
+
+applyTvMode();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

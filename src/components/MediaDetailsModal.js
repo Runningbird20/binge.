@@ -7,6 +7,7 @@ import OutsideRatings from './OutsideRatings';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
+import { isTvMode } from '../utils/tvMode';
 import RateReviewPanel from './RateReviewPanel';
 import ThemedSelect from './ThemedSelect';
 import { computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
@@ -324,7 +325,9 @@ export default function MediaDetailsModal({
     document.addEventListener('keydown', handleKeyDown);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    dialogRef.current?.focus({ preventScroll: true });
+    // TV remote: land on Play, the button you almost always want.
+    const primary = isTvMode() && dialogRef.current?.querySelector('.td-play, .td-actions .st-btn, .td-actions button');
+    (primary || dialogRef.current)?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = previousOverflow;

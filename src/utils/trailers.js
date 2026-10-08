@@ -1,6 +1,7 @@
 // YouTube trailer key for a title (TMDB /videos, cached by tmdb.js).
 import { tmdbGet, tmdbIdFromItem, tmdbKind } from './tmdb';
 import { getSettings } from './profileSettings';
+import { isTvMode } from './tvMode';
 
 export async function getTrailerKey(item) {
   const tmdbId = tmdbIdFromItem(item);
@@ -33,7 +34,7 @@ export function canAutoplayPreviews() {
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const saveData = navigator.connection?.saveData;
   const finePointer = window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
-  return !reduce && !saveData && finePointer && getSettings().previews && !getSettings().dataSaver;
+  return !reduce && !saveData && finePointer && !isTvMode() && getSettings().previews && !getSettings().dataSaver;
 }
 
 // YouTube shows its title bar and big pause button for the first couple of

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { isTvMode } from '../utils/tvMode';
 import { X } from '@phosphor-icons/react';
 
 // Keyboard-first browsing, mounted once in App:
@@ -7,6 +8,17 @@ import { X } from '@phosphor-icons/react';
 //   Enter   opens the focused title (it's a link/button already)
 //   /       jumps to search      ?  shows this list      Esc  closes things
 const NAV_SELECTOR = '.st-card, .st-game, .poster-tile, .td-more-card, .td-adapt, .st-hero-cta';
+// TV remotes have no mouse, so every control must be reachable by d-pad:
+// links, buttons, fields, and the video itself (iframe — the player then
+// takes the remote's keys until Back).
+const TV_SELECTOR = 'a[href], button:not([disabled]), input:not([type="hidden"]), select, textarea, iframe, [tabindex]:not([tabindex="-1"])';
+// Hover-only menus (the profile drawer) and decorative frames can't be used
+// with a remote; the avatar itself links to the Profile page instead.
+const TV_SKIP = '.st-row-arrow, .hs-arrow, .st-hero-nav, .profile-hover-drawer, [aria-hidden="true"]';
+
+function navSelector() {
+  return isTvMode() ? TV_SELECTOR : NAV_SELECTOR;
+}
 const OPEN_EVENT = 'binge:shortcuts';
 
 export function openShortcutsHelp() {
@@ -23,10 +35,21 @@ function visible(el) {
   return rect.width > 0 && rect.height > 0 && getComputedStyle(el).visibility !== 'hidden';
 }
 
-// Topmost open dialog, so arrows stay inside a details sheet while it's up.
+// Topmost open layer (player, sheet, dialog), so arrows stay inside it.
 function scopeRoot() {
-  const dialogs = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')].filter(visible);
+  const player = document.querySelector('[data-embed-player]');
+  if (player && isTvMode()) return player;
+  const dialogs = [...document.querySelectorAll('[role="dialog"][aria-modal="true"], .bsheet-panel')].filter(visible);
   return dialogs[dialogs.length - 1] || document;
+}
+
+function candidatesIn(root) {
+  return [...root.querySelectorAll(navSelector())]
+    .filter((el) => visible(el) && !(isTvMode() && (
+      el.closest(TV_SKIP)
+      // The only frame worth focusing is the video player itself.
+      || (el.tagName === 'IFRAME' && (!el.closest('[data-embed-player]') || el.tabIndex < 0))
+    )));
 }
 
 const DIRS = {
@@ -58,9 +81,9 @@ export function pickNext(fromRect, candidates, dir) {
 
 function moveFocus(key) {
   const root = scopeRoot();
-  const all = [...root.querySelectorAll(NAV_SELECTOR)].filter(visible);
+  const all = candidatesIn(root);
   if (!all.length) return false;
-  const active = document.activeElement?.closest?.(NAV_SELECTOR);
+  const active = document.activeElement?.closest?.(navSelector());
   let target = null;
   if (!active || !root.contains(active)) {
     // Start from the first title on screen.
@@ -74,8 +97,40 @@ function moveFocus(key) {
   }
   if (!target) return false;
   target.focus({ preventScroll: true });
-  target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  // On a TV keep the focused item near the middle of the screen.
+  target.scrollIntoView({ block: isTvMode() && DIRS[key]?.y ? 'center' : 'nearest', inline: 'nearest', behavior: 'smooth' });
   return true;
+}
+
+// The remote's Back button (the TV app calls this; returns whether binge.
+// handled it — false means "leave the app"). Steps out of the video, then
+// closes the top layer, then goes back a page.
+export function handleTvBack(pathname = window.location.pathname) {
+  const active = document.activeElement;
+  if (active?.tagName === 'IFRAME') {
+    active.blur();
+    const player = document.querySelector('[data-embed-player]');
+    (player?.querySelector('[aria-label^="Close"], button') || document.body).focus?.();
+    return true;
+  }
+  if (document.querySelector('[data-embed-player], [role="dialog"][aria-modal="true"], .bsheet-overlay, .kb-overlay')) {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    return true;
+  }
+  if (pathname !== '/home' && pathname !== '/' && window.history.length > 1) {
+    window.history.back();
+    return true;
+  }
+  return false;
+}
+
+function focusFirst() {
+  const main = document.querySelector('main') || document;
+  const first = candidatesIn(main).find((el) => {
+    const rect = el.getBoundingClientRect();
+    return rect.top >= 0 && rect.top < window.innerHeight;
+  });
+  first?.focus({ preventScroll: true });
 }
 
 const GROUPS = [
@@ -102,6 +157,23 @@ const GROUPS = [
 export default function KeyboardShortcuts() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const tv = isTvMode();
+
+  // TV: Back button bridge for the TV app, and something is always focused
+  // after a page change (a remote can't click "into" a page).
+  useEffect(() => {
+    if (!tv) return undefined;
+    window.bingeTvBack = () => handleTvBack();
+    return () => { delete window.bingeTvBack; };
+  }, [tv]);
+  useEffect(() => {
+    if (!tv) return undefined;
+    const timer = setTimeout(() => {
+      if (!document.activeElement || document.activeElement === document.body) focusFirst();
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [tv, location.pathname, location.search]);
 
   useEffect(() => {
     const show = () => setOpen(true);
@@ -112,7 +184,8 @@ export default function KeyboardShortcuts() {
   useEffect(() => {
     function onKey(event) {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isTyping(event.target)) return;
+      // On TV, up/down leave a text field (left/right still move the caret).
+      if (isTyping(event.target) && !(tv && (event.key === 'ArrowUp' || event.key === 'ArrowDown'))) return;
       if (open) {
         if (event.key === 'Escape' || event.key === '?') { event.preventDefault(); setOpen(false); }
         return;
@@ -125,13 +198,13 @@ export default function KeyboardShortcuts() {
         else navigate('/search');
         return;
       }
-      if (DIRS[event.key] && !document.querySelector('[data-embed-player]')) {
+      if (DIRS[event.key] && (tv || !document.querySelector('[data-embed-player]'))) {
         if (moveFocus(event.key)) event.preventDefault();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, navigate]);
+  }, [open, navigate, tv]);
 
   if (!open) return null;
   return (

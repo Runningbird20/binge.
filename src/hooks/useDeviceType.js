@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
+import { isTvMode } from '../utils/tvMode';
 
 function getState() {
   const w = window.innerWidth;
   const h = window.innerHeight;
+  // A 1080p TV's browser often reports 960×540 (2× density) — that's a big
+  // screen, not a phone, so TV mode always gets the desktop layout.
+  if (isTvMode()) {
+    return { isMobile: false, isTablet: false, isDesktop: true, isPortrait: false, isLandscape: true, width: w };
+  }
   // Use the short side so isMobile stays true when a phone rotates to landscape
   const short = Math.min(w, h);
   return {
