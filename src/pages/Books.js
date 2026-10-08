@@ -7,6 +7,8 @@ import BookBrowseView from '../components/BookBrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
+import useSwipeDismiss from '../hooks/useSwipeDismiss';
+import useDeviceType from '../hooks/useDeviceType';
 import { titleUrl } from '../components/TitleCard';
 import { findAdaptations } from '../utils/adaptations';
 import useDebounce from '../hooks/useDebounce';
@@ -202,6 +204,10 @@ export function BookDetailsModal({
   browseOnlyMessage = '',
 }) {
   const [showReader, setShowReader] = useState(false);
+  const bookOverlayRef = useRef(null);
+  const bookSheetRef = useRef(null);
+  const { isMobile: isPhone } = useDeviceType();
+  useSwipeDismiss({ enabled: isPhone && Boolean(book) && !showReader, scrollRef: bookOverlayRef, sheetRef: bookSheetRef, onDismiss: onClose });
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
 
@@ -290,8 +296,9 @@ export function BookDetailsModal({
 
   return (
     <>
-      <div className="td-overlay" onClick={onClose}>
+      <div className="td-overlay" onClick={onClose} ref={bookOverlayRef}>
         <div
+          ref={bookSheetRef}
           className="td-modal td-modal--book"
           role="dialog"
           aria-modal="true"

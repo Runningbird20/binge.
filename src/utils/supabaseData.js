@@ -226,7 +226,8 @@ export async function fetchAccountProfiles() {
 
   const { data, error } = await client
     .from('account_profiles')
-    .select('id, account_id, name, avatar_url, avatar_color, is_kids, is_default, created_at')
+    // No `pin`: a profile's lock PIN never needs to reach the browser list.
+    .select('id, account_id, name, avatar_url, avatar_color, is_kids, is_default, created_at, audio_pref, subtitle_pref, settings')
     .eq('account_id', authUser.id)
     .order('is_default', { ascending: false })
     .order('created_at', { ascending: true });

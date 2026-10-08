@@ -1,6 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import useSwipeDismiss from '../hooks/useSwipeDismiss';
 
+// Slide-up picker for phones. Drag the handle (or the sheet, when it's
+// scrolled to the top) down to close; tap outside or Esc also close.
 export default function BottomSheet({ open, onClose, title, children }) {
+  const panelRef = useRef(null);
+  useSwipeDismiss({ enabled: open, scrollRef: panelRef, sheetRef: panelRef, onDismiss: onClose });
+
   useEffect(() => {
     if (!open) return undefined;
 
@@ -23,6 +29,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
   return (
     <div className="bsheet-overlay" onClick={onClose}>
       <div
+        ref={panelRef}
         className="bsheet-panel"
         role="dialog"
         aria-modal="true"

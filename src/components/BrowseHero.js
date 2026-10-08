@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CaretLeft, CaretRight, Info, Play, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
 import { titleUrl } from './TitleCard';
+import ErrorBoundary from './ErrorBoundary';
 import { languageName } from '../utils/tmdb';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
 import { canAutoplayPreviews, getTrailerKey, setTrailerMuted, trailerEmbedUrl, whenTrailerPlaying } from '../utils/trailers';
@@ -26,7 +27,7 @@ function backdropOf(item) {
 // Netflix-style spotlight: a full-bleed backdrop for the top few titles,
 // rotating on a timer that pauses while hovered or focused, with explicit
 // ‹ › buttons and dots so it's fully mouse- and keyboard-operable.
-export default function BrowseHero({ items = [], kicker, emptyTitle = 'What will you binge tonight?', playLabel = 'Play' }) {
+function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge tonight?', playLabel = 'Play' }) {
   const location = useLocation();
   const slides = items.filter((item) => backdropOf(item)).slice(0, 6);
   const [index, setIndex] = useState(0);
@@ -206,5 +207,15 @@ export default function BrowseHero({ items = [], kicker, emptyTitle = 'What will
         </>
       )}
     </section>
+  );
+}
+
+// A broken billboard (bad art data, a TMDB hiccup) just disappears; the
+// rows below still render.
+export default function BrowseHero(props) {
+  return (
+    <ErrorBoundary resetKey={props.items} fallback={null}>
+      <BrowseHeroInner {...props} />
+    </ErrorBoundary>
   );
 }

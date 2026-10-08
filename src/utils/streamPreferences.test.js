@@ -1,4 +1,4 @@
-import { rankServers, wantedAudio } from './streamPreferences';
+import { rankServers, summarizeHealth, wantedAudio } from './streamPreferences';
 
 const IDS = ['vidsrc', 'vidsrc2', '2embed', 'vidlink'];
 
@@ -37,4 +37,25 @@ test('a server this profile just marked broken drops to the bottom', () => {
     memory: { 'broken:vidsrc': Date.now() },
   });
   expect(ranked[ranked.length - 1].id).toBe('vidsrc');
+});
+
+describe('provider health', () => {
+  it('flags a provider many viewers could not play today', () => {
+    expect(summarizeHealth({ works_24h: 1, broken_24h: 4, works_7d: 10, broken_7d: 6 }).down).toBe(true);
+    expect(summarizeHealth({ works_24h: 3, broken_24h: 3, works_7d: 10, broken_7d: 6 }).down).toBe(false);
+    expect(summarizeHealth({ works_24h: 0, broken_24h: 0, works_7d: 8, broken_7d: 2 }).usuallyWorks).toBe(true);
+  });
+
+  it('ranks a broadly-down server last and labels it', () => {
+    const health = { vidlink: { down: true }, vidrift: { usuallyWorks: true } };
+    const ranking = rankServers(['vidlink', 'vidrift', 'vidy'], { prefs: { audio: 'original' }, health });
+    expect(ranking[ranking.length - 1]).toMatchObject({ id: 'vidlink', status: 'down' });
+    expect(ranking.find((s) => s.id === 'vidrift')).toMatchObject({ status: 'ok', note: 'Usually works' });
+  });
+
+  it('prefers title-specific evidence over global health', () => {
+    const summary = [{ provider: 'vidlink', works_count: 2, broken_count: 0 }];
+    const ranking = rankServers(['vidlink'], { prefs: { audio: 'original' }, summary, health: { vidlink: { down: true } } });
+    expect(ranking[0].status).toBe('good');
+  });
 });

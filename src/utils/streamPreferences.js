@@ -82,17 +82,15 @@ export function savePlaybackPrefs(next) {
   return merged;
 }
 
-// Seed local prefs from the profile row (called once the profile loads).
+// Adopt the profile row's languages (written on every change, so it's the
+// freshest copy when switching devices).
 export function hydratePlaybackPrefs(profile) {
-  if (!profile) return;
-  const stored = readJson(profileKey(PREFS_KEY), null);
-  if (stored) return;
-  if (profile.audio_pref || profile.subtitle_pref) {
-    writeJson(profileKey(PREFS_KEY), {
-      audio: profile.audio_pref || DEFAULT_PREFS.audio,
-      subtitles: profile.subtitle_pref || DEFAULT_PREFS.subtitles,
-    });
-  }
+  if (!profile || !(profile.audio_pref || profile.subtitle_pref)) return;
+  writeJson(profileKey(PREFS_KEY), {
+    ...getPlaybackPrefs(),
+    ...(profile.audio_pref ? { audio: profile.audio_pref } : {}),
+    ...(profile.subtitle_pref ? { subtitles: profile.subtitle_pref } : {}),
+  });
 }
 
 // The language the viewer wants to hear for a given title.
@@ -160,13 +158,54 @@ export async function submitStreamReport({ mediaType, mediaId, provider, works, 
   }
 }
 
+// ── Provider health across all titles ──────────────────────────────────
+
+let healthCache = null; // { at, promise }
+let lastHealth = {}; // resolved copy, so synchronous ranking can use it
+const HEALTH_TTL_MS = 10 * 60 * 1000;
+
+// { [provider]: { works24h, broken24h, works7d, broken7d, down, usuallyWorks } }
+export function fetchProviderHealth() {
+  if (healthCache && Date.now() - healthCache.at < HEALTH_TTL_MS) return healthCache.promise;
+  const promise = (async () => {
+    if (!isSupabaseConfigured || !supabase) return {};
+    try {
+      const { data, error } = await supabase.rpc('stream_provider_health');
+      if (error) return {};
+      lastHealth = Object.fromEntries((data || []).map((row) => [row.provider, summarizeHealth(row)]));
+      return lastHealth;
+    } catch {
+      return {};
+    }
+  })();
+  healthCache = { at: Date.now(), promise };
+  return promise;
+}
+
+export function summarizeHealth(row) {
+  const works24h = Number(row.works_24h) || 0;
+  const broken24h = Number(row.broken_24h) || 0;
+  const works7d = Number(row.works_7d) || 0;
+  const broken7d = Number(row.broken_7d) || 0;
+  const total7d = works7d + broken7d;
+  return {
+    works24h,
+    broken24h,
+    works7d,
+    broken7d,
+    // Several different viewers couldn't play it today, and few could.
+    down: broken24h >= 3 && broken24h >= works24h * 2,
+    usuallyWorks: total7d >= 3 && works7d / total7d >= 0.7,
+  };
+}
+
 // ── Ranking ────────────────────────────────────────────────────────────
 
 /**
  * Orders servers best-first for this viewer and title.
  * @returns {{ id, score, audio: string|null, audioVotes: number, note: string }[]}
  */
-export function rankServers(providerIds, { prefs, originalLanguage, summary = [], memory = null }) {
+export function rankServers(providerIds, { prefs, originalLanguage, summary = [], memory = null, health = lastHealth }) {
   const want = wantedAudio(prefs, originalLanguage);
   const byProvider = new Map(summary.map((row) => [row.provider, row]));
   const RECENT_BROKEN_MS = 6 * 60 * 60 * 1000;
@@ -188,14 +227,24 @@ export function rankServers(providerIds, { prefs, originalLanguage, summary = []
       const slowAt = memory?.[`slow:${id}`];
       if (slowAt && Date.now() - slowAt < 2 * 60 * 60 * 1000) score -= 3;
       if (want && audio) score += audio === want ? 5 : -4;
+      const providerHealth = health[id];
+      if (providerHealth?.down) score -= 5;
+      else if (providerHealth?.usuallyWorks) score += 0.8;
 
+      // status drives the ✓ / ⚠ tag in the server menu.
       let note = '';
-      if (memory?.provider === id) note = 'Worked for you last time';
-      else if (audio && audioVotes) note = `${audioVotes} viewer${audioVotes === 1 ? '' : 's'} heard this audio`;
-      else if (works) note = `Works for ${works} viewer${works === 1 ? '' : 's'}`;
-      else if (broken) note = 'Reported not playing';
+      let status = 'unknown';
+      if (memory?.provider === id) { note = 'Worked for you last time'; status = 'good'; }
+      else if (works && works >= broken) {
+        status = 'good';
+        note = audio && audioVotes
+          ? `Works for this title · ${audioVotes} heard this audio`
+          : `Works for this title (${works} viewer${works === 1 ? '' : 's'})`;
+      } else if (providerHealth?.down) { note = 'Down for many viewers today'; status = 'down'; }
+      else if (broken) { note = 'Reported not playing for this title'; status = 'bad'; }
+      else if (providerHealth?.usuallyWorks) { note = 'Usually works'; status = 'ok'; }
 
-      return { id, score, audio, audioVotes, note };
+      return { id, score, audio, audioVotes, note, status };
     })
     .sort((a, b) => b.score - a.score);
 }

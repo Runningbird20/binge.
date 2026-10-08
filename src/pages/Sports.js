@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowsOut, CaretDown, Check, CornersOut, GridFour, Play, Ski
 import Navbar from '../components/Navbar';
 import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
+import LiveScorePanel from '../components/LiveScorePanel';
 import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel } from '../utils/sportsProviders';
 import { hostOf, isHostReachable, reachabilityMap } from '../utils/hostReachability';
 
@@ -328,6 +329,7 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
         </div>
       </div>
 
+      <div className="st-sp-stage">
       <div className="st-sp-frame" ref={frameRef}>
         {embedUrl ? (
           <iframe
@@ -363,6 +365,9 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
             )}
           </div>
         )}
+      </div>
+
+      <LiveScorePanel stream={stream} />
       </div>
 
       <div className="st-sp-controls">

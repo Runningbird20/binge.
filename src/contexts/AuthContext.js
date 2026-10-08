@@ -14,6 +14,8 @@ import {
 } from '../utils/supabaseData';
 import { normalizeUserType } from '../utils/userAccess';
 import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId } from '../utils/activeProfile';
+import { hydratePlaybackPrefs } from '../utils/streamPreferences';
+import { hydrateSettings } from '../utils/profileSettings';
 
 const AuthContext = createContext(null);
 // TEMP (UI preview only — do not commit): raw context export for the mock preview route
@@ -261,6 +263,13 @@ export function AuthProvider({ children }) {
     () => profiles.find((p) => p.id === activeProfileIdState) || null,
     [profiles, activeProfileIdState]
   );
+
+  // Languages and settings follow the profile across devices.
+  useEffect(() => {
+    if (!activeProfile) return;
+    hydratePlaybackPrefs(activeProfile);
+    hydrateSettings(activeProfile);
+  }, [activeProfile]);
 
   const signIn = useCallback(async (credentials) => {
     const nextUser = await signInWithSupabase(credentials);

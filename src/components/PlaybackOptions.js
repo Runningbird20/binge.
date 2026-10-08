@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Subtitles, WarningCircle } from '@phosphor-icons/react';
+import BottomSheet from './BottomSheet';
+import { haptic } from '../utils/haptics';
+import { CaretDown, Check, CheckCircle, HardDrives, SpeakerHigh, Subtitles, Warning, WarningCircle } from '@phosphor-icons/react';
 import { AUDIO_CHOICES, SUBTITLE_CHOICES } from '../utils/streamPreferences';
 import { languageName } from '../utils/tmdb';
 
@@ -17,10 +19,12 @@ export function PlaybackOptionsPanel({
   onReportBroken,
   onReportAudio,
   blockedCount = 0,
+  health = {},
   onClose,
 }) {
   const originalName = languageName(originalLanguage);
   const current = servers.find((server) => server.id === currentServer);
+  const downNames = servers.filter((server) => health[server.id]?.down).map((server) => serverLabels[server.id]?.label || server.id);
 
   return (
     <div className="st-pb-panel" role="dialog" aria-label="Audio, subtitles and server">
@@ -60,6 +64,12 @@ export function PlaybackOptionsPanel({
 
       <div className="st-pb-col st-pb-col--wide">
         <h3>Server</h3>
+        {downNames.length > 0 && (
+          <p className="st-pb-outage" role="status">
+            <Warning size={14} weight="fill" aria-hidden="true" />
+            {downNames.join(', ')} {downNames.length === 1 ? 'seems' : 'seem'} to be down for many viewers today, so {downNames.length === 1 ? 'it’s' : 'they’re'} tried last.
+          </p>
+        )}
         <ul role="radiogroup" aria-label="Server">
           {servers.map((server, index) => {
             const active = server.id === currentServer;
@@ -75,7 +85,13 @@ export function PlaybackOptionsPanel({
                       {server.audio && <span className="st-pb-tag">{languageName(server.audio)} audio</span>}
                       {meta.subtitles && <span className="st-pb-tag">CC</span>}
                     </span>
-                    {server.note && <span className="st-pb-server-note">{server.note}</span>}
+                    {server.note && (
+                      <span className={`st-pb-server-note st-pb-server-note--${server.status || 'unknown'}`}>
+                        {server.status === 'good' && <CheckCircle size={13} weight="fill" aria-hidden="true" />}
+                        {(server.status === 'down' || server.status === 'bad') && <Warning size={13} weight="fill" aria-hidden="true" />}
+                        {server.note}
+                      </span>
+                    )}
                   </span>
                 </button>
               </li>
@@ -146,5 +162,91 @@ export default function PlaybackOptions(props) {
       </button>
       {open && <PlaybackOptionsPanel {...props} onClose={() => setOpen(false)} />}
     </div>
+  );
+}
+
+// Phones: three compact buttons under the video, each opening a bottom
+// sheet at thumb height, instead of one long inline panel.
+export function MobilePlaybackPickers({
+  prefs, onPrefsChange, originalLanguage, servers, currentServer, serverLabels,
+  onSelectServer, onReportBroken, blockedCount = 0, health = {},
+}) {
+  const [sheet, setSheet] = useState(null); // 'server' | 'audio' | 'subs'
+  const originalName = languageName(originalLanguage);
+  const current = servers.find((server) => server.id === currentServer);
+  const audioChoice = AUDIO_CHOICES.find((choice) => choice.value === prefs.audio);
+  const subChoice = SUBTITLE_CHOICES.find((choice) => choice.value === prefs.subtitles);
+  const downNames = servers.filter((server) => health[server.id]?.down).map((server) => serverLabels[server.id]?.label || server.id);
+  const close = () => setSheet(null);
+  const pick = (fn) => (value) => { haptic(); fn(value); close(); };
+
+  return (
+    <>
+      <div className="mp-pickers">
+        <button type="button" className="mp-picker" onClick={() => setSheet('server')}>
+          <HardDrives size={16} weight="bold" aria-hidden="true" />
+          <span className="mp-picker-text"><span className="mp-picker-label">Server</span>{serverLabels[currentServer]?.label || currentServer}</span>
+          {current?.status === 'good' && <CheckCircle size={14} weight="fill" className="mp-picker-ok" aria-label="works for this title" />}
+          <CaretDown size={14} weight="bold" aria-hidden="true" />
+        </button>
+        <button type="button" className="mp-picker" onClick={() => setSheet('audio')}>
+          <SpeakerHigh size={16} weight="bold" aria-hidden="true" />
+          <span className="mp-picker-text"><span className="mp-picker-label">Audio</span>{prefs.audio === 'original' && originalName ? originalName : audioChoice?.label}</span>
+          <CaretDown size={14} weight="bold" aria-hidden="true" />
+        </button>
+        <button type="button" className="mp-picker" onClick={() => setSheet('subs')}>
+          <Subtitles size={16} weight="bold" aria-hidden="true" />
+          <span className="mp-picker-text"><span className="mp-picker-label">Subtitles</span>{subChoice?.label}</span>
+          <CaretDown size={14} weight="bold" aria-hidden="true" />
+        </button>
+      </div>
+
+      <BottomSheet open={sheet === 'server'} onClose={close} title="Server">
+        {downNames.length > 0 && (
+          <p className="st-pb-outage"><Warning size={14} weight="fill" aria-hidden="true" /> {downNames.join(', ')} {downNames.length === 1 ? 'seems' : 'seem'} to be down for many viewers today.</p>
+        )}
+        {servers.map((server, index) => {
+          const meta = serverLabels[server.id] || {};
+          const active = server.id === currentServer;
+          return (
+            <button key={server.id} type="button" className={`bsheet-option${active ? ' active' : ''}`} onClick={() => pick(onSelectServer)(server.id)}>
+              <span className="mp-sheet-server">
+                <span>{meta.label || server.id}{index === 0 && <span className="st-pb-tag st-pb-tag--best">Best match</span>}{meta.subtitles && <span className="st-pb-tag">CC</span>}</span>
+                {server.note && <span className={`st-pb-server-note st-pb-server-note--${server.status || 'unknown'}`}>{server.note}</span>}
+              </span>
+              {active && <Check size={18} weight="bold" className="bsheet-option-check" />}
+            </button>
+          );
+        })}
+        {blockedCount > 0 && <p className="st-pb-hint">{blockedCount} server{blockedCount === 1 ? ' is' : 's are'} blocked on this network and hidden.</p>}
+        <button type="button" className="st-btn st-btn--ghost mp-sheet-broken" onClick={() => { onReportBroken(); close(); }}>
+          <WarningCircle size={16} weight="bold" /> Not playing? Try the next server
+        </button>
+      </BottomSheet>
+
+      <BottomSheet open={sheet === 'audio'} onClose={close} title="Audio language">
+        {AUDIO_CHOICES.map((choice) => {
+          const active = prefs.audio === choice.value;
+          const label = choice.value === 'original' && originalName ? `Original (${originalName})` : choice.label;
+          return (
+            <button key={choice.value} type="button" className={`bsheet-option${active ? ' active' : ''}`} onClick={() => pick((audio) => onPrefsChange({ audio }))(choice.value)}>
+              {label}{active && <Check size={18} weight="bold" className="bsheet-option-check" />}
+            </button>
+          );
+        })}
+      </BottomSheet>
+
+      <BottomSheet open={sheet === 'subs'} onClose={close} title="Subtitles">
+        {SUBTITLE_CHOICES.map((choice) => {
+          const active = prefs.subtitles === choice.value;
+          return (
+            <button key={choice.value} type="button" className={`bsheet-option${active ? ' active' : ''}`} onClick={() => pick((subtitles) => onPrefsChange({ subtitles }))(choice.value)}>
+              {choice.label}{active && <Check size={18} weight="bold" className="bsheet-option-check" />}
+            </button>
+          );
+        })}
+        <p className="st-pb-hint">Applied automatically on servers marked CC. On others, use the player’s own CC button.</p>
+      </BottomSheet>
+    </>
   );
 }

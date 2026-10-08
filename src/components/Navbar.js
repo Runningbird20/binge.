@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
+  SlidersHorizontal,
   House,
   FilmSlate,
   MonitorPlay,
@@ -113,6 +114,9 @@ export default function Navbar() {
                             <Gear size={17} weight="bold" aria-hidden="true" /> Account Settings
                           </NavLink>
                         )}
+                        <NavLink to="/settings" className={profileDrawerLink}>
+                          <SlidersHorizontal size={17} weight="bold" aria-hidden="true" /> Settings
+                        </NavLink>
                         {isAdmin && (
                           <NavLink to="/admin" className={profileDrawerLink}>
                             <ShieldCheck size={17} weight="bold" aria-hidden="true" /> Admin Panel

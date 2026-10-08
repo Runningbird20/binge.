@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowsIn, ArrowsOut, CaretDown, Check, Play, Plus, X } from '@phosphor-icons/react';
+import { ArrowsIn, ArrowsOut, CaretDown, Check, DeviceRotate, LockSimple, LockSimpleOpen, Play, Plus, X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   fetchEpisodeProgress,
@@ -10,6 +10,8 @@ import {
   fetchSupabaseResumePoint,
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
+import { getSettings } from '../utils/profileSettings';
+import { readPlayback } from '../utils/playbackMessages';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
@@ -18,6 +20,7 @@ import { useSeasonEpisodes } from '../hooks/useTitleDetails';
 import { formatClock, getResumePosition, mergeRemotePosition, positionKey, savePosition } from '../utils/playbackPositions';
 import {
   fetchReportSummary,
+  fetchProviderHealth,
   rememberServer,
   getPlaybackPrefs,
   getServerMemory,
@@ -26,7 +29,8 @@ import {
   submitStreamReport,
   wantedAudio,
 } from '../utils/streamPreferences';
-import PlaybackOptions, { PlaybackOptionsPanel } from './PlaybackOptions';
+import PlaybackOptions, { MobilePlaybackPickers } from './PlaybackOptions';
+import { haptic } from '../utils/haptics';
 
 // Embed servers, best first. VidRift and Vidy lead: in testing they played
 // every title tried, including a new 2026 K-drama episode that vidsrc.ru
@@ -264,48 +268,9 @@ const STALL_SECONDS = 12;      // no progress while playing -> buffering
 const STALL_SWITCH_SECONDS = 30; // still stuck -> switch servers automatically
 
 function prefersLowBandwidth() {
+  if (getSettings().dataSaver) return true;
   const connection = typeof navigator !== 'undefined' ? navigator.connection : null;
   return Boolean(connection && (connection.saveData || (connection.downlink && connection.downlink < 3)));
-}
-
-// One normalized reading from any server's postMessage, or null.
-function readPlayback(raw) {
-  let data = raw;
-  if (typeof data === 'string') {
-    try { data = JSON.parse(data); } catch { return null; }
-  }
-  if (!data || typeof data !== 'object') return null;
-  const type = data.type || '';
-  if (type.startsWith('vidrift:')) {
-    if (type === 'vidrift:progress') return { time: Number(data.currentTime), duration: Number(data.duration) };
-    if (type === 'vidrift:paused') return { state: 'pause', time: Number(data.currentTime) };
-    if (type === 'vidrift:unpaused') return { state: 'play', time: Number(data.currentTime) };
-    if (type === 'vidrift:ended') return { state: 'ended' };
-    if (type === 'vidrift:nextup') return { time: Number(data.currentTime), duration: Number(data.duration) };
-    return null;
-  }
-  if (type.startsWith('cinesrc:')) {
-    if (type === 'cinesrc:timeupdate' || type === 'cinesrc:seeked') return { time: Number(data.currentTime), duration: Number(data.duration) };
-    if (type === 'cinesrc:play') return { state: 'play' };
-    if (type === 'cinesrc:pause') return { state: 'pause' };
-    if (type === 'cinesrc:ended') return { state: 'ended' };
-    return null;
-  }
-  if (type === 'PLAYER_EVENT') {
-    const event = data.data || {};
-    const reading = { time: Number(event.currentTime), duration: Number(event.duration) };
-    if (event.event === 'play') reading.state = 'play';
-    if (event.event === 'pause') reading.state = 'pause';
-    if (event.event === 'ended') reading.state = 'ended';
-    return reading;
-  }
-  if (type === 'MEDIA_DATA') {
-    const media = typeof data.data === 'string' ? (() => { try { return JSON.parse(data.data); } catch { return null; } })() : data.data;
-    const progress = media?.progress || (media && Object.values(media)[0]?.progress);
-    if (!progress) return null;
-    return { time: Number(progress.watched), duration: Number(progress.duration) };
-  }
-  return null;
 }
 
 function normalizeStartAt(value) {
@@ -330,6 +295,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
   const [originalLanguage, setOriginalLanguage] = useState(item?.original_language || null);
   const [reportSummary, setReportSummary] = useState([]);
+  const [providerHealth, setProviderHealth] = useState({});
   const [serverMemory, setServerMemory] = useState(() => getServerMemory(memoryType, item?.id));
   // Once the viewer picks a server themselves, or one has played long
   // enough to count as working, late-arriving community reports must not
@@ -412,8 +378,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     return reachable.length ? reachable : ids;
   }, [mediaType, externalId, blockedIds]);
   const rankedServers = useMemo(
-    () => rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory }),
-    [availableIds, prefs, originalLanguage, reportSummary, serverMemory]
+    () => rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory, health: providerHealth }),
+    [availableIds, prefs, originalLanguage, reportSummary, serverMemory, providerHealth]
   );
 
   // Original language: from the catalog row, else TMDB.
@@ -432,6 +398,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     if (!item?.id) return undefined;
     let cancelled = false;
     fetchReportSummary(memoryType, item.id).then((rows) => { if (!cancelled) setReportSummary(rows); });
+    fetchProviderHealth().then((health) => { if (!cancelled) setProviderHealth(health); });
     return () => { cancelled = true; };
   }, [item?.id, memoryType]);
 
@@ -540,13 +507,14 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       const key = `${season}:${episode}`;
       if (upNextDismissedRef.current === key) return;
       const nearEnd = state.duration > 0 && state.time > 0 && state.duration - state.time <= UP_NEXT_SECONDS;
-      if ((nearEnd || state.ended) && !upNext) setUpNext({ secondsLeft: UP_NEXT_COUNTDOWN });
+      // With autoplay off in Settings the card waits for a tap (no countdown).
+      if ((nearEnd || state.ended) && !upNext) setUpNext({ secondsLeft: getSettings().autoNext ? UP_NEXT_COUNTDOWN : null });
     }, 1000);
     return () => clearInterval(timer);
   }, [isTV, nextEpisode, season, episode, upNext]);
 
   useEffect(() => {
-    if (!upNext) return undefined;
+    if (!upNext || upNext.secondsLeft == null) return undefined;
     if (upNext.secondsLeft <= 0) { playNextEpisode(); return undefined; }
     const timer = setTimeout(() => setUpNext((current) => (current ? { secondsLeft: current.secondsLeft - 1 } : current)), 1000);
     return () => clearTimeout(timer);
@@ -555,6 +523,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   function playNextEpisode() {
     if (!nextEpisode) return;
+    haptic();
     if (item?.id && !watched.has(`${season}:${episode}`)) {
       markEpisodeWatched({ mediaId: item.id, season, episode })
         .then(() => setWatched((previous) => new Set([...previous, `${season}:${episode}`])))
@@ -579,12 +548,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         <strong>{nextInfo?.title || `Episode ${nextEpisode.episode}`}</strong>
         <div className="st-upnext-actions">
           <button type="button" className="st-btn st-btn--primary" onClick={playNextEpisode}>
-            <Play size={16} weight="fill" /> Play now {upNext.secondsLeft > 0 ? `(${upNext.secondsLeft})` : ''}
+            <Play size={16} weight="fill" /> {upNext.secondsLeft == null ? 'Play next episode' : `Play now${upNext.secondsLeft > 0 ? ` (${upNext.secondsLeft})` : ''}`}
           </button>
           <button type="button" className="st-btn st-btn--ghost" onClick={dismissUpNext}>Cancel</button>
         </div>
       </div>
-      <span className="st-upnext-bar" style={{ animationDuration: `${UP_NEXT_COUNTDOWN}s` }} aria-hidden="true" />
+      {upNext.secondsLeft != null && <span className="st-upnext-bar" style={{ animationDuration: `${UP_NEXT_COUNTDOWN}s` }} aria-hidden="true" />}
     </div>
   );
 
@@ -774,12 +743,23 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     onReportBroken: reportBroken,
     onReportAudio: reportServerAudio,
     blockedCount: blockedIds.size,
+    health: providerHealth,
   };
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
+
+  const [rotationLocked, setRotationLocked] = useState(false);
+  const [rotateHint, setRotateHint] = useState(false);
+  const canLockRotation = typeof window !== 'undefined' && Boolean(window.screen?.orientation?.lock) && !/iPhone|iPad|iPod/.test(navigator.userAgent);
+  useEffect(() => {
+    if (!rotateHint) return undefined;
+    const timer = setTimeout(() => setRotateHint(false), 3500);
+    return () => clearTimeout(timer);
+  }, [rotateHint]);
 
   useEffect(() => {
     function onFsChange() {
       setIsFullscreen(Boolean(document.fullscreenElement));
+      if (!document.fullscreenElement) setRotationLocked(false);
     }
 
     document.addEventListener('fullscreenchange', onFsChange);
@@ -1052,17 +1032,42 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     return () => clearTimeout(hideControlsTimerRef.current);
   }, [item?.id, season, episode, revealControls]);
 
+  // Orientation: Android can go fullscreen + lock to landscape (the lock
+  // only works while fullscreen). iPhones allow neither for a web page, so
+  // there the player follows the phone's own rotation and we just say so.
+  async function enterLandscape() {
+    const element = modalRef.current;
+    try {
+      if (!document.fullscreenElement) await element?.requestFullscreen?.({ navigationUI: 'hide' });
+      await window.screen.orientation?.lock?.('landscape');
+      setRotationLocked(true);
+    } catch {
+      if (!document.fullscreenElement) setRotateHint(true);
+    }
+  }
+
+  async function toggleRotationLock() {
+    haptic();
+    try {
+      if (rotationLocked) {
+        window.screen.orientation?.unlock?.();
+        setRotationLocked(false);
+      } else {
+        await window.screen.orientation?.lock?.(window.screen.orientation.type);
+        setRotationLocked(true);
+      }
+    } catch { /* not supported */ }
+  }
+
   function toggleFullscreen() {
     if (isMobile) {
-      // On mobile, use Screen Orientation API to rotate to landscape.
-      // requestFullscreen() doesn't work on iframes in iOS Safari.
-      try {
-        if (isLandscape) {
-          window.screen.orientation?.unlock?.();
-        } else {
-          window.screen.orientation?.lock?.('landscape').catch(() => {});
-        }
-      } catch {}
+      if (document.fullscreenElement) {
+        window.screen.orientation?.unlock?.();
+        setRotationLocked(false);
+        document.exitFullscreen().catch(() => {});
+      } else {
+        enterLandscape();
+      }
       return;
     }
     if (!document.fullscreenElement) {
@@ -1071,9 +1076,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       // subtree, so fullscreening the iframe directly would make our
       // sibling overlay/toggle button impossible to show at all.
       const element = frameWrapRef.current || modalRef.current;
-      element?.requestFullscreen().catch(() => {
-        modalRef.current?.requestFullscreen();
-      });
+      element?.requestFullscreen()
+        // Tablets: a 16:9 video wants landscape.
+        .then(() => window.screen.orientation?.lock?.('landscape').catch(() => {}))
+        .catch(() => {
+          modalRef.current?.requestFullscreen();
+        });
       return;
     }
     document.exitFullscreen();
@@ -1141,14 +1149,28 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // view the same way the close button would — the mini widget carries on
   // with its own copy of the embed, independent of this component now.
   function handleMinimize() {
+    // Hand over the *current* second (not the one this load started at), and
+    // save it, so the corner player and a later Expand both pick up here.
+    const state = playbackRef.current;
+    const key = item?.id ? positionKey(mediaType, item.id, season, episode) : null;
+    if (key && state.time > 0) savePosition(key, state.time, state.duration);
+    const at = state.time > 0 ? Math.floor(state.time) : startAt;
+    const miniUrl = RESUMABLE.has(provider) && provider !== 'vidrift'
+      ? buildUrl(provider, externalId, mediaType, season, episode, subtitleLang, { startAt: at, lowBandwidth: prefersLowBandwidth() })
+      : embedUrl;
+    const base = mediaType === 'tv_show' ? `/tv-show/${item.id}?play=1&season=${season}&episode=${episode}` : `/movie/${item.id}?play=1`;
     showMini({
-      embedUrl,
+      embedUrl: miniUrl,
       title: item.title,
       subtitle: isTV ? `S${season} E${episode}` : (item.year || ''),
       poster: item.poster_url || item.cover_url || item.image_url || null,
+      href: base,
+      positionKey: key,
+      vidriftResume: provider === 'vidrift' && at > 0 ? at : null,
     });
     onClose?.();
   }
+
 
   // ── Mobile player ────────────────────────────────────────────
   const epChipsRef = useRef(null);
@@ -1160,7 +1182,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   if (isMobile) {
     return (
-      <div className={`mp-shell${isLandscape ? ' mp-shell--ls' : ''}`}>
+      <div className={`mp-shell${isLandscape ? ' mp-shell--ls' : ''}`} data-embed-player>
         {/* Header — hidden in landscape via CSS */}
         <div className="mp-header">
           <div className="mp-title">
@@ -1169,7 +1191,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
           </div>
           <div className="mp-header-btns">
             <button className="mp-btn" onClick={handleMinimize} type="button" title="Minimize" aria-label="Minimize player"><CaretDown size={16} weight="bold" /></button>
-            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Go landscape" aria-label="Rotate to landscape">
+            <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Full screen, landscape" aria-label="Full screen in landscape">
               <ArrowsOut size={16} weight="bold" />
             </button>
             <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close"><X size={16} weight="bold" /></button>
@@ -1196,8 +1218,25 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           )}
           {upNextCard}
+          {rotateHint && (
+            <div className="mp-rotate-hint" role="status">
+              <DeviceRotate size={22} weight="bold" aria-hidden="true" /> Turn your phone sideways for a bigger picture
+            </div>
+          )}
           {/* Landscape overlay — top-right corner buttons, hidden in portrait via CSS */}
           <div className="mp-ls-overlay">
+            {canLockRotation && (
+              <button
+                className={`mp-btn${rotationLocked ? ' active' : ''}`}
+                onClick={toggleRotationLock}
+                type="button"
+                title={rotationLocked ? 'Unlock rotation' : 'Lock rotation'}
+                aria-label={rotationLocked ? 'Unlock rotation' : 'Lock rotation'}
+                aria-pressed={rotationLocked}
+              >
+                {rotationLocked ? <LockSimple size={16} weight="bold" /> : <LockSimpleOpen size={16} weight="bold" />}
+              </button>
+            )}
             {isTV && (
               <button
                 className="mp-btn"
@@ -1354,8 +1393,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
           <div className="mp-divider" />
 
-          {/* Audio, subtitles and server — same panel as desktop, inline. */}
-          <PlaybackOptionsPanel {...playbackOptionProps} />
+          {/* Server, audio and subtitles — bottom sheets at thumb height. */}
+          <MobilePlaybackPickers {...playbackOptionProps} />
         </div>
       </div>
     );
@@ -1363,7 +1402,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   // ── Desktop player ───────────────────────────────────────────
   return (
-    <div className="player-overlay" onClick={onClose}>
+    <div className="player-overlay" onClick={onClose} data-embed-player>
       <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
         <div className="player-header">
           <div className="player-title">

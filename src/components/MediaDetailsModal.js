@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
+import RemindButton from './RemindButton';
+import { haptic } from '../utils/haptics';
 import RateReviewPanel from './RateReviewPanel';
 import ThemedSelect from './ThemedSelect';
 import { computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
@@ -9,6 +11,8 @@ import { getPositionEntry, positionKey } from '../utils/playbackPositions';
 import { fetchEpisodeProgress } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import useTitleDetails, { useSeasonEpisodes } from '../hooks/useTitleDetails';
+import useSwipeDismiss from '../hooks/useSwipeDismiss';
+import useDeviceType from '../hooks/useDeviceType';
 import { fetchTmdbRecommendations, languageName } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
@@ -36,7 +40,7 @@ function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
   }, [currentSeason]);
 
   return (
-    <section className="td-section" aria-label="Episodes">
+    <section className="td-section td-episodes-section" aria-label="Episodes">
       <div className="td-section-head">
         <h3>Episodes</h3>
         {seasons.length > 1 ? (
@@ -255,6 +259,7 @@ export default function MediaDetailsModal({
   initialSeason,
   initialEpisode,
   initialPosition,
+  closeOnPlayerExit = false,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [playerStart, setPlayerStart] = useState(null);
@@ -263,7 +268,9 @@ export default function MediaDetailsModal({
   const [lastWatchedAt, setLastWatchedAt] = useState(0);
   const [showRecap, setShowRecap] = useState(false);
   const dialogRef = useRef(null);
+  const overlayRef = useRef(null);
   const rateRef = useRef(null);
+  const { isMobile } = useDeviceType();
   const details = useTitleDetails(item, mediaType);
   const isTV = mediaType === 'tv_show';
   const comingSoon = item ? isComingSoon(item) : false;
@@ -297,6 +304,8 @@ export default function MediaDetailsModal({
     if (showTrailer) { setShowTrailer(false); return; }
     onClose();
   }, [onClose, showTrailer, showRecap]);
+
+  useSwipeDismiss({ enabled: isMobile && Boolean(item) && !showPlayer && !showRecap, scrollRef: overlayRef, sheetRef: dialogRef, onDismiss: onClose });
 
   const playFromRecap = useCallback(() => {
     setShowRecap(false);
@@ -349,6 +358,7 @@ export default function MediaDetailsModal({
     : 'Play';
 
   function play(season, episode) {
+    haptic();
     setPlayerStart(season ? { season, episode } : null);
     setShowPlayer(true);
   }
@@ -364,6 +374,7 @@ export default function MediaDetailsModal({
     && (Number(resumeSeason) > 1 || Number(resumeEpisode) > 1) && daysAway >= RECAP_AFTER_DAYS;
 
   function resume() {
+    haptic();
     if (offerRecap) setShowRecap(true);
     else play();
   }
@@ -371,11 +382,12 @@ export default function MediaDetailsModal({
   async function handleRatingSave(categories, review) {
     if (typeof onRate !== 'function') return;
     await onRate(item, categories, review);
+    haptic('success');
   }
 
   return (
     <>
-      <div className="td-overlay" onClick={close}>
+      <div className="td-overlay" onClick={close} ref={overlayRef}>
         <div
           className="td-modal"
           role="dialog"
@@ -443,7 +455,7 @@ export default function MediaDetailsModal({
                     <button
                       type="button"
                       className="td-round-btn"
-                      onClick={() => onWatchlist(item)}
+                      onClick={() => { haptic('success'); onWatchlist(item); }}
                       disabled={!allowActions || isAddingWatchlist}
                       aria-label="Add to My List"
                       title="Add to My List"
@@ -472,6 +484,7 @@ export default function MediaDetailsModal({
                   >
                     <Star size={20} weight={userRating ? 'fill' : 'bold'} />
                   </button>
+                  {allowActions && <RemindButton item={item} mediaType={mediaType} />}
                 </div>
               </div>
             )}
@@ -482,6 +495,21 @@ export default function MediaDetailsModal({
             )}
           </header>
 
+          {isMobile && canWatch && !showTrailer && (
+            <div className="td-mobile-bar">
+              <button type="button" className="st-btn st-btn--primary" onClick={resume}>
+                <Play size={20} weight="fill" /> {resumeLabel}
+              </button>
+              {onWatchlist && !saved && (
+                <button type="button" className="td-round-btn" onClick={() => { haptic('success'); onWatchlist(item); }} disabled={!allowActions || isAddingWatchlist} aria-label="Add to My List">
+                  <Plus size={20} weight="bold" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Wide screens: a series' episodes sit beside the details. */}
+          <div className={`td-split${isTV && details?.seasons?.length ? ' td-split--tv' : ''}`}>
           <div className="td-body">
             <div className="td-main">
               <div className="td-meta">
@@ -547,6 +575,7 @@ export default function MediaDetailsModal({
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -565,7 +594,7 @@ export default function MediaDetailsModal({
         <EmbedPlayer
           item={item}
           mediaType={mediaType}
-          onClose={() => setShowPlayer(false)}
+          onClose={() => (closeOnPlayerExit && !playerStart ? onClose() : setShowPlayer(false))}
           initialSeason={playerStart?.season ?? resumeSeason}
           initialEpisode={playerStart?.episode ?? resumeEpisode}
           initialPosition={playerStart ? undefined : initialPosition}
