@@ -7,6 +7,9 @@ struct BingeTVApp: App {
     init() {
         // Posters and backdrops go through URLSession.shared; give it room.
         URLCache.shared = URLCache(memoryCapacity: 96 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "BingeCheckEngines") { EngineCheck.run() }
+        #endif
     }
 
     var body: some Scene {
@@ -24,6 +27,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
+            WarmHost().ignoresSafeArea()
             Theme.background.ignoresSafeArea()
             switch app.phase {
             case .loading:

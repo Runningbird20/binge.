@@ -14,12 +14,12 @@ project and TMDB lists as the website:
 
 ## Playback
 
-Videos play on the TV. tvOS leaves WebKit's legacy `UIWebView` out of the
-public SDK but still ships it, so `Player/LegacyWebView.swift` reaches it
-through the Objective-C runtime. That only works in a sideloaded app; App
-Review rejects it. The server's own player page loads full screen, and
-because its `<video>` is in the page's top level, the app drives it from the
-Siri remote:
+Videos play on the TV. tvOS ships WebKit but leaves it out of the public
+SDK, so `Player/WebEngine.swift` reaches **WKWebView** through the
+Objective-C runtime. That only works in a sideloaded app; App Review rejects
+it. The legacy UIWebView is kept only as a fallback: any video seek crashes
+inside it. The server's own player page loads full screen, and the app
+drives its `<video>` from the Siri remote:
 
 | Remote | Does |
 | --- | --- |
@@ -28,16 +28,19 @@ Siri remote:
 | Swipe down | Servers and episodes panel |
 | Back | Exit (progress is saved) |
 
-- **Servers:** that web view has no Media Source Extensions, so only servers that fall back to native HLS work: **VidRift, Vidy and CineSrc** (`Player/Servers.swift`, all checked in the simulator). VidLink, Videasy and the vidsrc servers never produced a playable video.
-- **Failover:** a server that hasn't played after 45 seconds is skipped automatically, unless you picked it by hand.
-- **Remembered server:** the last server that worked for a title goes first next time.
-- **Resume and sync:** resume seeks to the saved second, and progress goes to `continue_watching` every 30 seconds and on exit (same row as the website).
-- **Up Next:** counts down for 10 seconds at the end of an episode.
-- **Popups and redirects:** the top-level page is locked to the server's own host.
-- **Fallback:** if the web view is ever missing, Play falls back to the phone QR handoff.
+**Fast start** (`Player/StreamRace.swift`):
 
-Use `-BingeProbe <url>` in a Debug build to test another server. It logs
-whether the page has a `<video>`, its time, and whether it's playing.
+- **Race:** all servers load at once, muted, and the first whose video actually plays wins; the others are torn down. Startup varies a lot by server and title (Vidy 1.8s vs VidRift 26s on one movie), so this waits only for the fastest one.
+- **Preload:** a background race starts when a title page opens, when you rest on a Continue Watching card, for the first Continue Watching card on Home, and for the next episode in the last 90 seconds. The winner holds on its first frame (or your resume point), so Play is nearly instant. Unused preloads stop after 3 minutes.
+
+| Measured in the simulator | Before | Now |
+| --- | --- | --- |
+| Cold start (Play with nothing preloaded) | 6–40s, and 45s per dead server | 2.3–3.3s |
+| Warm start (preloaded) | — | 0.8s |
+
+**Servers:** tvOS has no Media Source Extensions, so only servers that fall back to native HLS work: **VidRift, Vidy and CineSrc** (`Player/Servers.swift`). VidLink, Videasy and the vidsrc servers never produced a playable video. A server you pick by hand plays alone, from where you were. Progress goes to `continue_watching` every 30 seconds and on exit (same row as the website), and Up Next counts down 10 seconds at the end of an episode. Pop-ups are refused, and the top-level page is locked to the server's host. If no web engine is available, Play falls back to the phone QR handoff.
+
+Use `-BingeProbe <url>` (plus `-BingeProbeSeek <js>`, `-BingeEngine legacy`) in a Debug build to time another server. `-BingePlayAfter N` opens a title page, waits N seconds, then presses Play, which measures the warm start.
 
 ## Run it
 

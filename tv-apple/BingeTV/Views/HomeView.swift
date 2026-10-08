@@ -81,6 +81,8 @@ struct HomeView: View {
 
         let (items, listTitles) = await (cw, list)
         continueItems = items
+        // The first Continue Watching card is the likeliest next play.
+        if let first = items.first { Warmup.shared.prepare(first.playRequest) }
         myList = listTitles
         rows = await general
         loading = false
@@ -243,6 +245,7 @@ struct ContinueRowView: View {
     let play: (ContinueItem) -> Void
     let details: (ContinueItem) -> Void
     let remove: (ContinueItem) -> Void
+    @FocusState private var focused: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -251,6 +254,7 @@ struct ContinueRowView: View {
                 LazyHStack(spacing: 40) {
                     ForEach(items) { item in
                         ContinueCard(item: item) { play(item) }
+                            .focused($focused, equals: item.id)
                             .contextMenu {
                                 Button { play(item) } label: { Label("Resume", systemImage: "play.fill") }
                                 Button { details(item) } label: { Label("Details & episodes", systemImage: "info.circle") }
@@ -262,6 +266,13 @@ struct ContinueRowView: View {
             }
             .scrollIndicators(.hidden)
             .scrollClipDisabled()
+            .task(id: focused) {
+                // Resting on a card for a moment preloads it.
+                guard let id = focused, let item = items.first(where: { $0.id == id }) else { return }
+                try? await Task.sleep(for: .milliseconds(700))
+                guard !Task.isCancelled else { return }
+                Warmup.shared.prepare(item.playRequest)
+            }
             Text("Click to resume · press and hold for details")
                 .font(.caption2)
                 .foregroundStyle(Theme.muted)

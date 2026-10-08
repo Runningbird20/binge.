@@ -13,7 +13,8 @@ struct PlayRequest: Identifiable {
 
 // Drives the server's own player page from the Siri remote. The <video> is
 // in the page's top level for every server in StreamServer.all, so play,
-// pause, seek and progress all go through one small script.
+// pause, seek and progress all go through one small script. Which server
+// plays is decided by a StreamRace (all servers at once, first to play wins).
 @MainActor
 final class PlayerModel: ObservableObject {
     struct Playback: Decodable, Equatable {
@@ -25,34 +26,43 @@ final class PlayerModel: ObservableObject {
     }
 
     @Published private(set) var request: PlayRequest
-    @Published private(set) var server: StreamServer
+    @Published private(set) var server: StreamServer?
     @Published private(set) var playback = Playback()
     @Published private(set) var started = false
+    @Published private(set) var racingNames = ""
     @Published var notice: String?
     @Published var hudVisible = true
     @Published var upNextCountdown: Int?
 
-    let servers: [StreamServer]
-    private(set) var web: LegacyWebView?
+    let servers = StreamServer.all
+    let surface = UIView()
+    private var race: StreamRace?
     private weak var app: AppModel?
-    private var manualServer = false
-    private var failed = Set<String>()
-    private var loadStarted = Date()
-    private var startApplied = false
-    private var lastSaved = Date.distantPast
-    private var lastProgressAt = Date()
-    private var lastTime: Double = 0
-    private var lastKick = Date.distantPast
     private var timer: Timer?
     private var hudHideAt = Date().addingTimeInterval(5)
-
-    static let failoverSeconds: TimeInterval = 45
+    private var lastSaved = Date.distantPast
+    private var warmedNext = false
+    private var openedAt = Date()
+    private var userPaused = false
 
     init(request: PlayRequest, app: AppModel) {
         self.request = request
         self.app = app
-        servers = StreamServer.ranked(for: request.title)
-        server = servers[0]
+        surface.backgroundColor = .black
+        if let warm = Warmup.shared.take(request) {
+            adopt(warm)
+        } else {
+            startRace(StreamServer.ranked(for: request.title))
+        }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
+            Task {
+                let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
+                self.request.seasons = (details?.seasons ?? []).filter { $0.seasonNumber > 0 }
+            }
+        }
     }
 
     var isEpisode: Bool { request.title.kind == .tvShow }
@@ -60,59 +70,67 @@ final class PlayerModel: ObservableObject {
         guard isEpisode, let s = request.season, let e = request.episode else { return nil }
         return "S\(s):E\(e)"
     }
+    private var web: WebEngine? { race?.winner?.web }
 
-    // MARK: Lifecycle
+    // MARK: Races
 
-    func attach() -> UIView {
-        if let web { return web.view }
-        let fresh = LegacyWebView(allowedHost: nil)
-        web = fresh
-        loadCurrent()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+    private func startRace(_ list: [StreamServer]) {
+        adopt(StreamRace(request: request, servers: list, mode: .live))
+    }
+
+    private func adopt(_ next: StreamRace) {
+        race?.stop()
+        race?.container.removeFromSuperview()
+        race = next
+        next.container.frame = surface.bounds
+        next.container.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        surface.addSubview(next.container)
+        next.onChange = { [weak self] in self?.raceChanged() }
+        racingNames = next.candidates.map(\.server.name).joined(separator: ", ")
+        started = false
+        warmedNext = false
+        playback = Playback()
+        next.goLive()
+        raceChanged()
+        showHUD()
+    }
+
+    private func raceChanged() {
+        guard let race else { return }
+        if let winner = race.winner {
+            server = winner.server
+            notice = nil
+        } else if race.failed {
+            notice = "No server could play this right now. Swipe down to try one again."
         }
-        if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
-            Task {
-                let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
-                request.seasons = (details?.seasons ?? []).filter { $0.seasonNumber > 0 }
-            }
-        }
-        return fresh?.view ?? UIView()
     }
 
     func close() {
         timer?.invalidate()
         timer = nil
         saveProgress(force: true)
-        web?.run("var v=document.querySelector('video'); if(v){v.pause()}")
-    }
-
-    private func loadCurrent() {
-        guard let tmdbId = request.title.tmdbId else {
-            notice = "This title has no streaming id yet."
-            return
-        }
-        let url = server.build(tmdbId, request.title.kind, request.season ?? 1, request.episode ?? 1)
-        web?.setAllowedHost(url.host)
-        web?.load(url)
-        loadStarted = Date()
-        started = false
-        startApplied = false
-        lastTime = 0
-        playback = Playback()
-        showHUD()
+        race?.stop()
+        race = nil
+        Warmup.shared.cancel()
     }
 
     // MARK: Remote
 
     func togglePlay() {
         if let countdown = upNextCountdown, countdown >= 0 { playNext(); return }
-        web?.run("var v=document.querySelector('video'); if(v){ if(v.paused){v.play()} else {v.pause()} }")
+        userPaused = !playback.paused
+        web?.evaluate("var v=document.querySelector('video'); if(v){ if(v.paused){v.play()} else {v.pause()} }", nil)
         showHUD()
     }
 
     func seek(by seconds: Double) {
-        web?.run("var v=document.querySelector('video'); if(v){ v.currentTime=Math.max(0, Math.min((v.duration||1e9)-1, v.currentTime+(\(seconds)))) }")
+        guard let web, web.canSeek else {
+            notice = "Skipping isn't available on this Apple TV."
+            showHUD()
+            return
+        }
+        web.evaluate("var v=document.querySelector('video'); if(v){ v.currentTime=Math.max(0, Math.min((v.duration||1e9)-1, v.currentTime+(\(seconds)))) }", nil)
+        playback.t = max(0, playback.t + seconds) // instant HUD feedback
         showHUD()
     }
 
@@ -121,11 +139,12 @@ final class PlayerModel: ObservableObject {
         hudHideAt = Date().addingTimeInterval(4)
     }
 
+    // A hand-picked server plays alone, from where you were.
     func choose(_ next: StreamServer) {
-        manualServer = true
-        server = next
+        saveProgress(force: true)
+        if playback.t > 30 { request.startAt = playback.t }
         notice = nil
-        loadCurrent()
+        startRace([next])
     }
 
     func play(season: Int, episode: Int) {
@@ -134,9 +153,12 @@ final class PlayerModel: ObservableObject {
         request.episode = episode
         request.startAt = nil
         upNextCountdown = nil
-        manualServer = false
-        failed = []
-        loadCurrent()
+        openedAt = Date()
+        if let warm = Warmup.shared.take(request) {
+            adopt(warm)
+        } else {
+            startRace(StreamServer.ranked(for: request.title))
+        }
     }
 
     // MARK: Polling
@@ -146,47 +168,32 @@ final class PlayerModel: ObservableObject {
     return JSON.stringify({video:true,t:v.currentTime||0,d:isFinite(v.duration)?v.duration:0,paused:v.paused,ended:v.ended})})()
     """
 
+    private var polling = false
+
     private func tick() {
-        guard let json = web?.run(Self.probe), let data = json.data(using: .utf8),
-              let state = try? JSONDecoder().decode(Playback.self, from: data) else { return }
+        guard let web, !polling else { return }
+        polling = true
+        web.evaluate(Self.probe) { [weak self] json in
+            guard let self else { return }
+            self.polling = false
+            guard let data = json?.data(using: .utf8),
+                  let state = try? JSONDecoder().decode(Playback.self, from: data) else { return }
+            self.apply(state, web: web)
+        }
+    }
+
+    private func apply(_ state: Playback, web: WebEngine) {
         playback = state
-
-        if state.t > lastTime + 0.2 {
-            lastProgressAt = Date()
-            if !started, state.t > 1 {
-                started = true
-                notice = nil
-                StreamServer.rememberWorking(server, for: request.title)
-            }
+        // A handed-over warm race is paused on its first frame; keep asking
+        // it to play until the clock moves (unmuting can pause it again).
+        if !started, state.video, state.paused, !userPaused {
+            web.evaluate("var v=document.querySelector('video'); if(v){v.muted=false; var p=v.play(); if(p&&p.catch)p.catch(function(){})}", nil)
         }
-        lastTime = state.t
-
-        // Some servers wait for a click before playing; we allow autoplay,
-        // so start it once the video has loaded.
-        if !started, state.video, state.paused, state.d > 0, Date().timeIntervalSince(lastKick) > 3 {
-            lastKick = Date()
-            web?.run("var v=document.querySelector('video'); if(v){var p=v.play(); if(p&&p.catch){p.catch(function(){})}}")
-        }
-
-        // Resume: jump once to the saved second when the video is ready.
-        if !startApplied, state.video, state.d > 0, let start = request.startAt, start > 30, start < state.d - 60 {
-            startApplied = true
-            web?.run("var v=document.querySelector('video'); if(v){v.currentTime=\(Int(start))}")
-        }
-
-        // Automatic failover while nothing has played yet (never for a
-        // server the viewer picked by hand).
-        if !started, !manualServer, Date().timeIntervalSince(loadStarted) > Self.failoverSeconds {
-            failed.insert(server.id)
-            if let next = servers.first(where: { !failed.contains($0.id) }) {
-                notice = "\(server.name) didn't start, trying \(next.name)…"
-                server = next
-                loadCurrent()
-            } else {
-                notice = "No server could play this right now. Swipe down to try one again."
-                manualServer = true
-            }
-            return
+        if !started, state.t > 0.4, !state.paused {
+            started = true
+            #if DEBUG
+            print("[player] playing \(String(format: "%.1f", Date().timeIntervalSince(openedAt)))s after Play")
+            #endif
         }
 
         if hudVisible, Date() > hudHideAt, !state.paused { hudVisible = false }
@@ -206,8 +213,14 @@ final class PlayerModel: ObservableObject {
     }
 
     private func handleUpNext(_ state: Playback) {
-        guard nextEpisode != nil, started, state.d > 120 else { return }
+        guard let next = nextEpisode, started, state.d > 120 else { return }
         let remaining = state.d - state.t
+        // Load the next episode in the background so it starts instantly.
+        if remaining < 90, !warmedNext {
+            warmedNext = true
+            Warmup.shared.prepare(PlayRequest(title: request.title, season: next.season, episode: next.episode,
+                                              seasons: request.seasons))
+        }
         if state.ended || remaining < 25 {
             let value = upNextCountdown ?? 10
             if upNextCountdown == nil { upNextCountdown = value } else if value > 0 { upNextCountdown = value - 1 }

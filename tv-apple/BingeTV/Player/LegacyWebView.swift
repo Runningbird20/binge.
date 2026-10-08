@@ -1,9 +1,9 @@
 import UIKit
 
-// tvOS ships WebKit's legacy UIWebView but leaves it out of the public SDK.
-// It is reached through the Objective-C runtime here, which is fine for a
-// sideloaded app and would not pass App Store review. It renders the
-// streaming server's own player page, exactly like the website's iframe.
+// Fallback engine: WebKit's legacy UIWebView (also private on tvOS). Plays
+// fine, but any seek crashes inside WebKit (its seek completion runs off
+// the web thread), so the player never seeks with it. See WebEngine.swift.
+@MainActor
 final class LegacyWebView: NSObject {
     let view: UIView
     private var allowedHost: String?
@@ -11,7 +11,7 @@ final class LegacyWebView: NSObject {
 
     func setAllowedHost(_ host: String?) { allowedHost = host }
 
-    static var isAvailable: Bool { NSClassFromString("UIWebView") != nil }
+    nonisolated static var isAvailable: Bool { NSClassFromString("UIWebView") != nil }
 
     init?(allowedHost: String?) {
         guard let type = NSClassFromString("UIWebView") as? UIView.Type else { return nil }
@@ -27,7 +27,8 @@ final class LegacyWebView: NSObject {
     }
 
     deinit {
-        view.setValue(nil, forKey: "delegate")
+        let web = view
+        Task { @MainActor in web.setValue(nil, forKey: "delegate") }
     }
 
     func load(_ url: URL) {
