@@ -164,46 +164,38 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
     return { completed, inProgress, avg, minutes, totalRatings: ratings.length };
   }, [watchlist, ratings]);
 
+  const hours = Math.round(stats.minutes / 60);
+  const editTo = activeProfile && !activeProfile.is_default ? '/profiles' : '/account-settings';
+  const tiles = [
+    { label: 'Watched', value: hours >= 2 ? `${hours.toLocaleString()}h` : `${stats.minutes}m` },
+    { label: 'Completed', value: stats.completed },
+    { label: 'In progress', value: stats.inProgress },
+    { label: 'Ratings', value: stats.totalRatings },
+    { label: 'Avg score', value: stats.avg },
+  ];
+
+  // Same look as the Profile page header (pf-*), condensed for Home.
   return (
-    <section className="home-section dashboard-section">
-      <div className="profile-header">
-        <div className="profile-avatar-wrap">
-          {activeProfile ? (
-            <ProfileAvatar profile={activeProfile} size={72} />
-          ) : (
-            <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
-          )}
-        </div>
-        <div className="profile-info">
-          <h1 className="profile-username">{activeProfile?.name || user.username}</h1>
-          <p className="profile-minutes">
-            <span className="profile-minutes-num">{stats.minutes.toLocaleString()}</span> minutes watched
-          </p>
-        </div>
-        <div className="profile-actions profile-actions--stacked">
-          <Link to={activeProfile && !activeProfile.is_default ? '/profiles' : '/account-settings'} className="btn-ghost">
-            {activeProfile && !activeProfile.is_default ? 'Manage Profiles' : 'Edit Profile'}
-          </Link>
-          <div className="profile-stat-squares">
-            <div className="profile-stat-square">
-              <span className="profile-stat-square-num">{stats.completed}</span>
-              <span className="profile-stat-square-label">Completed</span>
-            </div>
-            <div className="profile-stat-square">
-              <span className="profile-stat-square-num">{stats.inProgress}</span>
-              <span className="profile-stat-square-label">In Progress</span>
-            </div>
-            <div className="profile-stat-square">
-              <span className="profile-stat-square-num">{stats.totalRatings}</span>
-              <span className="profile-stat-square-label">Ratings</span>
-            </div>
-            <div className="profile-stat-square">
-              <span className="profile-stat-square-num">{stats.avg}</span>
-              <span className="profile-stat-square-label">Avg Score</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <section className="hm-me" aria-label="Your stats">
+      <Link to="/profile" className="hm-me-id">
+        {activeProfile ? (
+          <ProfileAvatar profile={activeProfile} size={56} />
+        ) : (
+          <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
+        )}
+        <span className="hm-me-text">
+          <span className="st-page-kicker">Your profile</span>
+          <span className="hm-me-name">{activeProfile?.name || user.username}</span>
+        </span>
+      </Link>
+      <dl className="pf-stats hm-me-stats">
+        {tiles.map((tile) => (
+          <div key={tile.label}><dt>{tile.label}</dt><dd>{tile.value}</dd></div>
+        ))}
+      </dl>
+      <Link to={editTo} className="st-btn st-btn--ghost hm-me-edit">
+        {activeProfile && !activeProfile.is_default ? 'Manage profiles' : 'Edit profile'}
+      </Link>
     </section>
   );
 }
