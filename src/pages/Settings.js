@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BellSimple, Keyboard, Trash } from '@phosphor-icons/react';
+import { BellSimple, Keyboard, Star, Trash } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { AUDIO_CHOICES, SUBTITLE_CHOICES, getPlaybackPrefs, savePlaybackPrefs } from '../utils/streamPreferences';
@@ -13,6 +13,8 @@ import { haptic, hapticsSupported } from '../utils/haptics';
 import { updateAccountProfile } from '../utils/supabaseData';
 import { supabase } from '../utils/supabase';
 import { openShortcutsHelp } from '../components/KeyboardShortcuts';
+import { FOLLOWABLE_LEAGUES, followTeam, listFollowedTeams, setTeamAlerts, TEAMS_EVENT, unfollowTeam } from '../utils/teams';
+import { fetchLeagueTeams } from '../utils/liveScores';
 
 function Switch({ checked, onChange, label, description, disabled = false }) {
   return (
@@ -47,6 +49,93 @@ function SelectRow({ label, description, value, options, onChange }) {
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>
+  );
+}
+
+// Follow teams: their games lead Sports, and (with notifications on) the
+// server sends a heads-up before kickoff and when a game gets close.
+function TeamsSettings() {
+  const [teams, setTeams] = useState([]);
+  const [league, setLeague] = useState('');
+  const [options, setOptions] = useState(null);
+
+  useEffect(() => {
+    const load = () => listFollowedTeams().then(setTeams);
+    load();
+    window.addEventListener(TEAMS_EVENT, load);
+    return () => window.removeEventListener(TEAMS_EVENT, load);
+  }, []);
+
+  useEffect(() => {
+    setOptions(null);
+    if (!league) return undefined;
+    let cancelled = false;
+    fetchLeagueTeams(league).then((list) => { if (!cancelled) setOptions(list); }).catch(() => { if (!cancelled) setOptions([]); });
+    return () => { cancelled = true; };
+  }, [league]);
+
+  const followedIds = new Set(teams.filter((team) => team.league_path === league).map((team) => team.team_id));
+
+  return (
+    <section className="set-card" aria-labelledby="set-teams">
+      <h2 id="set-teams">Your teams</h2>
+      {teams.length === 0 && <p className="set-note">Follow teams to put their games first on Sports and get alerts when they start or get close.</p>}
+      {teams.length > 0 && (
+        <ul className="set-teams">
+          {teams.map((team) => (
+            <li key={team.id}>
+              {team.logo ? <img src={team.logo} alt="" /> : <Star size={18} weight="fill" />}
+              <span className="set-team-name">{team.team_name}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={team.alerts}
+                className={`set-switch set-switch--sm${team.alerts ? ' on' : ''}`}
+                onClick={() => setTeamAlerts(team.id, !team.alerts)}
+                aria-label={`Alerts for ${team.team_name}`}
+                title="Game alerts"
+              ><span /></button>
+              <button type="button" className="pf-icon-btn" onClick={() => unfollowTeam(team.id)} aria-label={`Unfollow ${team.team_name}`}>
+                <Trash size={15} weight="bold" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className="set-row set-row--select">
+        <span className="set-row-text">
+          <span className="set-row-label">Add a team</span>
+          <span className="set-row-desc">Alerts: 30 minutes before start, close games late, overtime, and no-hitters.</span>
+        </span>
+        <select className="set-select" value={league} onChange={(event) => setLeague(event.target.value)}>
+          <option value="">Choose a league…</option>
+          {FOLLOWABLE_LEAGUES.map(([path, label]) => <option key={path} value={path}>{label}</option>)}
+        </select>
+      </label>
+      {league && (
+        <div className="set-team-grid">
+          {!options && <div className="hm-skeleton skeleton-block" aria-hidden="true" />}
+          {options?.map((team) => {
+            const on = followedIds.has(String(team.id));
+            return (
+              <button
+                key={team.id}
+                type="button"
+                className={`set-team-pick${on ? ' on' : ''}`}
+                aria-pressed={on}
+                onClick={() => (on
+                  ? unfollowTeam(teams.find((row) => row.league_path === league && row.team_id === String(team.id))?.id)
+                  : followTeam({ leaguePath: league, team }))}
+              >
+                {team.logo && <img src={team.logo} alt="" loading="lazy" />}
+                <span>{team.name}</span>
+                {on && <Star size={14} weight="fill" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -216,6 +305,8 @@ export default function Settings() {
             )}
           </div>
         </section>
+
+        <TeamsSettings />
 
         <section className="set-card" aria-labelledby="set-device">
           <h2 id="set-device">This device</h2>

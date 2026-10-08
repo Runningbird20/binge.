@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
+  CalendarBlank,
   ClockCounterClockwise,
   FilmSlate,
   GearSix,
@@ -94,7 +95,7 @@ export default function BottomNav() {
         </NavLink>
         <button
           type="button"
-          className={tab(['/profile', '/settings', '/history', '/wrapped', '/profiles'].some((path) => location.pathname.startsWith(path)))}
+          className={tab(['/profile', '/settings', '/history', '/wrapped', '/profiles', '/calendar'].some((path) => location.pathname.startsWith(path)))}
           aria-haspopup="dialog"
           onClick={() => { haptic(); setSheet('me'); }}
         >
@@ -120,6 +121,7 @@ export default function BottomNav() {
         {[
           { to: '/profile', label: 'Profile & stats', Icon: UserCircle },
           { to: '/settings', label: 'Settings', Icon: GearSix },
+          { to: '/calendar', label: 'Release calendar', Icon: CalendarBlank },
           { to: '/history', label: 'Watch history', Icon: ClockCounterClockwise },
           { to: '/wrapped', label: `${new Date().getFullYear()} Wrapped`, Icon: Sparkle },
           { to: '/profiles', label: profiles?.length > 1 ? 'Switch profile' : 'Manage profiles', Icon: UsersFour },

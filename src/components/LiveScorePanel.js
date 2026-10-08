@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Star } from '@phosphor-icons/react';
+import { followTeam, listFollowedTeams, TEAMS_EVENT, unfollowTeam } from '../utils/teams';
+import { haptic } from '../utils/haptics';
 import { findEspnEvent, fetchGameSummary } from '../utils/liveScores';
 
 const LIVE_POLL_MS = 20_000;
@@ -15,6 +18,23 @@ export default function LiveScorePanel({ stream }) {
   const [event, setEvent] = useState(undefined); // undefined = looking, null = not found
   const [summary, setSummary] = useState(null);
   const [tab, setTab] = useState('score');
+  const [followed, setFollowed] = useState([]);
+
+  useEffect(() => {
+    const load = () => listFollowedTeams().then(setFollowed);
+    load();
+    window.addEventListener(TEAMS_EVENT, load);
+    return () => window.removeEventListener(TEAMS_EVENT, load);
+  }, []);
+
+  async function toggleFollow(team) {
+    haptic();
+    const existing = followed.find((row) => row.league_path === event.path && row.team_id === String(team.id));
+    try {
+      if (existing) await unfollowTeam(existing.id);
+      else await followTeam({ leaguePath: event.path, team });
+    } catch { /* signed out */ }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +83,21 @@ export default function LiveScorePanel({ stream }) {
           <div key={team.id} className="st-ls-team">
             {team.logo && <img src={team.logo} alt="" loading="lazy" />}
             <span className="st-ls-team-name">{team.short || team.name}</span>
+            {(() => {
+              const isFollowed = followed.some((row) => row.league_path === event.path && row.team_id === String(team.id));
+              return (
+                <button
+                  type="button"
+                  className={`st-ls-follow${isFollowed ? ' on' : ''}`}
+                  onClick={() => toggleFollow(team)}
+                  aria-pressed={isFollowed}
+                  aria-label={isFollowed ? `Unfollow ${team.name}` : `Follow ${team.name}`}
+                  title={isFollowed ? 'Following — alerts on' : 'Follow team'}
+                >
+                  <Star size={13} weight={isFollowed ? 'fill' : 'bold'} /> {isFollowed ? 'Following' : 'Follow'}
+                </button>
+              );
+            })()}
             <strong className="st-ls-team-score">{summary.state === 'pre' ? '' : team.score}</strong>
           </div>
         ))}

@@ -250,7 +250,7 @@ router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
 
 // ESPN scores fallback for the live score panel (utils/liveScores.js calls
 // ESPN directly first). Only scoreboard/summary paths are allowed through.
-const ESPN_PATH = /^[a-z-]+\/[a-z0-9.-]+\/(scoreboard|summary)$/;
+const ESPN_PATH = /^[a-z-]+\/[a-z0-9.-]+\/(scoreboard|summary|teams)$/;
 const espnCache = new Map(); // url -> { at, body }
 
 router.get('/espn', async (req, res) => {

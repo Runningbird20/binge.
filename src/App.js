@@ -41,6 +41,7 @@ const History        = lazy(() => import('./pages/History'));
 const Wrapped        = lazy(() => import('./pages/Wrapped'));
 const Settings       = lazy(() => import('./pages/Settings'));
 const ShareTarget    = lazy(() => import('./pages/ShareTarget'));
+const ReleaseCalendar = lazy(() => import('./pages/ReleaseCalendar'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -107,6 +108,7 @@ function AppRoutes() {
         <Route path="/wrapped"   element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
         <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
+        <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />

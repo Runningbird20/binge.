@@ -6,7 +6,8 @@ import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import LiveScorePanel from '../components/LiveScorePanel';
 import useDeviceType from '../hooks/useDeviceType';
-import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel } from '../utils/sportsProviders';
+import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
 import { hostOf, isHostReachable, reachabilityMap } from '../utils/hostReachability';
 
 const POLL_MS = 60_000;
@@ -615,6 +616,24 @@ export default function Sports() {
   const live = useMemo(() => sortForRow(filtered.filter((stream) => getStatus(stream, nowMs) === 'live' && !stream.alwaysLive), nowMs), [filtered, nowMs]);
   const channels = useMemo(() => filtered.filter((stream) => stream.alwaysLive), [filtered]);
   const leagueRows = useMemo(() => buildLeagueRows(filtered, nowMs), [filtered, nowMs]);
+
+  // Followed teams' games lead the page.
+  const [followedTeams, setFollowedTeams] = useState([]);
+  useEffect(() => {
+    const load = () => listFollowedTeams().then(setFollowedTeams);
+    load();
+    window.addEventListener(TEAMS_EVENT, load);
+    return () => window.removeEventListener(TEAMS_EVENT, load);
+  }, []);
+  const yourGames = useMemo(() => {
+    if (!followedTeams.length) return [];
+    return sortForRow(streams.filter((stream) => {
+      if (stream.alwaysLive || getStatus(stream, nowMs) === 'replay') return false;
+      const teams = stream.teams || splitTeamsFromTitle(stream.name);
+      if (!teams) return false;
+      return followedTeams.some((team) => teamsMatch(team.team_name, teams.home) || teamsMatch(team.team_name, teams.away));
+    }), nowMs);
+  }, [streams, followedTeams, nowMs]);
   const featured = live[0] || leagueRows[0]?.items[0] || null;
 
   const multiGames = multiIds.map((id) => streams.find((stream) => stream.id === id)).filter(Boolean);
@@ -733,6 +752,16 @@ export default function Sports() {
 
         {!loading && (
           <div className="st-rows">
+            {yourGames.length > 0 && (
+              <TitleRow
+                className="st-row--wide"
+                title="Your teams"
+                subtitle={followedTeams.map((team) => team.team_abbr || team.team_name).join(' · ')}
+                items={yourGames}
+                eager
+                renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} multi={multi} />}
+              />
+            )}
             {live.length > 0 && (
               <TitleRow
                 className="st-row--wide"

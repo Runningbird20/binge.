@@ -101,6 +101,7 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
           <TitleRow
             key={`${definition.id}-${refreshKey}`}
             title={definition.title}
+            subtitle={definition.subtitle}
             load={loaders.get(definition.id)}
             minItems={definition.comingSoon ? 1 : 5}
           />

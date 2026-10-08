@@ -85,12 +85,147 @@ async function sendDueReminders(db) {
   return { due: (due || []).length, sent };
 }
 
+// ── Followed-team game alerts ─────────────────────────────────────────
+// Starting soon (≤30 min), close late, overtime, and no-hitters, for teams
+// people follow (followed_teams.alerts). ESPN scoreboards, one per league.
+
+const REGULATION = { football: 4, basketball: 4, hockey: 3, baseball: 9, soccer: 2 };
+
+function clockSeconds(display) {
+  const match = String(display || '').match(/(\d+):(\d+)/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function soccerMinute(display) {
+  const match = String(display || '').match(/(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+// Pure: which alerts does this ESPN event warrant right now?
+function gameAlerts(path, event, now = Date.now()) {
+  const sport = path.split('/')[0];
+  const college = path.includes('college');
+  const status = event.status || {};
+  const state = status.type?.state;
+  const period = Number(status.period) || 0;
+  const clock = clockSeconds(status.displayClock);
+  const competitors = event.competitions?.[0]?.competitors || [];
+  if (competitors.length !== 2) return [];
+  const [a, b] = competitors;
+  const diff = Math.abs((Number(a.score) || 0) - (Number(b.score) || 0));
+  const alerts = [];
+
+  if (state === 'pre') {
+    const minutes = (new Date(event.date).getTime() - now) / 60000;
+    if (minutes > 0 && minutes <= 30) alerts.push({ kind: 'starting', minutes: Math.round(minutes) });
+    return alerts;
+  }
+  if (state !== 'in') return alerts;
+
+  const regulation = sport === 'basketball' && college ? 2 : REGULATION[sport];
+  if (regulation && period > regulation) alerts.push({ kind: 'overtime' });
+
+  let close = false;
+  if (sport === 'football') close = period === 4 && diff <= 3;
+  else if (sport === 'basketball') close = period === (college ? 2 : 4) && clock != null && clock <= 300 && diff <= 5;
+  else if (sport === 'hockey') close = period === 3 && clock != null && clock <= 300 && diff <= 1;
+  else if (sport === 'baseball') close = period >= 8 && diff <= 1;
+  else if (sport === 'soccer') close = soccerMinute(status.displayClock) >= 75 && diff <= 1;
+  if (close) alerts.push({ kind: 'close' });
+
+  if (sport === 'baseball' && period >= 7) {
+    const hitless = competitors.find((team) => Number(team.hits) === 0);
+    if (hitless) alerts.push({ kind: 'no_hitter', hitless });
+  }
+  return alerts;
+}
+
+function alertMessage(alert, event) {
+  const competitors = event.competitions[0].competitors;
+  const away = competitors.find((c) => c.homeAway === 'away') || competitors[0];
+  const home = competitors.find((c) => c.homeAway === 'home') || competitors[1];
+  const score = `${away.team.shortDisplayName || away.team.displayName} ${away.score}–${home.score} ${home.team.shortDisplayName || home.team.displayName}`;
+  const detail = event.status?.type?.shortDetail || '';
+  switch (alert.kind) {
+    case 'starting':
+      return { title: `Starting soon: ${event.shortName || event.name}`, body: `Starts in ${alert.minutes} min. Tap to watch.` };
+    case 'overtime':
+      return { title: `Overtime! ${score}`, body: `${detail}. Tap to watch.` };
+    case 'close':
+      return { title: `Close game: ${score}`, body: `${detail}. Tap to watch.` };
+    case 'no_hitter': {
+      const pitching = competitors.find((c) => c !== alert.hitless);
+      return { title: `No-hitter watch: ${pitching.team.displayName}`, body: `${alert.hitless.team.displayName} still hitless — ${detail}. Tap to watch.` };
+    }
+    default:
+      return null;
+  }
+}
+
+async function sendGameAlerts(db) {
+  const { data: follows } = await db.from('followed_teams').select('user_id, profile_id, league_path, team_id').eq('alerts', true);
+  if (!follows?.length) return { leagues: 0, sent: 0 };
+  const byLeague = new Map();
+  follows.forEach((row) => byLeague.set(row.league_path, [...(byLeague.get(row.league_path) || []), row]));
+  let sent = 0;
+
+  for (const [path, rows] of byLeague) {
+    if (!/^[a-z-]+\/[a-z0-9.-]+$/.test(path)) continue;
+    let board = null;
+    try {
+      const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; binge-alerts/1.0)' },
+        signal: AbortSignal.timeout(8000),
+      });
+      board = res.ok ? await res.json() : null;
+    } catch { board = null; }
+    for (const event of board?.events || []) {
+      const teamIds = new Set((event.competitions?.[0]?.competitors || []).map((c) => String(c.team?.id)));
+      const followers = rows.filter((row) => teamIds.has(String(row.team_id)));
+      if (!followers.length) continue;
+      const alerts = gameAlerts(path, event);
+      for (const alert of alerts) {
+        const message = alertMessage(alert, event);
+        if (!message) continue;
+        const notified = new Set();
+        for (const follower of followers) {
+          const key = `${follower.user_id}|${follower.profile_id || ''}`;
+          if (notified.has(key)) continue;
+          notified.add(key);
+          // Once per user, game and kind.
+          const { error } = await db.from('game_alerts_sent').insert({ user_id: follower.user_id, event_id: String(event.id), kind: alert.kind });
+          if (error) continue;
+          let query = db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', follower.user_id);
+          if (follower.profile_id) query = query.eq('profile_id', follower.profile_id);
+          const { data: subs } = await query;
+          const result = await pushTo(db, subs || [], JSON.stringify({ ...message, url: '/sports', tag: `game-${event.id}-${alert.kind}` }));
+          sent += result.sent;
+        }
+      }
+    }
+  }
+  return { leagues: byLeague.size, sent };
+}
+
+router.get('/sports', async (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
+  const db = setupPush();
+  if (!db) return res.status(503).json({ error: 'push not configured' });
+  try {
+    res.json(await sendGameAlerts(db));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/reminders', async (req, res) => {
   if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
   const db = setupPush();
   if (!db) return res.status(503).json({ error: 'push not configured' });
   try {
-    res.json(await sendDueReminders(db));
+    // The same frequent job also checks followed teams' games.
+    const [reminders, games] = await Promise.all([sendDueReminders(db), sendGameAlerts(db).catch((err) => ({ error: err.message }))]);
+    res.json({ ...reminders, games });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -163,3 +298,4 @@ router.get('/new-episodes', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.gameAlerts = gameAlerts;

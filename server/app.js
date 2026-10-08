@@ -108,6 +108,7 @@ app.use('/api/search', require('./routes/search'));
 app.use('/api/watchroom', require('./routes/watchroom'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/cron', require('./routes/cron'));
+app.use('/api/extras', require('./routes/extras'));
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'API route not found.' });

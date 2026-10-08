@@ -97,6 +97,16 @@ Embed servers are cross-origin iframes — the app cannot detect which audio tra
 - **Sports second screen** (`utils/liveScores.js`, `LiveScorePanel`): ESPN site API, matched by league + `teamsMatch`; falls back to `/api/sports/espn` (allow-listed scoreboard/summary only). ESPN 403s headless browsers, so test via the proxy.
 - **PWA**: manifest `shortcuts` (Continue Watching → `/home?jump=continue`, Sports, Search) and `share_target` → `/share` (`pages/ShareTarget.js`: binge./TMDB/IMDb links open the title, anything else searches).
 
+### Ratings, franchises, calendar, teams & AI search (Oct 2026)
+
+- **Outside ratings** (`server/routes/extras.js` `/api/extras/ratings`, `src/utils/outsideRatings.js`, `OutsideRatings`): OMDb (IMDb/RT/Metacritic) looked up server-side and cached in `title_ratings` (shared; public read). Cards only read that cache in batches (`useCachedImdb`) — never spend OMDb quota per card. Needs `OMDB_API_KEY`; falls back to TMDB score.
+- **Episode heatmap** (`EpisodeHeatmap`): all seasons via one TMDB call per 20 seasons (`append_to_response=season/N`); IMDb episode ratings via `/api/extras/episodes` (cached in `episode_ratings_cache`) when OMDb is configured.
+- **Hidden Gems** rows (`browseRows.js`): TMDB discover with high average + capped vote count, feature-length only.
+- **Franchise order** (`utils/franchises.js`, `FranchiseOrder`): curated MCU / Star Wars / Fast & Furious (release + story order, ids verified against TMDB; MCU films sit in separate TMDB sub-collections, so curated wins); any other movie uses its TMDB collection in release order.
+- **Release calendar** (`/calendar`, `utils/releaseCalendar.js`): next episodes / premieres of My List + Continue Watching shows, upcoming list movies, Coming Soon; `.ics` export (share sheet on phones, download on desktop).
+- **Followed teams** (`followed_teams`, `utils/teams.js`): follow from the live score panel or Settings → "Your teams" row on Sports. Alerts (starting ≤30 min, close late, overtime, no-hitter; rules in `gameAlerts()` in `server/routes/cron.js`, deduped in `game_alerts_sent`) run inside `/api/cron/reminders` (pg_cron, every 3 min) or `/api/cron/sports`.
+- **Ask binge.** (`utils/aiSearch.js`, `/api/extras/ai/picks`): Groq `openai/gpt-oss-120b` (JSON mode) suggests titles → server verifies each on TMDB (drops hallucinations, enforces runtime) → client keeps only catalog matches, with reasons. Auto-runs on request-like queries (`isConversational`), otherwise a button. Needs `GROQ_API_KEY`; rate-limited per IP and cached 1h. Horizontal scrollers added here use `HScroll` (‹ › buttons).
+
 ### Network-blocked servers
 
 Some networks (school/office firewalls) DNS-sinkhole embed hosts (seen: `embedindia.st` = all of PPV, `vsembed.su`, `embedsports.top`). `src/utils/hostReachability.js` probes hosts with a no-cors fetch; blocked servers are skipped and labelled in the movie/TV player and on Sports. Never route around the block (no VPN/DoH/proxying). Note PPV also shows "Remove sandbox attributes" to headless/automated browsers even top-level — that's not our iframe; verify PPV in a real browser. Sports **Multiview** (`?multi=id1,id2`, 2–4 games) shares `useServerRotation` with the single-game player; cross-origin player audio can't be muted by the page, so only the first tile gets autoplay permission.

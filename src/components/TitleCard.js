@@ -5,6 +5,7 @@ import { formatReleaseDay } from '../utils/releaseWindow';
 import { languageName } from '../utils/tmdb';
 import { posterSrc, posterSrcSet } from '../utils/imageQuality';
 import HoverPreview from './HoverPreview';
+import { useCachedImdb } from './OutsideRatings';
 import { canAutoplayPreviews } from '../utils/trailers';
 
 const PREVIEW_DELAY_MS = 900;
@@ -34,6 +35,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
   const genre = primaryGenre(item);
   const language = item.original_language && item.original_language !== 'en' ? languageName(item.original_language) : '';
   const comingSoon = Boolean(item._comingSoon);
+  const imdb = useCachedImdb(item);
 
   // Hover preview (desktop pointers only).
   const cardRef = useRef(null);
@@ -100,6 +102,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
           <div className="st-card-placeholder"><span>{item.title?.charAt(0)}</span></div>
         )}
         {item._badge && <span className="st-badge st-badge--new">{item._badge}</span>}
+        {imdb != null && !rank && <span className="st-card-imdb" title={`IMDb ${imdb.toFixed(1)}`}><b>IMDb</b>{imdb.toFixed(1)}</span>}
         {comingSoon ? (
           <span className="st-badge st-badge--soon">Coming {formatReleaseDay(item) || 'Soon'}</span>
         ) : item._progressLabel ? (

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal } from '@phosphor-icons/react';
+import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal, CalendarBlank } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -432,6 +432,7 @@ export default function Profile() {
                 <Link to="/account-settings" className="st-btn st-btn--ghost"><PencilSimple size={16} weight="bold" /> Edit profile</Link>
                 <Link to="/settings" className="st-btn st-btn--ghost"><SlidersHorizontal size={16} weight="bold" /> Settings</Link>
                 <Link to="/profiles" className="st-btn st-btn--ghost"><Users size={16} weight="bold" /> Switch profile</Link>
+                <Link to="/calendar" className="st-btn st-btn--ghost"><CalendarBlank size={16} weight="bold" /> Release calendar</Link>
                 <Link to="/history" className="st-btn st-btn--ghost"><ClockCounterClockwise size={16} weight="bold" /> Watch history</Link>
                 <Link to="/wrapped" className="st-btn st-btn--ghost"><Sparkle size={16} weight="bold" /> Your {new Date().getFullYear()} Wrapped</Link>
               </div>
