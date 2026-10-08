@@ -231,6 +231,12 @@ export default function Settings() {
             onChange={(subtitles) => updatePrefs({ subtitles })}
           />
           <Switch
+            label="Captions first"
+            description="With subtitles on, start on servers that show them automatically (marked CC)."
+            checked={settings.captionsFirst !== false}
+            onChange={(captionsFirst) => updateSettings({ captionsFirst })}
+          />
+          <Switch
             label="Autoplay next episode"
             description="Up Next counts down and starts the next episode. Off: it waits for you."
             checked={settings.autoNext}
@@ -326,6 +332,17 @@ export default function Settings() {
               <span className="set-row-desc">Browse with arrow keys, / to search, ? for the full list.</span>
             </div>
             <button type="button" className="st-btn st-btn--ghost" onClick={openShortcutsHelp}><Keyboard size={16} weight="bold" /> Show</button>
+          </div>
+        </section>
+
+        <section className="set-card" aria-labelledby="set-import">
+          <h2 id="set-import">Your history</h2>
+          <div className="set-row">
+            <div className="set-row-text">
+              <span className="set-row-label">Import from Letterboxd, IMDb, Trakt or Netflix</span>
+              <span className="set-row-desc">Bring your ratings and watch history so your picks are good from day one.</span>
+            </div>
+            <Link to="/import" className="st-btn st-btn--ghost">Import</Link>
           </div>
         </section>
 

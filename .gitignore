@@ -53,3 +53,8 @@ tv-android/build/
 tv-android/app/build/
 tv-android/local.properties
 tv-android/.idea/
+
+# Playwright
+e2e/.auth/
+e2e-report/
+test-results/

@@ -109,12 +109,17 @@ app.use('/api/watchroom', require('./routes/watchroom'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));
+app.use('/api/ops', require('./routes/ops'));
 
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'API route not found.' });
 });
 
-app.use((error, _req, res, _next) => {
+app.use((error, req, res, _next) => {
+  // Unexpected server errors go to binge.'s own error log (admin → Errors).
+  if (!error?.type && (error?.status || error?.statusCode || 500) >= 500) {
+    require('./routes/ops').logServerError(error, req);
+  }
   if (res.headersSent) {
     return;
   }

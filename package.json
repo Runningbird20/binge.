@@ -21,12 +21,13 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
+    "fflate": "^0.8.3",
     "framer-motion": "^12.38.0",
     "helmet": "^8.1.0",
     "hls.js": "^1.6.16",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
-    "playwright": "^1.59.1",
+    "playwright": "1.59.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",
@@ -80,7 +81,9 @@
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
-    "clean:adult": "node clean_adult_content.js"
+    "clean:adult": "node clean_adult_content.js",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report e2e-report"
   },
   "eslintConfig": {
     "extends": [
@@ -101,6 +104,8 @@
     ]
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "1.59.1",
     "patch-package": "^8.0.1"
   },
   "proxy": "http://localhost:5001"

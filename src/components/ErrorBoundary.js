@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { reportError } from '../utils/monitoring';
 
 // Catches a render crash in one part of the page (a row, a route) so the
 // rest keeps working. `fallback` is a node or ({ retry }) => node;
@@ -18,8 +19,9 @@ export default class ErrorBoundary extends Component {
     if (this.state.error && previous.resetKey !== this.props.resetKey) this.retry();
   }
 
-  componentDidCatch(error) {
+  componentDidCatch(error, info) {
     if (process.env.NODE_ENV !== 'production') console.error(error); // eslint-disable-line no-console
+    reportError(error, { componentStack: info?.componentStack, boundary: this.props.name || 'unnamed' });
   }
 
   render() {
