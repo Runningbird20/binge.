@@ -14,35 +14,23 @@ import * as supabaseCatalogModule from './utils/supabaseMovieCatalog';
 const mockNavigate = jest.fn();
 let mockSearchParams = new URLSearchParams();
 
-// The catalog pages (Movies/TVShows/Books) fetch a random-offset "window"
-// of the real catalog several times per load (WINDOWS_PER_BATCH) and rely
-// on the catalog being large enough that those windows rarely collide. A
-// flat mock returning the same fixed list for every call would make every
-// window collide instead, producing duplicate cards. This mimics the real
-// shape (a "probe" call for total/facets, then one batch of items) so a
-// small fixture list behaves like the real thing.
-const WINDOWS_PER_BATCH = 3; // matches the constant in Movies.js/TVShows.js/Books.js
-
+// Catalog page mocks. The pages fetch the catalog in several shapes (a
+// count "probe", random windows, sorted pages) and dedupe what comes back,
+// so these mocks simply return the (genre-filtered) fixture list on every
+// call instead of trying to predict the call sequence.
 function mockBookCatalog(books) {
-  // Books.js's loadCatalog always does exactly 1 probe call (pageSize: 1)
-  // followed by fetchSupabaseWindows's WINDOWS_PER_BATCH parallel calls —
-  // every single time a load cycle starts, whether from mount, a genre
-  // chip click, or the extra reload genre-discovery triggers (see below).
-  // Track position-in-cycle by raw call count so it's correct regardless
-  // of *why* a new cycle started, rather than trying to infer it from
-  // args that are sometimes ambiguous for tiny fixture catalogs.
-  let callCount = 0;
+  // Every call returns the (genre-filtered) fixture list. Books.js dedupes
+  // by id when it merges its probe + window batches, so returning the same
+  // items each time is safe — and unlike counting calls, it doesn't break
+  // when a genre click cancels a load cycle part-way through.
   return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
-    const positionInCycle = callCount % (WINDOWS_PER_BATCH + 1);
-    callCount += 1;
-
     const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
     const filtered = genreValues.length === 0
       ? books
       : books.filter((book) => genreValues.includes(book.genre));
 
     return Promise.resolve({
-      items: positionInCycle === 1 ? filtered : [],
+      items: filtered,
       total: filtered.length,
       page: 1,
       pageSize: pageSize || filtered.length,
@@ -52,46 +40,27 @@ function mockBookCatalog(books) {
   });
 }
 
-function mockMovieCatalog(items, { matchesGenre } = {}) {
-  let sawItemsThisBatch = false;
+// Movies/TV catalog segments: every call returns the genre-filtered list,
+// with the count and genre facets. Covers both load paths — the default
+// "Most Popular" sorted page (one call carrying the count) and "Featured"
+// random windows (deduped by the page) — without depending on call order.
+function mockSegment(fnName, items, { matchesGenre } = {}) {
   const allGenres = [...new Set(items.flatMap((item) => item.genre.split(',').map((g) => g.trim())))];
-  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseMovieCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
+  return jest.spyOn(supabaseCatalogModule, fnName).mockImplementation(({ genre } = {}) => {
     const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
     const filtered = genreValues.length === 0
       ? items
       : items.filter((item) => matchesGenre(item, genreValues));
-
-    if (includeCount) {
-      sawItemsThisBatch = false;
-      return Promise.resolve({ items: [], total: filtered.length, facets: { genres: allGenres } });
-    }
-    if (!sawItemsThisBatch) {
-      sawItemsThisBatch = true;
-      return Promise.resolve({ items: filtered, total: null, facets: { genres: [] } });
-    }
-    return Promise.resolve({ items: [], total: null, facets: { genres: [] } });
+    return Promise.resolve({ items: filtered, total: filtered.length, facets: { genres: allGenres } });
   });
 }
 
-function mockTvCatalog(items, { matchesGenre } = {}) {
-  let sawItemsThisBatch = false;
-  const allGenres = [...new Set(items.flatMap((item) => item.genre.split(',').map((g) => g.trim())))];
-  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseTvShowCatalogSegment').mockImplementation(({ genre, includeCount } = {}) => {
-    const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
-    const filtered = genreValues.length === 0
-      ? items
-      : items.filter((item) => matchesGenre(item, genreValues));
+function mockMovieCatalog(items, options) {
+  return mockSegment('fetchSupabaseMovieCatalogSegment', items, options);
+}
 
-    if (includeCount) {
-      sawItemsThisBatch = false;
-      return Promise.resolve({ items: [], total: filtered.length, facets: { genres: allGenres } });
-    }
-    if (!sawItemsThisBatch) {
-      sawItemsThisBatch = true;
-      return Promise.resolve({ items: filtered, total: null, facets: { genres: [] } });
-    }
-    return Promise.resolve({ items: [], total: null, facets: { genres: [] } });
-  });
+function mockTvCatalog(items, options) {
+  return mockSegment('fetchSupabaseTvShowCatalogSegment', items, options);
 }
 
 jest.mock(
@@ -389,6 +358,8 @@ test('updates username and email from account settings', async () => {
 });
 
 test('shows seeded books as clickable covers and adds a book to the library', async () => {
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all');
   document.body.style.overflow = '';
 
   const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
@@ -428,7 +399,8 @@ test('shows seeded books as clickable covers and adds a book to the library', as
   expect(screen.getByText(/set on the desert planet arrakis/i)).toBeInTheDocument();
   expect(document.body.style.overflow).toBe('hidden');
 
-  await userEvent.click(screen.getByRole('button', { name: /add to library/i }));
+  // The grid tile has its own quick-add button too; use the one in the sheet.
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /add to library/i }));
 
   await waitFor(() => {
     expect(addToLibrarySpy).toHaveBeenCalledWith(
@@ -450,6 +422,8 @@ test('shows seeded books as clickable covers and adds a book to the library', as
 });
 
 test('falls back to a placeholder when a book cover image fails to load', async () => {
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all');
   const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
     user: {
       id: 7,
@@ -489,12 +463,14 @@ test('falls back to a placeholder when a book cover image fails to load', async 
   });
 
   const duneButton = await screen.findByRole('button', { name: /open details for dune/i });
-  const coverImage = within(duneButton).getByRole('img', { name: /dune/i });
+  // The cover is decorative (alt=""); the button carries the title.
+  const coverImage = duneButton.querySelector('img');
+  expect(coverImage).not.toBeNull();
 
   fireEvent.error(coverImage);
 
   await waitFor(() => {
-    expect(within(duneButton).queryByRole('img', { name: /dune/i })).not.toBeInTheDocument();
+    expect(duneButton.querySelector('img')).toBeNull();
     expect(within(duneButton).getByText('D')).toBeInTheDocument();
   });
 
@@ -505,6 +481,8 @@ test('falls back to a placeholder when a book cover image fails to load', async 
 });
 
 test('uses a genre chip filter bar on the books page', async () => {
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all');
   // 'Science Fiction' and 'Fiction' both map into BOOK_GENRE_GROUPS buckets
   // ("Fantasy & Sci-Fi" and "Fiction & Literature" respectively), which is
   // what actually renders as chips now — there's no search box, genre
@@ -587,7 +565,8 @@ test('ignores a page-level search query on the movies page', async () => {
   // URL (for deep-linking a genre chip) — a stray "?search=" has nothing to
   // be read by, so the catalog should render normally either way. This
   // guards against a future regression that starts reading it unexpectedly.
-  mockSearchParams = new URLSearchParams('?search=arrival');
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all&search=arrival');
 
   const allMovies = [
     {
@@ -635,6 +614,8 @@ test('ignores a page-level search query on the movies page', async () => {
 });
 
 test('uses a genre chip filter bar on the movies page', async () => {
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all');
   const allMovies = [
     {
       id: 1,
@@ -699,6 +680,8 @@ test('uses a genre chip filter bar on the movies page', async () => {
 });
 
 test('uses a genre chip filter bar on the TV shows page', async () => {
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all');
   const allShows = [
     {
       id: 1,
@@ -765,6 +748,8 @@ test('uses a genre chip filter bar on the TV shows page', async () => {
 });
 
 test('shows a back to top arrow after scrolling the books page', async () => {
+  // The catalog grid lives under "Browse all" (the page itself opens on rows).
+  mockSearchParams = new URLSearchParams('?view=all');
   const scrollToMock = jest.fn();
 
   Object.defineProperty(window, 'scrollY', {

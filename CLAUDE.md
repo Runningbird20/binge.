@@ -137,4 +137,4 @@ UI icons come from `@phosphor-icons/react` as SVG components, not text glyphs â€
 
 ## Testing notes
 
-Test files sit next to what they test (`*.test.js`) rather than in a separate directory. A number of `App.test.js` cases fail out of the box in this environment independent of feature work (movies/TV/books page tests, account-settings tests) â€” before attributing a red test to your change, run the same test on a clean checkout to check it isn't already failing.
+Test files sit next to what they test (`*.test.js`) rather than in a separate directory. The full suite is expected to be green. The catalog-page tests in `App.test.js` exercise the grid under `?view=all` (the pages themselves open on TMDB rows), and their catalog mocks return the fixture list on every call rather than predicting the probe/window/sorted-page call sequence. `src/setupTests.js` stubs `ResizeObserver` (jsdom has none) and sets a desktop-size window. `react-router-dom` v7 can't be resolved by this Jest setup: test pure logic in `src/utils/*` modules, or mock the router as `App.test.js` does.

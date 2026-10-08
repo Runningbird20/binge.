@@ -11,3 +11,13 @@ import '@testing-library/jest-dom';
 // unless they explicitly resize the window themselves.
 window.innerWidth = 1280;
 window.innerHeight = 800;
+
+// jsdom has no layout engine, so no ResizeObserver; the row/chip scrollers
+// use it only to show or hide their ‹ › buttons. A no-op is enough here.
+if (typeof window.ResizeObserver === 'undefined') {
+  window.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
