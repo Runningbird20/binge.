@@ -2980,7 +2980,8 @@ kbd {
 .td-remind { position: relative; }
 .td-round-btn.active { background: #fff; color: #0b0d12; }
 .td-remind-menu {
-  position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); z-index: 10; min-width: 200px;
+  /* Opens upward: the hero clips anything below it (it crops the art). */
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 10; min-width: 200px;
   padding: 0.4rem; border-radius: 12px; background: #1b1e27; border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
 }
 .td-remind-menu p { margin: 0.3rem 0.6rem 0.4rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.5); }
