@@ -46,3 +46,10 @@ Thumbs.db
 
 
 node_modules/
+
+# Android TV app build output
+tv-android/.gradle/
+tv-android/build/
+tv-android/app/build/
+tv-android/local.properties
+tv-android/.idea/

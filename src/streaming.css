@@ -3263,3 +3263,44 @@ kbd {
 .hm-grid--rows .hm-avg-cell { padding-left: 8px; }
 .hm-grid--rows .hm-avg { margin-top: 0; }
 .hm-cell.fallback { outline: 2px dotted rgba(0, 0, 0, 0.45); outline-offset: -4px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TV MODE (html.tv-mode) — remote-driven, viewed from the couch.
+   Set by utils/tvMode.js (Fire TV app, TV browsers, ?tv=1).
+═══════════════════════════════════════════════════════════════ */
+.tv-mode { cursor: none; }
+.tv-mode body { overflow-x: hidden; }
+
+/* Overscan-safe edges: TVs crop a few percent of the picture. */
+.tv-mode .page-content { padding-left: max(4vw, 32px); padding-right: max(4vw, 32px); }
+.tv-mode .navbar { padding-left: max(4vw, 32px); padding-right: max(4vw, 32px); }
+
+/* Bigger cards and type for 10-foot viewing. */
+.tv-mode { --st-card-w: clamp(150px, 15vw, 260px); --st-wide-w: clamp(260px, 26vw, 420px); }
+.tv-mode .st-row-title { font-size: 1.45rem; }
+.tv-mode .st-card-title { font-size: 0.95rem; }
+
+/* A focus you can see from the couch: every focused control glows, cards
+   lift. (Programmatic focus from the d-pad counts as :focus-visible, but
+   :focus is used too in case a TV browser disagrees.) */
+.tv-mode :is(a, button, input, select, textarea, iframe, [tabindex]):is(:focus, :focus-visible) {
+  outline: 3px solid #fff !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.18), 0 12px 40px rgba(0, 0, 0, 0.6) !important;
+}
+.tv-mode .st-card:focus, .tv-mode .st-game:focus { outline: none !important; box-shadow: none !important; }
+.tv-mode .st-card:focus .st-card-poster, .tv-mode .st-game:focus .st-game-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 4px #fff, 0 16px 50px rgba(0, 0, 0, 0.7);
+  z-index: 3;
+}
+.tv-mode .st-card:focus .st-card-hover { opacity: 1; }
+.tv-mode .st-card-poster, .tv-mode .st-game-thumb { transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.tv-mode .st-row-track { overflow-y: visible; padding-top: 14px; padding-bottom: 14px; }
+
+/* Mouse-only affordances aren't needed on a remote. */
+.tv-mode .st-row-arrow, .tv-mode .hs-arrow, .tv-mode .st-hero-nav { display: none !important; }
+
+/* Player: controls show while the remote is on them. */
+.tv-mode .player-controls-overlay:focus-within { opacity: 1; transform: none; pointer-events: auto; }
+.tv-mode .player-frame-wrap iframe:focus { outline-offset: -3px; }

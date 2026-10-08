@@ -1,0 +1,31 @@
+# Builds the Fire TV / Android TV app (tv-android/) and attaches the APK to
+# the run. Run it from the Actions tab ("Build TV app" → Run workflow), or it
+# runs on pushes that touch tv-android/. Set the repo variable BINGE_URL
+# (Settings → Secrets and variables → Actions → Variables) to the site URL.
+name: Build TV app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tv-android/**'
+      - '.github/workflows/tv-apk.yml'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build debug APK
+        run: gradle -p tv-android assembleDebug -Pbinge.url="${{ vars.BINGE_URL || 'https://your-binge-site.vercel.app' }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binge-tv-apk
+          path: tv-android/app/build/outputs/apk/debug/app-debug.apk

@@ -11,6 +11,7 @@ import {
 } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 import { getSettings } from '../utils/profileSettings';
+import { isTvMode } from '../utils/tvMode';
 import { readPlayback } from '../utils/playbackMessages';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
@@ -814,7 +815,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         return;
       }
       if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleFullscreen(); return; }
-      if (!isTV) return;
+      // On a TV the arrows move between the player's controls instead.
+      if (!isTV || isTvMode()) return;
       const s = kbSeason.current;
       const ep = kbEpisode.current;
       if (e.key === 'ArrowRight') {
@@ -1131,6 +1133,15 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   }
   const startAt = frozenStartRef.current.value;
   const embedUrl = buildUrl(provider, externalId, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth() });
+
+  // TV remote: hand the remote to the video once it loads, so OK plays and
+  // pauses; Back steps out to the player's controls (KeyboardShortcuts).
+  useEffect(() => {
+    if (!isTvMode() || !embedUrl) return undefined;
+    const timer = setTimeout(() => iframeRef.current?.focus(), 1500);
+    return () => clearTimeout(timer);
+  }, [embedUrl]);
+
 
   // VidRift takes its start position (and quality hint) as messages.
   function handleFrameLoad() {
