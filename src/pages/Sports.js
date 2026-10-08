@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar';
 import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import LiveScorePanel from '../components/LiveScorePanel';
+import useDeviceType from '../hooks/useDeviceType';
 import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel } from '../utils/sportsProviders';
 import { hostOf, isHostReachable, reachabilityMap } from '../utils/hostReachability';
 
@@ -557,6 +558,10 @@ export default function Sports() {
   const [nowMs, setNowMs] = useState(Date.now());
   const selectedId = searchParams.get('game');
   const multiIds = useMemo(() => (searchParams.get('multi') || '').split(',').filter(Boolean), [searchParams]);
+  // Multiview is desktop/tablet only: 2–4 players on a phone screen are
+  // too small to watch and too fiddly to control.
+  const { isMobile } = useDeviceType();
+  const multiviewAllowed = !isMobile;
   const [picks, setPicks] = useState([]);
 
   const load = useCallback(async () => {
@@ -590,7 +595,14 @@ export default function Sports() {
       ? current.filter((x) => x !== id)
       : current.length >= MULTIVIEW_MAX ? current : [...current, id]));
   }, []);
-  const multi = useMemo(() => ({ picks, toggle: togglePick }), [picks, togglePick]);
+  const multi = useMemo(() => (multiviewAllowed ? { picks, toggle: togglePick } : undefined), [multiviewAllowed, picks, togglePick]);
+
+  // A Multiview link opened on a phone (shared, or the window was resized):
+  // play the first game on its own instead.
+  useEffect(() => {
+    if (!multiviewAllowed && multiIds.length) setSearchParams({ game: multiIds[0] }, { replace: true });
+    if (!multiviewAllowed) setPicks([]);
+  }, [multiviewAllowed, multiIds, setSearchParams]);
 
   const openMultiview = useCallback((ids) => {
     setSearchParams({ multi: ids.slice(0, MULTIVIEW_MAX).join(',') });
@@ -606,7 +618,7 @@ export default function Sports() {
   const featured = live[0] || leagueRows[0]?.items[0] || null;
 
   const multiGames = multiIds.map((id) => streams.find((stream) => stream.id === id)).filter(Boolean);
-  if (multiIds.length && multiGames.length) {
+  if (multiviewAllowed && multiIds.length && multiGames.length) {
     const addable = sortForRow(streams.filter((stream) => !multiIds.includes(stream.id) && getStatus(stream, nowMs) === 'live'), nowMs).slice(0, 24);
     return (
       <div className="app-layout">
@@ -641,7 +653,7 @@ export default function Sports() {
             onBack={() => setSearchParams({})}
             otherStreams={others}
             onSelect={select}
-            onAddToMultiview={() => { setPicks([selected.id]); setSearchParams({}); }}
+            onAddToMultiview={multiviewAllowed ? () => { setPicks([selected.id]); setSearchParams({}); } : undefined}
           />
         </main>
       </div>
@@ -750,7 +762,7 @@ export default function Sports() {
             )}
           </div>
         )}
-        {picks.length > 0 && (
+        {multiviewAllowed && picks.length > 0 && (
           <div className="st-mv-tray" role="region" aria-label="Multiview selection">
             <div className="st-mv-tray-picks">
               {picks.map((id) => {

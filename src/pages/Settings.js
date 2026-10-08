@@ -38,7 +38,7 @@ function Switch({ checked, onChange, label, description, disabled = false }) {
 
 function SelectRow({ label, description, value, options, onChange }) {
   return (
-    <label className="set-row">
+    <label className="set-row set-row--select">
       <span className="set-row-text">
         <span className="set-row-label">{label}</span>
         {description && <span className="set-row-desc">{description}</span>}
