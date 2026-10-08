@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Play } from '@phosphor-icons/react';
 import { formatReleaseDay } from '../utils/releaseWindow';
 import { languageName } from '../utils/tmdb';
 import { posterSrc, posterSrcSet } from '../utils/imageQuality';
+import HoverPreview from './HoverPreview';
+import { canAutoplayPreviews } from '../utils/trailers';
+
+const PREVIEW_DELAY_MS = 900;
+// Only one floating preview at a time across every row.
+let closeOpenPreview = null;
 
 export function titleUrl(item, { play = false } = {}) {
   const id = item.media_id ?? item.id;
@@ -29,8 +35,47 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
   const language = item.original_language && item.original_language !== 'en' ? languageName(item.original_language) : '';
   const comingSoon = Boolean(item._comingSoon);
 
+  // Hover preview (desktop pointers only).
+  const cardRef = useRef(null);
+  const openTimer = useRef(null);
+  const closeTimer = useRef(null);
+  const [previewRect, setPreviewRect] = useState(null);
+  const previewable = item.media_type === 'movie' || item.media_type === 'tv_show';
+
+  function closePreview() {
+    clearTimeout(openTimer.current);
+    clearTimeout(closeTimer.current);
+    setPreviewRect(null);
+  }
+  function scheduleOpen() {
+    if (!previewable || !canAutoplayPreviews()) return;
+    clearTimeout(closeTimer.current);
+    openTimer.current = setTimeout(() => {
+      const rect = cardRef.current?.querySelector('.st-card-poster')?.getBoundingClientRect();
+      if (!rect) return;
+      if (closeOpenPreview && closeOpenPreview !== closePreview) closeOpenPreview();
+      closeOpenPreview = closePreview;
+      setPreviewRect(rect);
+    }, PREVIEW_DELAY_MS);
+  }
+  function scheduleClose() {
+    clearTimeout(openTimer.current);
+    closeTimer.current = setTimeout(() => setPreviewRect(null), 160);
+  }
+  useEffect(() => {
+    if (!previewRect) return undefined;
+    const onScroll = () => closePreview();
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => window.removeEventListener('scroll', onScroll, { capture: true });
+  }, [previewRect]);
+  useEffect(() => () => { clearTimeout(openTimer.current); clearTimeout(closeTimer.current); }, []);
+
   return (
+    <>
     <Link
+      ref={cardRef}
+      onMouseEnter={scheduleOpen}
+      onMouseLeave={scheduleClose}
       to={to || titleUrl(item)}
       state={{ backgroundLocation: location }}
       className={`st-card${rank ? ' st-card--ranked' : ''}`}
@@ -54,6 +99,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         ) : (
           <div className="st-card-placeholder"><span>{item.title?.charAt(0)}</span></div>
         )}
+        {item._badge && <span className="st-badge st-badge--new">{item._badge}</span>}
         {comingSoon ? (
           <span className="st-badge st-badge--soon">Coming {formatReleaseDay(item) || 'Soon'}</span>
         ) : item._progressLabel ? (
@@ -74,7 +120,19 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         )}
       </div>
       <p className="st-card-title">{item.title}</p>
-      {item.author && <p className="st-card-sub">{item.author}</p>}
+      {item._subtitle ? <p className="st-card-sub">{item._subtitle}</p> : item.author && <p className="st-card-sub">{item.author}</p>}
     </Link>
+    {previewRect && (
+      <HoverPreview
+        item={item}
+        anchorRect={previewRect}
+        playTo={to ? to : titleUrl(item, { play: true })}
+        infoTo={titleUrl(item)}
+        linkState={{ backgroundLocation: location }}
+        onEnter={() => clearTimeout(closeTimer.current)}
+        onLeave={scheduleClose}
+      />
+    )}
+    </>
   );
 }

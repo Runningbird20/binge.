@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Check, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
+import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
 import RateReviewPanel from './RateReviewPanel';
 import ThemedSelect from './ThemedSelect';
-import { computeProgressBadge } from '../utils/continueWatching';
+import { computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
+import { getPositionEntry, positionKey } from '../utils/playbackPositions';
 import { fetchEpisodeProgress } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import useTitleDetails, { useSeasonEpisodes } from '../hooks/useTitleDetails';
@@ -13,6 +14,7 @@ import { resolveTmdbItems } from '../utils/catalogLookup';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
 import { titleUrl } from './TitleCard';
 import { isComingSoon, formatReleaseDay } from '../utils/releaseWindow';
+import { findSourceBooks, splitBookTitle } from '../utils/adaptations';
 
 function splitList(value) {
   return String(value || '').split(',').map((entry) => entry.trim()).filter(Boolean);
@@ -82,6 +84,99 @@ function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
           );
         })}
       </ol>
+    </section>
+  );
+}
+
+// "Previously on…": after a long break, the summaries of the last few
+// episodes before the one you're resuming (TMDB season data).
+const RECAP_AFTER_DAYS = 14;
+
+function PreviouslyOn({ tmdbId, season, episode, daysAway, onPlay, onCancel }) {
+  const current = useSeasonEpisodes(tmdbId, season);
+  const previous = useSeasonEpisodes(tmdbId, episode <= 3 && season > 1 ? season - 1 : null);
+  const recap = useMemo(() => {
+    if (!current) return null;
+    const before = current.filter((ep) => ep.number < episode).map((ep) => ({ ...ep, season }));
+    const earlier = (previous || []).map((ep) => ({ ...ep, season: season - 1 }));
+    return [...earlier, ...before].filter((ep) => ep.overview).slice(-3);
+  }, [current, previous, season, episode]);
+
+  useEffect(() => {
+    // Nothing to recap (TMDB has no summaries) — go straight to playing.
+    if (recap && recap.length === 0) onPlay();
+  }, [recap, onPlay]);
+
+  return (
+    <div className="td-recap" role="dialog" aria-modal="true" aria-labelledby="td-recap-title">
+      <div className="td-recap-card">
+        <p className="td-recap-kicker"><ClockCounterClockwise size={16} weight="bold" /> It’s been {daysAway} days</p>
+        <h3 id="td-recap-title">Previously on…</h3>
+        {!recap && <div className="td-recap-skeleton skeleton-block" aria-hidden="true" />}
+        <ol className="td-recap-list">
+          {recap?.map((ep) => (
+            <li key={`${ep.season}:${ep.number}`}>
+              {ep.still && <img src={ep.still} alt="" loading="lazy" />}
+              <div>
+                <p className="td-recap-ep">S{ep.season} · E{ep.number}{ep.title ? ` — ${ep.title}` : ''}</p>
+                <p className="td-recap-text">{ep.overview}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <div className="td-recap-actions">
+          <button type="button" className="st-btn st-btn--primary" onClick={onPlay} autoFocus>
+            <Play size={18} weight="fill" /> Continue S{season} · E{episode}
+          </button>
+          <button type="button" className="st-btn st-btn--ghost" onClick={onCancel}>Not now</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// "Read the book behind it" — the novel an adaptation is credited to.
+function SourceBooks({ mediaType, tmdbId, title }) {
+  const location = useLocation();
+  const [source, setSource] = useState(null);
+
+  useEffect(() => {
+    setSource(null);
+    if (!tmdbId) return undefined;
+    let cancelled = false;
+    findSourceBooks({ mediaType, tmdbId, title })
+      .then((result) => { if (!cancelled) setSource(result); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [mediaType, tmdbId, title]);
+
+  if (!source?.author) return null;
+  const background = location.state?.backgroundLocation || location;
+  const heading = source.exact ? 'Read the book behind it' : `Based on the work of ${source.author}`;
+
+  return (
+    <section className="td-section" aria-label={heading}>
+      <div className="td-section-head"><h3>{heading}</h3></div>
+      {source.books.length > 0 ? (
+        <div className="td-adapt-list">
+          {source.books.map((book) => {
+            const { main, series, number } = splitBookTitle(book.title);
+            return (
+              <Link key={book.id} to={`/book/${book.id}`} state={{ backgroundLocation: background }} className="td-adapt">
+                {book.cover_url ? <img src={posterSrc(book.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="td-adapt-fallback"><BookOpen size={22} /></span>}
+                <span className="td-adapt-body">
+                  <span className="td-adapt-title">{main}</span>
+                  <span className="td-muted">{[book.author, book.year].filter(Boolean).join(' · ')}</span>
+                  {series && <span className="td-muted">{series}{number ? ` · Book ${number}` : ''}</span>}
+                  <span className="td-adapt-cta"><BookOpen size={14} weight="bold" /> See the book</span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="td-muted">Based on a book by {source.author}. It isn’t in the binge. library yet.</p>
+      )}
     </section>
   );
 }
@@ -165,6 +260,8 @@ export default function MediaDetailsModal({
   const [playerStart, setPlayerStart] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [watched, setWatched] = useState(new Set());
+  const [lastWatchedAt, setLastWatchedAt] = useState(0);
+  const [showRecap, setShowRecap] = useState(false);
   const dialogRef = useRef(null);
   const rateRef = useRef(null);
   const details = useTitleDetails(item, mediaType);
@@ -179,21 +276,33 @@ export default function MediaDetailsModal({
     setShowPlayer(Boolean(autoPlay));
     setPlayerStart(null);
     setShowTrailer(false);
+    setShowRecap(false);
   }, [autoPlay, item?.id]);
 
   useEffect(() => {
     if (!isTV || !item?.id) return undefined;
     let cancelled = false;
     fetchEpisodeProgress(item.id)
-      .then((rows) => { if (!cancelled) setWatched(new Set(rows.map((row) => `${row.season}:${row.episode}`))); })
+      .then((rows) => {
+        if (cancelled) return;
+        setWatched(new Set(rows.map((row) => `${row.season}:${row.episode}`)));
+        setLastWatchedAt(rows.reduce((max, row) => Math.max(max, new Date(row.watched_at).getTime() || 0), 0));
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [isTV, item?.id, showPlayer]);
 
   const close = useCallback(() => {
+    if (showRecap) { setShowRecap(false); return; }
     if (showTrailer) { setShowTrailer(false); return; }
     onClose();
-  }, [onClose, showTrailer]);
+  }, [onClose, showTrailer, showRecap]);
+
+  const playFromRecap = useCallback(() => {
+    setShowRecap(false);
+    setPlayerStart(null);
+    setShowPlayer(true);
+  }, []);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -229,10 +338,34 @@ export default function MediaDetailsModal({
   const seasonsCount = details?.seasons?.length || item.seasons;
   const canWatch = !comingSoon;
   const saved = Boolean(watchlistEntry?.status);
+  const resumeProgress = computeResumeProgress({
+    media_type: mediaType,
+    media_id: item.id,
+    current_season: resumeSeason,
+    current_episode: resumeEpisode,
+  });
+  const resumeLabel = (progressBadge || resumeProgress)
+    ? ['Resume', isTV ? progressBadge : null, resumeProgress ? `· ${formatTimeLeft(resumeProgress.secondsLeft)}` : null].filter(Boolean).join(' ')
+    : 'Play';
 
   function play(season, episode) {
     setPlayerStart(season ? { season, episode } : null);
     setShowPlayer(true);
+  }
+
+  // Resuming a show after a long break gets a short catch-up first.
+  const lastActivity = Math.max(
+    lastWatchedAt,
+    new Date(watchlistEntry?.updated_at || 0).getTime() || 0,
+    isTV && resumeSeason ? getPositionEntry(positionKey(mediaType, item.id, resumeSeason, resumeEpisode))?.at || 0 : 0,
+  );
+  const daysAway = lastActivity ? Math.floor((Date.now() - lastActivity) / 86400000) : 0;
+  const offerRecap = isTV && details?.tmdbId && resumeSeason && resumeEpisode
+    && (Number(resumeSeason) > 1 || Number(resumeEpisode) > 1) && daysAway >= RECAP_AFTER_DAYS;
+
+  function resume() {
+    if (offerRecap) setShowRecap(true);
+    else play();
   }
 
   async function handleRatingSave(categories, review) {
@@ -294,9 +427,9 @@ export default function MediaDetailsModal({
                 )}
                 <div className="td-actions">
                   {canWatch ? (
-                    <button type="button" className="st-btn st-btn--primary td-play" onClick={() => play()}>
+                    <button type="button" className="st-btn st-btn--primary td-play" onClick={resume}>
                       <Play size={20} weight="fill" />
-                      {progressBadge ? `Resume ${progressBadge}` : 'Play'}
+                      {resumeLabel}
                     </button>
                   ) : (
                     <span className="st-badge st-badge--soon st-badge--lg">Coming {formatReleaseDay(item) || 'soon'}</span>
@@ -386,6 +519,8 @@ export default function MediaDetailsModal({
             />
           )}
 
+          <SourceBooks mediaType={mediaType} tmdbId={details?.tmdbId} title={item.title} />
+
           <MoreLikeThis mediaType={mediaType} tmdbId={details?.tmdbId} />
 
           <section className="td-section td-rate" ref={rateRef} aria-label="Your rating and review">
@@ -414,6 +549,17 @@ export default function MediaDetailsModal({
           )}
         </div>
       </div>
+
+      {showRecap && !showPlayer && (
+        <PreviouslyOn
+          tmdbId={details.tmdbId}
+          season={Number(resumeSeason)}
+          episode={Number(resumeEpisode)}
+          daysAway={daysAway}
+          onPlay={playFromRecap}
+          onCancel={() => setShowRecap(false)}
+        />
+      )}
 
       {showPlayer && canWatch && (
         <EmbedPlayer

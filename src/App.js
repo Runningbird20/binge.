@@ -33,6 +33,8 @@ const AdminHome      = lazy(() => import('./pages/AdminHome'));
 const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const Sports         = lazy(() => import('./pages/Sports'));
 const Profile        = lazy(() => import('./pages/Profile'));
+const History        = lazy(() => import('./pages/History'));
+const Wrapped        = lazy(() => import('./pages/Wrapped'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -85,6 +87,8 @@ function AppRoutes() {
         <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
         <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
         <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/history"   element={<ProtectedRoute><History /></ProtectedRoute>} />
+        <Route path="/wrapped"   element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />

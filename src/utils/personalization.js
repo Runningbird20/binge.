@@ -24,6 +24,7 @@ import {
   fetchSupabaseWatchlist,
   fetchSupabaseContinueWatching,
   fetchEpisodeProgressCounts,
+  fetchHiddenRecommendations,
   averageRatingValue,
 } from './supabaseData';
 import {
@@ -238,20 +239,32 @@ function dedupe(items) {
   });
 }
 
+let hiddenKeys = new Set();
+
 async function loadHistory() {
-  const [ratings, watchlist, continueWatching, episodeCounts] = await Promise.all([
+  const [ratings, watchlist, continueWatching, episodeCounts, hidden] = await Promise.all([
     fetchSupabaseRatings().catch(() => []),
     fetchSupabaseWatchlist().catch(() => []),
     fetchSupabaseContinueWatching().catch(() => []),
     fetchEpisodeProgressCounts().catch(() => new Map()),
+    fetchHiddenRecommendations().catch(() => []),
   ]);
-  return buildHistory({ ratings, watchlist, continueWatching, episodeCounts });
+  // "Hide from recommendations": never recommended, and no longer a taste
+  // signal (so it can't seed "Because you watched…").
+  hiddenKeys = new Set(hidden.map((row) => `${row.media_type}:${row.media_id}`));
+  const notHidden = (row) => !hiddenKeys.has(`${row.media_type}:${row.media_id}`);
+  return buildHistory({
+    ratings: ratings.filter(notHidden),
+    watchlist: watchlist.filter(notHidden),
+    continueWatching: continueWatching.filter(notHidden),
+    episodeCounts,
+  });
 }
 
 function excludedKeySet(history) {
   // Anything already rated, watched, in progress or saved — the point of
-  // these rows is discovering something new.
-  return new Set(history.map((entry) => `${entry.mediaType}:${entry.mediaId}`));
+  // these rows is discovering something new — plus anything hidden.
+  return new Set([...history.map((entry) => `${entry.mediaType}:${entry.mediaId}`), ...hiddenKeys]);
 }
 
 function seedsFor(history, mediaType) {

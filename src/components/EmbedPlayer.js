@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowsIn, ArrowsOut, CaretDown, Check, Plus, X } from '@phosphor-icons/react';
+import { ArrowsIn, ArrowsOut, CaretDown, Check, Play, Plus, X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   fetchEpisodeProgress,
@@ -13,6 +13,8 @@ import useDeviceType from '../hooks/useDeviceType';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
+import { reachabilityMap } from '../utils/hostReachability';
+import { useSeasonEpisodes } from '../hooks/useTitleDetails';
 import { formatClock, getResumePosition, mergeRemotePosition, positionKey, savePosition } from '../utils/playbackPositions';
 import {
   fetchReportSummary,
@@ -77,7 +79,7 @@ const PROVIDERS = [
       if (startAt > 0) url.searchParams.set('progress', String(startAt));
       if (isTV) {
         url.searchParams.set('nextEpisode', 'true');
-        url.searchParams.set('autoplayNextEpisode', 'true');
+        // Auto-next is ours (Up Next card), not the player's.
       }
       return url.toString();
     },
@@ -119,6 +121,7 @@ const PROVIDERS = [
       if (lowBandwidth) url.searchParams.set('quality', '720');
       url.searchParams.set('color', '#f4f6f8');
       url.searchParams.set('prioritize', 'true');
+      url.searchParams.set('autonext', 'false');
       if (subtitleLang) {
         url.searchParams.set('subtitles', 'auto');
         url.searchParams.set('subtitlelang', languageName(subtitleLang));
@@ -140,7 +143,7 @@ const PROVIDERS = [
       url.searchParams.set('autoplay', 'true');
       url.searchParams.set('colour', 'f4f6f8');
       url.searchParams.set('pausescreen', 'true');
-      if (isTV) url.searchParams.set('autonextepisode', 'true');
+      if (isTV) url.searchParams.set('autonextepisode', 'false');
       return url.toString();
     },
   },
@@ -164,7 +167,7 @@ const PROVIDERS = [
     types: ['movie', 'tv_show'],
     buildUrl(id, mediaType, season, episode) {
       return mediaType === 'tv_show'
-        ? `https://player.videasy.net/tv/${id.value}/${season}/${episode}?nextEpisode=true&autoplayNextEpisode=true`
+        ? `https://player.videasy.net/tv/${id.value}/${season}/${episode}?nextEpisode=true`
         : `https://player.videasy.net/movie/${id.value}`;
     },
   },
@@ -189,7 +192,7 @@ const PROVIDERS = [
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
       url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); url.searchParams.set('autonext', '1'); }
+      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
       url.searchParams.set('autoplay', '1');
       // Documented: default subtitle language, ISO 639-1.
       if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
@@ -232,6 +235,14 @@ function providerIdsFor(mediaType, externalId) {
     .map((entry) => entry.id);
   return ids.length ? ids : PROVIDERS.map((entry) => entry.id);
 }
+// Host each server's player lives on, for the network reachability probe.
+const PROVIDER_HOSTS = Object.fromEntries(PROVIDERS.map((entry) => {
+  try {
+    return [entry.id, new URL(entry.buildUrl({ kind: 'tmdb', value: '1' }, 'movie', 1, 1, null, {})).hostname];
+  } catch {
+    return [entry.id, ''];
+  }
+}));
 const EVENT_PROVIDERS = new Set(PROVIDERS.filter((entry) => entry.events).map((entry) => entry.id));
 const SERVER_LABELS = Object.fromEntries(PROVIDERS.map((entry) => [entry.id, { label: entry.label, subtitles: Boolean(entry.subtitles) }]));
 // How long a server has to stay open before it counts as "works" for this
@@ -247,6 +258,8 @@ const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'videasy']
 // Servers that can start at a given second (URL param or message), so a
 // mid-play switch keeps the viewer's place.
 const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink']);
+const UP_NEXT_SECONDS = 30;   // show the Up Next card in the last 30s
+const UP_NEXT_COUNTDOWN = 10; // seconds before the next episode starts
 const STALL_SECONDS = 12;      // no progress while playing -> buffering
 const STALL_SWITCH_SECONDS = 30; // still stuck -> switch servers automatically
 
@@ -268,6 +281,7 @@ function readPlayback(raw) {
     if (type === 'vidrift:paused') return { state: 'pause', time: Number(data.currentTime) };
     if (type === 'vidrift:unpaused') return { state: 'play', time: Number(data.currentTime) };
     if (type === 'vidrift:ended') return { state: 'ended' };
+    if (type === 'vidrift:nextup') return { time: Number(data.currentTime), duration: Number(data.duration) };
     return null;
   }
   if (type.startsWith('cinesrc:')) {
@@ -381,7 +395,22 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   }, [item?.id, item?.title, mediaType, initialSeason, initialEpisode]);
 
   // ── Smart server choice (see utils/streamPreferences.js) ──────────────
-  const availableIds = useMemo(() => providerIdsFor(mediaType, externalId), [mediaType, externalId]);
+  // Servers this network blocks (school/work firewalls) are dropped from
+  // the ranking instead of being tried and failing.
+  const [blockedIds, setBlockedIds] = useState(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    reachabilityMap(Object.values(PROVIDER_HOSTS)).then((reach) => {
+      if (cancelled) return;
+      setBlockedIds(new Set(Object.entries(PROVIDER_HOSTS).filter(([, host]) => reach[host] === false).map(([id]) => id)));
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const availableIds = useMemo(() => {
+    const ids = providerIdsFor(mediaType, externalId);
+    const reachable = ids.filter((id) => !blockedIds.has(id));
+    return reachable.length ? reachable : ids;
+  }, [mediaType, externalId, blockedIds]);
   const rankedServers = useMemo(
     () => rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory }),
     [availableIds, prefs, originalLanguage, reportSummary, serverMemory]
@@ -437,7 +466,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   useEffect(() => {
     if (!EVENT_PROVIDERS.has(provider)) return undefined;
-    playbackRef.current = { time: 0, duration: 0, playing: false, lastAdvanceAt: Date.now(), lastSavedAt: 0 };
+    playbackRef.current = { time: 0, duration: 0, playing: false, ended: false, lastAdvanceAt: Date.now(), lastSavedAt: 0 };
     function onMessage(event) {
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
       const reading = readPlayback(event.data);
@@ -446,6 +475,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       const state = playbackRef.current;
 
       if (reading.state === 'pause' || reading.state === 'ended') state.playing = false;
+      state.ended = reading.state === 'ended' ? true : (reading.state === 'play' ? false : state.ended);
       if (reading.state === 'play') { state.playing = true; state.lastAdvanceAt = now; }
       if (reading.duration > 0) state.duration = reading.duration;
 
@@ -481,6 +511,82 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, confirmServer, season, episode]);
+
+  // ── Up Next / binge mode ─────────────────────────────────────────
+  // Near the end of an episode (last UP_NEXT_SECONDS, or on 'ended'), show
+  // the next episode with a 10s countdown. Players' own auto-next is turned
+  // off in their URLs so this stays the one source of truth; the server
+  // you're on carries over to the next episode.
+  const currentSeasonEpisodes = isTV ? seasonEpisodeCounts[season] : null;
+  const nextEpisode = useMemo(() => {
+    if (!isTV) return null;
+    if (currentSeasonEpisodes && episode < currentSeasonEpisodes) return { season, episode: episode + 1 };
+    if (season < totalSeasons) return { season: season + 1, episode: 1 };
+    return null;
+  }, [isTV, currentSeasonEpisodes, episode, season, totalSeasons]);
+  const nextSeasonEpisodes = useSeasonEpisodes(isTV && nextEpisode ? tmdbId : null, nextEpisode?.season);
+  const nextInfo = nextEpisode && nextSeasonEpisodes?.find((ep) => ep.number === nextEpisode.episode);
+  const [upNext, setUpNext] = useState(null); // { secondsLeft }
+  const upNextDismissedRef = useRef('');
+
+  useEffect(() => {
+    setUpNext(null);
+  }, [season, episode, item?.id]);
+
+  useEffect(() => {
+    if (!isTV || !nextEpisode) return undefined;
+    const timer = setInterval(() => {
+      const state = playbackRef.current;
+      const key = `${season}:${episode}`;
+      if (upNextDismissedRef.current === key) return;
+      const nearEnd = state.duration > 0 && state.time > 0 && state.duration - state.time <= UP_NEXT_SECONDS;
+      if ((nearEnd || state.ended) && !upNext) setUpNext({ secondsLeft: UP_NEXT_COUNTDOWN });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isTV, nextEpisode, season, episode, upNext]);
+
+  useEffect(() => {
+    if (!upNext) return undefined;
+    if (upNext.secondsLeft <= 0) { playNextEpisode(); return undefined; }
+    const timer = setTimeout(() => setUpNext((current) => (current ? { secondsLeft: current.secondsLeft - 1 } : current)), 1000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upNext]);
+
+  function playNextEpisode() {
+    if (!nextEpisode) return;
+    if (item?.id && !watched.has(`${season}:${episode}`)) {
+      markEpisodeWatched({ mediaId: item.id, season, episode })
+        .then(() => setWatched((previous) => new Set([...previous, `${season}:${episode}`])))
+        .catch(() => {});
+    }
+    setUpNext(null);
+    upNextDismissedRef.current = '';
+    setSeason(nextEpisode.season);
+    setEpisode(nextEpisode.episode);
+  }
+
+  function dismissUpNext() {
+    upNextDismissedRef.current = `${season}:${episode}`;
+    setUpNext(null);
+  }
+
+  const upNextCard = upNext && nextEpisode && (
+    <div className="st-upnext" role="dialog" aria-label="Up next">
+      {nextInfo?.still && <img src={nextInfo.still} alt="" className="st-upnext-still" />}
+      <div className="st-upnext-body">
+        <span className="st-upnext-kicker">Up next · S{nextEpisode.season} E{nextEpisode.episode}</span>
+        <strong>{nextInfo?.title || `Episode ${nextEpisode.episode}`}</strong>
+        <div className="st-upnext-actions">
+          <button type="button" className="st-btn st-btn--primary" onClick={playNextEpisode}>
+            <Play size={16} weight="fill" /> Play now {upNext.secondsLeft > 0 ? `(${upNext.secondsLeft})` : ''}
+          </button>
+          <button type="button" className="st-btn st-btn--ghost" onClick={dismissUpNext}>Cancel</button>
+        </div>
+      </div>
+      <span className="st-upnext-bar" style={{ animationDuration: `${UP_NEXT_COUNTDOWN}s` }} aria-hidden="true" />
+    </div>
+  );
 
   function syncPosition(seconds, duration) {
     upsertSupabaseContinueWatching({
@@ -667,6 +773,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     onSelectServer: selectServer,
     onReportBroken: reportBroken,
     onReportAudio: reportServerAudio,
+    blockedCount: blockedIds.size,
   };
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
 
@@ -1088,6 +1195,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               <p>{lookupState === 'loading' ? 'Preparing stream…' : 'Stream unavailable.'}</p>
             </div>
           )}
+          {upNextCard}
           {/* Landscape overlay — top-right corner buttons, hidden in portrait via CSS */}
           <div className="mp-ls-overlay">
             {isTV && (
@@ -1332,6 +1440,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           )}
 
+          {upNextCard}
           <div
             className={`player-controls-overlay ${controlsVisible ? 'visible' : ''}`}
             onMouseEnter={() => clearTimeout(hideControlsTimerRef.current)}
