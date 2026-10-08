@@ -16,6 +16,7 @@ export function PlaybackOptionsPanel({
   onSelectServer,
   onReportBroken,
   onReportAudio,
+  blockedCount = 0,
   onClose,
 }) {
   const originalName = languageName(originalLanguage);
@@ -95,6 +96,9 @@ export function PlaybackOptionsPanel({
               ))}
             </select>
           </label>
+        )}
+        {blockedCount > 0 && (
+          <p className="st-pb-hint">{blockedCount} server{blockedCount === 1 ? ' is' : 's are'} blocked on the network you’re on and hidden.</p>
         )}
         <button type="button" className="st-btn st-btn--ghost st-pb-broken" onClick={onReportBroken}>
           <WarningCircle size={16} weight="bold" /> Not playing? Try the next server

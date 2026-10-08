@@ -1,3 +1,5 @@
+import { getPositionEntry, positionKey } from './playbackPositions';
+
 // Shared helpers for surfacing watch/read progress (season/episode or
 // page/chapter) wherever a title can show it: Home's Continue Watching row,
 // the watchlist grid, and the media details modal.
@@ -44,4 +46,27 @@ export function computeProgressBadge(item) {
     return ch ? `Ch ${ch}` : `Pg ${pg}`;
   }
   return null;
+}
+
+// Where the viewer is in the title's current episode/movie: the newer of
+// the synced position (continue_watching) and this device's own record.
+// Returns { fraction, secondsLeft } or null.
+export function computeResumeProgress(item) {
+  if (!item || item.media_type === 'book') return null;
+  const mediaId = item.media_id ?? item.id;
+  const key = positionKey(item.media_type, mediaId, item.current_season || 1, item.current_episode || 1);
+  const local = getPositionEntry(key);
+  const remoteAt = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+  const useLocal = local && (local.at || 0) >= remoteAt;
+  const position = useLocal ? local.t : Number(item.position_seconds);
+  const duration = useLocal ? local.d : Number(item.duration_seconds);
+  if (!(position > 0) || !(duration > 0)) return null;
+  const fraction = Math.min(1, position / duration);
+  return { fraction, secondsLeft: Math.max(0, duration - position) };
+}
+
+export function formatTimeLeft(seconds) {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes}m left`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m left`;
 }

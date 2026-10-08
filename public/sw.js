@@ -1,5 +1,5 @@
-// v3: streaming redesign — drop shells/assets cached before it.
-const CACHE_NAME = 'binge-shell-v3';
+// v4: push notifications (new-episode alerts) added to this worker.
+const CACHE_NAME = 'binge-shell-v4';
 // v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
 const IMAGE_CACHE_NAME = 'binge-images-v2';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
@@ -130,4 +130,31 @@ self.addEventListener('fetch', (event) => {
       })
     );
   }
+});
+
+// ── New-episode alerts (sent by /api/cron/new-episodes) ─────────────
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'binge.', body: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'binge.', {
+    body: data.body || '',
+    icon: '/logo192.png',
+    badge: '/favicon-32.png',
+    tag: data.tag,
+    data: { url: data.url || '/home' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/home', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows.find((client) => client.url.startsWith(self.location.origin));
+    if (existing) {
+      await existing.focus();
+      return existing.navigate(target);
+    }
+    return self.clients.openWindow(target);
+  })());
 });

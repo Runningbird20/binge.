@@ -1254,3 +1254,72 @@ export async function removeSupabaseContinueWatching(id) {
     throw new Error(toFriendlyError(error, 'Unable to remove that from continue watching.'));
   }
 }
+
+
+// ─── Watch history & hidden recommendations ───────────────────────────
+
+// Recently watched episodes (episode_progress), newest first, with titles.
+export async function fetchEpisodeHistory(limit = 300) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+  let query = client
+    .from('episode_progress')
+    .select('media_id, season, episode, watched_at')
+    .eq('user_id', authUser.id)
+    .order('watched_at', { ascending: false })
+    .limit(limit);
+  if (profileId) query = query.eq('profile_id', profileId);
+  const { data, error } = await query;
+  if (error) return [];
+  return enrichMediaRecords((data || []).map((row) => ({ ...row, media_type: 'tv_show' })));
+}
+
+// Remove a title from watch history: its Continue Watching row and, for
+// shows, its watched-episode records. Ratings and My List are untouched.
+export async function removeTitleFromHistory({ mediaType, mediaId }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+  const scope = (query) => (profileId ? query.eq('profile_id', profileId) : query);
+  const tasks = [
+    scope(client.from('continue_watching').delete().eq('user_id', authUser.id).eq('media_type', mediaType).eq('media_id', Number(mediaId))),
+  ];
+  if (mediaType === 'tv_show') {
+    tasks.push(scope(client.from('episode_progress').delete().eq('user_id', authUser.id).eq('media_id', Number(mediaId))));
+  }
+  const results = await Promise.all(tasks);
+  const failed = results.find((result) => result.error);
+  if (failed) throw new Error(toFriendlyError(failed.error, 'Unable to remove that from your history.'));
+  window.dispatchEvent(new CustomEvent('binge:historyChanged'));
+}
+
+export async function fetchHiddenRecommendations() {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) return [];
+  const profileId = getActiveProfileId();
+  let query = supabase.from('recommendation_hidden').select('media_type, media_id').eq('user_id', user.id);
+  query = profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
+  const { data, error } = await query;
+  return error ? [] : (data || []);
+}
+
+export async function setRecommendationHidden({ mediaType, mediaId, hidden }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+  if (hidden) {
+    const { error } = await client.from('recommendation_hidden').insert({
+      user_id: authUser.id, profile_id: profileId || null, media_type: mediaType, media_id: Number(mediaId),
+    });
+    if (error && !/duplicate/i.test(error.message)) throw new Error(toFriendlyError(error, 'Unable to hide that title.'));
+  } else {
+    let query = client.from('recommendation_hidden').delete()
+      .eq('user_id', authUser.id).eq('media_type', mediaType).eq('media_id', Number(mediaId));
+    query = profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
+    const { error } = await query;
+    if (error) throw new Error(toFriendlyError(error, 'Unable to un-hide that title.'));
+  }
+  window.dispatchEvent(new CustomEvent('binge:historyChanged'));
+}

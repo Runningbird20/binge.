@@ -19,10 +19,13 @@ import {
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
-import { resumeUrl, computeProgressBadge } from '../utils/continueWatching';
+import { resumeUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
+import { findNewEpisodes } from '../utils/newEpisodes';
+import { enableNewEpisodeAlerts, isSubscribed, pushSupported } from '../utils/pushNotifications';
+import { Bell, BellRinging } from '@phosphor-icons/react';
 
 // Library/continue-watching rows carry media_id; cards key off id.
 function asTitle(record) {
@@ -44,12 +47,51 @@ async function withBackdrop(item) {
     : item;
 }
 
+// Opt-in for push alerts when a show in your list gets a new episode.
+function NotifyButton() {
+  const [state, setState] = useState('idle'); // idle | on | busy | error
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    isSubscribed().then((on) => { if (!cancelled && on) setState('on'); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (!pushSupported()) return null;
+  if (state === 'on') {
+    return <span className="st-notify st-notify--on"><BellRinging size={16} weight="fill" /> Alerts on</span>;
+  }
+  return (
+    <span className="st-notify-wrap">
+      <button
+        type="button"
+        className="st-btn st-btn--ghost st-notify"
+        disabled={state === 'busy'}
+        onClick={async () => {
+          setState('busy');
+          try { await enableNewEpisodeAlerts(); setState('on'); } catch (error) { setState('error'); setMessage(error.message); }
+        }}
+      >
+        <Bell size={16} weight="bold" /> {state === 'busy' ? 'Turning on…' : 'Get notified'}
+      </button>
+      {state === 'error' && <span className="st-notify-error" role="status">{message}</span>}
+    </span>
+  );
+}
+
 function ContinueWatchingCard({ item, onRemove, priority }) {
-  const progress = computeProgressBadge(item);
+  const episodeLabel = computeProgressBadge(item);
+  const resume = computeResumeProgress(item);
+  const subtitle = [item.media_type === 'tv_show' ? episodeLabel : null, resume ? formatTimeLeft(resume.secondsLeft) : null]
+    .filter(Boolean).join(' · ');
   return (
     <div className="st-cw-cell">
       <TitleCard
-        item={{ ...asTitle(item), _progressLabel: progress, _match: null }}
+        item={{
+          ...asTitle(item),
+          _progress: resume ? Math.max(0.03, resume.fraction) : null,
+          _subtitle: subtitle || episodeLabel,
+          _match: null,
+        }}
         to={resumeUrl(item)}
         priority={priority}
         showMatch={false}
@@ -163,6 +205,7 @@ export default function Home() {
   const [personal, setPersonal] = useState(null);
   const [heroItems, setHeroItems] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [newEpisodes, setNewEpisodes] = useState([]);
 
   const userId = user?.id;
   const kidsSafe = Boolean(activeProfile?.is_kids);
@@ -254,6 +297,16 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [continueWatchingItems, personal, kidsSafe]);
 
+  // Shows in your list with an episode newer than where you are.
+  useEffect(() => {
+    if (dataLoading) return undefined;
+    let cancelled = false;
+    findNewEpisodes({ watchlist: watchlistItems, continueWatching: continueWatchingItems })
+      .then((items) => { if (!cancelled) setNewEpisodes(items); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [dataLoading, watchlistItems, continueWatchingItems]);
+
   async function handleRefresh() {
     setRefreshKey((n) => n + 1);
     await fetchStats();
@@ -332,6 +385,22 @@ export default function Home() {
               eager
               renderItem={(item, index) => (
                 <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} />
+              )}
+            />
+          )}
+
+          {newEpisodes.length > 0 && (
+            <TitleRow
+              title="New Episodes"
+              subtitle="New in shows you’re watching"
+              items={newEpisodes}
+              action={<NotifyButton />}
+              renderItem={(item) => (
+                <TitleCard
+                  item={item}
+                  to={`/tv-show/${item.id}?play=1&season=${item.current_season}&episode=${item.current_episode}`}
+                  showMatch={false}
+                />
               )}
             />
           )}

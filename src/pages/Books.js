@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { BookOpen, Check, DownloadSimple, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
+import { BookOpen, Check, DownloadSimple, FilmStrip, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import GridTitleTile from '../components/GridTitleTile';
 import BookBrowseView from '../components/BookBrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
+import { titleUrl } from '../components/TitleCard';
+import { findAdaptations } from '../utils/adaptations';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
@@ -34,7 +36,7 @@ import ThemedSelect from '../components/ThemedSelect';
 import BookReader from '../components/BookReader';
 import { findReadableEdition, findReadableEditionQueued, isFreeToRead } from '../utils/bookAccess';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
-import { posterSrc } from '../utils/imageQuality';
+import { backdropSrc, posterSrc } from '../utils/imageQuality';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
 
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
@@ -149,6 +151,41 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
       subtitle={book.author || ''}
       badge={freeEdition ? 'Free to read' : null}
     />
+  );
+}
+
+// "Watch the adaptation" — movies/shows credited to this book's author.
+function Adaptations({ book }) {
+  const location = useLocation();
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    setItems(null);
+    let cancelled = false;
+    findAdaptations(book)
+      .then((result) => { if (!cancelled) setItems(result); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, [book]);
+
+  if (!items?.length) return null;
+  const background = location.state?.backgroundLocation || location;
+  return (
+    <section className="td-section" aria-label="Watch the adaptation">
+      <div className="td-section-head"><h3>Watch the adaptation</h3></div>
+      <div className="td-adapt-list td-adapt-list--screen">
+        {items.slice(0, 4).map((entry) => (
+          <Link key={`${entry.media_type}:${entry.id}`} to={titleUrl(entry)} state={{ backgroundLocation: background }} className="td-adapt td-adapt--screen">
+            <img src={backdropSrc(entry.backdrop_url, 'w780') || posterSrc(entry.poster_url)} alt="" loading="lazy" referrerPolicy="no-referrer" />
+            <span className="td-adapt-body">
+              <span className="td-adapt-title">{entry.title}</span>
+              <span className="td-muted">{[entry.media_type === 'tv_show' ? 'Series' : 'Movie', entry.year || String(entry.release_date || '').slice(0, 4)].filter(Boolean).join(' · ')}</span>
+              <span className="td-adapt-cta"><FilmStrip size={14} weight="bold" /> {entry._comingSoon ? 'Coming soon' : 'Watch now'}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -345,6 +382,8 @@ export function BookDetailsModal({
 
           {book.author && <BookShelfSection title={`More by ${book.author}`} load={() => fetchBooksByAuthor(book)} />}
           <BookShelfSection title="Readers Also Enjoyed" load={() => fetchSimilarBooks(book)} />
+
+          <Adaptations book={book} />
 
           <section className="td-section td-rate" aria-label="Your rating and review">
             <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>

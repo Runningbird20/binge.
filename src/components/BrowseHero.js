@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { CaretLeft, CaretRight, Info, Play } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, Info, Play, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
 import { titleUrl } from './TitleCard';
 import { languageName } from '../utils/tmdb';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
+import { canAutoplayPreviews, getTrailerKey, setTrailerMuted, trailerEmbedUrl, whenTrailerPlaying } from '../utils/trailers';
+
+const TRAILER_DELAY_MS = 2500;
 
 const ROTATE_MS = 9000;
 
@@ -33,11 +36,36 @@ export default function BrowseHero({ items = [], kicker, emptyTitle = 'What will
     setIndex(0);
   }, [slides.length]);
 
+  // Billboard trailer: after a beat on a slide, fade the muted trailer in
+  // over the backdrop and hold the carousel while it plays.
+  const [trailer, setTrailer] = useState(null); // { key, slideKey, ready }
+  const [trailerMuted, setTrailerMutedState] = useState(true);
+  const trailerRef = useRef(null);
+  const stopWaitingRef = useRef(null);
+
+  useEffect(() => () => stopWaitingRef.current?.(), []);
+  const activeSlide = slides[Math.min(index, Math.max(0, slides.length - 1))];
+  const activeKey = activeSlide ? `${activeSlide.media_type}:${activeSlide.id}` : '';
   useEffect(() => {
-    if (paused || slides.length < 2) return undefined;
+    setTrailer(null);
+    setTrailerMutedState(true);
+    if (!activeSlide || !canAutoplayPreviews()) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      getTrailerKey(activeSlide).then((key) => {
+        if (!cancelled && key) setTrailer({ key, slideKey: activeKey, ready: false });
+      }).catch(() => {});
+    }, TRAILER_DELAY_MS);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey]);
+  const trailerPlaying = Boolean(trailer?.ready && trailer.slideKey === activeKey);
+
+  useEffect(() => {
+    if (paused || trailerPlaying || slides.length < 2) return undefined;
     const timer = setInterval(() => setIndex((current) => (current + 1) % slides.length), ROTATE_MS);
     return () => clearInterval(timer);
-  }, [paused, slides.length]);
+  }, [paused, trailerPlaying, slides.length]);
 
   if (!slides.length) {
     return (
@@ -83,6 +111,21 @@ export default function BrowseHero({ items = [], kicker, emptyTitle = 'What will
           referrerPolicy="no-referrer"
         />
       ))}
+      {trailer && trailer.slideKey === activeKey && (
+        <div className={`st-hero-trailer${trailer.ready ? ' ready' : ''}`} aria-hidden="true">
+          <iframe
+            ref={trailerRef}
+            src={trailerEmbedUrl(trailer.key, { start: 6 })}
+            title={`${activeSlide?.title || 'Featured'} trailer`}
+            tabIndex={-1}
+            allow="autoplay; encrypted-media"
+            onLoad={() => {
+              stopWaitingRef.current?.();
+              stopWaitingRef.current = whenTrailerPlaying(trailerRef.current, () => setTrailer((current) => (current ? { ...current, ready: true } : current)));
+            }}
+          />
+        </div>
+      )}
       <div className="st-hero-scrim" aria-hidden="true" />
 
       {!item.backdrop_url && backdropOf(item) && (
@@ -129,6 +172,16 @@ export default function BrowseHero({ items = [], kicker, emptyTitle = 'What will
         </div>
       </div>
 
+      {trailerPlaying && (
+        <button
+          type="button"
+          className="st-hero-mute"
+          onClick={() => { setTrailerMuted(trailerRef.current, !trailerMuted); setTrailerMutedState(!trailerMuted); }}
+          aria-label={trailerMuted ? 'Unmute trailer' : 'Mute trailer'}
+        >
+          {trailerMuted ? <SpeakerSlash size={18} weight="bold" /> : <SpeakerHigh size={18} weight="bold" />}
+        </button>
+      )}
       {slides.length > 1 && (
         <>
           <button type="button" className="st-hero-nav st-hero-nav--left" onClick={() => go(-1)} aria-label="Previous featured title">

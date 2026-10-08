@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users } from '@phosphor-icons/react';
+import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -431,6 +431,8 @@ export default function Profile() {
               <div className="pf-actions">
                 <Link to="/account-settings" className="st-btn st-btn--ghost"><PencilSimple size={16} weight="bold" /> Edit profile</Link>
                 <Link to="/profiles" className="st-btn st-btn--ghost"><Users size={16} weight="bold" /> Switch profile</Link>
+                <Link to="/history" className="st-btn st-btn--ghost"><ClockCounterClockwise size={16} weight="bold" /> Watch history</Link>
+                <Link to="/wrapped" className="st-btn st-btn--ghost"><Sparkle size={16} weight="bold" /> Your {new Date().getFullYear()} Wrapped</Link>
               </div>
             </div>
           </div>
