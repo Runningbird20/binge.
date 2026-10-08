@@ -198,6 +198,9 @@ export default function MediaOverlay({ mediaType }) {
       initialSeason={initialSeason}
       initialEpisode={initialEpisode}
       initialPosition={initialPosition}
+      // Opened from a Play button somewhere (Continue Watching, previews):
+      // closing the player returns there instead of to a details page.
+      closeOnPlayerExit={playImmediately && Boolean(backgroundLocation)}
     />
   );
 }

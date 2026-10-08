@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { X } from '@phosphor-icons/react';
+import { Info, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import PullToRefresh from '../components/PullToRefresh';
 import BrowseHero from '../components/BrowseHero';
@@ -19,7 +19,7 @@ import {
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
-import { resumeUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
+import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
@@ -79,10 +79,13 @@ function NotifyButton() {
 }
 
 function ContinueWatchingCard({ item, onRemove, priority }) {
+  const location = useLocation();
   const episodeLabel = computeProgressBadge(item);
   const resume = computeResumeProgress(item);
   const subtitle = [item.media_type === 'tv_show' ? episodeLabel : null, resume ? formatTimeLeft(resume.secondsLeft) : null]
     .filter(Boolean).join(' · ');
+  // The card itself plays straight from the saved position and server;
+  // details live behind the (i) button.
   return (
     <div className="st-cw-cell">
       <TitleCard
@@ -95,7 +98,17 @@ function ContinueWatchingCard({ item, onRemove, priority }) {
         to={resumeUrl(item)}
         priority={priority}
         showMatch={false}
+        playNow
       />
+      <Link
+        to={detailsUrl(item)}
+        state={{ backgroundLocation: location }}
+        className="st-cw-info"
+        title="Episodes & info"
+        aria-label={`Details for ${item.title}`}
+      >
+        <Info size={15} weight="bold" />
+      </Link>
       <button
         type="button"
         className="st-cw-remove"
@@ -201,6 +214,7 @@ export default function Home() {
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
+  const jumpToContinue = new URLSearchParams(location.search).get('jump') === 'continue';
   const [dataLoading, setDataLoading] = useState(true);
   const [personal, setPersonal] = useState(null);
   const [heroItems, setHeroItems] = useState([]);
@@ -366,6 +380,14 @@ export default function Home() {
 
   const name = activeProfile?.name || user?.username;
 
+  // Home-screen shortcut "Continue Watching" (manifest) lands here.
+  useEffect(() => {
+    if (!jumpToContinue || !continueWatchingItems.length) return;
+    const row = document.getElementById('continue-watching');
+    row?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    row?.querySelector('.st-card')?.focus({ preventScroll: true });
+  }, [jumpToContinue, continueWatchingItems.length]);
+
   return (
     <div className="app-layout">
       <Navbar />
@@ -379,6 +401,7 @@ export default function Home() {
 
         <div className="st-rows">
           {continueWatchingItems.length > 0 && (
+            <div id="continue-watching" className="st-anchor">
             <TitleRow
               title={`Continue Watching for ${name}`}
               items={continueWatchingItems}
@@ -387,6 +410,7 @@ export default function Home() {
                 <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} />
               )}
             />
+            </div>
           )}
 
           {newEpisodes.length > 0 && (

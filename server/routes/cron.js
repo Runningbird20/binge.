@@ -33,13 +33,74 @@ async function latestEpisode(tmdbId) {
   return { name: data.name, last: data.last_episode_to_air };
 }
 
+function setupPush() {
+  const db = getAdminClient();
+  if (!db || !process.env.VAPID_PRIVATE_KEY || !process.env.VAPID_PUBLIC_KEY) return null;
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@binge.app', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+  return db;
+}
+
+// Push one payload to each subscription; prunes expired ones.
+async function pushTo(db, subs, payload) {
+  let sent = 0;
+  let removed = 0;
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, { TTL: 86400 });
+      sent += 1;
+    } catch (err) {
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        await db.from('push_subscriptions').delete().eq('id', sub.id);
+        removed += 1;
+      }
+    }
+  }
+  return { sent, removed };
+}
+
+// "Remind me tonight" reminders that are due. Meant to run every ~15 min
+// (Vercel Hobby crons are daily only, so schedule it from Supabase
+// pg_cron — see supabase/manual/schedule_reminders.sql); the daily
+// new-episodes run also sweeps it as a fallback.
+async function sendDueReminders(db) {
+  const { data: due } = await db.from('watch_reminders')
+    .select('id, user_id, profile_id, title, url')
+    .is('sent_at', null).is('dismissed_at', null)
+    .lte('remind_at', new Date().toISOString())
+    .limit(500);
+  let sent = 0;
+  for (const reminder of due || []) {
+    let query = db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', reminder.user_id);
+    if (reminder.profile_id) query = query.eq('profile_id', reminder.profile_id);
+    const { data: subs } = await query;
+    const result = await pushTo(db, subs || [], JSON.stringify({
+      title: `Time to watch ${reminder.title}`,
+      body: 'You asked binge. to remind you. Tap to start watching.',
+      url: `${reminder.url}?play=1&reminder=${reminder.id}`,
+      tag: `reminder-${reminder.id}`,
+    }));
+    sent += result.sent;
+    await db.from('watch_reminders').update({ sent_at: new Date().toISOString() }).eq('id', reminder.id);
+  }
+  return { due: (due || []).length, sent };
+}
+
+router.get('/reminders', async (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
+  const db = setupPush();
+  if (!db) return res.status(503).json({ error: 'push not configured' });
+  try {
+    res.json(await sendDueReminders(db));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/new-episodes', async (req, res) => {
   if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
-  const db = getAdminClient();
-  if (!db || !process.env.VAPID_PRIVATE_KEY || !process.env.VAPID_PUBLIC_KEY) {
-    return res.status(503).json({ error: 'push not configured' });
-  }
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@binge.app', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+  const db = setupPush();
+  if (!db) return res.status(503).json({ error: 'push not configured' });
+  const reminders = await sendDueReminders(db).catch(() => null);
 
   const { data: subs, error } = await db.from('push_subscriptions').select('id, user_id, profile_id, endpoint, p256dh, auth');
   if (error) return res.status(500).json({ error: error.message });
@@ -89,27 +150,16 @@ router.get('/new-episodes', async (req, res) => {
         url: `/tv-show/${show.id}?play=1&season=${last.season_number}&episode=${last.episode_number}`,
         tag: `new-episode-${show.id}`,
       });
-      let delivered = false;
-      for (const sub of profileSubs) {
-        try {
-          await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, { TTL: 86400 });
-          delivered = true;
-          sent += 1;
-        } catch (err) {
-          // Gone / expired subscriptions are cleaned up.
-          if (err.statusCode === 404 || err.statusCode === 410) {
-            await db.from('push_subscriptions').delete().eq('id', sub.id);
-            removed += 1;
-          }
-        }
-      }
-      if (delivered) {
+      const result = await pushTo(db, profileSubs, payload);
+      sent += result.sent;
+      removed += result.removed;
+      if (result.sent) {
         await db.from('push_notified').insert({ user_id: userId, profile_id: profileId || null, media_id: show.id, episode_key: episodeKey });
       }
     }
   }
 
-  res.json({ profiles: byProfile.size, sent, removedSubscriptions: removed });
+  res.json({ profiles: byProfile.size, sent, removedSubscriptions: removed, reminders });
 });
 
 module.exports = router;

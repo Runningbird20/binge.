@@ -248,4 +248,34 @@ router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
   }
 });
 
+// ESPN scores fallback for the live score panel (utils/liveScores.js calls
+// ESPN directly first). Only scoreboard/summary paths are allowed through.
+const ESPN_PATH = /^[a-z-]+\/[a-z0-9.-]+\/(scoreboard|summary)$/;
+const espnCache = new Map(); // url -> { at, body }
+
+router.get('/espn', async (req, res) => {
+  const path = String(req.query.path || '');
+  if (!ESPN_PATH.test(path)) return res.status(400).json({ error: 'bad path' });
+  const params = new URLSearchParams();
+  ['dates', 'event', 'groups', 'limit'].forEach((key) => {
+    if (req.query[key] && /^[0-9]{1,12}$/.test(String(req.query[key]))) params.set(key, String(req.query[key]));
+  });
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${path}${params.toString() ? `?${params}` : ''}`;
+  const hit = espnCache.get(url);
+  if (hit && Date.now() - hit.at < 15000) return res.type('json').send(hit.body);
+  try {
+    const upstream = await fetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; binge-scores/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!upstream.ok) return res.status(upstream.status).json({ error: `espn ${upstream.status}` });
+    const body = await upstream.text();
+    espnCache.set(url, { at: Date.now(), body });
+    if (espnCache.size > 200) espnCache.delete(espnCache.keys().next().value);
+    res.set('Cache-Control', 'public, max-age=15').type('json').send(body);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 module.exports = router;

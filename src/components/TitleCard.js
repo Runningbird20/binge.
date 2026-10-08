@@ -24,7 +24,7 @@ function primaryGenre(item) {
 // Poster card used by every browse row. Links into the existing details
 // overlay (background-location routing) so opening a title never loses the
 // row you were browsing. `rank` renders the Top-10 numeral variant.
-export default function TitleCard({ item, priority = false, rank = null, showMatch = true, to = null }) {
+export default function TitleCard({ item, priority = false, rank = null, showMatch = true, to = null, playNow = false }) {
   const location = useLocation();
   const [imgError, setImgError] = useState(false);
   const rawPoster = item.poster_url || item.cover_url || item.image_url || item.posterUrl;
@@ -80,7 +80,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
       state={{ backgroundLocation: location }}
       className={`st-card${rank ? ' st-card--ranked' : ''}`}
       title={item._reason || item.title}
-      aria-label={`${item.title}${year ? ` (${year})` : ''}${comingSoon ? ', coming soon' : ''}`}
+      aria-label={`${playNow ? 'Play ' : ''}${item.title}${year ? ` (${year})` : ''}${item._subtitle && playNow ? `, ${item._subtitle}` : ''}${comingSoon ? ', coming soon' : ''}`}
     >
       {rank && <span className="st-card-rank" aria-hidden="true">{rank}</span>}
       <div className="st-card-poster">
@@ -105,6 +105,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         ) : item._progressLabel ? (
           <span className="st-badge">{item._progressLabel}</span>
         ) : null}
+        {playNow && <span className="st-card-playnow" aria-hidden="true"><Play size={22} weight="fill" /></span>}
         <div className="st-card-hover" aria-hidden="true">
           {!comingSoon && <span className="st-card-play"><Play size={18} weight="fill" /></span>}
           <div className="st-card-hover-meta">

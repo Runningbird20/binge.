@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { haptic } from '../utils/haptics';
 
 const THRESHOLD = 68;
 const MAX_PULL = 110;
@@ -49,6 +50,7 @@ export default function PullToRefresh({ onRefresh, children, disabled = false })
       setPullDistance((current) => {
         if (current >= THRESHOLD && !refreshingRef.current) {
           refreshingRef.current = true;
+          haptic('medium');
           setRefreshing(true);
           Promise.resolve()
             .then(() => onRefreshRef.current?.())

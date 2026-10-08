@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
@@ -9,6 +9,10 @@ import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
 import AdBlocker from './components/AdBlocker';
+import ErrorBoundary, { PageError } from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
+import KeyboardShortcuts from './components/KeyboardShortcuts';
+import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -35,6 +39,8 @@ const Sports         = lazy(() => import('./pages/Sports'));
 const Profile        = lazy(() => import('./pages/Profile'));
 const History        = lazy(() => import('./pages/History'));
 const Wrapped        = lazy(() => import('./pages/Wrapped'));
+const Settings       = lazy(() => import('./pages/Settings'));
+const ShareTarget    = lazy(() => import('./pages/ShareTarget'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -48,10 +54,20 @@ function AppShell({ children }) {
   const location     = useLocation();
   const showBottomNav = isMobile && !!user && !NO_NAV_PATHS.includes(location.pathname);
 
+  // Search and profile move to the bottom nav on phones (thumb reach).
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-bottom-nav', showBottomNav);
+  }, [showBottomNav]);
+
   return (
     <>
-      {children}
+      <OfflineBanner />
+      <ErrorBoundary resetKey={location.pathname} fallback={PageError}>
+        {children}
+      </ErrorBoundary>
       {showBottomNav && <BottomNav />}
+      <KeyboardShortcuts />
+      {user && <ReminderWatcher />}
     </>
   );
 }
@@ -89,6 +105,8 @@ function AppRoutes() {
         <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/history"   element={<ProtectedRoute><History /></ProtectedRoute>} />
         <Route path="/wrapped"   element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
+        <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
@@ -117,17 +135,26 @@ function AppRoutes() {
   );
 }
 
+// Shaped like a browse page (billboard + rows) so the real page drops in
+// without everything shifting.
 function AppRouteFallback() {
   return (
     <div className="app-layout">
-      <div className="route-skeleton">
-        <div className="route-skeleton-bar skeleton-block" />
-        <div className="route-skeleton-bar route-skeleton-bar--short skeleton-block" />
-        <div className="route-skeleton-grid">
-          {Array.from({ length: 12 }, (_, i) => (
-            <div key={i} className="route-skeleton-card skeleton-block" />
-          ))}
-        </div>
+      <div className="page-content st-route-skel" aria-busy="true" aria-label="Loading">
+        <div className="st-route-skel-hero skeleton-block" />
+        {[0, 1].map((row) => (
+          <div key={row} className="st-route-skel-row">
+            <div className="st-route-skel-title skeleton-block" />
+            <div className="st-route-skel-cards">
+              {Array.from({ length: 7 }, (_, i) => (
+                <div key={i} className="st-skel">
+                  <div className="st-skel-art skeleton-block" />
+                  <div className="st-skel-line skeleton-block" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -137,8 +164,8 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <MiniPlayerProvider>
-          <BrowserRouter>
+        <BrowserRouter>
+          <MiniPlayerProvider>
             <Suspense fallback={<AppRouteFallback />}>
               <AppShell>
                 <AdBlocker />
@@ -161,8 +188,8 @@ export default function App() {
                 },
               }}
             />
-          </BrowserRouter>
-        </MiniPlayerProvider>
+          </MiniPlayerProvider>
+        </BrowserRouter>
       </ToastProvider>
       <Analytics />
     </AuthProvider>

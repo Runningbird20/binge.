@@ -41,5 +41,55 @@
     "entertainment",
     "lifestyle",
     "social"
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Continue Watching",
+      "short_name": "Continue",
+      "description": "Pick up where you left off",
+      "url": "/home?jump=continue",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Live Sports",
+      "short_name": "Sports",
+      "description": "Games on now",
+      "url": "/sports",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "description": "Find a title, actor or team",
+      "url": "/search?focus=1",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }
