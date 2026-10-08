@@ -3040,3 +3040,8 @@ kbd {
 .gs-person-photo { border-radius: 50% !important; object-fit: cover; }
 .gs-all { display: block; width: 100%; margin-top: 0.25rem; padding: 0.7rem; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08); background: none; color: #fff; font: inherit; font-weight: 700; font-size: 0.88rem; cursor: pointer; }
 .gs-all:hover { background: rgba(255, 255, 255, 0.06); }
+/* Phones: dropdown rows stack so long choices ("Original language") fit. */
+@media (max-width: 480px) {
+  .set-row--select { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .set-row--select .set-select { max-width: none; width: 100%; }
+}

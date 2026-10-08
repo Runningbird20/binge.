@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ClockCounterClockwise, FilmSlate, Info, MonitorPlay, BookOpen, MagnifyingGlass, Play, Trophy, X } from '@phosphor-icons/react';
+import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Trophy, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
-import { SkeletonGrid } from '../components/SkeletonCard';
 import { api } from '../api';
 import TitleRow from '../components/TitleRow';
 import TitleCard from '../components/TitleCard';
@@ -14,65 +13,31 @@ import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, isGameLive, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
 
-const MEDIA_ICONS = { movie: FilmSlate, tv: MonitorPlay, book: BookOpen };
+const MEDIA_TYPE = { movie: 'movie', tv: 'tv_show', book: 'book' };
 
-function MediaTypeIcon({ type, size = 16 }) {
-  const Icon = MEDIA_ICONS[type];
-  if (!Icon) return null;
-  return <Icon size={size} weight="bold" aria-hidden="true" />;
-}
-
-function resultUrl(type, id) {
-  if (type === 'movie') return `/movie/${id}`;
-  if (type === 'tv') return `/tv-show/${id}`;
-  return `/book/${id}`;
-}
-
-function ResultTile({ type, item }) {
-  const location = useLocation();
-  const poster = item.poster_url || item.cover_url;
-
-  return (
-    <Link
-      to={resultUrl(type, item.id)}
-      state={{ backgroundLocation: location }}
-      className="poster-tile"
-      title={item.title}
-    >
-      <div className="poster-tile-frame">
-        {poster ? (
-          <img src={poster} alt={item.title} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-        ) : (
-          <div className="poster-tile-placeholder">
-            <MediaTypeIcon type={type} size={28} />
-          </div>
-        )}
-      </div>
-      <p className="poster-tile-title">{item.title}</p>
-      {(item.year || item.author) && (
-        <p className="poster-tile-year">{type === 'book' ? (item.author || item.year) : item.year}</p>
-      )}
-    </Link>
-  );
-}
-
+// "More … like X" rows: a normal horizontal row, with a row-shaped skeleton
+// while loading (a stacked grid skeleton made the page jump on phones).
 function ResultRow({ heading, items, loading }) {
   if (!loading && !items.length) return null;
   return (
-    <section className="home-section">
-      <div className="section-header">
-        <h2>{heading}</h2>
-      </div>
-      {loading ? (
-        <SkeletonGrid count={6} />
-      ) : (
-        <div className="poster-grid">
-          {items.map((item) => (
-            <ResultTile key={item.id} type={item._type} item={item} />
-          ))}
+    <TitleRow
+      title={heading}
+      loading={loading}
+      items={loading ? undefined : items.map((item) => ({ ...item, media_type: MEDIA_TYPE[item._type] || item._type }))}
+    />
+  );
+}
+
+function GridSkeleton() {
+  return (
+    <div className="st-grid" aria-busy="true" aria-label="Loading results">
+      {Array.from({ length: 12 }, (_, index) => (
+        <div key={index} className="st-grid-cell st-skel">
+          <div className="st-skel-art skeleton-block" />
+          <div className="st-skel-line skeleton-block" />
         </div>
-      )}
-    </section>
+      ))}
+    </div>
   );
 }
 
@@ -295,7 +260,7 @@ export default function SearchResults() {
         </header>
         <SearchBox query={query} />
 
-        {primaryState === 'loading' && <SkeletonGrid count={12} />}
+        {primaryState === 'loading' && <GridSkeleton />}
 
         {primaryState === 'error' && (
           <div className="empty-state">
