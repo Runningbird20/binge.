@@ -73,9 +73,8 @@ private struct SurfaceButtonStyle: ButtonStyle {
 private struct WebSurface: UIViewRepresentable {
     let model: PlayerModel
     func makeUIView(context: Context) -> UIView {
-        let view = model.attach()
-        view.isUserInteractionEnabled = false // the remote goes to our layer
-        return view
+        model.surface.isUserInteractionEnabled = false // the remote goes to our layer
+        return model.surface
     }
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
@@ -100,9 +99,11 @@ private struct HUD: View {
                     }
                 }
                 Spacer()
-                Label(model.server.name, systemImage: "server.rack")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.muted)
+                if let server = model.server {
+                    Label(server.name, systemImage: "server.rack")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.muted)
+                }
             }
             .padding(.horizontal, Theme.edge)
             .padding(.top, 50)
@@ -151,7 +152,10 @@ private struct LoadingCard: View {
     var body: some View {
         VStack(spacing: 22) {
             ProgressView()
-            Text("Starting \(model.server.name)…").font(.headline)
+            Text("Finding the fastest server…").font(.headline)
+            if !model.racingNames.isEmpty {
+                Text("Trying \(model.racingNames) at once").font(.callout).foregroundStyle(Theme.muted)
+            }
             if let notice = model.notice {
                 Text(notice).font(.callout).foregroundStyle(Theme.gold).multilineTextAlignment(.center)
             }
@@ -243,7 +247,7 @@ private struct PlayerPanel: View {
             .background(LinearGradient(colors: [.clear, .black.opacity(0.92), .black], startPoint: .top, endPoint: .bottom))
         }
         .ignoresSafeArea()
-        .onAppear { focusedServer = model.server.id }
+        .onAppear { focusedServer = model.server?.id ?? model.servers.first?.id }
         .onExitCommand(perform: close)
         .task {
             guard model.isEpisode, let tmdbId = model.request.title.tmdbId else { return }

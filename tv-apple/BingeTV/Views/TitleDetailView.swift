@@ -231,7 +231,7 @@ struct TitleDetailView: View {
     private func start(season: Int?, episode: Int?, name: String?) {
         let sameAsResume = title.kind == .movie || (season == resume?.currentSeason && episode == resume?.currentEpisode)
         let startAt = sameAsResume ? resume?.positionSeconds : nil
-        if LegacyWebView.isAvailable, title.tmdbId != nil {
+        if WebEngines.isAvailable, title.tmdbId != nil {
             playing = PlayRequest(title: title, season: season, episode: episode, startAt: startAt, seasons: seasons)
             return
         }
@@ -266,11 +266,20 @@ struct TitleDetailView: View {
         if title.kind == .tvShow, season == nil {
             season = resume?.currentSeason ?? seasons.first?.seasonNumber
         }
+        warmUp()
         if let tmdbId = title.tmdbId {
             let spec = RowSpec(id: "more", title: "More Like This", kind: title.kind,
                                path: "\(title.kind.tmdbPath)/\(tmdbId)/recommendations")
             more = await Catalog.load(spec, kids: app.isKids)?.items.filter { $0.id != title.id } ?? []
         }
+    }
+
+    // Start loading what Play will play while you read the page.
+    private func warmUp() {
+        let season = title.kind == .tvShow ? (resume?.currentSeason ?? seasons.first?.seasonNumber ?? 1) : nil
+        let episode = title.kind == .tvShow ? (resume?.currentEpisode ?? 1) : nil
+        Warmup.shared.prepare(PlayRequest(title: title, season: season, episode: episode,
+                                          startAt: resume?.positionSeconds, seasons: seasons))
     }
 
     private func loadEpisodes() async {
