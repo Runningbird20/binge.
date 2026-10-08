@@ -908,6 +908,8 @@
   align-items: flex-start;
   padding: clamp(0px, 3vh, 40px) 16px 40px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background: rgba(4, 6, 10, 0.78);
   backdrop-filter: blur(6px);
   animation: td-fade 0.18s ease;
@@ -1217,8 +1219,13 @@
 
 /* Phones: full-screen sheet */
 @media (max-width: 768px) {
-  .td-overlay { padding: 0; align-items: stretch; }
+  /* Block layout, not a stretched flex item: stretch pins the sheet to the
+     screen height and its overflow: hidden then clips everything below the
+     fold (episodes, facts, rating), leaving nothing to scroll. */
+  .td-overlay { display: block; padding: 0; }
   .td-modal { border-radius: 0; min-height: 100%; }
+  /* Close stays reachable while the sheet scrolls. */
+  .td-close { position: fixed; z-index: 5; }
   .td-hero { aspect-ratio: 4 / 3; max-height: none; }
   .td-logo-title img { max-width: 70%; max-height: 90px; }
   .td-title { max-width: 100%; font-size: 1.9rem; }
