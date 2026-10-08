@@ -3045,3 +3045,60 @@ kbd {
   .set-row--select { flex-direction: column; align-items: stretch; gap: 0.6rem; }
   .set-row--select .set-select { max-width: none; width: 100%; }
 }
+
+/* ── Visual consistency pass ──────────────────────────────────── */
+/* Books / Manga tabs float over the top of the spotlight instead of
+   sitting in their own strip above it. */
+.curated-page > .st-tabs {
+  position: relative;
+  z-index: 6;
+  margin: 0.9rem 0 1.25rem;
+  background: rgba(11, 13, 18, 0.55);
+  border-color: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+.curated-page > .st-tabs + .st-browse .st-hero { margin-top: calc(-0.9rem - 1.25rem - 48px - 1.75rem); }
+.curated-page > .st-tabs + .st-browse .st-hero-content { padding-top: 5rem; }
+@media (max-width: 768px) {
+  .curated-page > .st-tabs { margin-top: 0.6rem; }
+  .curated-page > .st-tabs + .st-browse .st-hero { margin-top: calc(-0.6rem - 1.25rem - 48px - 1.1rem); }
+}
+
+/* "Browse all" pages: breathing room under the navbar, and the search row
+   lines up with the title instead of floating centered. */
+.catalog-view > .st-page-head,
+.curated-page > .st-page-head { margin-top: 1.25rem; }
+.page-content .catalog-search-row { justify-content: flex-start; padding: 0; margin-bottom: 1.25rem; }
+.page-content .catalog-search-row .catalog-search-bar { max-width: 560px; }
+
+/* Home: your stats strip */
+.hm-me {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 1rem 0 2rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 16px;
+  border: 1px solid var(--exp-border);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+.hm-me-id { display: flex; align-items: center; gap: 0.9rem; color: #fff; text-decoration: none; min-width: 0; }
+.hm-me-text { display: flex; flex-direction: column; min-width: 0; }
+.hm-me-text .st-page-kicker { margin: 0 0 0.15rem; }
+.hm-me-name { font-size: 1.45rem; font-weight: 800; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-me-id:hover .hm-me-name { text-decoration: underline; text-underline-offset: 4px; }
+.hm-me-stats { margin: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.hm-me-stats > div { padding: 0.75rem 0.9rem; background: rgba(14, 17, 24, 0.5); }
+.hm-me-stats dd { font-size: clamp(1.2rem, 1.8vw, 1.6rem); }
+@media (max-width: 1100px) {
+  .hm-me { grid-template-columns: minmax(0, 1fr) auto; }
+  .hm-me-stats { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 600px) {
+  .hm-me { padding: 1rem; gap: 1rem; }
+  .hm-me-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hm-me-stats > div:nth-child(n + 4) { display: none; }
+  .hm-me-edit { padding: 0 0.9rem; }
+}
