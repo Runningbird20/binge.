@@ -3482,3 +3482,17 @@ kbd {
   .adm-ann-list li { grid-template-columns: minmax(0, 1fr) auto auto; }
   .adm-ann-list .adm-ann-level, .adm-ann-list .adm-muted { display: none; }
 }
+
+/* ── Manga providers & where to read ──────────────────────────── */
+.manga-providers { margin: 1.25rem 0 0.4rem; }
+.manga-provider-note { margin: 0 0 0.9rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.6); }
+.manga-where { margin: 1rem 0 0.5rem; }
+.manga-where-links { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.45rem; }
+.manga-where-link {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 36px; padding: 0 0.8rem; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #fff; text-decoration: none; font-size: 0.85rem; font-weight: 700;
+}
+.manga-where-link:hover { background: rgba(255, 255, 255, 0.12); }
+.manga-where-link span { padding: 0.05rem 0.4rem; border-radius: 999px; background: var(--st-match); color: #04170a; font-size: 0.68rem; font-weight: 800; }
+.manga-where-link.free { border-color: rgba(70, 211, 105, 0.45); }
+.manga-external-btn { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.6rem; text-decoration: none; }
