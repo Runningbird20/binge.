@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { BookOpen, MagnifyingGlass, X } from '@phosphor-icons/react';
-import { SOURCES, browseManga, searchBySource, popularBySource, chaptersBySource, pagesBySource } from '../utils/mangaSources';
+import { ArrowSquareOut, BookOpen, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { DEFAULT_PROVIDER, PROVIDER_LIST, getProvider, providerFor } from '../utils/mangaProviders';
+import { findWhereToRead } from '../utils/anilist';
 import BrowseHero from './BrowseHero';
 import TitleRow from './TitleRow';
 import RatingInput from './RatingInput';
@@ -20,7 +21,17 @@ export function getMangaRating(id)          { return getLS(LS_RATINGS)[id] || nu
 
 function upsertMangaListItem(manga, status) {
   const list = getLS(LS_LIST);
-  list[manga.id] = { id: manga.id, title: manga.title, cover: manga.cover, status, savedAt: Date.now() };
+  list[manga.id] = {
+    id: manga.id,
+    provider: manga.provider || 'mangadex',
+    title: manga.title,
+    cover: manga.cover,
+    author: manga.author || '',
+    anilistId: manga.anilistId || null,
+    readLinks: manga.readLinks || null,
+    status,
+    savedAt: Date.now(),
+  };
   setLS(LS_LIST, list);
   return list[manga.id];
 }
@@ -36,7 +47,7 @@ const MANGA_STATUSES = [
 ];
 
 // ─── MangaReader ──────────────────────────────────────────────
-function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }) {
+function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
   const chapter = chapters[index];
   const hasPrev = index > 0;
   const hasNext = index < chapters.length - 1;
@@ -56,15 +67,17 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
     setPages([]);
     if (isExternal) { setLoading(false); return; }
     const ctrl = new AbortController();
-    pagesBySource(source, chapter.id, ctrl.signal)
+    providerFor(comic).getPages(chapter, ctrl.signal)
       .then(({ pages: p, dataSaverPages: dp }) => {
-        setPages(dataSaver ? dp : p);
+        const list = dataSaver && dp?.length ? dp : p;
+        if (!list?.length) throw new Error('This chapter has no pages available. Try another chapter.');
+        setPages(list);
         topRef.current?.scrollTo({ top: 0 });
       })
       .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [chapter, dataSaver, isExternal, source]);
+  }, [chapter, dataSaver, isExternal, comic]);
 
   useEffect(() => {
     function onKey(e) {
@@ -171,8 +184,77 @@ function MangaReader({ comic, chapters, index, source, onClose, onPrev, onNext }
   );
 }
 
+// MangaDex's "official English" link, named after the site it points to.
+function officialSiteName(url) {
+  const host = (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+  const known = { 'mangaplus.shueisha.co.jp': 'MANGA Plus', 'webtoons.com': 'WEBTOON', 'viz.com': 'VIZ', 'kodansha.us': 'Kodansha', 'yenpress.com': 'Yen Press', 'tapas.io': 'Tapas', 'tappytoon.com': 'Tappytoon', 'comikey.com': 'Comikey', 'azuki.co': 'Azuki', 'sevenseasentertainment.com': 'Seven Seas' };
+  return known[host] || host || 'Official English edition';
+}
+
+// ─── Where to read (official links via AniList) ───────────────
+function WhereToRead({ comic }) {
+  const [links, setLinks] = useState(comic.readLinks || null);
+  useEffect(() => {
+    if (comic.readLinks?.length) { setLinks(comic.readLinks); return undefined; }
+    const ctrl = new AbortController();
+    let retry = null;
+    const lookup = (attempt) => findWhereToRead(comic, ctrl.signal)
+      .then((found) => setLinks(found))
+      .catch((e) => {
+        if (e.name === 'AbortError') return;
+        // AniList allows ~30 requests/min; when it's busy, try once more.
+        if (e.status === 429 && attempt === 0) retry = setTimeout(() => lookup(1), 8000);
+        else setLinks([]);
+      });
+    lookup(0);
+    return () => { ctrl.abort(); clearTimeout(retry); };
+  }, [comic]);
+  const all = [...(links || [])];
+  if (comic.officialUrl && !all.some((link) => link.url === comic.officialUrl)) {
+    all.push({ site: officialSiteName(comic.officialUrl), url: comic.officialUrl, free: /mangaplus|webtoons/.test(comic.officialUrl) });
+  }
+  if (!all.length) return null;
+  return (
+    <section className="manga-where" aria-label="Where to read officially">
+      <p className="manga-detail-section-label">Where to read officially</p>
+      <div className="manga-where-links">
+        {all.map((link) => (
+          <a key={link.url} className={`manga-where-link${link.free ? ' free' : ''}`} href={link.url} target="_blank" rel="noopener noreferrer">
+            {link.site}{link.free && <span>Free</span>}<ArrowSquareOut size={14} weight="bold" aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Series from an external-reader provider: open the official reader.
+function ExternalRead({ comic, provider }) {
+  const links = provider.readLinks(comic);
+  const primary = links[0];
+  return (
+    <div className="manga-chapter-list manga-external">
+      <h3 className="manga-chapter-list-title">Chapters</h3>
+      {primary ? (
+        <>
+          <p className="manga-chapter-empty">
+            {comic.title} is published by {primary.site}{primary.free ? ', free to read' : ''}. Chapters open in their official reader.
+          </p>
+          <a className="btn-watch manga-external-btn" href={primary.url} target="_blank" rel="noopener noreferrer">
+            Read on {primary.site} <ArrowSquareOut size={16} weight="bold" aria-hidden="true" />
+          </a>
+        </>
+      ) : (
+        <p className="manga-chapter-empty">No official reading link is listed for this series yet.</p>
+      )}
+    </div>
+  );
+}
+
 // ─── ChapterModal (full book-style detail view) ───────────────
-function ChapterModal({ comic, source, onClose, onRead }) {
+function ChapterModal({ comic, onClose, onRead }) {
+  const provider = providerFor(comic);
+  const external = provider.reading === 'external';
   const { isMobile } = useDeviceType();
   const [chapters, setChapters]     = useState([]);
   const [chapLoading, setChapLoading] = useState(true);
@@ -195,13 +277,14 @@ function ChapterModal({ comic, source, onClose, onRead }) {
   const displayScore = computeNormalizedScore('manga', draftScores);
 
   useEffect(() => {
+    if (external) { setChapLoading(false); return undefined; }
     const ctrl = new AbortController();
-    chaptersBySource(source, comic.id, ctrl.signal)
-      .then(setChapters)
-      .catch(e => { if (e.name !== 'AbortError') setChapError(e.message); })
+    provider.getChapters(comic, ctrl.signal)
+      .then((list) => setChapters(Array.isArray(list) ? list : []))
+      .catch(e => { if (e.name !== 'AbortError') setChapError(e.message || 'Couldn’t load chapters.'); })
       .finally(() => setChapLoading(false));
     return () => ctrl.abort();
-  }, [source, comic.id]);
+  }, [provider, external, comic]);
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -283,6 +366,8 @@ function ChapterModal({ comic, source, onClose, onRead }) {
           {tab === 'info' && (
             <div className="mob-detail-tab-content">
               {comic.description && <p className="mob-detail-overview">{comic.description}</p>}
+              <WhereToRead comic={comic} />
+              {external ? <ExternalRead comic={comic} provider={provider} /> : (
               <div className="manga-chapter-list">
                 <h3 className="manga-chapter-list-title">
                   Chapters
@@ -310,6 +395,7 @@ function ChapterModal({ comic, source, onClose, onRead }) {
                   </button>
                 )}
               </div>
+              )}
             </div>
           )}
 
@@ -342,6 +428,11 @@ function ChapterModal({ comic, source, onClose, onRead }) {
             <button type="button" className="mob-detail-bar-btn mob-detail-bar-btn--watch" onClick={() => onRead(chapters[0], chapters)}>
               ▶ Read Ch. {chapters[0]?.number || '1'}
             </button>
+          )}
+          {external && provider.readLinks(comic)[0] && (
+            <a className="mob-detail-bar-btn mob-detail-bar-btn--watch" href={provider.readLinks(comic)[0].url} target="_blank" rel="noopener noreferrer">
+              ▶ Read on {provider.readLinks(comic)[0].site}
+            </a>
           )}
         </div>
 
@@ -465,8 +556,10 @@ function ChapterModal({ comic, source, onClose, onRead }) {
 
         {/* ── Description ── */}
         {comic.description && <p className="manga-detail-desc">{comic.description}</p>}
+        <WhereToRead comic={comic} />
 
         {/* ── Chapter list ── */}
+        {external ? <ExternalRead comic={comic} provider={provider} /> : (
         <div className="manga-chapter-list">
           <h3 className="manga-chapter-list-title">
             Chapters
@@ -499,6 +592,7 @@ function ChapterModal({ comic, source, onClose, onRead }) {
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );
@@ -507,23 +601,6 @@ function ChapterModal({ comic, source, onClose, onRead }) {
 // ─── MangaCard ────────────────────────────────────────────────
 
 // ─── Landing rows ─────────────────────────────────────────────
-const LANDING_ROWS = [
-  { id: 'popular', title: 'Popular Right Now', query: { order: 'popular' }, ranked: true },
-  { id: 'latest', title: 'Fresh Chapters', query: { order: 'latest' } },
-  { id: 'manhwa', title: 'Top Manhwa', subtitle: 'Korean webtoons', query: { order: 'popular', lang: 'ko' } },
-  { id: 'rated', title: 'Highest Rated', query: { order: 'rating' } },
-  { id: 'manga', title: 'Top Manga', subtitle: 'From Japan', query: { order: 'popular', lang: 'ja' } },
-  { id: 'manhua', title: 'Top Manhua', subtitle: 'Chinese webcomics', query: { order: 'popular', lang: 'zh' } },
-  { id: 'action', title: 'Action & Battles', query: { tags: ['Action'] } },
-  { id: 'romance', title: 'Romance', query: { tags: ['Romance'] } },
-  { id: 'isekai', title: 'Isekai', query: { tags: ['Isekai'] } },
-  { id: 'fantasy', title: 'Fantasy Worlds', query: { tags: ['Fantasy'] } },
-  { id: 'comedy', title: 'Comedy', query: { tags: ['Comedy'] } },
-  { id: 'slice', title: 'Slice of Life', query: { tags: ['Slice of Life'] } },
-  { id: 'horror', title: 'Horror & Thriller', query: { tags: ['Horror'] } },
-  { id: 'sports', title: 'Sports', query: { tags: ['Sports'] } },
-  { id: 'new', title: 'New on MangaDex', query: { order: 'new' } },
-];
 
 const ORIGIN_LABELS = { ko: 'Manhwa', zh: 'Manhua', 'zh-hk': 'Manhua', ja: 'Manga', en: 'Comic' };
 
@@ -584,19 +661,27 @@ export default function MangaTab() {
   const [popular, setPopular]       = useState(null);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState('');
-  const source = SOURCES[0].key;
+  const [providerKey, setProviderKey] = useState(() => {
+    try { return getProvider(window.localStorage.getItem('binge:manga-provider')).key; } catch { return DEFAULT_PROVIDER; }
+  });
+  const provider = getProvider(providerKey);
   const [selected, setSelected]     = useState(null);
   const [reader, setReader]         = useState(null);
   const abortRef = useRef(null);
 
+  function chooseProvider(key) {
+    setProviderKey(key);
+    setPopular(null);
+    try { window.localStorage.setItem('binge:manga-provider', key); } catch { /* private mode */ }
+  }
+
   useEffect(() => {
     const ctrl = new AbortController();
-    browseManga({ order: 'popular', limit: 24 }, ctrl.signal)
-      .catch(() => popularBySource(source, ctrl.signal))
+    provider.popular(ctrl.signal)
       .then((items) => setPopular(items || []))
-      .catch(() => setPopular([]));
+      .catch((e) => { if (e.name !== 'AbortError') setPopular([]); });
     return () => ctrl.abort();
-  }, [source]);
+  }, [provider]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(query.trim()), 350);
@@ -610,12 +695,12 @@ export default function MangaTab() {
     abortRef.current = ctrl;
     setLoading(true);
     setError('');
-    searchBySource(source, debouncedQ, ctrl.signal)
-      .then(setResults)
-      .catch(e => { if (e.name !== 'AbortError') setError(e.message); })
+    provider.search(debouncedQ, ctrl.signal)
+      .then((list) => setResults(Array.isArray(list) ? list : []))
+      .catch(e => { if (e.name !== 'AbortError') setError(e.message || 'Search failed — try again.'); })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [debouncedQ, source]);
+  }, [debouncedQ, provider]);
 
   const openReader = useCallback((ch, chapters) => {
     const idx = chapters.findIndex(c => c.id === ch.id);
@@ -633,9 +718,9 @@ export default function MangaTab() {
 
   const loaders = useMemo(() => {
     const map = new Map();
-    LANDING_ROWS.forEach((row) => map.set(row.id, () => browseManga({ ...row.query, limit: row.ranked ? 10 : 24 })));
+    provider.rows.forEach((row) => map.set(row.id, () => row.load()));
     return map;
-  }, []);
+  }, [provider]);
 
   if (reader) {
     return (
@@ -643,7 +728,6 @@ export default function MangaTab() {
         comic={reader.comic}
         chapters={reader.chapters}
         index={reader.index}
-        source={source}
         onPrev={() => setReader(r => ({ ...r, index: r.index - 1 }))}
         onNext={() => setReader(r => ({ ...r, index: r.index + 1 }))}
         onClose={() => setReader(null)}
@@ -661,11 +745,26 @@ export default function MangaTab() {
       {!isSearching && (
         <BrowseHero
           items={(popular || []).filter((m) => m.cover && m.description).slice(0, 6).map((m) => asHeroItem(m, setSelected))}
-          kicker="Popular this week"
+          kicker={`Popular on ${provider.label}`}
           emptyTitle="Manga, manhwa & comics"
           playLabel="Read"
         />
       )}
+
+      <div className="st-tabs st-tabs--sm manga-providers" role="group" aria-label="Source">
+        {PROVIDER_LIST.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            className={`st-tab${entry.key === provider.key ? ' active' : ''}`}
+            aria-pressed={entry.key === provider.key}
+            onClick={() => chooseProvider(entry.key)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <p className="manga-provider-note">{provider.tagline}</p>
 
       <div className="catalog-search-row st-manga-search">
         <div className="catalog-search-bar">
@@ -673,7 +772,7 @@ export default function MangaTab() {
           <input
             type="text"
             className="catalog-search-input"
-            placeholder="Search manga, manhwa, manhua…"
+            placeholder={`Search ${provider.label}…`}
             value={query}
             onChange={e => setQuery(e.target.value)}
             aria-label="Search manga"
@@ -707,9 +806,9 @@ export default function MangaTab() {
           {continueReading.length > 0 && (
             <TitleRow title="Continue Reading" items={continueReading} renderItem={renderCard(false)} />
           )}
-          {LANDING_ROWS.map((row) => (
+          {provider.rows.map((row) => (
             <TitleRow
-              key={row.id}
+              key={`${provider.key}-${row.id}`}
               title={row.title}
               subtitle={row.subtitle}
               ranked={row.ranked}
@@ -724,7 +823,6 @@ export default function MangaTab() {
       {selected && (
         <ChapterModal
           comic={selected}
-          source={source}
           onClose={() => setSelected(null)}
           onRead={openReader}
         />

@@ -54,27 +54,31 @@ app.use(helmet({
     },
   },
 }));
-const configuredClientUrl = process.env.CLIENT_URL?.trim();
-const localhostOriginPattern = /^https?:\/\/localhost(:\d+)?$|^https?:\/\/127\.0\.0\.1(:\d+)?$|^https?:\/\[::1\](:\d+)?$/i;
+// CORS. The site and this API share one origin on Vercel, but browsers still
+// send an Origin header on POSTs (AI picks, error log, admin actions), so the
+// site's own origin must always be allowed — not just CLIENT_URL.
+// Allowed: same origin as the request's host, CLIENT_URL (comma-separated
+// list), Vercel's deployment URLs, and localhost for development.
+const configuredClientUrls = String(process.env.CLIENT_URL || '').split(',').map((url) => url.trim().replace(/\/$/, '')).filter(Boolean);
+const vercelOrigins = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+  .filter(Boolean).map((host) => `https://${host}`);
+const localhostOriginPattern = /^https?:\/\/localhost(:\d+)?$|^https?:\/\/127\.0\.0\.1(:\d+)?$|^https?:\/\/\[::1\](:\d+)?$/i;
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
+function originAllowed(origin, req) {
+  if (!origin) return true;
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  try {
+    if (host && new URL(origin).host === host) return true; // same origin
+  } catch {
+    return false;
+  }
+  return configuredClientUrls.includes(origin) || vercelOrigins.includes(origin) || localhostOriginPattern.test(origin);
+}
 
-      if (
-        (configuredClientUrl && origin === configuredClientUrl) ||
-        localhostOriginPattern.test(origin)
-      ) {
-        return callback(null, true);
-      }
-
-      return callback(new Error(`CORS blocked for origin ${origin}`));
-    },
-  })
-);
+app.use(cors((req, callback) => {
+  // Not allowed → no CORS headers (the browser blocks it); never a 500.
+  callback(null, { origin: originAllowed(req.headers.origin, req) });
+}));
 
 app.use(express.json({ limit: '1mb' }));
 

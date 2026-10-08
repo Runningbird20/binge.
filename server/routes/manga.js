@@ -52,6 +52,10 @@ function normalizeManga(m) {
     contentRating: attrs.contentRating,
     originalLanguage: attrs.originalLanguage,
     originalTitle: isRomanized ? original : null,
+    // Cross-references for "Where to read" (AniList id, official English
+    // publisher page) — MangaDex keeps both in attributes.links.
+    anilistId: /^\d+$/.test(String(attrs.links?.al || '')) ? Number(attrs.links.al) : null,
+    officialUrl: /^https:\/\//.test(String(attrs.links?.engtl || '')) ? attrs.links.engtl : null,
   };
 }
 
