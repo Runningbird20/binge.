@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BingeSupabaseURL</key>
+	<string>$(BINGE_SUPABASE_URL)</string>
+	<key>BingeSupabaseKey</key>
+	<string>$(BINGE_SUPABASE_KEY)</string>
+	<key>BingeTMDBKey</key>
+	<string>$(BINGE_TMDB_KEY)</string>
+	<key>BingeSiteURL</key>
+	<string>$(BINGE_SITE_URL)</string>
+</dict>
+</plist>

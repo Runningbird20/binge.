@@ -3496,3 +3496,52 @@ kbd {
 .manga-where-link span { padding: 0.05rem 0.4rem; border-radius: 999px; background: var(--st-match); color: #04170a; font-size: 0.68rem; font-weight: 800; }
 .manga-where-link.free { border-color: rgba(70, 211, 105, 0.45); }
 .manga-external-btn { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.6rem; text-decoration: none; }
+
+/* Admin: users panel */
+.adm-panel h3 + .adm-muted { margin-bottom: 1rem; }
+.adm-panel-head .adm-muted { margin-bottom: 0; }
+.adm-users-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+.adm-search {
+  flex: 1 1 260px; max-width: 420px; display: flex; align-items: center; gap: 0.5rem; min-height: 42px; padding: 0 0.8rem;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.6);
+}
+.adm-search:focus-within { border-color: rgba(255, 255, 255, 0.5); }
+.adm-search input { flex: 1; min-width: 0; height: 40px; border: 0; background: none; color: #fff; font: inherit; outline: none; }
+.adm-users-toolbar .st-tabs { margin: 0; }
+.adm-user-form { padding: 1rem; margin: 0 0 1rem; border-radius: 12px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.08); }
+.adm-error-inline { color: #ffb4a8; font-size: 0.88rem; }
+.adm-users td, .adm-users th { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+.adm-user { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
+.adm-avatar {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #3b4a7a, #2a3350); color: #fff; font-weight: 800; font-size: 0.9rem;
+}
+.adm-user-text { display: flex; flex-direction: column; min-width: 0; }
+.adm-user-name { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; }
+.adm-user-email { font-size: 0.8rem; font-weight: 400; color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+.adm-shield { color: var(--st-soon); }
+.adm-you { padding: 0 0.4rem; border-radius: 999px; background: rgba(255, 255, 255, 0.12); font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+.adm-pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.6); }
+.adm-pill.on { background: rgba(70, 211, 105, 0.15); color: #9ee6b4; }
+.adm-actions { text-align: right; white-space: nowrap; }
+.adm-confirm { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.adm-confirm .st-btn { min-height: 34px; padding: 0 0.8rem; font-size: 0.82rem; }
+.st-btn--danger { background: #c62f3a; color: #fff; }
+.st-btn--danger:hover { background: #a92530; }
+.adm-users tr.confirming { background: rgba(255, 90, 80, 0.06); }
+@media (max-width: 700px) {
+  .adm-users tr { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.6rem; padding: 0.9rem 0; }
+  .adm-users tr > th { flex: 1 1 calc(100% - 34px - 44px - 1.5rem); min-width: 0; } /* leaves exactly room for the switch + delete, so the meta wraps below */
+  .adm-users tr > td, .adm-users tr > th { padding: 0; }
+  .adm-users tr > td { white-space: nowrap; font-size: 0.8rem; color: rgba(255, 255, 255, 0.7); }
+  .adm-users tr > td:nth-of-type(4) { order: 1; }
+  .adm-users tr > td.adm-actions { order: 2; min-width: 34px; }
+  .adm-users tr > td:nth-of-type(1) { order: 3; }
+  .adm-users tr > td:nth-of-type(2) { order: 4; }
+  .adm-users tr > td:nth-of-type(3) { order: 5; }
+  .adm-users tr.confirming > td.adm-actions { order: 6; flex-basis: 100%; text-align: left; }
+  .adm-users td:nth-of-type(1)::before { content: 'Joined '; color: rgba(255, 255, 255, 0.45); }
+  .adm-users td:nth-of-type(2)::before { content: '· Seen '; color: rgba(255, 255, 255, 0.45); }
+  .adm-user-email { max-width: 100%; }
+  .adm-confirm { flex-wrap: wrap; }
+}
