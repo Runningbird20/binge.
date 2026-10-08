@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
@@ -35,7 +35,6 @@ const SearchResults  = lazy(() => import('./pages/SearchResults'));
 const ProfilePicker  = lazy(() => import('./pages/ProfilePicker'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
-const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const Sports         = lazy(() => import('./pages/Sports'));
 const Profile        = lazy(() => import('./pages/Profile'));
 const History        = lazy(() => import('./pages/History'));
@@ -127,7 +126,8 @@ function AppRoutes() {
         <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
         <Route path="/import"    element={<ProtectedRoute><ImportHistory /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-        <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
+        {/* Old address for user management — now a tab in the admin panel. */}
+        <Route path="/admin/users"      element={<Navigate to="/admin?tab=users" replace />} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
         {/* TEMP (UI preview only — do not commit) */}
         <Route path="/ui-preview" element={<UIPreview />} />

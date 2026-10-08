@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Bell, ChartLineUp, HardDrives, Megaphone, Bug, Users } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import AdminServers from './admin/AdminServers';
 import AdminErrors from './admin/AdminErrors';
 import AdminAnnouncements from './admin/AdminAnnouncements';
 import AdminBroadcast from './admin/AdminBroadcast';
+import AdminUsersPanel from './admin/AdminUsersPanel';
 
 const TABS = [
   { id: 'overview', label: 'Overview', Icon: ChartLineUp },
@@ -66,13 +67,7 @@ export default function AdminHome() {
         {tab === 'errors' && <AdminErrors />}
         {tab === 'announcements' && <AdminAnnouncements />}
         {tab === 'notify' && <AdminBroadcast deviceCount={badges.devices} />}
-        {tab === 'users' && (
-          <section className="adm-panel">
-            <h3>Users</h3>
-            <p className="adm-muted">Create, delete and promote accounts, and see last sign-ins.</p>
-            <Link to="/admin/users" className="st-btn st-btn--primary">Open user management</Link>
-          </section>
-        )}
+        {tab === 'users' && <AdminUsersPanel />}
       </main>
     </div>
   );

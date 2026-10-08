@@ -1,0 +1,9 @@
+// Shared build settings. Keys come from Secrets.xcconfig (gitignored,
+// generated from the repo's .env by scripts/make-secrets.sh). The build
+// still compiles without it; the app then explains what's missing.
+BINGE_SUPABASE_URL =
+BINGE_SUPABASE_KEY =
+BINGE_TMDB_KEY =
+BINGE_SITE_URL = https:/$()/binge-26.vercel.app
+
+#include? "Secrets.xcconfig"
