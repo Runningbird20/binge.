@@ -14,7 +14,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B1A0000000000000000000C1 /* BingeTV */ = {isa = PBXFileSystemSynchronizedRootGroup; path = BingeTV; sourceTree = "<group>"; };
+		B1A0000000000000000000C1 /* BingeTV */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BingeTV;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */

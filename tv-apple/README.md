@@ -4,7 +4,7 @@ A native tvOS app (SwiftUI, no dependencies) that uses the same Supabase
 project and TMDB lists as the website:
 
 - **Sign in** with a binge. account (an iPhone nearby can fill it in), and pick a profile ("Who's watching?").
-- **Home:** Continue Watching (with progress), My List, "Because you watched…", Trending, K-Dramas, Hidden Gems, Anime, Top Rated.
+- **Home (Netflix-style):** your whole Continue Watching row (click resumes, hold for details/remove), New Episodes, Top Picks for you, My List, and several "Because you watched/liked…" rows woven between Trending, K-Dramas, Hidden Gems, Anime and Top Rated.
 - **Movies / Series:** popular, new, top-rated and genre rows.
 - **Title pages:** logo art, details, seasons and episodes, More Like This, and add or remove from My List.
 - **Sports:** live and upcoming scores (ESPN), refreshed every 30 seconds.
@@ -14,11 +14,30 @@ project and TMDB lists as the website:
 
 ## Playback
 
-tvOS has no web view, so the web players binge. streams through can't run
-here. **Play** shows a QR code instead. Scan it with your iPhone, binge. opens
-and starts that exact episode (resuming where you left off), and you then
-AirPlay or Screen Mirror it to the TV. Progress syncs back through
-`continue_watching` like on any other device.
+Videos play on the TV. tvOS leaves WebKit's legacy `UIWebView` out of the
+public SDK but still ships it, so `Player/LegacyWebView.swift` reaches it
+through the Objective-C runtime. That only works in a sideloaded app; App
+Review rejects it. The server's own player page loads full screen, and
+because its `<video>` is in the page's top level, the app drives it from the
+Siri remote:
+
+| Remote | Does |
+| --- | --- |
+| Click / Play-Pause | Play or pause |
+| ◀ / ▶ | Back or forward 10 seconds |
+| Swipe down | Servers and episodes panel |
+| Back | Exit (progress is saved) |
+
+- **Servers:** that web view has no Media Source Extensions, so only servers that fall back to native HLS work: **VidRift, Vidy and CineSrc** (`Player/Servers.swift`, all checked in the simulator). VidLink, Videasy and the vidsrc servers never produced a playable video.
+- **Failover:** a server that hasn't played after 45 seconds is skipped automatically, unless you picked it by hand.
+- **Remembered server:** the last server that worked for a title goes first next time.
+- **Resume and sync:** resume seeks to the saved second, and progress goes to `continue_watching` every 30 seconds and on exit (same row as the website).
+- **Up Next:** counts down for 10 seconds at the end of an episode.
+- **Popups and redirects:** the top-level page is locked to the server's own host.
+- **Fallback:** if the web view is ever missing, Play falls back to the phone QR handoff.
+
+Use `-BingeProbe <url>` in a Debug build to test another server. It logs
+whether the page has a `<video>`, its time, and whether it's playing.
 
 ## Run it
 
@@ -41,7 +60,8 @@ xcodebuild -project tv-apple/BingeTV.xcodeproj -scheme BingeTV \
 
 Debug builds accept launch arguments for checking screens without a remote
 or an account: `-BingeDemo` (browse without signing in), `-BingeTab sports`,
-`-BingeOpen tv_show:58132`, and `-BingeHandoff YES`.
+`-BingeOpen tv_show:58132`, `-BingePlay 1:2` (start the player at S1:E2; `0` for a movie),
+`-BingeHandoff YES`, and `-BingeProbe <url>`.
 
 ## Put it on your Apple TV
 

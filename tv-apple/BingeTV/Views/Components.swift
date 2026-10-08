@@ -85,7 +85,7 @@ struct PosterCard: View {
                 .frame(width: width, height: width * 1.5)
                 .clipped()
                 .overlay(alignment: .topLeading) {
-                    if title.comingSoon { Badge(text: "Coming soon").padding(10) }
+                    if let badge = title.badge ?? (title.comingSoon ? "Coming soon" : nil) { Badge(text: badge).padding(10) }
                 }
         }
         .buttonStyle(.card)
