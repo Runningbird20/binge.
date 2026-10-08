@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS = {
   previews: true,     // muted trailers on hover and in the billboard
   dataSaver: false,   // ask servers for lower quality
   haptics: true,      // vibration feedback on supported phones
+  captionsFirst: true, // prefer servers that turn subtitles on themselves
 };
 
 function storageKey() {

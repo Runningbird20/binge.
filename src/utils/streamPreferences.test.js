@@ -1,4 +1,4 @@
-import { rankServers, summarizeHealth, wantedAudio } from './streamPreferences';
+import { rankServers, setCaptionCapableServers, summarizeHealth, wantedAudio } from './streamPreferences';
 
 const IDS = ['vidsrc', 'vidsrc2', '2embed', 'vidlink'];
 
@@ -57,5 +57,15 @@ describe('provider health', () => {
     const summary = [{ provider: 'vidlink', works_count: 2, broken_count: 0 }];
     const ranking = rankServers(['vidlink'], { prefs: { audio: 'original' }, summary, health: { vidlink: { down: true } } });
     expect(ranking[0].status).toBe('good');
+  });
+});
+
+describe('captions first', () => {
+  it('lifts caption-capable servers when subtitles are on, not when off', () => {
+    setCaptionCapableServers(['cinesrc']);
+    const on = rankServers(['vidlink', 'cinesrc'], { prefs: { audio: 'original', subtitles: 'en' }, health: {} });
+    expect(on[0].id).toBe('cinesrc');
+    const off = rankServers(['vidlink', 'cinesrc'], { prefs: { audio: 'original', subtitles: 'off' }, health: {} });
+    expect(off[0].id).toBe('vidlink');
   });
 });

@@ -5,7 +5,9 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { register as registerSW } from './serviceWorkerRegistration';
 import { applyTvMode } from './utils/tvMode';
+import { initMonitoring } from './utils/monitoring';
 
+initMonitoring();
 applyTvMode();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));

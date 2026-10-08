@@ -537,7 +537,7 @@ test('uses a genre chip filter bar on the books page', async () => {
   expect(screen.getByRole('button', { name: /open details for emma/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
 
-  const genreBar = screen.getByRole('tablist', { name: /book genres/i });
+  const genreBar = screen.getByRole('group', { name: /book genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
   await waitFor(() => {
@@ -665,7 +665,7 @@ test('uses a genre chip filter bar on the movies page', async () => {
   expect(screen.getByText('Heat')).toBeInTheDocument();
   expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
 
-  const genreBar = screen.getByRole('tablist', { name: /movie genres/i });
+  const genreBar = screen.getByRole('group', { name: /movie genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
   await waitFor(() => {
@@ -733,7 +733,7 @@ test('uses a genre chip filter bar on the TV shows page', async () => {
 
   // 'Mystery' and 'Thriller' both fold into the "Crime & Mystery" chip
   // (TV_GENRE_GROUPS, distinct from movies' "Crime & Thriller" grouping).
-  const genreBar = screen.getByRole('tablist', { name: /series genres/i });
+  const genreBar = screen.getByRole('group', { name: /series genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /crime & mystery/i }));
 
   await waitFor(() => {

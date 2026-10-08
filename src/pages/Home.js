@@ -432,8 +432,11 @@ export default function Home() {
           )}
           {personal && !personal.hasHistory && (
             <div className="st-coldstart">
-              <p>Rate or watch a few titles and binge. will start building rows just for you.</p>
-              <Link className="st-btn st-btn--ghost" to="/movies">Find something to watch</Link>
+              <p>Rate or watch a few titles and binge. will start building rows just for you — or bring your history from Letterboxd, IMDb, Trakt or Netflix.</p>
+              <div className="st-coldstart-actions">
+                <Link className="st-btn st-btn--primary" to="/import">Import my history</Link>
+                <Link className="st-btn st-btn--ghost" to="/movies">Find something to watch</Link>
+              </div>
             </div>
           )}
 

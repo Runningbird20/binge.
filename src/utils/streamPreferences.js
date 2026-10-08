@@ -14,6 +14,7 @@
 // (Vidsrc's `ds_lang`), so that preference is passed straight through.
 import { supabase, isSupabaseConfigured } from './supabase';
 import { getActiveProfileId } from './activeProfile';
+import { getSettings } from './profileSettings';
 
 const PREFS_KEY = 'binge:playback-prefs:';
 const MEMORY_KEY = 'binge:server-memory:';
@@ -170,9 +171,17 @@ export function fetchProviderHealth() {
   const promise = (async () => {
     if (!isSupabaseConfigured || !supabase) return {};
     try {
-      const { data, error } = await supabase.rpc('stream_provider_health');
-      if (error) return {};
-      lastHealth = Object.fromEntries((data || []).map((row) => [row.provider, summarizeHealth(row)]));
+      const [{ data, error }, { data: checks }] = await Promise.all([
+        supabase.rpc('stream_provider_health'),
+        // The server's own uptime probe (server_status, every 15 min).
+        supabase.from('server_status').select('provider, status, detail'),
+      ]);
+      const health = error ? {} : Object.fromEntries((data || []).map((row) => [row.provider, summarizeHealth(row)]));
+      (checks || []).forEach((check) => {
+        if (check.status !== 'down') return;
+        health[check.provider] = { ...(health[check.provider] || {}), down: true, downReason: 'Down right now (automatic check)' };
+      });
+      lastHealth = health;
       return lastHealth;
     } catch {
       return {};
@@ -197,6 +206,30 @@ export function summarizeHealth(row) {
     down: broken24h >= 3 && broken24h >= works24h * 2,
     usuallyWorks: total7d >= 3 && works7d / total7d >= 0.7,
   };
+}
+
+// Servers an admin switched off site-wide (server_config.enabled = false).
+let switchesCache = null; // { at, promise }
+export function fetchDisabledServers() {
+  if (switchesCache && Date.now() - switchesCache.at < 5 * 60 * 1000) return switchesCache.promise;
+  const promise = (async () => {
+    if (!isSupabaseConfigured || !supabase) return new Set();
+    try {
+      const { data } = await supabase.from('server_config').select('provider').eq('enabled', false);
+      return new Set((data || []).map((row) => row.provider));
+    } catch {
+      return new Set();
+    }
+  })();
+  switchesCache = { at: Date.now(), promise };
+  return promise;
+}
+
+// Servers that apply the subtitle preference themselves (registered by the
+// player from its server list).
+let captionServers = new Set();
+export function setCaptionCapableServers(ids) {
+  captionServers = new Set(ids);
 }
 
 // ── Ranking ────────────────────────────────────────────────────────────
@@ -227,6 +260,9 @@ export function rankServers(providerIds, { prefs, originalLanguage, summary = []
       const slowAt = memory?.[`slow:${id}`];
       if (slowAt && Date.now() - slowAt < 2 * 60 * 60 * 1000) score -= 3;
       if (want && audio) score += audio === want ? 5 : -4;
+      // Captions first: with subtitles on, servers that turn them on by
+      // themselves rank above ones where you'd hunt for a CC button.
+      if (prefs?.subtitles && prefs.subtitles !== 'off' && captionServers.has(id) && getSettings().captionsFirst !== false) score += 1.5;
       const providerHealth = health[id];
       if (providerHealth?.down) score -= 5;
       else if (providerHealth?.usuallyWorks) score += 0.8;
@@ -240,7 +276,7 @@ export function rankServers(providerIds, { prefs, originalLanguage, summary = []
         note = audio && audioVotes
           ? `Works for this title · ${audioVotes} heard this audio`
           : `Works for this title (${works} viewer${works === 1 ? '' : 's'})`;
-      } else if (providerHealth?.down) { note = 'Down for many viewers today'; status = 'down'; }
+      } else if (providerHealth?.down) { note = providerHealth.downReason || 'Down for many viewers today'; status = 'down'; }
       else if (broken) { note = 'Reported not playing for this title'; status = 'bad'; }
       else if (providerHealth?.usuallyWorks) { note = 'Usually works'; status = 'ok'; }
 

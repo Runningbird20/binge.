@@ -207,6 +207,133 @@ async function sendGameAlerts(db) {
   return { leagues: byLeague.size, sent };
 }
 
+// ── Streaming-server uptime ───────────────────────────────────────────
+// Loads each embed server's player page for a known film and records
+// up / slow / down (plus the last 24h of viewer reports), and alerts admins
+// (push + optional ALERT_WEBHOOK_URL for Discord/Slack) when a server goes
+// down for two checks in a row or comes back. A 200 page doesn't prove a
+// video plays, which is why viewer reports are shown alongside.
+// Keep in sync with PROVIDERS in src/components/EmbedPlayer.js.
+const PROBE_TMDB = 550; // Fight Club — on every server
+const PROBES = [
+  ['vidrift', 'VidRift', `https://embed.vidrift.net/embed/movie/${PROBE_TMDB}`],
+  ['vidy', 'Vidy', `https://vidy.st/movie/${PROBE_TMDB}`],
+  ['vidlink', 'VidLink', `https://vidlink.pro/movie/${PROBE_TMDB}`],
+  ['cinesrc', 'CineSrc', `https://cinesrc.st/embed/movie/${PROBE_TMDB}`],
+  ['vidsrc-ru', 'VidSrc', `https://vidsrc.ru/movie/${PROBE_TMDB}`],
+  ['vidsrc-su', 'VidSrc SU', `https://vidsrc.su/embed/movie/${PROBE_TMDB}`],
+  ['videasy', 'Videasy', `https://player.videasy.net/movie/${PROBE_TMDB}`],
+  ['2embed', '2Embed', `https://www.2embed.stream/embed/movie/${PROBE_TMDB}`],
+  ['vidsrc-embed-ru', 'VidSrc Classic', `https://vsembed.ru/embed/movie?tmdb=${PROBE_TMDB}`],
+  ['vidsrc-rip', 'VidSrc RIP', `https://vidsrc.rip/embed/movie/${PROBE_TMDB}`],
+];
+const HEALTH_EVERY_MS = 15 * 60 * 1000;
+const UNAVAILABLE = /media is unavailable|video not found|not available in your|404 not found|bad gateway|service unavailable/i;
+
+async function probe(url) {
+  const started = Date.now();
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(12000),
+    });
+    const body = (await res.text()).slice(0, 20000);
+    const latency = Date.now() - started;
+    // Bot protection (Cloudflare etc.) refuses server-side checks even when
+    // the player works fine in a browser — that's "can't tell", not down.
+    if ([401, 403, 429].includes(res.status)) return { status: 'unknown', http: res.status, latency, detail: 'Blocks automated checks — using viewer reports' };
+    if (!res.ok) return { status: 'down', http: res.status, latency, detail: `HTTP ${res.status}` };
+    if (UNAVAILABLE.test(body)) return { status: 'down', http: res.status, latency, detail: 'Page says the video is unavailable' };
+    return { status: latency > 6000 ? 'slow' : 'up', http: res.status, latency, detail: latency > 6000 ? 'Slow to respond' : null };
+  } catch (error) {
+    return { status: 'down', http: null, latency: Date.now() - started, detail: error.name === 'TimeoutError' ? 'Timed out' : (error.cause?.code || error.message) };
+  }
+}
+
+async function notifyAdmins(db, title, body) {
+  const webhook = process.env.ALERT_WEBHOOK_URL;
+  if (webhook) {
+    // Discord reads `content`, Slack reads `text`.
+    await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: `**${title}**\n${body}`, text: `*${title}*\n${body}` }) }).catch(() => {});
+  }
+  const { data: admins } = await db.from('profiles').select('id').eq('is_admin', true);
+  const ids = (admins || []).map((row) => row.id);
+  if (!ids.length) return;
+  const { data: subs } = await db.from('push_subscriptions').select('id, endpoint, p256dh, auth').in('user_id', ids);
+  await pushTo(db, subs || [], JSON.stringify({ title, body, url: '/admin', tag: `server-${title}` }));
+}
+
+async function checkServers(db, { force = false } = {}) {
+  const { data: rows } = await db.from('server_status').select('*');
+  const previous = new Map((rows || []).map((row) => [row.provider, row]));
+  const lastRun = Math.max(0, ...(rows || []).map((row) => new Date(row.checked_at || 0).getTime()));
+  if (!force && Date.now() - lastRun < HEALTH_EVERY_MS) return { skipped: true };
+
+  const since = new Date(Date.now() - 86400000).toISOString();
+  const { data: reports } = await db.from('stream_reports').select('provider, works').gte('updated_at', since).limit(5000);
+  const counts = new Map();
+  (reports || []).forEach((row) => {
+    const entry = counts.get(row.provider) || { works: 0, broken: 0 };
+    if (row.works) entry.works += 1; else entry.broken += 1;
+    counts.set(row.provider, entry);
+  });
+
+  const now = new Date().toISOString();
+  const results = await Promise.all(PROBES.map(async ([provider, label, url]) => ({ provider, label, ...(await probe(url)) })));
+  const changes = [];
+  for (const result of results) {
+    const before = previous.get(result.provider);
+    // Viewers' reports decide for servers we can't probe, and can flag a
+    // server whose page loads but whose videos don't play.
+    const viewer = counts.get(result.provider) || { works: 0, broken: 0 };
+    if (result.status !== 'down' && viewer.broken >= 3 && viewer.broken >= viewer.works * 2) {
+      result.status = 'down';
+      result.detail = `${viewer.broken} viewers couldn’t play it in the last day`;
+    }
+    const failCount = result.status === 'down' ? (before?.fail_count || 0) + 1 : 0;
+    const row = {
+      provider: result.provider,
+      label: result.label,
+      status: result.status,
+      http_status: result.http,
+      latency_ms: result.latency,
+      detail: result.detail,
+      reports_broken_24h: counts.get(result.provider)?.broken || 0,
+      reports_works_24h: counts.get(result.provider)?.works || 0,
+      fail_count: failCount,
+      alerted_down: before?.alerted_down || false,
+      checked_at: now,
+      changed_at: before?.status === result.status ? before?.changed_at || now : now,
+    };
+    // Two failed checks in a row (~30 min) before alerting — one blip isn't an outage.
+    if (failCount >= 2 && !row.alerted_down) {
+      row.alerted_down = true;
+      changes.push(`🔴 ${result.label} is down (${result.detail || 'no response'})`);
+    } else if (result.status !== 'down' && before?.alerted_down) {
+      row.alerted_down = false;
+      changes.push(`🟢 ${result.label} is back up`);
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await db.from('server_status').upsert(row);
+  }
+  if (changes.length) {
+    await notifyAdmins(db, changes.length === 1 ? changes[0] : `${changes.length} streaming servers changed`, changes.join('\n'));
+  }
+  return { checked: results.length, down: results.filter((r) => r.status === 'down').map((r) => r.provider), alerts: changes.length };
+}
+
+router.get('/health', async (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
+  const db = setupPush() || getAdminClient();
+  if (!db) return res.status(503).json({ error: 'database not configured' });
+  try {
+    res.json(await checkServers(db, { force: true }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/sports', async (req, res) => {
   if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
   const db = setupPush();
@@ -224,8 +351,12 @@ router.get('/reminders', async (req, res) => {
   if (!db) return res.status(503).json({ error: 'push not configured' });
   try {
     // The same frequent job also checks followed teams' games.
-    const [reminders, games] = await Promise.all([sendDueReminders(db), sendGameAlerts(db).catch((err) => ({ error: err.message }))]);
-    res.json({ ...reminders, games });
+    const [reminders, games, servers] = await Promise.all([
+      sendDueReminders(db),
+      sendGameAlerts(db).catch((err) => ({ error: err.message })),
+      checkServers(db).catch((err) => ({ error: err.message })), // throttled to every 15 min
+    ]);
+    res.json({ ...reminders, games, servers });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -299,3 +430,6 @@ router.get('/new-episodes', async (req, res) => {
 
 module.exports = router;
 module.exports.gameAlerts = gameAlerts;
+module.exports.checkServers = checkServers;
+module.exports.pushTo = pushTo;
+module.exports.setupPush = setupPush;

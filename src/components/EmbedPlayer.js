@@ -22,10 +22,12 @@ import { formatClock, getResumePosition, mergeRemotePosition, positionKey, saveP
 import {
   fetchReportSummary,
   fetchProviderHealth,
+  fetchDisabledServers,
   rememberServer,
   getPlaybackPrefs,
   getServerMemory,
   rankServers,
+  setCaptionCapableServers,
   savePlaybackPrefs,
   submitStreamReport,
   wantedAudio,
@@ -250,6 +252,7 @@ const PROVIDER_HOSTS = Object.fromEntries(PROVIDERS.map((entry) => {
 }));
 const EVENT_PROVIDERS = new Set(PROVIDERS.filter((entry) => entry.events).map((entry) => entry.id));
 const SERVER_LABELS = Object.fromEntries(PROVIDERS.map((entry) => [entry.id, { label: entry.label, subtitles: Boolean(entry.subtitles) }]));
+setCaptionCapableServers(PROVIDERS.filter((entry) => entry.subtitles).map((entry) => entry.id));
 // How long a server has to stay open before it counts as "works" for this
 // title (and the one-time audio check appears).
 const SERVER_CONFIRM_SECONDS = 60;
@@ -365,6 +368,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // Servers this network blocks (school/work firewalls) are dropped from
   // the ranking instead of being tried and failing.
   const [blockedIds, setBlockedIds] = useState(() => new Set());
+  const [disabledIds, setDisabledIds] = useState(() => new Set());
+  useEffect(() => { fetchDisabledServers().then(setDisabledIds); }, []);
   useEffect(() => {
     let cancelled = false;
     reachabilityMap(Object.values(PROVIDER_HOSTS)).then((reach) => {
@@ -375,9 +380,10 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   }, []);
   const availableIds = useMemo(() => {
     const ids = providerIdsFor(mediaType, externalId);
-    const reachable = ids.filter((id) => !blockedIds.has(id));
+    // Off-limits: blocked on this network, or switched off by an admin.
+    const reachable = ids.filter((id) => !blockedIds.has(id) && !disabledIds.has(id));
     return reachable.length ? reachable : ids;
-  }, [mediaType, externalId, blockedIds]);
+  }, [mediaType, externalId, blockedIds, disabledIds]);
   const rankedServers = useMemo(
     () => rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory, health: providerHealth }),
     [availableIds, prefs, originalLanguage, reportSummary, serverMemory, providerHealth]

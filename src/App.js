@@ -11,6 +11,7 @@ import BottomNav from './components/BottomNav';
 import AdBlocker from './components/AdBlocker';
 import ErrorBoundary, { PageError } from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
+import AnnouncementBanner from './components/AnnouncementBanner';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
@@ -42,6 +43,7 @@ const Wrapped        = lazy(() => import('./pages/Wrapped'));
 const Settings       = lazy(() => import('./pages/Settings'));
 const ShareTarget    = lazy(() => import('./pages/ShareTarget'));
 const ReleaseCalendar = lazy(() => import('./pages/ReleaseCalendar'));
+const ImportHistory  = lazy(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -62,7 +64,21 @@ function AppShell({ children }) {
 
   return (
     <>
+      <a
+        href="#main"
+        className="skip-link"
+        onClick={(event) => {
+          event.preventDefault();
+          const main = document.querySelector('main');
+          if (!main) return;
+          main.setAttribute('tabindex', '-1');
+          main.focus();
+        }}
+      >
+        Skip to content
+      </a>
       <OfflineBanner />
+      {!NO_NAV_PATHS.includes(location.pathname) && <AnnouncementBanner />}
       <ErrorBoundary resetKey={location.pathname} fallback={PageError}>
         {children}
       </ErrorBoundary>
@@ -109,6 +125,7 @@ function AppRoutes() {
         <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
         <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
+        <Route path="/import"    element={<ProtectedRoute><ImportHistory /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />

@@ -725,6 +725,7 @@ export default function Sports() {
               key={cat}
               type="button"
               className={`genre-chip${category === cat ? ' active' : ''}`}
+              aria-pressed={category === cat}
               onClick={() => setCategory(cat)}
             >
               {cat !== 'All' ? `${catIcon(cat)} ` : ''}{cat}

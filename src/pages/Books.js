@@ -1054,6 +1054,7 @@ export default function Books() {
               <button
                 type="button"
                 className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+                aria-pressed={activeLabel === ''}
                 onClick={() => setActiveLabel('')}
               >
                 Featured
@@ -1063,6 +1064,7 @@ export default function Books() {
                   key={group.label}
                   type="button"
                   className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+                  aria-pressed={activeLabel === group.label}
                   onClick={() => setActiveLabel(group.label)}
                 >
                   {group.label}
