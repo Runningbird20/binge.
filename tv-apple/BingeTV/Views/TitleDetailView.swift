@@ -17,6 +17,7 @@ struct TitleDetailView: View {
     @State private var episodes: [TMDBSeason.Episode] = []
     @State private var more: [Title] = []
     @State private var handoff: Handoff?
+    @State private var playing: PlayRequest?
     @State private var listBusy = false
     @State private var listError: String?
     @FocusState private var playFocused: Bool
@@ -42,6 +43,9 @@ struct TitleDetailView: View {
             .padding(.bottom, 80)
         }
         .scrollClipDisabled()
+        .fullScreenCover(item: $playing, onDismiss: { Task { resume = await app.resumePoint(for: title) } }) {
+            PlayerView(request: $0, app: app)
+        }
         .background(alignment: .top) { backdrop }
         .fullScreenCover(item: $handoff) { HandoffView(handoff: $0) }
         .task { await load() }
@@ -198,8 +202,7 @@ struct TitleDetailView: View {
                     ForEach(episodes) { episode in
                         EpisodeCard(episode: episode, fallback: title.backdrop,
                                     isCurrent: episode.seasonNumber == resume?.currentSeason && episode.episodeNumber == resume?.currentEpisode) {
-                            handoffFor(season: episode.seasonNumber, episode: episode.episodeNumber,
-                                       name: episode.name, seconds: nil)
+                            start(season: episode.seasonNumber, episode: episode.episodeNumber, name: episode.name)
                         }
                     }
                 }
@@ -217,20 +220,24 @@ struct TitleDetailView: View {
         if title.kind == .tvShow {
             let s = resume?.currentSeason ?? seasons.first?.seasonNumber ?? 1
             let e = resume?.currentEpisode ?? 1
-            handoffFor(season: s, episode: e, name: nil, seconds: resume?.positionSeconds)
+            start(season: s, episode: e, name: nil)
         } else {
-            handoff = Handoff(heading: "Watch \(title.name)",
-                              detail: resumeProgress != nil ? "Picks up where you left off." : "Starts from the beginning.",
-                              url: title.watchURL(seconds: resume?.positionSeconds))
+            start(season: nil, episode: nil, name: nil)
         }
     }
 
-    private func handoffFor(season: Int, episode: Int, name: String?, seconds: Double?) {
-        let sameAsResume = season == resume?.currentSeason && episode == resume?.currentEpisode
-        let label = "S\(season):E\(episode)" + (name.map { " · \($0)" } ?? "")
-        handoff = Handoff(heading: "Watch \(title.name)",
-                          detail: sameAsResume && seconds != nil ? "\(label) — picks up where you left off." : label,
-                          url: title.watchURL(season: season, episode: episode, seconds: sameAsResume ? (seconds ?? resume?.positionSeconds) : nil))
+    // Plays on the TV. The phone handoff is only a fallback for a tvOS
+    // without the web view, or a title with no streaming id.
+    private func start(season: Int?, episode: Int?, name: String?) {
+        let sameAsResume = title.kind == .movie || (season == resume?.currentSeason && episode == resume?.currentEpisode)
+        let startAt = sameAsResume ? resume?.positionSeconds : nil
+        if LegacyWebView.isAvailable, title.tmdbId != nil {
+            playing = PlayRequest(title: title, season: season, episode: episode, startAt: startAt, seasons: seasons)
+            return
+        }
+        let label = season.map { "S\($0):E\(episode ?? 1)" + (name.map { " · \($0)" } ?? "") } ?? "Starts on your phone."
+        handoff = Handoff(heading: "Watch \(title.name)", detail: label,
+                          url: title.watchURL(season: season, episode: episode, seconds: startAt))
     }
 
     private func toggleList() {

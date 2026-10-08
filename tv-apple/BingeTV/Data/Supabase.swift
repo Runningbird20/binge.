@@ -135,6 +135,10 @@ actor Supabase {
         _ = try await send("POST", table: table, query: [], body: row, auth: .required, prefer: "return=minimal")
     }
 
+    func update(_ table: String, _ query: [URLQueryItem], _ row: [String: Any]) async throws {
+        _ = try await send("PATCH", table: table, query: query, body: row, auth: .required, prefer: "return=minimal")
+    }
+
     func delete(_ table: String, _ query: [URLQueryItem]) async throws {
         _ = try await send("DELETE", table: table, query: query, body: nil, auth: .required)
     }

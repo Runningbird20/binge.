@@ -35,6 +35,11 @@ struct RootView: View {
             case .ready:
                 MainTabs()
             }
+            #if DEBUG
+            if let probe = UserDefaults.standard.string(forKey: "BingeProbe").flatMap(URL.init(string:)) {
+                DebugProbeView(url: probe).ignoresSafeArea()
+            }
+            #endif
         }
         .animation(.easeInOut(duration: 0.25), value: app.phase)
         .task { await app.start() }

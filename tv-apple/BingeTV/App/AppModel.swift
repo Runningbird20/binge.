@@ -96,9 +96,17 @@ final class AppModel: ObservableObject {
 
     // MARK: Per-profile data (same tables and profile_id scoping as the site)
 
+    // Rows saved before profiles existed have no profile_id; they belong to
+    // the account's main profile, so that profile sees them too.
     private var ownerFilter: [URLQueryItem] {
         var items = [URLQueryItem(name: "user_id", value: "eq.\(session?.userId ?? "")")]
-        if let profile { items.append(URLQueryItem(name: "profile_id", value: "eq.\(profile.id)")) }
+        if let profile {
+            if profile.isDefault || profiles.count <= 1 {
+                items.append(URLQueryItem(name: "or", value: "(profile_id.eq.\(profile.id),profile_id.is.null)"))
+            } else {
+                items.append(URLQueryItem(name: "profile_id", value: "eq.\(profile.id)"))
+            }
+        }
         return items
     }
 
@@ -145,9 +153,10 @@ final class AppModel: ObservableObject {
         async let movies = Catalog.titles(.movie, ids: rows.filter { $0.mediaType == "movie" }.map(\.mediaId))
         async let shows = Catalog.titles(.tvShow, ids: rows.filter { $0.mediaType == "tv_show" }.map(\.mediaId))
         let (movieMap, showMap) = try await (movies, shows)
+        var seen = Set<String>()
         return rows.compactMap { row in
             let title = row.mediaType == "movie" ? movieMap[row.mediaId] : showMap[row.mediaId]
-            guard let title, !isKids || KidsFilter.allows(title.ageRating) else { return nil }
+            guard let title, !isKids || KidsFilter.allows(title.ageRating), seen.insert(title.id).inserted else { return nil }
             return title
         }
     }
@@ -158,14 +167,15 @@ final class AppModel: ObservableObject {
             URLQueryItem(name: "select", value: ContinueRow.columns),
             URLQueryItem(name: "media_type", value: "in.(movie,tv_show)"),
             URLQueryItem(name: "order", value: "updated_at.desc"),
-            URLQueryItem(name: "limit", value: "20"),
+            URLQueryItem(name: "limit", value: "60"),
         ] + ownerFilter)
         async let movies = Catalog.titles(.movie, ids: rows.filter { $0.mediaType == "movie" }.map(\.mediaId))
         async let shows = Catalog.titles(.tvShow, ids: rows.filter { $0.mediaType == "tv_show" }.map(\.mediaId))
         let (movieMap, showMap) = try await (movies, shows)
+        var seen = Set<String>()
         let items: [ContinueItem] = rows.compactMap { row in
             let title = row.mediaType == "movie" ? movieMap[row.mediaId] : showMap[row.mediaId]
-            guard let title, !isKids || KidsFilter.allows(title.ageRating) else { return nil }
+            guard let title, !isKids || KidsFilter.allows(title.ageRating), seen.insert(title.id).inserted else { return nil }
             return ContinueItem(title: title, season: row.currentSeason, episode: row.currentEpisode,
                                 position: row.positionSeconds, duration: row.durationSeconds)
         }
@@ -173,26 +183,113 @@ final class AppModel: ObservableObject {
     }
 
     // Catalog rows only carry posters; Continue Watching cards are wide, so
-    // fetch each title's backdrop from TMDB (cached).
+    // fetch each title's backdrop from TMDB (cached). The same call says
+    // whether a newer episode aired in the last two weeks.
     private func withBackdrops(_ items: [ContinueItem]) async -> [ContinueItem] {
-        await withTaskGroup(of: (Int, URL?).self) { group in
+        await withTaskGroup(of: (Int, TMDBDetails?).self) { group in
             for (index, item) in items.enumerated() {
                 guard let tmdbId = item.title.tmdbId else { continue }
                 group.addTask {
-                    let details: TMDBDetails? = try? await TMDB.shared.get("\(item.title.kind.tmdbPath)/\(tmdbId)")
-                    return (index, TMDB.image(details?.backdropPath, "w780"))
+                    (index, try? await TMDB.shared.get("\(item.title.kind.tmdbPath)/\(tmdbId)") as TMDBDetails)
                 }
             }
             var result = items
-            for await (index, url) in group {
-                guard let url else { continue }
-                var title = result[index].title
-                title.backdrop = url
-                let old = result[index]
-                result[index] = ContinueItem(title: title, season: old.season, episode: old.episode, position: old.position, duration: old.duration)
+            for await (index, details) in group {
+                guard let details else { continue }
+                if let backdrop = TMDB.image(details.backdropPath, "w780") { result[index].title.backdrop = backdrop }
+                if let aired = details.lastEpisodeToAir, let date = aired.airDate,
+                   ReleaseWindow.isRecent(date, days: 14),
+                   (aired.seasonNumber, aired.episodeNumber) > (result[index].season ?? 0, result[index].episode ?? 0) {
+                    result[index].newEpisode = "S\(aired.seasonNumber):E\(aired.episodeNumber)"
+                }
             }
             return result
         }
+    }
+
+    // Highly rated titles (average of the rating criteria ≥ 4★), newest first.
+    func lovedTitles() async -> [Title] {
+        guard isSignedIn else { return [] }
+        struct Rating: Decodable {
+            let mediaId: Int
+            let acting, writing, originality, pacing, cinematography: Double?
+            let premise, resonance: Double?
+            var average: Double {
+                let parts = [acting, writing, originality, pacing, cinematography, premise, resonance].compactMap { $0 }
+                return parts.isEmpty ? 0 : parts.reduce(0, +) / Double(parts.count)
+            }
+        }
+        async let movieRows: [Rating]? = try? Supabase.shared.select("movie_ratings", [
+            URLQueryItem(name: "select", value: "media_id,acting,writing,originality,pacing,cinematography"),
+            URLQueryItem(name: "order", value: "created_at.desc"), URLQueryItem(name: "limit", value: "40"),
+        ] + ownerFilter)
+        async let showRows: [Rating]? = try? Supabase.shared.select("tv_show_ratings", [
+            URLQueryItem(name: "select", value: "media_id,premise,originality,acting,cinematography,writing,pacing,resonance"),
+            URLQueryItem(name: "order", value: "created_at.desc"), URLQueryItem(name: "limit", value: "40"),
+        ] + ownerFilter)
+        let (m, t) = await (movieRows ?? [], showRows ?? [])
+        let lovedMovies = m.filter { $0.average >= 4 }.map(\.mediaId)
+        let lovedShows = t.filter { $0.average >= 4 }.map(\.mediaId)
+        let movieMap = (try? await Catalog.titles(.movie, ids: lovedMovies)) ?? [:]
+        let showMap = (try? await Catalog.titles(.tvShow, ids: lovedShows)) ?? [:]
+        let titles = lovedShows.compactMap { showMap[$0] } + lovedMovies.compactMap { movieMap[$0] }
+        return titles.filter { !isKids || KidsFilter.allows($0.ageRating) }
+    }
+
+    // Every rated title (for excluding from picks).
+    func ratedIds() async -> Set<String> {
+        guard isSignedIn else { return [] }
+        struct Row: Decodable { let mediaId: Int }
+        async let m: [Row]? = try? Supabase.shared.select("movie_ratings", [URLQueryItem(name: "select", value: "media_id")] + ownerFilter)
+        async let t: [Row]? = try? Supabase.shared.select("tv_show_ratings", [URLQueryItem(name: "select", value: "media_id")] + ownerFilter)
+        let (movies, shows) = await (m ?? [], t ?? [])
+        return Set(movies.map { "movie:\($0.mediaId)" } + shows.map { "tv_show:\($0.mediaId)" })
+    }
+
+    // Same continue_watching row the website writes, so the phone, laptop
+    // and TV all resume from the same spot.
+    func saveProgress(title: Title, season: Int?, episode: Int?, position: Double, duration: Double) async {
+        guard let session, !isDemo else { return }
+        var row: [String: Any] = [
+            "updated_at": ISO8601DateFormatter().string(from: Date()),
+            "position_seconds": Int(position),
+            "duration_seconds": Int(duration),
+        ]
+        if title.kind == .tvShow {
+            row["current_season"] = season ?? 1
+            row["current_episode"] = episode ?? 1
+        }
+        let match = [
+            URLQueryItem(name: "user_id", value: "eq.\(session.userId)"),
+            URLQueryItem(name: "media_type", value: "eq.\(title.kind.rawValue)"),
+            URLQueryItem(name: "media_id", value: "eq.\(title.dbId)"),
+            URLQueryItem(name: "profile_id", value: profile.map { "eq.\($0.id)" } ?? "is.null"),
+        ]
+        do {
+            let existing: [ContinueRow] = try await Supabase.shared.select("continue_watching", [
+                URLQueryItem(name: "select", value: ContinueRow.columns), URLQueryItem(name: "limit", value: "1"),
+            ] + match)
+            if let current = existing.first {
+                try await Supabase.shared.update("continue_watching", [URLQueryItem(name: "id", value: "eq.\(current.id)")], row)
+            } else {
+                row["user_id"] = session.userId
+                row["profile_id"] = profile?.id ?? NSNull()
+                row["media_type"] = title.kind.rawValue
+                row["media_id"] = title.dbId
+                try await Supabase.shared.insert("continue_watching", row)
+            }
+        } catch {
+            handle(error)
+        }
+    }
+
+    func removeFromContinue(_ title: Title) async {
+        guard let session else { return }
+        try? await Supabase.shared.delete("continue_watching", [
+            URLQueryItem(name: "user_id", value: "eq.\(session.userId)"),
+            URLQueryItem(name: "media_type", value: "eq.\(title.kind.rawValue)"),
+            URLQueryItem(name: "media_id", value: "eq.\(title.dbId)"),
+        ] + ownerFilter.filter { $0.name != "user_id" })
     }
 
     func resumePoint(for title: Title) async -> ContinueRow? {
@@ -201,6 +298,7 @@ final class AppModel: ObservableObject {
             URLQueryItem(name: "select", value: ContinueRow.columns),
             URLQueryItem(name: "media_type", value: "eq.\(title.kind.rawValue)"),
             URLQueryItem(name: "media_id", value: "eq.\(title.dbId)"),
+            URLQueryItem(name: "order", value: "updated_at.desc"),
             URLQueryItem(name: "limit", value: "1"),
         ] + ownerFilter)
         return rows?.first

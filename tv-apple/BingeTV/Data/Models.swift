@@ -23,6 +23,7 @@ struct Title: Identifiable, Hashable, Sendable {
     var backdrop: URL?
     var tmdbId: Int?
     var comingSoon = false
+    var badge: String?
 
     var id: String { "\(kind.rawValue):\(dbId)" }
 
@@ -102,11 +103,13 @@ struct ContinueRow: Decodable {
 }
 
 struct ContinueItem: Identifiable, Hashable {
-    let title: Title
+    var title: Title
     let season: Int?
     let episode: Int?
     let position: Double?
     let duration: Double?
+    // Set when an episode newer than the one you're on aired recently.
+    var newEpisode: String?
 
     var id: String { title.id }
 
@@ -140,6 +143,11 @@ enum ReleaseWindow {
     private static func days(until value: String?) -> Double? {
         guard let value, let date = formatter.date(from: String(value.prefix(10))) else { return nil }
         return date.timeIntervalSinceNow / 86_400
+    }
+
+    static func isRecent(_ value: String?, days: Double) -> Bool {
+        guard let until = self.days(until: value) else { return false }
+        return until <= 0 && until > -days
     }
 
     static func isVisible(_ value: String?) -> Bool { (days(until: value) ?? 0) <= 30 }
