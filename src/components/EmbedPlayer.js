@@ -551,8 +551,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     <div className="st-upnext" role="dialog" aria-label="Up next">
       {nextInfo?.still && <img src={nextInfo.still} alt="" className="st-upnext-still" />}
       <div className="st-upnext-body">
-        <span className="st-upnext-kicker">Up next · S{nextEpisode.season} E{nextEpisode.episode}</span>
         <strong>{nextInfo?.title || `Episode ${nextEpisode.episode}`}</strong>
+        <span className="st-upnext-meta">Next: season {nextEpisode.season}, episode {nextEpisode.episode}</span>
         <div className="st-upnext-actions">
           <button type="button" className="st-btn st-btn--primary" onClick={playNextEpisode}>
             <Play size={16} weight="fill" /> {upNext.secondsLeft == null ? 'Play next episode' : `Play now${upNext.secondsLeft > 0 ? ` (${upNext.secondsLeft})` : ''}`}

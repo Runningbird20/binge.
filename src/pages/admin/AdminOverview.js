@@ -47,15 +47,20 @@ export default function AdminOverview({ onOpenTab }) {
 
   return (
     <div className="adm-overview">
-      <dl className="adm-tiles">
-        {tiles.map(([label, value, sub, tab]) => (
-          <div key={label} className={`adm-tile${tab ? ' adm-tile--alert' : ''}`}>
-            <dt>{label}</dt>
-            <dd>{Number(value || 0).toLocaleString()}</dd>
-            {tab ? <button type="button" className="adm-tile-link" onClick={() => onOpenTab(tab)}>{sub} →</button> : <span>{sub}</span>}
-          </div>
-        ))}
-      </dl>
+      <section className="adm-panel" aria-labelledby="adm-glance-title">
+        <h3 id="adm-glance-title">At a glance</h3>
+        <dl className="adm-facts">
+          {tiles.map(([label, value, sub, tab]) => (
+            <div key={label} className={tab ? 'alert' : ''}>
+              <dt>{label}</dt>
+              <dd>{Number(value || 0).toLocaleString()}</dd>
+              <dd className="adm-facts-sub">
+                {tab ? <button type="button" className="adm-tile-link" onClick={() => onOpenTab(tab)}>{sub}</button> : sub}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <div className="adm-charts">
         <Bars series={stats.active_by_day || []} label="Active viewers per day (14 days)" />

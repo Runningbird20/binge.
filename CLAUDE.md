@@ -159,6 +159,21 @@ A rated title is treated as watched and belongs in the "Ratings & Reviews" secti
 - `saveSupabaseRating` (`src/utils/supabaseData.js`) deletes the matching watchlist row after saving a rating (best-effort — a delete failure must not fail the save).
 - `src/utils/libraryStats.js` centralizes the dashboard math shared by Home (`ProfileStatsHeader` / `LibrarySection`) and Profile: `excludeRated` hides rated titles from the library view, `computeWatchMinutes` counts both watchlist progress and rated titles toward watch time (deduped, since rating a title you'd already tracked must not double-count), and `countCompleted` counts watched/read + rated titles. If you change what "counts" as watched or completed, do it here so both dashboards stay in sync.
 
+### Design rules (web, mobile, TV)
+
+All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/reference/craft-floor.md`, `operate.md`, `ios.md`):
+- **No small labels above headings.** Context goes in a subtitle under the heading (`.st-page-sub`) or the hero's meta row (`.st-hero-context`).
+- **No emoji or text characters as icons.** Use Phosphor on the web (the Sports `CatIcon`) and SF Symbols on tvOS. Arrows inside written instructions and keyboard-key labels are fine.
+- **No big-number / small-label stat tiles.**
+  - Profile and Home stats are one line of facts (`.pf-stats`).
+  - Admin overview is a table (`.adm-facts`).
+  - Wrapped tells each fact as a sentence with the fact in bold, on both web and TV.
+- **No identical icon-card grids.** The TV Me tab is a native `List`.
+- **Gold only marks actions, selection or state** (never taglines, section icons or captions).
+- **No purple/blue gradients or frosted glass as decoration.**
+- **Every control has its states.** Loading uses skeletons, not page-centered spinners. Empty states explain what to do next.
+- **Verify in one batched screenshot round:** desktop plus a phone on the web, the simulator on tvOS.
+
 ### Icons
 
 UI icons come from `@phosphor-icons/react` as SVG components, not text glyphs — a glyph like `+`/`✕` in a round button isn't reliably centered by the font, so close/add/remove buttons render `<Plus>` / `<X>` inside a flex-centered button instead.

@@ -63,7 +63,14 @@ struct SportsView: View {
                                     watch: { play(featured) },
                                     toggleMulti: { toggleMulti(featured) })
                 } else if !loaded {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 160)
+                    // Placeholder shapes in the layout the page will have.
+                    VStack(alignment: .leading, spacing: 30) {
+                        RoundedRectangle(cornerRadius: 12).fill(Theme.surface).frame(height: 520)
+                        HStack(spacing: 40) {
+                            ForEach(0..<4, id: \.self) { _ in RoundedRectangle(cornerRadius: 12).fill(Theme.surface).frame(width: 480, height: 270) }
+                        }
+                    }
+                    .accessibilityHidden(true)
                 }
 
                 if let message {
@@ -80,7 +87,9 @@ struct SportsView: View {
                                 Button {
                                     category = name
                                 } label: {
-                                    Text(name == "All" ? "All" : "\(SportsFeed.icons[name] ?? "🏆") \(name)")
+                                    if name == "All" { Text("All") } else {
+                                        Label(name, systemImage: SportsFeed.icons[name] ?? "trophy.fill")
+                                    }
                                 }
                                 .buttonStyle(PillButtonStyle(selected: category == name))
                             }
@@ -293,7 +302,7 @@ struct SportsView: View {
 
     private func cornerBar(_ corner: SportGame) -> some View {
         HStack(spacing: 24) {
-            Image(systemName: "pip.fill").font(.title3).foregroundStyle(Theme.gold)
+            Image(systemName: "pip.fill").font(.title3)
             Text("In the corner: \(corner.title)").font(.callout.weight(.semibold)).lineLimit(1)
             Spacer(minLength: 20)
             Button {
@@ -322,7 +331,7 @@ struct SportsView: View {
 
     private var multiviewBar: some View {
         HStack(spacing: 24) {
-            Image(systemName: "rectangle.grid.2x2.fill").font(.title3).foregroundStyle(Theme.gold)
+            Image(systemName: "rectangle.grid.2x2.fill").font(.title3)
             Text(multi.map(\.title).joined(separator: "  ·  "))
                 .font(.callout.weight(.semibold))
                 .lineLimit(1)
@@ -446,7 +455,7 @@ struct SportArt: View {
     private var iconArt: some View {
         ZStack {
             LinearGradient(colors: [split.0, split.1], startPoint: .topLeading, endPoint: .bottomTrailing)
-            Text(game.icon).font(.system(size: large ? 140 : 72))
+            Image(systemName: game.icon).font(.system(size: large ? 140 : 72, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
         }
     }
 }
@@ -526,7 +535,7 @@ struct SportThumbCard: View {
                 .frame(width: 480, height: 270)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(game.title).font(.callout.weight(.semibold)).lineLimit(1)
-                    Text("\(game.icon) \(game.league)  ·  \(game.streams.count) server\(game.streams.count == 1 ? "" : "s")")
+                    Text("\(Image(systemName: game.icon)) \(game.league)  ·  \(game.streams.count) server\(game.streams.count == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundStyle(Theme.muted)
                         .lineLimit(1)
@@ -589,7 +598,7 @@ struct SportsSpotlight: View {
                     .font(.system(size: 60, weight: .heavy))
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
-                Text("\(game.icon) \(game.league)  ·  \(game.streams.count) server\(game.streams.count == 1 ? "" : "s")")
+                Text("\(Image(systemName: game.icon)) \(game.league)  ·  \(game.streams.count) server\(game.streams.count == 1 ? "" : "s")")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Theme.muted)
                 HStack(spacing: 24) {

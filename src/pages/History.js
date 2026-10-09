@@ -116,7 +116,6 @@ export default function History() {
       <main className="page-content">
         <header className="st-page-head">
           <div>
-            <p className="st-page-kicker">Your activity</p>
             <h1 className="st-page-title">Watch History</h1>
           </div>
           <Link to="/profile" className="st-btn st-btn--ghost">Back to profile</Link>

@@ -109,9 +109,8 @@ function TopResult({ item }) {
       <div className="sr-top-body">
         {poster && <img className="sr-top-poster" src={poster} alt="" referrerPolicy="no-referrer" />}
         <div className="sr-top-text">
-          <p className="st-page-kicker">Top result · {KIND[item.media_type]}</p>
           <h2>{item.title}</h2>
-          <p className="sr-top-meta">{[item.year, item.media_type === 'book' ? item.author : String(item.genre || '').split(',')[0]].filter(Boolean).join(' · ')}</p>
+          <p className="sr-top-meta">{[KIND[item.media_type], item.year, item.media_type === 'book' ? item.author : String(item.genre || '').split(',')[0]].filter(Boolean).join(' · ')}</p>
           <div className="sr-top-actions">
             {item.media_type !== 'book' && (
               <Link to={titleUrl(item, { play: true })} state={{ backgroundLocation: location }} className="st-btn st-btn--primary"><Play size={18} weight="fill" /> Play</Link>
@@ -306,7 +305,6 @@ export default function SearchResults() {
       <main className="page-content sr-page">
         <header className="st-page-head">
           <div>
-            <p className="st-page-kicker">Search</p>
             <h1 className="st-page-title">{query ? `“${query}”` : 'Search'}</h1>
           </div>
         </header>
@@ -337,7 +335,6 @@ export default function SearchResults() {
                 <div className="sr-person-head">
                   {person.person.photo && <img src={person.person.photo} alt="" referrerPolicy="no-referrer" />}
                   <div>
-                    <p className="st-page-kicker">{person.person.department}</p>
                     <h2 className="st-row-title">{person.person.department === 'Director' ? `Directed by ${person.person.name}` : `Starring ${person.person.name}`}</h2>
                   </div>
                 </div>

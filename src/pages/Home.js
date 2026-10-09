@@ -184,7 +184,6 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
           <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="lg" />
         )}
         <span className="hm-me-text">
-          <span className="st-page-kicker">Your profile</span>
           <span className="hm-me-name">{activeProfile?.name || user.username}</span>
         </span>
       </Link>

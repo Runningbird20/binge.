@@ -116,7 +116,7 @@ struct TitleDetailView: View {
                 HStack(spacing: 30) {
                     if let outside { OutsideRatingsRow(ratings: outside) }
                     if let myStars {
-                        Label("You: " + String(repeating: "★", count: Int(myStars.rounded())), systemImage: "person.fill")
+                        Label("You rated it \(Int(myStars.rounded())) of 5", systemImage: "star.fill")
                             .font(.callout.weight(.bold))
                             .foregroundStyle(Theme.gold)
                     }
@@ -124,7 +124,7 @@ struct TitleDetailView: View {
             }
 
             if let tagline = details?.tagline, !tagline.isEmpty {
-                Text(tagline).font(.headline).italic().foregroundStyle(Theme.gold)
+                Text(tagline).font(.headline).italic().foregroundStyle(.white.opacity(0.85))
             }
 
             if let overview = details?.overview ?? title.overview, !overview.isEmpty {
@@ -187,7 +187,7 @@ struct TitleDetailView: View {
     private var metaLine: String {
         var parts: [String] = []
         if let year = title.year { parts.append(String(year)) }
-        if let vote = details?.voteAverage, vote > 0 { parts.append(String(format: "★ %.1f", vote)) }
+        if let vote = details?.voteAverage, vote > 0 { parts.append(String(format: "TMDB %.1f", vote)) }
         if let runtime = details?.runtime, runtime > 0 {
             parts.append(runtime >= 60 ? "\(runtime / 60)h \(runtime % 60)m" : "\(runtime)m")
         }
@@ -394,7 +394,7 @@ struct HandoffView: View {
                         .minimumScaleFactor(0.6)
                     Text(handoff.detail)
                         .font(.title3)
-                        .foregroundStyle(Theme.gold)
+                        .foregroundStyle(.white.opacity(0.85))
                     VStack(alignment: .leading, spacing: 22) {
                         Step(number: 1, text: "Point your iPhone camera at the code.")
                         Step(number: 2, text: "binge. opens and starts playing.")
@@ -423,7 +423,7 @@ struct HandoffView: View {
                     .font(.headline.weight(.heavy))
                     .foregroundStyle(.black)
                     .frame(width: 46, height: 46)
-                    .background(Theme.gold, in: Circle())
+                    .background(.white, in: Circle())
                 Text(text).font(.title3)
             }
         }

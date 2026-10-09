@@ -208,8 +208,8 @@ export default function Settings() {
       <main className="page-content set-page">
         <header className="st-page-head">
           <div>
-            <p className="st-page-kicker">{activeProfile?.name ? `${activeProfile.name}’s profile` : 'Your profile'}</p>
             <h1 className="st-page-title">Settings</h1>
+            <p className="st-page-sub">{activeProfile?.name ? `For ${activeProfile.name}’s profile on every device.` : 'For your profile on every device.'}</p>
           </div>
           <span className={`set-saved${message ? ' show' : ''}`} role="status">{message}</span>
         </header>

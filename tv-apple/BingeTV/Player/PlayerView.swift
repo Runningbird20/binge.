@@ -56,7 +56,7 @@ struct PlayerView: View {
                     .background(.white, in: Capsule())
                     .foregroundStyle(.black)
                     .overlay(alignment: .top) {
-                        Text("Press ▲").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted).offset(y: -30)
+                        Text("Press \(Image(systemName: "chevron.up"))").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted).offset(y: -30)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, Theme.edge)
@@ -69,7 +69,7 @@ struct PlayerView: View {
                 VStack(spacing: 18) {
                     Text("Still watching?").font(.system(size: 52, weight: .heavy))
                     Text(model.request.title.name).font(.title3).foregroundStyle(Theme.muted)
-                    Text("Click to keep going · Back to stop").font(.callout).foregroundStyle(Theme.gold)
+                    Text("Click to keep going · Back to stop").font(.callout).foregroundStyle(Theme.muted)
                 }
                 .padding(60)
                 .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 30))
@@ -201,7 +201,7 @@ private struct HUD: View {
                             .foregroundStyle(Color(hex: 0xFF5A50))
                         Image(systemName: model.playback.paused ? "play.fill" : "pause.fill")
                     }
-                    Text("Click  Pause / play     ▼  Other streams     Back  Exit")
+                    Text("Click  Pause / play     \(Image(systemName: "chevron.down"))  Other streams     Back  Exit")
                         .font(.caption)
                         .foregroundStyle(Theme.muted)
                 } else {
@@ -220,7 +220,7 @@ private struct HUD: View {
                     Text("-" + clock(max(0, model.playback.d - model.playback.t))).monospacedDigit()
                 }
                 .font(.callout.weight(.semibold))
-                Text("◀ ▶  10 seconds     ▼  Servers & episodes     Back  Exit")
+                Text("\(Image(systemName: "chevron.left")) \(Image(systemName: "chevron.right"))  10 seconds     \(Image(systemName: "chevron.down"))  Servers & episodes     Back  Exit")
                     .font(.caption)
                     .foregroundStyle(Theme.muted)
                 }
@@ -262,8 +262,8 @@ private struct UpNextCard: View {
     let seconds: Int
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("UP NEXT").font(.caption.weight(.heavy)).tracking(2).foregroundStyle(Theme.gold)
-            Text("S\(season):E\(episode) in \(seconds)s").font(.title3.weight(.bold))
+            Text("Next: S\(season):E\(episode)").font(.title3.weight(.bold))
+            Text("Starts in \(seconds) seconds").font(.callout).monospacedDigit()
             Text("Click to play now · Back to keep watching").font(.caption).foregroundStyle(Theme.muted)
         }
         .padding(30)

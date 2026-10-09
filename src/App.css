@@ -632,14 +632,6 @@ body {
   margin: 0;
 }
 
-.page-kicker {
-  margin: 0;
-  color: #f4f6f8;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
 
 .page-subtitle,
 .books-page-subtitle {
@@ -1034,20 +1026,6 @@ body {
 }
 
 .badge-card-progress-chip,
-.badge-card-kicker,
-.badge-card-status,
-.badge-card-tier {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.14rem 0.36rem;
-  border-radius: 999px;
-  font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  line-height: 1.1;
-  text-transform: uppercase;
-}
 
 .badge-card-progress-chip {
   background-color: var(--badge-metal-soft);
@@ -1055,11 +1033,6 @@ body {
   color: var(--badge-metal);
 }
 
-.badge-card-kicker {
-  background-color: rgba(93, 184, 138, 0.12);
-  border: 1px solid rgba(93, 184, 138, 0.24);
-  color: #93dab6;
-}
 
 .badge-card-status {
   background-color: rgba(255, 255, 255, 0.05);
@@ -1603,14 +1576,6 @@ body {
   font-size: 1.2rem;
 }
 
-.books-filter-kicker {
-  margin: 0;
-  color: #f4f6f8;
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
 
 .books-filter-group {
   display: flex;
@@ -1959,14 +1924,6 @@ body {
   min-width: 0;
 }
 
-.book-detail-kicker {
-  margin: 0 0 0.65rem 0;
-  color: #f4f6f8;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
 
 .book-detail-content h2 {
   margin: 0;
@@ -2803,7 +2760,8 @@ body {
   display: inline-block;
   line-height: 1;
 }
-.star-rating-star-bg { color: rgba(255,255,255,0.18); }
+.star-rating-star-bg { color: rgba(255,255,255,0.18); display: block; }
+.star-rating-star svg { display: block; }
 .star-rating-star-fill {
   position: absolute;
   top: 0; left: 0;
@@ -7380,7 +7338,6 @@ body {
 
 /* ── Header ── */
 .admin-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.25rem 0 1.5rem; flex-wrap: wrap; }
-.admin-kicker { font-size: 0.72rem; font-weight: 700; color: #f4f6f8; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 0.3rem; }
 .admin-title { font-size: 2rem; font-weight: 900; color: #fff; margin: 0 0 0.3rem; letter-spacing: -0.04em; }
 .admin-subtitle { font-size: 0.88rem; color: #555; margin: 0; }
 .admin-subtitle strong { color: #bbb; }
@@ -9098,7 +9055,6 @@ select.filter-input,
     flex-shrink: 0;
   }
 
-  .book-detail-kicker { font-size: 0.7rem; }
 }
 
 /* ── Very small phones ≤480px ────────────────────────────── */

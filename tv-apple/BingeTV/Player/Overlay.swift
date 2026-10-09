@@ -71,7 +71,7 @@ private struct OverlayRoot: View {
             }
             if let alert = teams.banner {
                 HStack(spacing: 18) {
-                    Image(systemName: "sportscourt.fill").font(.title2).foregroundStyle(Theme.gold)
+                    Image(systemName: "sportscourt.fill").font(.title2)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(alert.headline).font(.headline).lineLimit(1)
                         Text(alert.detail + " · Swipe down in the player or open Sports to watch")

@@ -1,17 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import {
-  CalendarBlank,
-  SlidersHorizontal,
-  House,
-  FilmSlate,
-  MonitorPlay,
-  BookOpen,
-  Trophy,
-  Gear,
-  ShieldCheck,
-  UsersFour,
-} from '@phosphor-icons/react';
+import { ArrowRight, BookOpen, CalendarBlank, FilmSlate, Gear, House, MonitorPlay, ShieldCheck, SlidersHorizontal, Trophy, UsersFour } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import ProfileAvatar from './ProfileAvatar';
@@ -82,7 +71,7 @@ export default function Navbar() {
                         <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
                         <div className="profile-hover-user-text">
                           <span className="profile-hover-user-name">{user.username}</span>
-                          <span className="profile-hover-user-sub">View Profile →</span>
+                          <span className="profile-hover-user-sub">View profile <ArrowRight size={12} weight="bold" aria-hidden="true" /></span>
                         </div>
                       </Link>
                     )}

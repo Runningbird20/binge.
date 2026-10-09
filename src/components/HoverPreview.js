@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Info, Play, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
+import { Info, Play, SpeakerHigh, SpeakerSlash, Star } from '@phosphor-icons/react';
 import { getTrailerKey, setTrailerMuted, trailerEmbedUrl, whenTrailerPlaying } from '../utils/trailers';
 import { backdropSrc, posterSrc } from '../utils/imageQuality';
 import { languageName } from '../utils/tmdb';
@@ -83,7 +83,7 @@ export default function HoverPreview({ item, anchorRect, playTo, infoTo, linkSta
         <div className="st-preview-meta">
           {item._match && <span className="st-match">{item._match}% match</span>}
           {year && <span>{year}</span>}
-          {Number(item.vote_average) > 0 && <span>★ {Number(item.vote_average).toFixed(1)}</span>}
+          {Number(item.vote_average) > 0 && <span><Star size={12} weight="fill" aria-hidden="true" /> {Number(item.vote_average).toFixed(1)}</span>}
           {language && <span className="st-chip">{language}</span>}
         </div>
         {genres.length > 0 && <p className="st-preview-genres">{genres.join(' · ')}</p>}

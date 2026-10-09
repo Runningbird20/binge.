@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CaretLeft, CaretRight, ShareNetwork, X } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, ShareNetwork, Star, X } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   fetchEpisodeHistory,
@@ -14,50 +14,51 @@ import { buildWrapped } from '../utils/wrapped';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// 1080x1920 story image for sharing.
-async function renderShareImage(w, name) {
+// A story is a sentence with its fact set heavy: ['You spent ', ['112 hours'], ' watching.']
+function Sentence({ parts }) {
+  return parts.map((part, index) => (Array.isArray(part)
+    ? <strong key={index}>{part[0]}</strong>
+    : <span key={index}>{part}</span>));
+}
+
+function plain(parts) {
+  return parts.map((part) => (Array.isArray(part) ? part[0] : part)).join('');
+}
+
+// 1080x1920 story image for sharing: the same sentences, set large.
+async function renderShareImage(slides, name, year) {
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1920;
   const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 1080, 1920);
-  gradient.addColorStop(0, '#2b1b5a');
-  gradient.addColorStop(0.5, '#0f1220');
-  gradient.addColorStop(1, '#5a1b2b');
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = '#0b0d12';
   ctx.fillRect(0, 0, 1080, 1920);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'italic 700 64px Georgia, serif';
   ctx.fillText('binge.', 90, 160);
-  ctx.font = '700 44px -apple-system, Helvetica, Arial, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText(`${name}'s ${w.year} Wrapped`, 90, 240);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '900 200px -apple-system, Helvetica, Arial, sans-serif';
-  ctx.fillText(w.hours.toLocaleString(), 90, 520);
-  ctx.font = '600 52px -apple-system, Helvetica, Arial, sans-serif';
-  ctx.fillText('hours watched', 90, 600);
-  const lines = [
-    ['You are', w.persona.name],
-    ['Top show', w.topShow ? w.topShow.title : '—'],
-    ['Top genres', w.topGenres.join(', ') || '—'],
-    ['Titles', `${w.titleCount} · ${w.episodeCount} episodes`],
-    ['Favorite', w.favorites[0]?.title || '—'],
-  ];
-  let y = 800;
-  lines.forEach(([label, value]) => {
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = '600 38px -apple-system, Helvetica, Arial, sans-serif';
-    ctx.fillText(label.toUpperCase(), 90, y);
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.font = '500 40px -apple-system, Helvetica, Arial, sans-serif';
+  ctx.fillText(`${name}’s ${year}`, 90, 230);
+
+  const wrap = (text, maxWidth) => {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((word) => {
+      const next = line ? `${line} ${word}` : word;
+      if (ctx.measureText(next).width > maxWidth && line) { lines.push(line); line = word; } else { line = next; }
+    });
+    if (line) lines.push(line);
+    return lines;
+  };
+  let y = 420;
+  ctx.font = '800 66px -apple-system, Helvetica, Arial, sans-serif';
+  slides.filter((slide) => slide.share).slice(0, 5).forEach((slide) => {
     ctx.fillStyle = '#ffffff';
-    ctx.font = '800 64px -apple-system, Helvetica, Arial, sans-serif';
-    let text = String(value);
-    while (ctx.measureText(text).width > 900 && text.length > 4) text = `${text.slice(0, -2)}`;
-    if (text !== String(value)) text = `${text.trim()}…`;
-    ctx.fillText(text, 90, y + 76);
-    y += 200;
+    wrap(plain(slide.title), 900).forEach((line) => { ctx.fillText(line, 90, y); y += 80; });
+    y += 70;
   });
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = '500 34px -apple-system, Helvetica, Arial, sans-serif';
   ctx.fillText('Movies · Series · Books · Sports', 90, 1830);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
@@ -87,18 +88,30 @@ export default function Wrapped() {
   const slides = useMemo(() => {
     if (!data) return [];
     const list = [
-      { key: 'intro', kicker: `${name}'s ${year}`, title: 'Your year on binge.', body: 'Here’s what you watched, read and loved.' },
-      { key: 'time', kicker: 'Time well spent', big: data.hours.toLocaleString(), title: 'hours watched', body: `${data.episodeCount} episodes · ${data.movieCount} movies · ${data.titleCount} titles in all` },
+      { key: 'intro', title: [`${name}, here’s `, ['your year'], ' on binge.'], body: 'What you watched, read and loved, one story at a time.' },
+      {
+        key: 'time',
+        share: true,
+        title: ['You spent ', [`${data.hours.toLocaleString()} hours`], ' watching this year.'],
+        body: `${data.episodeCount.toLocaleString()} episodes and ${data.movieCount} movies, across ${data.titleCount} titles.`,
+      },
     ];
-    if (data.topShow) list.push({ key: 'show', kicker: 'Your most-binged show', title: data.topShow.title, body: `${data.topShow.episodes} episodes this year`, image: data.topShow.image_url });
-    if (data.topGenres.length) list.push({ key: 'genres', kicker: 'Your top genres', list: data.topGenres });
-    if (data.topLanguage && data.topLanguage !== 'en') list.push({ key: 'lang', kicker: 'You watched the world', title: languageName(data.topLanguage), body: 'was your most-watched language after English.' });
-    if (data.bingeDay) list.push({ key: 'day', kicker: 'Your biggest binge', big: String(data.bingeDay.count), title: 'episodes in one day', body: new Date(data.bingeDay.date).toLocaleDateString([], { month: 'long', day: 'numeric' }) });
-    if (data.busiestMonth != null) list.push({ key: 'month', kicker: 'Your busiest month', title: MONTHS[data.busiestMonth] });
-    if (data.favorites.length) list.push({ key: 'favs', kicker: 'Your highest rated', favorites: data.favorites });
-    list.push({ key: 'persona', kicker: 'Your binge personality', title: data.persona.name, body: data.persona.line, final: true });
+    if (data.topShow) list.push({ key: 'show', share: true, title: [[data.topShow.title], ' was your show.'], body: `You watched ${data.topShow.episodes} episodes of it.`, image: data.topShow.image_url });
+    if (data.topGenres.length) {
+      const g = data.topGenres.slice(0, 3);
+      const parts = g.length === 1 ? [[g[0]]] : g.length === 2 ? [[g[0]], ' and ', [g[1]]] : [[g[0]], ', ', [g[1]], ' and ', [g[2]]];
+      list.push({ key: 'genres', share: true, title: ['You kept coming back to ', ...parts, '.'] });
+    }
+    if (data.topLanguage && data.topLanguage !== 'en') list.push({ key: 'lang', title: ['After English, you watched the most in ', [languageName(data.topLanguage)], '.'] });
+    if (data.bingeDay) {
+      const day = new Date(data.bingeDay.date).toLocaleDateString([], { month: 'long', day: 'numeric' });
+      list.push({ key: 'day', title: ['Your biggest binge: ', [`${data.bingeDay.count} episodes`], ` on ${day}.`] });
+    }
+    if (data.busiestMonth != null) list.push({ key: 'month', title: [[MONTHS[data.busiestMonth]], ' was your busiest month.'] });
+    if (data.favorites.length) list.push({ key: 'favs', title: ['These earned ', ['your best ratings'], '.'], favorites: data.favorites });
+    list.push({ key: 'persona', share: true, title: ['You’re ', [data.persona.name], '.'], body: data.persona.line, final: true });
     return list;
-  }, [data, name, year]);
+  }, [data, name]);
 
   const go = useCallback((step) => setSlide((current) => Math.max(0, Math.min(slides.length - 1, current + step))), [slides.length]);
 
@@ -114,7 +127,7 @@ export default function Wrapped() {
   async function share() {
     setShareState('Preparing…');
     try {
-      const blob = await renderShareImage(data, name);
+      const blob = await renderShareImage(slides, name, year);
       const file = new File([blob], `binge-wrapped-${year}.png`, { type: 'image/png' });
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: `My ${year} on binge.`, text: `I'm "${data.persona.name}" on binge. this year.` });
@@ -139,12 +152,16 @@ export default function Wrapped() {
   return (
     <div className="wr-shell">
       <Link to="/profile" className="wr-close" aria-label="Close Wrapped"><X size={20} weight="bold" /></Link>
-      {!data && <div className="wr-card"><p className="wr-kicker">Building your year…</p></div>}
+      {!data && (
+        <div className="wr-card" aria-busy="true">
+          <div className="wr-skel wr-skel--title" />
+          <div className="wr-skel" />
+        </div>
+      )}
       {empty && (
         <div className="wr-card">
-          <p className="wr-kicker">{year}</p>
-          <h1 className="wr-title">Your Wrapped is still loading up</h1>
-          <p className="wr-body">Watch and rate a few things this year and your recap will appear here.</p>
+          <h1 className="wr-title">Your {year} story starts with one show.</h1>
+          <p className="wr-body">Watch or rate a few things this year and your recap builds itself here.</p>
           <Link to="/home" className="st-btn st-btn--primary">Find something to watch</Link>
         </div>
       )}
@@ -155,18 +172,15 @@ export default function Wrapped() {
           </div>
           <div className={`wr-card wr-card--${current.key}`} key={current.key} aria-live="polite">
             {current.image && <img className="wr-image" src={posterSrc(current.image)} alt="" referrerPolicy="no-referrer" />}
-            <p className="wr-kicker">{current.kicker}</p>
-            {current.big && <p className="wr-big">{current.big}</p>}
-            {current.title && <h1 className="wr-title">{current.title}</h1>}
+            <h1 className="wr-title"><Sentence parts={current.title} /></h1>
             {current.body && <p className="wr-body">{current.body}</p>}
-            {current.list && <ol className="wr-list">{current.list.map((item) => <li key={item}>{item}</li>)}</ol>}
             {current.favorites && (
               <ol className="wr-favs">
                 {current.favorites.map((fav) => (
                   <li key={`${fav.media_type}:${fav.media_id}`}>
                     {fav.image_url && <img src={posterSrc(fav.image_url)} alt="" referrerPolicy="no-referrer" />}
                     <span>{fav.title}</span>
-                    <strong>★ {fav.stars.toFixed(1)}</strong>
+                    <strong><Star size={14} weight="fill" aria-hidden="true" /> {fav.stars.toFixed(1)}</strong>
                   </li>
                 ))}
               </ol>

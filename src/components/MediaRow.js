@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { CaretRight, Play } from '@phosphor-icons/react';
 
 function resolvePosterUrl(url) {
   if (!url) return null;
@@ -40,7 +41,7 @@ function PosterCard({ item, onClick }) {
           </div>
         )}
         <div className="mr-overlay">
-          <div className="mr-play">▶</div>
+          <div className="mr-play"><Play size={18} weight="fill" aria-hidden="true" /></div>
         </div>
         <div className="mr-shine" />
       </div>
@@ -92,7 +93,7 @@ export default function MediaRow({ row, mediaType, onItemClick, onSeeAll }) {
             onClick={() => onSeeAll ? onSeeAll(row) : null}
             type="button"
           >
-            See all <span className="mr-see-all-arrow">→</span>
+            See all <CaretRight className="mr-see-all-arrow" size={14} weight="bold" aria-hidden="true" />
           </button>
         )}
       </div>

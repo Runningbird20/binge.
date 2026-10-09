@@ -44,9 +44,8 @@ export default function AdminHome() {
       <main className="page-content adm-page">
         <header className="st-page-head">
           <div>
-            <p className="st-page-kicker">Admin</p>
-            <h1 className="st-page-title">Control Center</h1>
-            <p className="adm-muted">Signed in as {user?.username}.</p>
+            <h1 className="st-page-title">Admin</h1>
+            <p className="st-page-sub">Signed in as {user?.username}.</p>
           </div>
         </header>
 

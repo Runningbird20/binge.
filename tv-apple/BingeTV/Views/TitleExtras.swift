@@ -12,7 +12,7 @@ struct OutsideRatingsRow: View {
                 badge("IMDb", String(format: "%.1f", imdb), color: Color(hex: 0xF5C518), dark: true)
             }
             if let rt = ratings.rottenTomatoes {
-                badge(rt >= 60 ? "🍅" : "🤢", "\(rt)%", color: Color(hex: rt >= 60 ? 0xFA320A : 0x6A8B2F), dark: false)
+                badge("RT", "\(rt)% " + (rt >= 60 ? "fresh" : "rotten"), color: Color(hex: rt >= 60 ? 0xFA320A : 0x5F7D2A), dark: false)
             }
             if let mc = ratings.metacritic {
                 badge("Metacritic", "\(mc)", color: Color(hex: mc >= 61 ? 0x66CC33 : mc >= 40 ? 0xFFCC33 : 0xFF0000), dark: mc >= 40)

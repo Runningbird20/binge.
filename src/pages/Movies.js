@@ -758,7 +758,6 @@ export default function Movies() {
           <>
           <header className="st-page-head">
             <div>
-              <p className="st-page-kicker">Browse all</p>
               <h1 className="st-page-title">Movies</h1>
             </div>
             <Link className="st-btn st-btn--ghost" to="/movies">Back to highlights</Link>

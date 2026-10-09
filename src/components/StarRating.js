@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Star } from '@phosphor-icons/react';
 
 const STARS = [1, 2, 3, 4, 5];
 
@@ -41,8 +42,8 @@ export default function StarRating({ value = 0, onChange, size = 'md', readOnly 
             role={interactive ? 'button' : undefined}
             aria-label={interactive ? `Rate ${starIndex} stars` : undefined}
           >
-            <span className="star-rating-star-bg" aria-hidden="true">★</span>
-            <span className="star-rating-star-fill" style={{ width: `${fraction * 100}%` }} aria-hidden="true">★</span>
+            <span className="star-rating-star-bg" aria-hidden="true"><Star size="1em" weight="fill" /></span>
+            <span className="star-rating-star-fill" style={{ width: `${fraction * 100}%` }} aria-hidden="true"><Star size="1em" weight="fill" /></span>
           </span>
         );
       })}

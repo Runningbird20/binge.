@@ -1,4 +1,5 @@
 import StarRating from './StarRating';
+import { Play, Star } from '@phosphor-icons/react';
 import { computeStarRating } from './RatingArtifact';
 import { useToast } from '../contexts/ToastContext';
 
@@ -59,7 +60,7 @@ export default function MobileMediaCard({
           </div>
         )}
         {userStars !== null && (
-          <div className="mob-card-badge">★ {userStars}</div>
+          <div className="mob-card-badge"><Star size={11} weight="fill" aria-hidden="true" /> {userStars}</div>
         )}
       </div>
 
@@ -80,7 +81,7 @@ export default function MobileMediaCard({
             </span>
           )}
           {avgRating && (
-            <span className="mob-card-avg-score">★ {avgRating}</span>
+            <span className="mob-card-avg-score"><Star size={11} weight="fill" aria-hidden="true" /> {avgRating}</span>
           )}
         </div>
 
@@ -108,7 +109,7 @@ export default function MobileMediaCard({
               className="mob-card-action-btn mob-card-action-btn--watch"
               onClick={() => onOpenDetails?.(item)}
             >
-              ▶ Watch
+              <Play size={14} weight="fill" aria-hidden="true" /> Watch
             </button>
           )}
           <button

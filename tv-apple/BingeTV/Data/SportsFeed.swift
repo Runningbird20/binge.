@@ -60,14 +60,16 @@ struct SportGame: Identifiable, Hashable {
         return category
     }
 
-    var icon: String { SportsFeed.icons[category] ?? "🏆" }
+    var icon: String { SportsFeed.icons[category] ?? "trophy.fill" }
 }
 
 enum SportsFeed {
+    // SF Symbols, one icon family for every sport.
     static let icons: [String: String] = [
-        "American Football": "🏈", "Australian Football": "🏉", "Basketball": "🏀", "Soccer": "⚽",
-        "Baseball": "⚾", "Hockey": "🏒", "Combat Sports": "🥊", "Tennis": "🎾", "Golf": "⛳", "Racing": "🏎️",
-        "Rugby": "🏉", "Cricket": "🏏", "Volleyball": "🏐", "Billiards": "🎱", "Darts": "🎯",
+        "American Football": "football.fill", "Australian Football": "figure.australian.football", "Basketball": "basketball.fill",
+        "Soccer": "soccerball", "Baseball": "baseball.fill", "Hockey": "hockey.puck.fill", "Combat Sports": "figure.boxing",
+        "Tennis": "tennisball.fill", "Golf": "figure.golf", "Racing": "flag.checkered", "Rugby": "figure.rugby",
+        "Cricket": "cricket.ball.fill", "Volleyball": "volleyball.fill", "Darts": "target",
     ]
     static let nflTeams: Set<String> = ["cardinals", "falcons", "ravens", "bills", "panthers", "bears", "bengals", "browns", "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars", "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots", "saints", "giants", "jets", "eagles", "steelers", "49ers", "seahawks", "buccaneers", "titans", "commanders"]
     static let nbaTeams: Set<String> = ["hawks", "celtics", "nets", "hornets", "bulls", "cavaliers", "mavericks", "nuggets", "pistons", "warriors", "rockets", "pacers", "clippers", "lakers", "grizzlies", "heat", "bucks", "timberwolves", "pelicans", "knicks", "thunder", "magic", "76ers", "suns", "blazers", "kings", "spurs", "raptors", "jazz", "wizards"]

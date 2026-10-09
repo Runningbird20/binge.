@@ -425,7 +425,6 @@ export default function Profile() {
                 : <UserAvatar avatarUrl={user?.avatarUrl} name={user?.username} size="lg" />}
             </div>
             <div className="pf-identity">
-              <p className="st-page-kicker">Profile</p>
               <h1 className="pf-name">{displayName}</h1>
               {user?.bio && <p className="pf-bio">{user.bio}</p>}
               <div className="pf-actions">

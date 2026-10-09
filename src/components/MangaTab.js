@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ArrowSquareOut, BookOpen, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowSquareOut, BookOpen, MagnifyingGlass, Play, Star, WarningCircle, X } from '@phosphor-icons/react';
 import { DEFAULT_PROVIDER, PROVIDER_LIST, getProvider, providerFor } from '../utils/mangaProviders';
 import { findWhereToRead } from '../utils/anilist';
 import BrowseHero from './BrowseHero';
@@ -151,7 +151,7 @@ function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
           )}
           {error && (
             <div className="manga-reader-loading">
-              <p style={{ fontSize: '2rem', margin: 0 }}>⚠️</p>
+              <WarningCircle size={36} weight="fill" color="#f87171" aria-hidden="true" />
               <p style={{ color: '#f87171' }}>{error}</p>
             </div>
           )}
@@ -334,7 +334,7 @@ function ChapterModal({ comic, onClose, onRead }) {
             <div className="mob-detail-hero-placeholder"><span>{comic.title?.charAt(0) || '?'}</span></div>
           )}
           <div className="mob-detail-hero-grad" />
-          <button type="button" className="mob-detail-back" onClick={onClose} aria-label="Go back">← Back</button>
+          <button type="button" className="mob-detail-back" onClick={onClose} aria-label="Go back"><ArrowLeft size={16} weight="bold" aria-hidden="true" /> Back</button>
         </div>
 
         <div className="mob-detail-scroll">
@@ -349,7 +349,7 @@ function ChapterModal({ comic, onClose, onRead }) {
             </div>
             {displayScore !== null && (
               <div className="mob-detail-scores">
-                <span className="mob-detail-community">★ {displayScore}/10</span>
+                <span className="mob-detail-community"><Star size={12} weight="fill" aria-hidden="true" /> {displayScore}/10</span>
               </div>
             )}
           </div>
@@ -374,7 +374,7 @@ function ChapterModal({ comic, onClose, onRead }) {
                   {!chapLoading && <span className="manga-chapter-count">{chapters.length}</span>}
                 </h3>
                 {chapLoading && <p className="manga-chapter-loading">Loading chapters…</p>}
-                {chapError && <p className="manga-chapter-error">⚠️ {chapError}</p>}
+                {chapError && <p className="manga-chapter-error"><WarningCircle size={16} weight="fill" aria-hidden="true" /> {chapError}</p>}
                 {!chapLoading && chapters.length === 0 && !chapError && (
                   <p className="manga-chapter-empty">No English chapters found.</p>
                 )}
@@ -426,12 +426,12 @@ function ChapterModal({ comic, onClose, onRead }) {
           </button>
           {chapters.length > 0 && (
             <button type="button" className="mob-detail-bar-btn mob-detail-bar-btn--watch" onClick={() => onRead(chapters[0], chapters)}>
-              ▶ Read Ch. {chapters[0]?.number || '1'}
+              <Play size={14} weight="fill" aria-hidden="true" /> Read Ch. {chapters[0]?.number || '1'}
             </button>
           )}
           {external && provider.readLinks(comic)[0] && (
             <a className="mob-detail-bar-btn mob-detail-bar-btn--watch" href={provider.readLinks(comic)[0].url} target="_blank" rel="noopener noreferrer">
-              ▶ Read on {provider.readLinks(comic)[0].site}
+              <Play size={14} weight="fill" aria-hidden="true" /> Read on {provider.readLinks(comic)[0].site}
             </a>
           )}
         </div>
@@ -566,7 +566,7 @@ function ChapterModal({ comic, onClose, onRead }) {
             {!chapLoading && <span className="manga-chapter-count">{chapters.length}</span>}
           </h3>
           {chapLoading && <p className="manga-chapter-loading">Loading chapters…</p>}
-          {chapError   && <p className="manga-chapter-error">⚠️ {chapError}</p>}
+          {chapError   && <p className="manga-chapter-error"><WarningCircle size={16} weight="fill" aria-hidden="true" /> {chapError}</p>}
           {!chapLoading && chapters.length === 0 && !chapError && (
             <p className="manga-chapter-empty">No English chapters found.</p>
           )}

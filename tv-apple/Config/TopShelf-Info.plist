@@ -4,6 +4,12 @@
 <dict>
 	<key>BingeAppGroup</key>
 	<string>group.$(BINGE_BUNDLE_ID)</string>
+	<key>BingeSupabaseURL</key>
+	<string>$(BINGE_SUPABASE_URL)</string>
+	<key>BingeSupabaseKey</key>
+	<string>$(BINGE_SUPABASE_KEY)</string>
+	<key>BingeTMDBKey</key>
+	<string>$(BINGE_TMDB_KEY)</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

@@ -99,13 +99,15 @@ or an account: `-BingeDemo` (browse without signing in), `-BingeTab sports`,
 
 ## Put it on your Apple TV
 
-1. On the Apple TV, open Settings → Remotes and Devices → Remote App and Devices. The Apple TV and Mac must be on the same network.
-2. In Xcode, open Window → Devices and Simulators. Pair the Apple TV with the code it shows.
-3. Under **both** targets (BingeTV and TopShelf), open Signing & Capabilities and choose your team. If Xcode says the bundle id is taken, change `BINGE_BUNDLE_ID` in `Config/Base.xcconfig` (e.g. `com.<you>.binge`); the extension and App Group follow it. If your account can't create the App Group, remove the App Groups capability from both targets. Everything else still works, only Top Shelf stays empty.
-4. Select the Apple TV as the run destination and press ⌘R.
+1. **Sign in to Xcode once:** Xcode → Settings (⌘,) → Accounts → + → Apple ID. (Done on this Mac.)
+2. **Set up signing:** run `tv-apple/scripts/setup-signing.sh`. It finds your team and picks a unique app id (`Config/Signing.xcconfig`), so you never open Signing & Capabilities. (Done: team `ZD849HQM6V`, app id `com.zd849hqm6v.binge`.)
+3. **Pair the Apple TV once:**
+   - On the TV: Settings → Remotes and Devices → Remote App and Devices.
+   - On the Mac: Xcode → Window → Devices and Simulators → the Apple TV appears → **Pair** → type the code shown on the TV.
+   - If the TV then asks, turn on Settings → Privacy & Security → **Developer Mode** and restart it.
+4. **Install:** run `tv-apple/scripts/install-on-tv.sh`. It builds, signs and installs.
 
-A free Apple ID signs the app for 7 days; after that, press ⌘R again to
-re-install it. A paid developer account ($99/yr) signs it for a year.
+A free Apple ID signs the app for **7 days**; run `install-on-tv.sh` again to renew. A paid account ($99/yr) lasts a year and also allows **App Groups** (`setup-signing.sh --paid`). App Groups let Top Shelf show your personal Continue Watching. Without them it shows Trending on binge., which needs no setup.
 
 New Swift files only need to go inside `BingeTV/`. The project uses a
 folder-synced group, so Xcode picks them up without editing the project file.

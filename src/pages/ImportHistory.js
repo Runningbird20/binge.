@@ -78,7 +78,6 @@ export default function ImportHistory() {
       <main className="page-content imp-page" id="main">
         <header className="st-page-head">
           <div>
-            <p className="st-page-kicker">Bring your history</p>
             <h1 className="st-page-title">Import from other apps</h1>
           </div>
         </header>

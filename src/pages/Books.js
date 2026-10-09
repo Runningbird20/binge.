@@ -316,7 +316,6 @@ export function BookDetailsModal({
               <BookCoverImage book={book} imageClassName="" placeholderClassName="st-card-placeholder" priority />
             </div>
             <div className="td-book-head">
-              <p className="st-page-kicker">Book</p>
               <h2 id="book-detail-title" className="td-title">{book.title}</h2>
               {book.author && <p className="td-book-author">by {book.author}</p>}
               {access && (
@@ -1014,7 +1013,6 @@ export default function Books() {
           <div className="catalog-view">
             <header className="st-page-head">
               <div>
-                <p className="st-page-kicker">Browse all</p>
                 <h1 className="st-page-title">Books</h1>
               </div>
               <Link className="st-btn st-btn--ghost" to="/books">Back to highlights</Link>

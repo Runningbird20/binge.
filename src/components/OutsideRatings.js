@@ -25,7 +25,7 @@ export default function OutsideRatings({ item, tmdbScore = 0, tmdbVotes = 0 }) {
     const fresh = ratings.rotten_tomatoes >= 60;
     chips.push(
       <span key="rt" className={`or-chip or-chip--rt${fresh ? ' fresh' : ' rotten'}`} title={`Rotten Tomatoes: ${ratings.rotten_tomatoes}% of critics`}>
-        <b aria-hidden="true">{fresh ? '🍅' : '🤢'}</b> {ratings.rotten_tomatoes}%
+        <b>RT</b> {ratings.rotten_tomatoes}% <small>{fresh ? 'fresh' : 'rotten'}</small>
       </span>
     );
   }

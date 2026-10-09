@@ -18,8 +18,15 @@ struct HistoryView: View {
                 Text("History").font(.system(size: 54, weight: .heavy))
                 Text("Everything you've started, newest first. Press and hold to remove something.")
                     .font(.callout).foregroundStyle(Theme.muted)
-                if !loaded { ProgressView().frame(maxWidth: .infinity).padding(.top, 60) }
-                if loaded && items.isEmpty { Text("Nothing watched yet.").foregroundStyle(Theme.muted) }
+                if !loaded {
+                    HStack(spacing: 40) {
+                        ForEach(0..<4, id: \.self) { _ in RoundedRectangle(cornerRadius: 12).fill(Theme.surface).frame(width: 420, height: 236) }
+                    }
+                    .accessibilityHidden(true)
+                }
+                if loaded && items.isEmpty {
+                    Text("Nothing here yet. Anything you start playing on the TV, phone or web shows up here.").foregroundStyle(Theme.muted)
+                }
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(420), spacing: 40), count: 4), alignment: .leading, spacing: 50) {
                     ForEach(items, id: \.0.id) { item, date in
                         VStack(alignment: .leading, spacing: 10) {
@@ -90,7 +97,7 @@ struct CalendarView: View {
                 Text("Release calendar").font(.system(size: 54, weight: .heavy))
                 Text("New episodes of what you watch and your list, and movies you're waiting for.")
                     .font(.callout).foregroundStyle(Theme.muted)
-                if !loaded { ProgressView().frame(maxWidth: .infinity).padding(.top, 60) }
+                if !loaded { RowSkeleton(); RowSkeleton() }
                 if loaded && days.isEmpty {
                     Text("Nothing scheduled yet. Add shows to My List to see their next episodes here.").foregroundStyle(Theme.muted)
                 }
@@ -102,7 +109,7 @@ struct CalendarView: View {
                                 ForEach(entries, id: \.0.id) { title, label in
                                     VStack(alignment: .leading, spacing: 10) {
                                         PosterCard(title: title)
-                                        Text(label).font(.caption).foregroundStyle(Theme.gold).lineLimit(2)
+                                        Text(label).font(.caption).foregroundStyle(Theme.muted).lineLimit(2)
                                             .frame(width: 220, alignment: .leading)
                                     }
                                 }
@@ -178,34 +185,70 @@ struct WrappedView: View {
         var favorite: (Title, Double)?
     }
 
+    // A story is one sentence with its fact in bold: no labels, no giant
+    // numbers (same rewrite as the website's Wrapped).
+    private struct Story: Identifiable {
+        let id: String
+        let sentence: Text
+        var detail: String?
+        var poster: URL?
+    }
+
+    private func bold(_ text: String) -> Text { Text(text).fontWeight(.heavy).foregroundColor(.white) }
+
+    private var stories: [Story] {
+        guard let stats else { return [] }
+        let name = app.profile?.name ?? "Hey"
+        var list = [
+            Story(id: "intro", sentence: Text("\(name), here’s ") + bold("your year") + Text(" on binge.")),
+            Story(id: "time", sentence: Text("You spent ") + bold("\(stats.minutes / 60) hours") + Text(" watching this year."),
+                  detail: "\(stats.episodes) episodes and \(stats.movies) movies, across \(stats.titles) titles."),
+        ]
+        if let show = stats.topShow {
+            list.append(Story(id: "show", sentence: bold(show.name) + Text(" was your show."),
+                              detail: "You watched \(stats.topShowEpisodes) episodes of it.", poster: show.poster))
+        }
+        if let favorite = stats.favorite {
+            list.append(Story(id: "fav", sentence: bold(favorite.0.name) + Text(" got your best rating."),
+                              detail: "Rated \(Int(favorite.1.rounded())) out of 5.", poster: favorite.0.poster))
+        }
+        let genres = Array(stats.genres.prefix(3))
+        if !genres.isEmpty {
+            var sentence = Text("You kept coming back to ")
+            for (index, genre) in genres.enumerated() {
+                if index > 0 { sentence = sentence + Text(index == genres.count - 1 ? " and " : ", ") }
+                sentence = sentence + bold(genre)
+            }
+            list.append(Story(id: "genres", sentence: sentence + Text(".")))
+        }
+        if stats.ratings > 0 {
+            list.append(Story(id: "ratings", sentence: Text("You rated ") + bold("\(stats.ratings) titles") + Text(", and binge. learned from every one.")))
+        }
+        return list
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 40) {
-                Text("Your \(String(year)) Wrapped").font(.system(size: 60, weight: .heavy))
-                if let stats {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 40) {
-                            slide("Hours watched", "\(stats.minutes / 60)", "about \(stats.minutes / 60 / 24) days of your year")
-                            slide("Episodes", "\(stats.episodes)", "\(stats.titles) titles in total")
-                            slide("Movies", "\(stats.movies)", "and \(stats.ratings) ratings")
-                            if let show = stats.topShow {
-                                slide("Most watched show", show.name, "\(stats.topShowEpisodes) episodes", poster: show.poster)
+            VStack(alignment: .leading, spacing: 30) {
+                Text("Your \(String(year)) on binge.").font(.system(size: 54, weight: .heavy))
+                ScrollView(.horizontal) {
+                    HStack(spacing: 40) {
+                        if stats == nil {
+                            ForEach(0..<3, id: \.self) { _ in
+                                RoundedRectangle(cornerRadius: 16).fill(Theme.surface).frame(width: 640, height: 480)
                             }
-                            if let favorite = stats.favorite {
-                                slide("Top rated", favorite.0.name, String(repeating: "★", count: Int(favorite.1.rounded())), poster: favorite.0.poster)
-                            }
-                            if !stats.genres.isEmpty {
-                                slide("Your genres", stats.genres.prefix(3).joined(separator: "\n"), "what you came back to")
-                            }
+                        } else if stats?.titles == 0 {
+                            storyCard(Story(id: "empty", sentence: Text("Your story starts with ") + bold("one show") + Text("."),
+                                            detail: "Watch or rate a few things this year and your recap builds itself here."))
+                        } else {
+                            ForEach(stories) { storyCard($0) }
                         }
-                        .padding(.vertical, 30)
                     }
-                    .scrollClipDisabled()
-                    Text("Watch time is estimated (45 min an episode, 110 a movie), like the website.")
-                        .font(.caption).foregroundStyle(Theme.muted)
-                } else {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 80)
+                    .padding(.vertical, 30)
                 }
+                .scrollClipDisabled()
+                Text("Watch time is estimated (45 min an episode, 110 a movie), like the website.")
+                    .font(.caption).foregroundStyle(Theme.muted)
             }
             .padding(.vertical, 30)
         }
@@ -213,23 +256,28 @@ struct WrappedView: View {
         .task { await load() }
     }
 
-    private func slide(_ label: String, _ value: String, _ detail: String, poster: URL? = nil) -> some View {
+    private func storyCard(_ story: Story) -> some View {
         Button {} label: {
             ZStack(alignment: .bottomLeading) {
-                if let poster {
-                    AsyncImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Theme.surface }
-                        .opacity(0.35)
+                Theme.surface
+                if let poster = story.poster {
+                    AsyncImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Color.clear }
+                        .opacity(0.28)
                 }
-                LinearGradient(colors: [Theme.gold.opacity(0.25), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(label.uppercased()).font(.caption.weight(.heavy)).tracking(2).foregroundStyle(Theme.gold)
-                    Text(value).font(.system(size: 56, weight: .heavy)).lineLimit(3).minimumScaleFactor(0.5)
-                    Text(detail).font(.callout).foregroundStyle(.white.opacity(0.8))
+                VStack(alignment: .leading, spacing: 18) {
+                    story.sentence
+                        .font(.system(size: 46, weight: .medium))
+                        .foregroundColor(.white.opacity(0.78))
+                        .lineLimit(5)
+                        .minimumScaleFactor(0.7)
+                    if let detail = story.detail {
+                        Text(detail).font(.callout).foregroundStyle(.white.opacity(0.8))
+                    }
                 }
-                .padding(34)
+                .padding(40)
             }
-            .frame(width: 420, height: 540)
-            .background(Theme.surface)
+            .frame(width: 640, height: 480)
+            .clipped()
         }
         .buttonStyle(.card)
     }
