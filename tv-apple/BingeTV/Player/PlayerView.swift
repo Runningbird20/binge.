@@ -306,6 +306,46 @@ private struct PlayerPanel: View {
                 }
                 .focusSection()
 
+                // The video's own tracks, switched directly.
+                Text("Audio").font(.headline).foregroundStyle(Theme.muted)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 20) {
+                        if model.audioTracks.count > 1 {
+                            ForEach(model.audioTracks) { track in
+                                Button(PlayerModel.displayName(track)) { model.selectAudio(track); close() }
+                                    .buttonStyle(PillButtonStyle(selected: track.on))
+                            }
+                        } else {
+                            Text(model.audioTracks.isEmpty ? "This server has one audio track. Try another server for a different language."
+                                                           : "Only \(PlayerModel.displayName(model.audioTracks[0])) on this server. Try another server for a different language.")
+                                .font(.callout).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .padding(.vertical, 10)
+                }
+                .scrollClipDisabled()
+                .focusSection()
+
+                Text("Subtitles").font(.headline).foregroundStyle(Theme.muted)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 20) {
+                        if model.textTracks.isEmpty {
+                            Text("This server doesn't offer subtitle choices. CineSrc usually does.")
+                                .font(.callout).foregroundStyle(Theme.muted)
+                        } else {
+                            Button("Off") { model.selectSubtitles(nil); close() }
+                                .buttonStyle(PillButtonStyle(selected: !model.textTracks.contains(where: \.on)))
+                            ForEach(model.textTracks) { track in
+                                Button(PlayerModel.displayName(track)) { model.selectSubtitles(track); close() }
+                                    .buttonStyle(PillButtonStyle(selected: track.on))
+                            }
+                        }
+                    }
+                    .padding(.vertical, 10)
+                }
+                .scrollClipDisabled()
+                .focusSection()
+
                 Text("Picture").font(.headline).foregroundStyle(Theme.muted)
                 HStack(spacing: 20) {
                     Button("Fill screen") { model.fillScreen = true; close() }

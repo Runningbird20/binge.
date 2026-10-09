@@ -259,7 +259,20 @@ enum SportsFeed {
 
     // Streamed sources resolve to one or more embeds (HD first). Capped so a
     // race never opens too many pages at once.
+    @MainActor private static var serverCache: [String: (at: Date, servers: [StreamServer])] = [:]
+
+    // Cached for 90s: focusing a card and then pressing Play shouldn't
+    // resolve the same streams twice.
+    @MainActor
     static func servers(for game: SportGame, limit: Int = 4) async -> [StreamServer] {
+        let key = "\(game.id):\(limit)"
+        if let hit = serverCache[key], hit.at.timeIntervalSinceNow > -90 { return hit.servers }
+        let fresh = await resolveServers(for: game, limit: limit)
+        if !fresh.isEmpty { serverCache[key] = (Date(), fresh) }
+        return fresh
+    }
+
+    private static func resolveServers(for game: SportGame, limit: Int) async -> [StreamServer] {
         var urls: [(String, URL)] = []
         for stream in game.streams {
             switch stream.source {

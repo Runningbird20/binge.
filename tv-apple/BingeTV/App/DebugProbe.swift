@@ -36,7 +36,7 @@ struct DebugProbeView: UIViewRepresentable {
             }
         } }
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in MainActor.assumeIsolated {
-            web.poll { state in print("[probe] state \(state.map { "t=\(Int($0.t)) d=\(Int($0.d)) paused=\($0.paused) ready=\($0.ready)" } ?? "no video")") }
+            web.poll { state in print("[probe] state \(state.map { "t=\(Int($0.t)) d=\(Int($0.d)) paused=\($0.paused) ready=\($0.ready) h=\($0.height) audio=\($0.audio.map { "\($0.label)|\($0.language)|\($0.on)" }) text=\($0.text.map { "\($0.label)|\($0.language)|\($0.on)" })" } ?? "no video")") }
         } }
         return web.view
     }

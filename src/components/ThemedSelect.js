@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 function normalizeOptions(options = []) {
   if (options.length) {
@@ -26,6 +27,8 @@ export default function ThemedSelect({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const [menuStyle, setMenuStyle] = useState(null);
   const normalizedOptions = useMemo(() => normalizeOptions(options), [options]);
   const selectedIndex = Math.max(0, normalizedOptions.findIndex((option) => String(option.value) === String(value)));
   const selectedOption = normalizedOptions[selectedIndex] || normalizedOptions[0] || { label: '' };
@@ -35,7 +38,7 @@ export default function ThemedSelect({
     if (!open) return undefined;
 
     function handlePointerDown(event) {
-      if (!rootRef.current?.contains(event.target)) {
+      if (!rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
         setOpen(false);
       }
     }
@@ -49,6 +52,40 @@ export default function ThemedSelect({
       setActiveIndex(selectedIndex);
     }
   }, [open, selectedIndex]);
+
+  // The menu renders on document.body, pinned next to the control, so a
+  // parent with overflow: hidden (title hero, cards, sheets) can't clip it.
+  // It opens upward when there isn't room below.
+  const placeMenu = useCallback(() => {
+    const control = rootRef.current?.querySelector('.themed-select-control');
+    if (!control) return;
+    const rect = control.getBoundingClientRect();
+    const width = Math.max(rect.width, 180);
+    const estimated = Math.min(260, normalizedOptions.length * 44 + 16);
+    const below = window.innerHeight - rect.bottom;
+    const up = below < estimated + 12 && rect.top > below;
+    setMenuStyle({
+      position: 'fixed',
+      zIndex: 4000,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      right: 'auto',
+      width,
+      top: up ? 'auto' : rect.bottom + 7,
+      bottom: up ? window.innerHeight - rect.top + 7 : 'auto',
+      maxHeight: Math.max(120, Math.min(260, (up ? rect.top : below) - 16)),
+    });
+  }, [normalizedOptions.length]);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    placeMenu();
+    window.addEventListener('resize', placeMenu);
+    window.addEventListener('scroll', placeMenu, true);
+    return () => {
+      window.removeEventListener('resize', placeMenu);
+      window.removeEventListener('scroll', placeMenu, true);
+    };
+  }, [open, placeMenu]);
 
   function emitChange(nextValue) {
     onChange?.({ target: { value: nextValue } });
@@ -118,8 +155,8 @@ export default function ThemedSelect({
         <span className="themed-select-value">{selectedOption.label}</span>
         <span className="themed-select-chevron" aria-hidden="true" />
       </button>
-      {open && (
-        <div className="themed-select-menu" role="listbox" aria-label={controlLabel}>
+      {open && menuStyle && createPortal(
+        <div ref={menuRef} className="themed-select-menu" role="listbox" aria-label={controlLabel} style={menuStyle}>
           {normalizedOptions.map((option, index) => {
             const selected = String(option.value) === String(value);
             const active = index === activeIndex;
@@ -139,7 +176,8 @@ export default function ThemedSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

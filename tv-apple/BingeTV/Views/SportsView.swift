@@ -15,6 +15,7 @@ struct SportsView: View {
     @State private var message: String?
     @State private var multi: [SportGame] = []
     @State private var multiOpen = false
+    @State private var warmTask: Task<Void, Never>?
     @ObservedObject private var teams = TeamCenter.shared
     @ObservedObject private var pip = PiPController.shared
 
@@ -157,6 +158,8 @@ struct SportsView: View {
         .task {
             while !Task.isCancelled {
                 await load()
+                // The spotlight game is the likeliest pick: start it now.
+                if let featured, !Warmup.shared.isWarming(SportsView.liveRequestKey(featured)) { prewarm(featured) }
                 #if DEBUG
                 // -BingeMulti "celtics,flyers": open Multiview with those live games.
                 if let wanted = UserDefaults.standard.string(forKey: "BingeMulti")?.lowercased(), !multiOpen {
@@ -201,7 +204,7 @@ struct SportsView: View {
                 LazyHStack(alignment: .top, spacing: 40) {
                     ForEach(games) { game in
                         SportThumbCard(game: game, event: event(for: game), busy: starting == game.id,
-                                       inMulti: multi.contains(game)) {
+                                       inMulti: multi.contains(game), onFocus: { prewarm(game) }) {
                             if game.isLive { play(game) } else {
                                 message = "\(game.title) starts \(game.startsAt.map(Self.when) ?? "soon")."
                             }
@@ -386,8 +389,30 @@ struct SportsView: View {
         return boards.lazy.flatMap(\.1).first { tokens($0) == wanted }
     }
 
+    static func liveRequestKey(_ game: SportGame) -> String { "live:\(game.id)" }
+
+    static func liveRequest(_ game: SportGame, servers: [StreamServer]) -> PlayRequest {
+        let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
+        return PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)", game: game)
+    }
+
+    // Resting on a live game for a moment starts it in the background, so
+    // Play is near-instant (the race is already won).
+    private func prewarm(_ game: SportGame) {
+        guard game.isLive else { return }
+        warmTask?.cancel()
+        warmTask = Task {
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            let servers = await SportsFeed.servers(for: game)
+            guard !Task.isCancelled, !servers.isEmpty else { return }
+            Warmup.shared.prepare(Self.liveRequest(game, servers: servers))
+        }
+    }
+
     private func play(_ game: SportGame) {
         guard starting == nil else { return }
+        warmTask?.cancel()
         starting = game.id
         message = nil
         Task {
@@ -397,9 +422,17 @@ struct SportsView: View {
                 message = "Couldn't find a stream for \(game.title) right now."
                 return
             }
-            let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
-            playing = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)", game: game)
+            playing = Self.liveRequest(game, servers: servers)
         }
+    }
+}
+
+// Reports when its button gains focus (tvOS has no onFocus for buttons).
+struct FocusProbe: View {
+    @Environment(\.isFocused) private var focused
+    let onFocus: () -> Void
+    var body: some View {
+        Color.clear.onChange(of: focused) { _, now in if now { onFocus() } }
     }
 }
 
@@ -503,6 +536,7 @@ struct SportThumbCard: View {
     let event: Scoreboard.Event?
     let busy: Bool
     let inMulti: Bool
+    var onFocus: () -> Void = {}
     let action: () -> Void
 
     var body: some View {
@@ -545,6 +579,7 @@ struct SportThumbCard: View {
                 .frame(width: 480, alignment: .leading)
                 .background(Theme.surface)
             }
+            .background(FocusProbe(onFocus: onFocus))
         }
         .buttonStyle(.card)
     }
@@ -651,7 +686,7 @@ struct GameCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     if event.isLive {
                         Circle().fill(Color(hex: 0xFF5A50)).frame(width: 14, height: 14)
@@ -680,8 +715,9 @@ struct GameCard: View {
                     TeamScore(name: home.name, logo: home.logoURL, score: showScore ? home.score : nil, dim: event.isFinal && home.winner == false)
                 }
             }
-            .padding(26)
-            .frame(width: 460, height: 230, alignment: .topLeading)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 22)
+            .frame(width: 460, height: 260, alignment: .topLeading)
             .background(Theme.surface)
         }
         .buttonStyle(.card)

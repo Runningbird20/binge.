@@ -46,6 +46,17 @@ enum PlaybackPrefs {
     }
 }
 
+// The title's own language: the catalog's, or TMDB's when the catalog row
+// doesn't have one (many don't).
+enum OriginalLanguage {
+    static func of(_ title: Title) async -> String? {
+        if let known = title.originalLanguage, !known.isEmpty { return known }
+        guard let tmdbId = title.tmdbId,
+              let details: TMDBDetails = try? await TMDB.shared.get("\(title.kind.tmdbPath)/\(tmdbId)") else { return nil }
+        return details.originalLanguage
+    }
+}
+
 // MARK: - Community audio reports → server choice
 
 enum ServerPlan {
@@ -63,7 +74,13 @@ enum ServerPlan {
     static func servers(for title: Title, originalLanguage: String?) async -> [StreamServer] {
         let disabled = await ServerSwitches.shared.disabledServers()
         var list = StreamServer.ranked(for: title).filter { !disabled.contains($0.id) }
-        let wanted = PlaybackPrefs.audio == "original" ? originalLanguage : PlaybackPrefs.audio
+        #if DEBUG
+        // -BingeServer vidrift: race only that server (testing).
+        if let only = UserDefaults.standard.string(forKey: "BingeServer") { list = list.filter { $0.id == only } }
+        #endif
+        let original: String?
+        if let originalLanguage { original = originalLanguage } else { original = await OriginalLanguage.of(title) }
+        let wanted = PlaybackPrefs.audio == "original" ? original : PlaybackPrefs.audio
         guard let wanted, !wanted.isEmpty else { return list }
         let reports: [Report] = (try? await Supabase.shared.rpc("stream_report_summary", [
             "p_media_type": title.kind.rawValue, "p_media_id": title.dbId,

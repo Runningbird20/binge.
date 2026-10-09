@@ -123,9 +123,12 @@ struct MultiviewView: View {
             tiles.first?.audible = true
             // Fewer contenders per tile when there are more tiles: an Apple
             // TV has to decode every stream on screen.
-            let perTile = tiles.count >= 3 ? 2 : 3
-            await withTaskGroup(of: Void.self) { group in
-                for tile in tiles { group.addTask { await tile.start(streamsPerTile: perTile) } }
+            // A real Apple TV runs out of memory with a dozen video pages at
+            // once, so tiles start one after another with few contenders.
+            let perTile = tiles.count >= 4 ? 1 : 2
+            for (index, tile) in tiles.enumerated() {
+                if index > 0 { try? await Task.sleep(for: .milliseconds(1500)) }
+                Task { await tile.start(streamsPerTile: perTile) }
             }
         }
         .onDisappear { tiles.forEach { $0.stop() } }

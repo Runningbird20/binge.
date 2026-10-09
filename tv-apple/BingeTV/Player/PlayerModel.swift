@@ -47,6 +47,12 @@ final class PlayerModel: ObservableObject {
 
     private var sleepAt: Date?
     private var lastFill = Date.distantPast
+    // Tracks the server's video actually has, and whether the profile's
+    // audio/subtitle preference has been applied to this video yet.
+    @Published private(set) var audioTracks: [MediaTrack] = []
+    @Published private(set) var textTracks: [MediaTrack] = []
+    private var prefsAppliedFor: String?
+    private var originalLanguage: String?
     // Picture: fill the screen (default) or keep the server's own layout.
     @Published var fillScreen = UserDefaults.standard.object(forKey: "binge.fillScreen") as? Bool ?? true {
         didSet {
@@ -82,6 +88,10 @@ final class PlayerModel: ObservableObject {
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
+        }
+        Task {
+            let language = await OriginalLanguage.of(self.request.title)
+            self.originalLanguage = language
         }
         if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
             Task {
@@ -172,6 +182,64 @@ final class PlayerModel: ObservableObject {
         showHUD()
     }
 
+    // MARK: Audio & subtitles (the video's real tracks)
+
+    func selectAudio(_ track: MediaTrack) {
+        web?.send(.audioTrack(track.index))
+        showHUD()
+    }
+
+    func selectSubtitles(_ track: MediaTrack?) {
+        web?.send(.textTrack(track?.index ?? -1))
+        showHUD()
+    }
+
+    // Once per video, as soon as its tracks show up: the profile's saved
+    // audio language and subtitle language (set here or on the website).
+    private func applyPreferredTracks(_ web: WebEngine) {
+        let key = "\(server?.id ?? "")-\(request.season ?? 0)-\(request.episode ?? 0)"
+        guard prefsAppliedFor != key, !audioTracks.isEmpty || !textTracks.isEmpty else { return }
+        prefsAppliedFor = key
+        // "Original language" means the title's own language (Korean for a
+        // K-drama), not whatever dub the server starts with.
+        if PlaybackPrefs.audio == "original", originalLanguage == nil, request.title.tmdbId != nil, !request.isLive {
+            prefsAppliedFor = nil // wait for TMDB to say what the original is
+            return
+        }
+        let audio = PlaybackPrefs.audio == "original" ? (originalLanguage ?? "") : PlaybackPrefs.audio
+        #if DEBUG
+        print("[tracks] prefs audio=\(PlaybackPrefs.audio) original=\(request.title.originalLanguage ?? "nil") want=\(audio) langs=\(audioTracks.prefix(16).map(\.language))")
+        #endif
+        if !audio.isEmpty, let match = audioTracks.first(where: { Self.matches($0, audio) }), !match.on {
+            web.send(.audioTrack(match.index))
+            #if DEBUG
+            print("[tracks] audio -> \(Self.displayName(match))")
+            #endif
+        }
+        let subtitles = PlaybackPrefs.subtitle
+        if subtitles == "off" {
+            if textTracks.contains(where: \.on) { web.send(.textTrack(-1)) }
+        } else if let match = textTracks.first(where: { Self.matches($0, subtitles) }), !match.on {
+            web.send(.textTrack(match.index))
+        }
+    }
+
+    static func matches(_ track: MediaTrack, _ code: String) -> Bool {
+        let language = track.language.lowercased()
+        // Servers use 2-letter (ko) or 3-letter (kor) codes, sometimes with a region.
+        if language == code || language.hasPrefix(code + "-") || (language.count == 3 && language.hasPrefix(code)) { return true }
+        let name = PlaybackPrefs.languageName(code).lowercased()
+        return track.label.lowercased().contains(name)
+    }
+
+    static func displayName(_ track: MediaTrack) -> String {
+        // "14. Korean" → "Korean"
+        let label = track.label.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
+        if !label.isEmpty { return label }
+        if !track.language.isEmpty { return PlaybackPrefs.languageName(String(track.language.prefix(2))) }
+        return "Track \(track.index + 1)"
+    }
+
     // ▲ during the first minutes of an episode.
     func skipIntro() {
         skippedIntro = true
@@ -250,6 +318,14 @@ final class PlayerModel: ObservableObject {
 
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
+        if state.audio != audioTracks {
+            audioTracks = state.audio
+            #if DEBUG
+            print("[tracks] now: \(state.audio.filter(\.on).map(Self.displayName)) of \(state.audio.count) audio, \(state.text.count) subtitle, h=\(state.height)")
+            #endif
+        }
+        if state.text != textTracks { textTracks = state.text }
+        applyPreferredTracks(web)
         // A handed-over warm race is paused on its first frame; keep asking
         // it to play until the clock moves (unmuting can pause it again).
         if !started, state.video, state.paused, !userPaused {

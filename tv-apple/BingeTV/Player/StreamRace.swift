@@ -33,8 +33,15 @@ final class StreamRace {
 
     var key: String { Self.key(for: request) }
     static func key(for request: PlayRequest) -> String {
-        "\(request.title.id):\(request.season ?? 0):\(request.episode ?? 0)"
+        if let game = request.game { return "live:\(game.id)" }
+        return "\(request.title.id):\(request.season ?? 0):\(request.episode ?? 0)"
     }
+
+    // Live: after a winner, runners-up keep loading (silent, hidden) for a
+    // few seconds; a clearly sharper one takes over. The fastest stream
+    // isn't always the best-looking one.
+    private var upgradeUntil: Date?
+    private var heights: [String: Int] = [:]
 
     // Multiview tiles decide their own sound; the winner stays muted.
     let keepMuted: Bool
@@ -86,11 +93,17 @@ final class StreamRace {
     }
 
     private func tick() {
+        if let winner, let until = upgradeUntil {
+            upgradeTick(winner: winner, until: until)
+            return
+        }
         if let winner {
             // Warm: hold the winner on the start point, buffered and silent.
             if mode == .warm {
                 winner.web.send(.mute)
-                winner.web.send(.pause)
+                // A live stream stays running (muted) so it's at the live
+                // edge when you press Play; anything else holds still.
+                if !request.isLive { winner.web.send(.pause) }
                 if !seekedToStart, winner.web.canSeek, !request.isLive {
                     seekedToStart = true
                     let saved = request.startAt ?? 0
@@ -119,13 +132,51 @@ final class StreamRace {
         }
     }
 
+    private func upgradeTick(winner: Candidate, until: Date) {
+        let others = candidates.filter { $0.server != winner.server }
+        if Date() > until || others.isEmpty {
+            for other in others { Self.tearDown(other.web) }
+            candidates = [winner]
+            upgradeUntil = nil
+            return
+        }
+        winner.web.poll { [weak self] state in
+            if let state, state.height > 0 { self?.heights[winner.server.id] = state.height }
+        }
+        for other in others {
+            other.web.send(.mute)
+            other.web.poll { [weak self] state in
+                guard let self, let state, self.winner?.server == winner.server else { return }
+                if state.paused, state.ready >= 2 { other.web.send(.play) }
+                self.heights[other.server.id] = state.height
+                let current = self.heights[winner.server.id] ?? 0
+                guard current > 0, state.height >= Int(Double(current) * 1.3), !state.paused, state.t > 0.4 else { return }
+                // Promote the sharper stream.
+                #if DEBUG
+                print("[race] upgrade \(winner.server.name) \(current)p -> \(other.server.name) \(state.height)p")
+                #endif
+                winner.web.view.alpha = 0
+                Self.tearDown(winner.web)
+                self.candidates.removeAll { $0.server == winner.server }
+                self.winner = other
+                other.web.view.alpha = 1
+                if !self.keepMuted { other.web.send(.unmute) }
+                self.onChange?()
+            }
+        }
+    }
+
     private func crown(_ candidate: Candidate) {
         winner = candidate
         #if DEBUG
         print("[race] \(mode == .warm ? "warm" : "live") winner \(candidate.server.name) after \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s")
         #endif
-        for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
-        candidates = [candidate]
+        if request.isLive, mode == .live, candidates.count > 1 {
+            upgradeUntil = Date().addingTimeInterval(6)
+        } else {
+            for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
+            candidates = [candidate]
+        }
         candidate.web.view.alpha = 1
         if !request.isLive { StreamServer.rememberWorking(candidate.server, for: request.title) }
         if mode == .live {
@@ -156,7 +207,7 @@ final class Warmup {
     private var pendingKey: String?
 
     func prepare(_ request: PlayRequest) {
-        guard WebEngines.isAvailable, request.title.tmdbId != nil else { return }
+        guard WebEngines.isAvailable, request.title.tmdbId != nil || request.isLive else { return }
         let key = StreamRace.key(for: request)
         if race?.key == key || pendingKey == key { return }
         race?.stop()
@@ -164,7 +215,8 @@ final class Warmup {
         race = nil
         pendingKey = key
         Task {
-            let servers = await ServerPlan.servers(for: request.title, originalLanguage: request.title.originalLanguage)
+            let servers = request.isLive ? request.liveStreams
+                : await ServerPlan.servers(for: request.title, originalLanguage: request.title.originalLanguage)
             guard self.pendingKey == key else { return }
             self.pendingKey = nil
             let fresh = StreamRace(request: request, servers: servers.isEmpty ? StreamServer.all : servers, mode: .warm)
@@ -178,6 +230,8 @@ final class Warmup {
             }
         }
     }
+
+    func isWarming(_ key: String) -> Bool { race?.key == key || pendingKey == key }
 
     // Hands over the warm race if it matches (and hasn't given up).
     func take(_ request: PlayRequest) -> StreamRace? {
