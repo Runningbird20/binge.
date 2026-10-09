@@ -37,6 +37,16 @@ enum PlaybackPrefs {
         ("pt", "Portuguese"), ("de", "German"), ("ar", "Arabic"),
     ]
 
+    // Subtitle look (this Apple TV): size and background behind the text.
+    static let captionSizes: [(Int, String)] = [(80, "Small"), (100, "Default"), (135, "Large"), (175, "Extra large")]
+    static let captionBackgrounds: [(String, String)] = [
+        ("transparent", "None"), ("rgba(0,0,0,0.6)", "Shaded"), ("rgba(0,0,0,1)", "Solid"),
+    ]
+    static var captionSize: Int { UserDefaults.standard.object(forKey: "binge.captionSize") as? Int ?? 100 }
+    static var captionBackground: String { UserDefaults.standard.string(forKey: "binge.captionBackground") ?? "rgba(0,0,0,0.6)" }
+    // Prefer an audio-description track when the video has one.
+    static var audioDescription: Bool { UserDefaults.standard.bool(forKey: "binge.audioDescription") }
+
     // Read by the server URL builders (CineSrc takes a subtitle language).
     nonisolated(unsafe) static var subtitle = "en"
     nonisolated(unsafe) static var audio = "original"
@@ -219,6 +229,9 @@ enum AskBinge {
         let words = query.split(separator: " ")
         let lower = query.lowercased()
         let cues = ["like ", "something", "movies ", "shows ", "series ", "funny", "scary", "under ", "about ", "with ", "for a ", "feel", "similar"]
+        // How people talk to the remote ("show me…", "I want…").
+        let spoken = ["show me", "find me", "i want", "i'm in the mood", "im in the mood", "recommend", "what should i", "give me", "play something"]
+        if spoken.contains(where: { lower.hasPrefix($0) }) { return true }
         return words.count >= 4 || cues.contains { lower.contains($0) } && words.count >= 3
     }
 

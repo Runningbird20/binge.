@@ -10,6 +10,10 @@ import { canAutoplayPreviews, getTrailerKey, setTrailerMuted, trailerEmbedUrl, w
 const TRAILER_DELAY_MS = 2500;
 
 const ROTATE_MS = 9000;
+// With a trailer playing, a slide still moves on after this long.
+const TRAILER_HOLD_MS = 35000;
+// A swipe or arrow press holds the carousel this long before it rotates again.
+const MANUAL_HOLD_MS = 15000;
 
 // "Atomic Habits: An Easy & Proven Way to…" / "Dune (Dune, #1)" -> the
 // main title; the full title is still on the details page.
@@ -27,9 +31,12 @@ function backdropOf(item) {
 // Netflix-style spotlight: a full-bleed backdrop for the top few titles,
 // rotating on a timer that pauses while hovered or focused, with explicit
 // ‹ › buttons and dots so it's fully mouse- and keyboard-operable.
+// items === null means "still loading": a quiet placeholder the size of the
+// real spotlight, so the page doesn't flash the empty-state headline first.
 function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge tonight?', playLabel = 'Play' }) {
   const location = useLocation();
-  const slides = items.filter((item) => backdropOf(item)).slice(0, 6);
+  const loading = items == null;
+  const slides = (items || []).filter((item) => backdropOf(item)).slice(0, 6);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -62,11 +69,23 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
   }, [activeKey]);
   const trailerPlaying = Boolean(trailer?.ready && trailer.slideKey === activeKey);
 
+  // Rotate on a timer; a playing trailer gets longer, but the spotlight
+  // never sits on one title forever. Restarts whenever the slide changes.
+  const [manualAt, setManualAt] = useState(0);
   useEffect(() => {
-    if (paused || trailerPlaying || slides.length < 2) return undefined;
-    const timer = setInterval(() => setIndex((current) => (current + 1) % slides.length), ROTATE_MS);
-    return () => clearInterval(timer);
-  }, [paused, trailerPlaying, slides.length]);
+    if (paused || slides.length < 2) return undefined;
+    const sinceManual = Date.now() - manualAt;
+    const wait = Math.max(trailerPlaying ? TRAILER_HOLD_MS : ROTATE_MS, MANUAL_HOLD_MS - sinceManual);
+    const timer = setTimeout(() => setIndex((current) => (current + 1) % slides.length), wait);
+    return () => clearTimeout(timer);
+  }, [paused, trailerPlaying, slides.length, index, manualAt]);
+
+  // Phones: swipe the spotlight left/right.
+  const touchRef = useRef(null);
+
+  if (loading) {
+    return <div className="st-hero st-hero--loading skeleton-block" aria-hidden="true" />;
+  }
 
   if (!slides.length) {
     return (
@@ -86,7 +105,23 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
   const language = item.original_language && item.original_language !== 'en' ? languageName(item.original_language) : '';
   const rawOverview = item.overview || item.synopsis || '';
   const overview = rawOverview === 'No description available yet.' ? '' : rawOverview;
-  const go = (step) => setIndex((current) => (current + step + slides.length) % slides.length);
+  const go = (step) => {
+    setManualAt(Date.now());
+    setIndex((current) => (current + step + slides.length) % slides.length);
+  };
+  const onTouchStart = (event) => {
+    const touch = event.touches[0];
+    touchRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+  const onTouchEnd = (event) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch || slides.length < 2) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4) go(dx < 0 ? 1 : -1);
+  };
 
   return (
     <section
@@ -97,6 +132,8 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
     >
       {slides.map((slide, slideIndex) => (
         <img
@@ -200,7 +237,7 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
                 aria-selected={slideIndex === index}
                 aria-label={slide.title}
                 className={`st-hero-dot${slideIndex === index ? ' active' : ''}`}
-                onClick={() => setIndex(slideIndex)}
+                onClick={() => { setManualAt(Date.now()); setIndex(slideIndex); }}
               />
             ))}
           </div>

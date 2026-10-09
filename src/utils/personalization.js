@@ -52,9 +52,10 @@ function splitGenres(value) {
 
 // Recency by order (history arrives newest-first) times a slow calendar
 // decay, so the last few things watched steer the picks even for someone
-// with hundreds of older ratings.
+// with hundreds of older ratings — without two recent ratings drowning out
+// everything else (the curve used to be 0.82^rank, floor 0.12).
 function recencyWeight(rank, dateStr) {
-  const byRank = Math.max(0.12, Math.pow(0.82, rank));
+  const byRank = Math.max(0.25, Math.pow(0.9, rank));
   if (!dateStr) return byRank * 0.7;
   const days = (Date.now() - new Date(dateStr).getTime()) / 86400000;
   const byTime = Number.isFinite(days) && days > 0 ? Math.max(0.3, Math.pow(0.5, days / 240)) : 1;
@@ -161,10 +162,17 @@ function buildTaste(history) {
     const max = Math.max(0, ...map.values());
     return max > 0 ? new Map([...map].map(([key, value]) => [key, value / max])) : new Map();
   };
+  // Languages are a share of the whole history (0–1), not relative to the
+  // top one: two Korean dramas among forty English titles is a light lean,
+  // not "this viewer watches Korean".
+  const share = (map) => {
+    const total = [...map.values()].reduce((sum, value) => sum + value, 0);
+    return total > 0 ? new Map([...map].map(([key, value]) => [key, value / total])) : new Map();
+  };
 
   return {
     genres: normalize(genres),
-    languages: normalize(languages),
+    languages: share(languages),
     dislikedGenres: normalize(dislikedGenres),
     types: normalize(types),
   };
@@ -209,19 +217,67 @@ function scoreCandidate(candidate, taste) {
     - dislike * 0.8;
 }
 
-// Light MMR: after a genre already holds 3 slots near the top, further
-// titles whose primary genre matches it are nudged down.
+// Light MMR: once a primary genre, a non-English language or a single
+// "Because you watched" seed already holds a few of the slots above,
+// further titles like it are nudged down, so one recent favourite can't
+// fill a whole row.
 function diversify(items) {
-  const counts = new Map();
+  const genres = new Map();
+  const languages = new Map();
+  const seeds = new Map();
+  const bump = (map, key) => {
+    const seen = map.get(key) || 0;
+    map.set(key, seen + 1);
+    return seen;
+  };
   return items
     .map((item) => {
-      const primary = candidateGenres(item)[0] || '';
-      const seen = counts.get(primary) || 0;
-      counts.set(primary, seen + 1);
-      return { item, adjusted: item._score - Math.max(0, seen - 2) * 0.18 };
+      const genreSeen = bump(genres, candidateGenres(item)[0] || '');
+      const language = item.original_language || item._tmdb?.originalLanguage || '';
+      const languageSeen = language && language !== 'en' ? bump(languages, language) : 0;
+      const seedSeen = item._seed ? bump(seeds, item._seed.key) : 0;
+      const penalty = Math.max(0, genreSeen - 2) * 0.18
+        + Math.max(0, languageSeen - 3) * 0.14
+        + Math.max(0, seedSeen - 3) * 0.2;
+      return { item, adjusted: item._score - penalty };
     })
     .sort((a, b) => b.adjusted - a.adjusted)
     .map(({ item }) => item);
+}
+
+// Same order every time within a day, a different mix the next day.
+function dailyShuffle(items, salt = '') {
+  const day = new Date().toISOString().slice(0, 10);
+  const hash = (text) => {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i += 1) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+    return h >>> 0;
+  };
+  return items
+    .map((item, index) => ({ item, key: hash(`${day}|${salt}|${item.id ?? index}`) }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ item }) => item);
+}
+
+// "Because you…" rows: the strongest seed always, then seeds that differ
+// from the ones already shown (language + main genre), rotating daily among
+// the strong ones so the same three rows don't sit there for weeks.
+export function pickBecauseRows(rows, limit) {
+  if (rows.length <= 1) return rows.slice(0, limit);
+  const signature = (row) => `${row.seed.language || ''}|${splitGenres(row.seed.genre)[0] || ''}`;
+  const [first, ...rest] = rows;
+  const pool = dailyShuffle(rest.slice(0, Math.max(limit * 2, 4)), getActiveProfileId() || '');
+  const picked = [first];
+  const used = new Set([signature(first)]);
+  for (const row of pool) {
+    if (picked.length >= limit) break;
+    if (!used.has(signature(row))) { picked.push(row); used.add(signature(row)); }
+  }
+  for (const row of pool) {
+    if (picked.length >= limit) break;
+    if (!picked.includes(row)) picked.push(row);
+  }
+  return picked;
 }
 
 function matchPercent(score, maxScore) {
@@ -303,7 +359,7 @@ async function candidatesForType(mediaType, history, taste, { kidsSafe }) {
   const topGenres = rankedKeys(taste.genres, 2).map(tmdbGenreId).filter(Boolean);
   const topLanguage = rankedKeys(taste.languages, 1)[0];
   const discoverParams = { 'vote_count.gte': mediaType === 'movie' ? '150' : '60' };
-  if (topLanguage && topLanguage !== 'en' && (taste.languages.get(topLanguage) || 0) >= 0.5) {
+  if (topLanguage && topLanguage !== 'en' && (taste.languages.get(topLanguage) || 0) >= 0.45) {
     discoverParams.with_original_language = topLanguage;
   }
   const discoverLists = await Promise.all(
@@ -358,7 +414,7 @@ async function candidatesForType(mediaType, history, taste, { kidsSafe }) {
 function reasonFor(item, taste) {
   if (item._seed) return seedReason(item._seed);
   const language = item.original_language || item._tmdb?.originalLanguage;
-  if (language && language !== 'en' && (taste.languages.get(language) || 0) >= 0.5) {
+  if (language && language !== 'en' && (taste.languages.get(language) || 0) >= 0.35) {
     return `Popular ${languageName(language)} ${TYPE_NOUN[item.media_type] || 'title'} for you`;
   }
   const genre = candidateGenres(item).find((name) => (taste.genres.get(name) || 0) >= 0.4);
@@ -460,7 +516,7 @@ export async function buildPersonalizedRows({ mediaTypes = ['movie', 'tv_show'],
   const because = perType.flatMap(({ seedLists }, index) => {
     const mediaType = mediaTypes[index];
     const lookup = new Map([...scoredByTmdbId].filter(([k]) => k.startsWith(`${mediaType}:`)).map(([k, v]) => [Number(k.split(':')[1]), v]));
-    return becauseRows(seedLists, lookup, taste, becauseLimit);
+    return becauseRows(seedLists, lookup, taste, becauseLimit * 3);
   });
 
   // Interleave seeds by recency/strength rather than all-movies-then-all-TV.
@@ -469,10 +525,13 @@ export async function buildPersonalizedRows({ mediaTypes = ['movie', 'tv_show'],
   const value = {
     hasHistory: true,
     topPicks,
-    becauseYouWatched: because.slice(0, becauseLimit),
+    becauseYouWatched: pickBecauseRows(because, becauseLimit),
     taste: {
       genres: rankedKeys(taste.genres, 8),
       languages: rankedKeys(taste.languages, 4).filter(Boolean),
+      // Share of the history per language (0–1), so rows only lead with a
+      // language the viewer really leans on.
+      languageShare: Object.fromEntries([...taste.languages].map(([language, value]) => [language, Math.round(value * 100) / 100])),
     },
   };
   resultCache.set(key, { ts: Date.now(), value });

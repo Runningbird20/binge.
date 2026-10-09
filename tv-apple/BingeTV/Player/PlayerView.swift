@@ -87,6 +87,14 @@ struct PlayerView: View {
                 UpNextCard(season: next.season, episode: next.episode, seconds: countdown)
             }
 
+            if model.pausedAmbient {
+                AmbientView(titles: [model.request.title] + AmbientStore.shared.titles.filter { $0.id != model.request.title.id },
+                            resumeLabel: "Resume \(model.request.title.name)",
+                            resume: { model.togglePlay(); surfaceFocused = true },
+                            dismiss: { model.leaveAmbient(); surfaceFocused = true })
+                    .transition(.opacity)
+            }
+
             if panelOpen {
                 PlayerPanel(model: model) {
                     panelOpen = false
@@ -183,6 +191,14 @@ private struct HUD: View {
                     }
                 }
                 Spacer()
+                if let quality = model.resolutionLabel {
+                    Text(quality)
+                        .font(.caption.weight(.heavy))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.7), lineWidth: 1.5))
+                        .accessibilityLabel("Playing in \(quality)")
+                }
                 if let server = model.server {
                     Label(server.name, systemImage: "server.rack")
                         .font(.caption.weight(.semibold))
@@ -360,6 +376,20 @@ private struct PlayerPanel: View {
                     Button("Server's layout") { model.fillScreen = false; close() }
                         .buttonStyle(PillButtonStyle(selected: !model.fillScreen))
                     Text("Switch if subtitles or the server's buttons go missing.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
+                .focusSection()
+
+                Text("Quality").font(.headline).foregroundStyle(Theme.muted)
+                HStack(spacing: 20) {
+                    ForEach(QualityPreference.allCases) { option in
+                        Button(option.label) {
+                            UserDefaults.standard.set(option.rawValue, forKey: "binge.quality")
+                            close()
+                        }
+                        .buttonStyle(PillButtonStyle(selected: QualityPreference.current == option))
+                    }
+                    Text("Best quality checks every server for a sharper (up to 4K) stream for a few seconds after it starts.")
                         .font(.caption).foregroundStyle(Theme.muted)
                 }
                 .focusSection()

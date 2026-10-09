@@ -4,7 +4,7 @@ import {
   cacheMediaMetadata,
   getCachedMediaMetadata,
 } from './mediaMetadataCache';
-import { getActiveProfileId } from './activeProfile';
+import { activeProfileOwnsLegacyRows, getActiveProfileId } from './activeProfile';
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
@@ -699,7 +699,18 @@ async function fetchMediaMetadataMap(mediaType, mediaIds) {
   );
 }
 
-async function enrichMediaRecords(records = []) {
+// Reads for the active profile. The default profile (or an account's only
+// profile) also owns rows saved before profiles existed or with no profile
+// picked (profile_id null), the same rule the TV app uses — otherwise those
+// titles show up on the TV but silently never on the website.
+function scopeToProfile(query, profileId) {
+  if (!profileId) return query;
+  return activeProfileOwnsLegacyRows()
+    ? query.or(`profile_id.eq.${profileId},profile_id.is.null`)
+    : query.eq('profile_id', profileId);
+}
+
+export async function enrichMediaRecords(records = []) {
   if (!Array.isArray(records)) {
     return [];
   }
@@ -757,7 +768,7 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
     let nextQuery = query.eq('user_id', userId);
 
     if (profileId) {
-      nextQuery = nextQuery.eq('profile_id', profileId);
+      nextQuery = scopeToProfile(nextQuery, profileId);
     }
 
     if (mediaType) {
@@ -804,7 +815,7 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
     .select('id')
     .eq('media_type', mediaType)
     .eq('media_id', Number(mediaId));
-  if (profileId) existingQuery = existingQuery.eq('profile_id', profileId);
+  if (profileId) existingQuery = scopeToProfile(existingQuery, profileId);
   const { data: existing, error: existingError } = await existingQuery.maybeSingle();
 
   if (existingError) {
@@ -848,7 +859,7 @@ export async function fetchSupabaseWatchlistStatusMap(mediaType) {
     .select('id, media_id, status, current_season, current_episode, current_page, current_chapter')
     .eq('user_id', authUser.id)
     .eq('media_type', mediaType);
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
 
   if (error) {
@@ -919,7 +930,7 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRating
     .select(selectColumns)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
 
   if (error) {
@@ -1069,7 +1080,7 @@ export async function fetchEpisodeProgress(mediaId) {
     .select('season, episode, watched_at')
     .eq('user_id', user.id)
     .eq('media_id', mediaId);
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
   if (error) throw toFriendlyError(error, 'Failed to fetch episode progress');
   return data || [];
@@ -1087,7 +1098,7 @@ export async function fetchEpisodeProgressCounts() {
     .select('media_id')
     .eq('user_id', user.id)
     .limit(5000);
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
   if (error) return new Map();
   const counts = new Map();
@@ -1179,7 +1190,7 @@ export async function fetchSupabaseContinueWatching() {
     .select('id, media_type, media_id, current_season, current_episode, current_page, current_chapter, position_seconds, duration_seconds, updated_at')
     .eq('user_id', authUser.id)
     .order('updated_at', { ascending: false });
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
 
   if (error) {
@@ -1231,7 +1242,7 @@ export async function fetchSupabaseResumePoint({ mediaType, mediaId }) {
     .eq('media_type', mediaType)
     .eq('media_id', Number(mediaId))
     .limit(1);
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
   if (error || !data?.[0]) return null;
   const row = data[0];
@@ -1270,7 +1281,7 @@ export async function fetchEpisodeHistory(limit = 300) {
     .eq('user_id', authUser.id)
     .order('watched_at', { ascending: false })
     .limit(limit);
-  if (profileId) query = query.eq('profile_id', profileId);
+  if (profileId) query = scopeToProfile(query, profileId);
   const { data, error } = await query;
   if (error) return [];
   return enrichMediaRecords((data || []).map((row) => ({ ...row, media_type: 'tv_show' })));

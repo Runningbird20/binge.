@@ -11,6 +11,7 @@ import {
 import { languageName } from '../utils/tmdb';
 import { posterSrc } from '../utils/imageQuality';
 import { buildWrapped } from '../utils/wrapped';
+import TicketBook from './TicketBook';
 
 // Wrapped is the one place binge. dresses up: your year as a run of movie
 // tickets. Each stat prints on its own ticket (gold ADMIT ONE stub,
@@ -163,6 +164,29 @@ const DEMO = (year) => ({
   persona: { name: 'The K-Drama Devotee', line: 'Seoul was basically your second home this year.' },
 });
 
+// Development only: raw activity for /wrapped?view=book&demo=1.
+const DEMO_ACTIVITY = (year) => {
+  const shows = [
+    { media_id: 1, title: 'Squid Game', tmdb_id: 93405, genre: 'Drama' },
+    { media_id: 2, title: 'Severance', tmdb_id: 95396, genre: 'Sci-Fi & Fantasy' },
+    { media_id: 3, title: 'Shōgun', tmdb_id: 126308, genre: 'Drama' },
+  ];
+  const episodes = [];
+  for (let month = 0; month <= new Date().getMonth(); month += 1) {
+    const show = shows[month % shows.length];
+    for (let i = 0; i < 4 + (month * 3) % 9; i += 1) {
+      episodes.push({ ...show, media_type: 'tv_show', source_key: `tmdb:tv:${show.tmdb_id}`, watched_at: new Date(year, month, 3 + i, 21 + (i % 4)).toISOString() });
+    }
+  }
+  const movie = (id, title, tmdb, month) => ({ media_type: 'movie', media_id: id, title, source_key: `tmdb:movie:${tmdb}`, genre: 'Drama', updated_at: new Date(year, month, 12).toISOString() });
+  return {
+    episodes,
+    playing: [movie(10, 'Parasite', 496243, 1), movie(11, 'Amélie', 194, 2), movie(12, 'Spirited Away', 129, 4), movie(13, 'City of God', 598, 6)],
+    ratings: [],
+    watchlist: [],
+  };
+};
+
 export default function Wrapped() {
   const { user, activeProfile } = useAuth();
   const [data, setData] = useState(null);
@@ -174,6 +198,7 @@ export default function Wrapped() {
   const year = new Date().getFullYear();
   const name = activeProfile?.name || user?.username || 'Your';
   useTicketFonts();
+  const view = new URLSearchParams(window.location.search).get('view');
 
   useEffect(() => {
     let cancelled = false;
@@ -283,6 +308,10 @@ export default function Wrapped() {
   }
 
   const empty = data && data.titleCount === 0;
+  if (view === 'book') {
+    const demo = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('demo') ? DEMO_ACTIVITY(year) : null;
+    return <TicketBook year={year} name={name} demo={demo} />;
+  }
   const ticket = empty
     ? { key: 'empty', screen: 'Box office', title: 'No tickets yet', sub: 'Watch or rate a few things this year and your tickets print here.', lines: [] }
     : tickets[slide];
@@ -296,6 +325,7 @@ export default function Wrapped() {
       onPointerCancel={() => setHeld(false)}
     >
       <Link to="/profile" className="wp-close" aria-label="Close Wrapped"><X size={20} weight="bold" /></Link>
+      <Link to="/wrapped?view=book" className="wp-booklink">Ticket book</Link>
 
       {!empty && tickets.length > 0 && (
         <div className="wp-progress" aria-hidden="true">

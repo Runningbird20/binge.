@@ -984,7 +984,7 @@ export default function Books() {
       <Navbar />
       <main className="page-content curated-page">
         <PullToRefresh onRefresh={activeTab === 'books' ? handleRefresh : (() => {})}>
-        <div className="st-tabs" role="tablist" aria-label="Reading">
+        <div className="st-tabs st-reading-tabs" role="tablist" aria-label="Reading">
           <button
             type="button"
             role="tab"

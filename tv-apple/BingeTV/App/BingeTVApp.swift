@@ -24,6 +24,8 @@ struct BingeTVApp: App {
 
 struct RootView: View {
     @EnvironmentObject private var app: AppModel
+    // Settings › Accessibility "Larger text": every text style one big step up.
+    @AppStorage("binge.largeText") private var largeText = false
 
     var body: some View {
         ZStack {
@@ -46,6 +48,7 @@ struct RootView: View {
             #endif
         }
         .animation(.easeInOut(duration: 0.25), value: app.phase)
+        .dynamicTypeSize(largeText ? .accessibility2 : .large)
         .task {
             OverlayWindow.install()
             await app.start()
@@ -61,6 +64,8 @@ struct RootView: View {
 struct MainTabs: View {
     @EnvironmentObject private var app: AppModel
     @State private var tab = DebugLaunch.tab ?? "home"
+    @ObservedObject private var ambient = AmbientStore.shared
+    @State private var ambientPlay: PlayRequest?
 
     var body: some View {
         TabView(selection: $tab) {
@@ -89,6 +94,22 @@ struct MainTabs: View {
         .overlay { DebugLaunch.overlay() }
         #endif
         .onChange(of: app.deepLink) { _, link in if link != nil { tab = "home" } }
+        // Ambient mode after a few idle minutes (AmbientStore).
+        .fullScreenCover(isPresented: $ambient.showing) {
+            AmbientView(titles: ambient.titles,
+                        resumeLabel: ambient.resume.map { item in "Resume \(item.title.name)\(item.episodeLabel.map { " · \($0)" } ?? "")" },
+                        resume: {
+                            let next = ambient.resume?.playRequest
+                            ambient.showing = false
+                            ambient.touch()
+                            if let next { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { ambientPlay = next } }
+                        },
+                        dismiss: { ambient.showing = false; ambient.touch() })
+        }
+        .background {
+            Color.clear.fullScreenCover(item: $ambientPlay) { PlayerView(request: $0, app: app) }
+        }
+        .onAppear { AmbientStore.shared.start() }
         // A different profile means different rows, list and history.
         .id(app.profile?.id ?? "none")
     }

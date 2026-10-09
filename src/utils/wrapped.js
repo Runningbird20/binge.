@@ -86,3 +86,92 @@ export function buildWrapped({ episodes, playing, ratings, watchlist }, year) {
     persona,
   };
 }
+
+// ── Year-round ticket book ─────────────────────────────────────────────
+// Monthly stubs, the countries you "visited", and achievement tickets,
+// from the same activity as Wrapped, so it can be opened any month.
+
+export function buildTicketBook({ episodes, playing, ratings, watchlist }, year, now = new Date()) {
+  const eps = episodes.filter((row) => inYear(row.watched_at, year));
+  const rated = ratings.filter((row) => inYear(row.created_at, year));
+  const played = playing.filter((row) => inYear(row.updated_at, year));
+  const finished = watchlist.filter((row) => (row.status === 'watched' || row.status === 'read') && inYear(row.updated_at || row.added_at, year));
+
+  const months = Array.from({ length: 12 }, (_, month) => ({
+    month,
+    future: year === now.getFullYear() && month > now.getMonth(),
+    episodes: 0,
+    titles: new Map(),
+  }));
+  const touch = (row, date) => {
+    const at = new Date(date);
+    if (Number.isNaN(at.getTime())) return;
+    const entry = months[at.getMonth()];
+    const key = `${row.media_type}:${row.media_id}`;
+    const current = entry.titles.get(key) || { row, count: 0 };
+    current.count += 1;
+    entry.titles.set(key, current);
+  };
+  eps.forEach((row) => { months[new Date(row.watched_at).getMonth()].episodes += 1; touch(row, row.watched_at); });
+  played.forEach((row) => touch(row, row.updated_at));
+  rated.forEach((row) => touch(row, row.created_at));
+
+  const monthly = months.map((entry) => {
+    const movies = [...entry.titles.values()].filter(({ row }) => row.media_type === 'movie').length;
+    const top = [...entry.titles.values()].sort((a, b) => b.count - a.count)[0]?.row || null;
+    return {
+      month: entry.month,
+      future: entry.future,
+      episodes: entry.episodes,
+      titles: entry.titles.size,
+      hours: Math.round((entry.episodes * EPISODE_MINUTES + movies * MOVIE_MINUTES) / 60),
+      top,
+    };
+  });
+
+  const allTitles = new Map();
+  [...eps, ...rated, ...played, ...finished].forEach((row) => allTitles.set(`${row.media_type}:${row.media_id}`, row));
+  const genres = new Set();
+  allTitles.forEach((row) => String(row.genre || '').split(',').map((g) => g.trim()).filter(Boolean).forEach((g) => genres.add(g)));
+  const days = new Map();
+  eps.forEach((row) => bump(days, new Date(row.watched_at).toDateString()));
+  const bestDay = Math.max(0, ...days.values());
+  const lateNights = eps.filter((row) => { const h = new Date(row.watched_at).getHours(); return h >= 0 && h < 4; }).length;
+  const finishedShows = finished.filter((row) => row.media_type === 'tv_show').length;
+  const books = finished.filter((row) => row.media_type === 'book').length;
+
+  const achievement = (key, title, line, progress, goal) => ({ key, title, line, progress: Math.min(progress, goal), goal, earned: progress >= goal });
+  const achievements = [
+    achievement('eps100', 'Century', '100 episodes this year', eps.length, 100),
+    achievement('marathon', 'Marathoner', '6 episodes in one day', bestDay, 6),
+    achievement('critic', 'Critic', '25 ratings this year', rated.length, 25),
+    achievement('genres', 'Genre hopper', '10 different genres', genres.size, 10),
+    achievement('night', 'Night owl', '10 episodes after midnight', lateNights, 10),
+    achievement('finisher', 'Completionist', 'Finish 3 series', finishedShows, 3),
+    achievement('reader', 'Bookworm', 'Finish 5 books', books, 5),
+    achievement('films', 'Movie buff', '25 movies', [...allTitles.values()].filter((row) => row.media_type === 'movie').length, 25),
+  ];
+
+  return {
+    year,
+    monthly,
+    achievements,
+    // Titles to look up countries for (passport), most-watched first.
+    titles: [...allTitles.values()].filter((row) => row.media_type === 'movie' || row.media_type === 'tv_show'),
+  };
+}
+
+// Countries from TMDB details (production_countries / origin_country),
+// counted once per title.
+export function countPassport(detailsList) {
+  const countries = new Map();
+  detailsList.forEach((details) => {
+    if (!details) return;
+    const codes = new Set([
+      ...(details.production_countries || []).map((c) => c.iso_3166_1),
+      ...(details.origin_country || []),
+    ].filter(Boolean));
+    codes.forEach((code) => countries.set(code, (countries.get(code) || 0) + 1));
+  });
+  return [...countries.entries()].sort((a, b) => b[1] - a[1]).map(([code, count]) => ({ code, count }));
+}

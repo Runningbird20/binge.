@@ -13,7 +13,7 @@ import {
   createAccountProfile,
 } from '../utils/supabaseData';
 import { normalizeUserType } from '../utils/userAccess';
-import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId } from '../utils/activeProfile';
+import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId, setActiveProfileOwnsLegacyRows } from '../utils/activeProfile';
 import { hydratePlaybackPrefs } from '../utils/streamPreferences';
 import { hydrateSettings } from '../utils/profileSettings';
 
@@ -228,6 +228,7 @@ export function AuthProvider({ children }) {
       const valid = list.find((p) => p.id === stored);
       const fallback = list.find((p) => p.is_default) || list[0] || null;
       const chosen = valid || fallback;
+      if (chosen) setActiveProfileOwnsLegacyRows(chosen.is_default || list.length <= 1);
       if (chosen && chosen.id !== stored) {
         setActiveProfileId(chosen.id);
       }
@@ -249,9 +250,11 @@ export function AuthProvider({ children }) {
   // profile automatically, instead of needing each of those components to
   // separately subscribe to profile changes and re-fetch.
   const switchProfile = useCallback((profileId) => {
+    const next = profiles.find((p) => p.id === profileId);
+    if (next) setActiveProfileOwnsLegacyRows(next.is_default || profiles.length <= 1);
     setActiveProfileId(profileId);
     window.location.assign('/home');
-  }, []);
+  }, [profiles]);
 
   const addProfile = useCallback(async ({ name, isKids, avatarUrl, avatarColor }) => {
     const created = await createAccountProfile({ name, isKids, avatarUrl, avatarColor });

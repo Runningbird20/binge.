@@ -17,6 +17,7 @@ final class PiPController: ObservableObject {
     }
 
     var game: SportGame? { tile?.game }
+    var isPlayerOpen: Bool { otherPlayback > 0 }
 
     func show(_ game: SportGame) {
         tile?.stop()

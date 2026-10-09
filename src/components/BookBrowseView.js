@@ -52,7 +52,12 @@ export default function BookBrowseView({ refreshKey = 0 }) {
   return (
     <div className="st-browse">
       <BrowseHero
-        items={(trending || []).filter((book) => book.synopsis && book.synopsis !== 'No description available yet.').slice(0, 6)}
+        // Books with a description first, but any book with a cover can lead
+        // the spotlight (it used to require one and often showed nothing).
+        items={trending === null ? null : [...trending]
+          .filter((book) => book.cover_url || book.poster_url || book.image_url)
+          .sort((a, b) => Number(Boolean(b.synopsis && b.synopsis !== 'No description available yet.')) - Number(Boolean(a.synopsis && a.synopsis !== 'No description available yet.')))
+          .slice(0, 6)}
         kicker="Trending this week"
         emptyTitle="Find your next great read"
         playLabel="Read"

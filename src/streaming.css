@@ -95,6 +95,11 @@
   background: #0b0d12;
 }
 .st-hero--empty { margin-bottom: 1.5rem; border-radius: 0; }
+.st-hero--loading { border-radius: 0; }
+/* Books / Manga: the spotlight runs full-bleed under the nav like Movies
+   and Series, with the Books | Manga tabs floating over its top edge. */
+.st-reading-tabs { position: relative; z-index: 3; width: fit-content; margin-bottom: -3.6rem; }
+.st-reading-tabs + * .st-hero--empty, .st-reading-tabs ~ .st-browse .st-hero--empty { padding-top: 4rem; }
 
 .st-hero-backdrop {
   position: absolute;
@@ -438,7 +443,10 @@
   .st-hero { min-height: 62vh; margin-top: -1rem; }
   .st-hero-nav { display: none; }
   .st-hero-overview { -webkit-line-clamp: 2; font-size: 0.92rem; }
-  .st-hero-dots { left: var(--st-gutter); right: auto; bottom: 1rem; }
+  .st-hero-dots { left: var(--st-gutter); right: auto; bottom: 0.4rem; }
+  /* Bigger tap targets on phones (the bar itself stays slim). */
+  .st-hero-dot { height: 26px; padding: 10px 0; background-clip: content-box; }
+  .st-hero { touch-action: pan-y; }
   .st-hero-content { padding: 0 var(--st-gutter) 2.6rem; }
   .st-row-arrow { display: none; }
   .st-row-track { gap: 0.5rem; }
@@ -459,6 +467,7 @@
 }
 
 .st-cw-cell { position: relative; }
+.st-card-note { margin: 0.1rem 0 0; font-size: 0.78rem; color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-cw-remove {
   position: absolute;
   top: 0.95rem;
@@ -2184,6 +2193,32 @@
 .st-official { position: relative; flex: 1; min-height: 60vh; background: #0d0f14; }
 
 /* ── Player: Up Next ─────────────────────────────────────────── */
+/* Next episode warming up off-screen (see EmbedPlayer preloadNext). */
+.st-preload-frame { position: absolute; width: 1px; height: 1px; left: -9999px; top: 0; border: 0; opacity: 0; pointer-events: none; }
+
+/* Skip intro: bottom-right over the video, like the streaming apps. */
+.st-skip-intro {
+  position: absolute;
+  right: clamp(12px, 3vw, 32px);
+  bottom: clamp(56px, 9vh, 96px);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.6rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(12, 14, 20, 0.82);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.98rem;
+  cursor: pointer;
+}
+.st-skip-intro:hover { background: #fff; color: #0b0d12; }
+.st-skip-intro:focus-visible { outline: none; box-shadow: var(--st-focus); }
+@media (max-width: 768px) { .st-skip-intro { bottom: 12px; right: 12px; } }
+
 .st-upnext {
   position: absolute;
   right: clamp(12px, 3vw, 32px);
@@ -3611,4 +3646,74 @@ kbd {
 }
 @media (prefers-reduced-motion: reduce) {
   .wp-ticket, .wp-stamp { animation: none; }
+}
+
+/* ── Ticket book (/wrapped?view=book): monthly stubs, passport, awards ── */
+.wp-booklink {
+  position: absolute; top: 1.2rem; right: 4.6rem; z-index: 5;
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 1rem;
+  border-radius: 999px; color: #f4efe6; background: rgba(244, 239, 230, 0.1);
+  font: 600 0.9rem/1 "IBM Plex Mono", ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.06em; text-decoration: none;
+}
+.wp-booklink:hover { background: rgba(244, 239, 230, 0.2); }
+.wp-progress { right: 12rem; }
+.wp-book { overflow: hidden; }
+.wp-book-scroll { position: absolute; inset: 0; overflow-y: auto; padding: 4.5rem clamp(1rem, 5vw, 4rem) 4rem; }
+.wp-book-head h1 { margin: 0; font: 800 clamp(2.4rem, 6vw, 4.6rem)/0.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.wp-book-head p { margin: 0.6rem 0 0; color: rgba(244, 239, 230, 0.7); }
+.wp-book-head a { color: var(--tk-gold); }
+.wp-book section { margin-top: 2.6rem; }
+.wp-book h2 { margin: 0 0 1rem; font: 600 1rem/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(244, 239, 230, 0.65); }
+.wp-book-note { margin: 0 0 1rem; color: rgba(244, 239, 230, 0.7); }
+
+.wp-stubs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.9rem; }
+.wp-mini {
+  position: relative; display: flex; flex-direction: column; gap: 0.25rem; min-height: 132px;
+  padding: 0.9rem 0.9rem 0.8rem 1.15rem; border-radius: 6px;
+  background: var(--tk-paper); color: var(--tk-ink);
+  border-left: 8px solid var(--tk-gold);
+  font-family: "IBM Plex Mono", monospace;
+}
+.wp-mini::before, .wp-mini::after { content: ""; position: absolute; left: -12px; width: 16px; height: 16px; border-radius: 50%; background: var(--tk-floor); }
+.wp-mini::before { top: -8px; } .wp-mini::after { bottom: -8px; }
+.wp-mini-month { font: 800 1.6rem/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.wp-mini-hours { font: 800 1.35rem/1 "Barlow Condensed", sans-serif; color: var(--tk-red); }
+.wp-mini-line, .wp-mini-empty { font-size: 0.74rem; color: rgba(28, 26, 23, 0.7); }
+.wp-mini-top { margin-top: auto; font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-mini--future { background: transparent; color: rgba(244, 239, 230, 0.5); border: 1px dashed rgba(244, 239, 230, 0.25); }
+.wp-mini--future::before, .wp-mini--future::after { display: none; }
+.wp-mini--future .wp-mini-empty { color: rgba(244, 239, 230, 0.45); }
+.wp-mini--loading { opacity: 0.4; }
+
+.wp-stamps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 1.1rem; }
+.wp-stamp-mark {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
+  width: 132px; height: 132px; border-radius: 50%; padding: 0.6rem; text-align: center;
+  border: 3px double rgba(214, 120, 120, 0.85); color: #e7a3a3;
+  transform: rotate(var(--tilt, 0deg));
+}
+.wp-stamp-country { font: 800 1.05rem/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.wp-stamp-count { font: 400 0.68rem/1.2 "IBM Plex Mono", monospace; }
+
+.wp-awards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0.9rem; }
+.wp-award {
+  position: relative; display: flex; flex-direction: column; gap: 0.35rem; min-height: 120px;
+  padding: 1rem 1.1rem; border-radius: 6px; border: 1px dashed rgba(244, 239, 230, 0.3);
+  font-family: "IBM Plex Mono", monospace; color: rgba(244, 239, 230, 0.75);
+}
+.wp-award--earned { border: 0; background: var(--tk-paper); color: var(--tk-ink); }
+.wp-award-title { font: 800 1.5rem/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.wp-award-line { font-size: 0.8rem; }
+.wp-award-stamp {
+  position: absolute; right: 0.9rem; bottom: 0.8rem; padding: 0.15rem 0.55rem; transform: rotate(-8deg);
+  border: 2px solid var(--tk-red); color: var(--tk-red); font: 800 0.95rem/1.2 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.wp-award-progress { position: relative; margin-top: auto; height: 22px; border-radius: 4px; background: rgba(244, 239, 230, 0.08); overflow: hidden; }
+.wp-award-progress i { position: absolute; inset: 0 auto 0 0; background: rgba(245, 196, 81, 0.35); }
+.wp-award-progress b { position: relative; display: block; padding: 0 0.5rem; font-size: 0.74rem; line-height: 22px; }
+@media (max-width: 600px) {
+  .wp-booklink { right: 4.2rem; padding: 0 0.75rem; font-size: 0.78rem; }
+  .wp-progress { right: 10.5rem; }
+  .wp-stubs { grid-template-columns: repeat(2, 1fr); }
+  .wp-stamp-mark { width: 112px; height: 112px; }
 }

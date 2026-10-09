@@ -27,6 +27,15 @@ struct SearchView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 80)
                 } else {
+                    if query.isEmpty {
+                        // tvOS dictates into the search field from the Siri
+                        // Remote's microphone button; sentences go to Ask binge.
+                        Label("Hold \(Image(systemName: "mic.fill")) on the Siri Remote and say a title, an actor, or what you're in the mood for — like “a funny movie under two hours”.",
+                              systemImage: "waveform")
+                            .labelStyle(.titleOnly)
+                            .font(.callout)
+                            .foregroundStyle(Theme.muted)
+                    }
                     if query.isEmpty && !trending.isEmpty { SectionTitle(text: "Trending searches") }
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
                         ForEach(showing) { PosterCard(title: $0) }
@@ -170,7 +179,7 @@ struct MeView: View {
                     }
                 }
                 Section {
-                    row("Playback", "captions.bubble", "Audio, subtitles, trailers") { PlaybackSettingsView() }
+                    row("Playback & accessibility", "captions.bubble", "Quality, audio, subtitles, larger text") { PlaybackSettingsView() }
                 }
                 if let corner = pip.game {
                     Section {

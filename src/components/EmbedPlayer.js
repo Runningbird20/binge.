@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowsIn, ArrowsOut, CaretDown, Check, DeviceRotate, LockSimple, LockSimpleOpen, Play, Plus, X } from '@phosphor-icons/react';
+import { ArrowsIn, ArrowsOut, CaretDown, Check, DeviceRotate, LockSimple, LockSimpleOpen, Play, Plus, SkipForward, X } from '@phosphor-icons/react';
 import { api } from '../api';
 import {
   fetchEpisodeProgress,
@@ -34,6 +34,7 @@ import {
 } from '../utils/streamPreferences';
 import PlaybackOptions, { MobilePlaybackPickers } from './PlaybackOptions';
 import { haptic } from '../utils/haptics';
+import { fetchEpisodeMarkers, looksLikeIntroSkip, reportCredits, reportIntro } from '../utils/episodeMarkers';
 
 // Embed servers, best first. VidRift and Vidy lead: in testing they played
 // every title tried, including a new 2026 K-drama episode that vidsrc.ru
@@ -314,6 +315,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // Start position per load (provider + episode), frozen when the load
   // begins so saving progress every few seconds never changes the iframe
   // URL (which would reload the player).
+  // Intro-marker bookkeeping: our own skip target (so it isn't reported as
+  // a viewer's skip), where a viewer's skip started, and its report timer.
+  const ownSkipRef = useRef(0);
+  const introFromRef = useRef(null);
+  const introReportTimerRef = useRef(null);
   const pendingStartRef = useRef(Number(initialPosition) > 0 ? Math.floor(Number(initialPosition)) : null);
   const [resumeNonce, setResumeNonce] = useState(0);
   const lastRemoteSaveRef = useRef(0);
@@ -454,6 +460,21 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       if (reading.duration > 0) state.duration = reading.duration;
 
       if (Number.isFinite(reading.time) && reading.time > 0) {
+        // A viewer skipping ahead early in an episode is timing its intro
+        // (not when it's our own "Skip intro" jump).
+        if (isTV && item?.id && state.time > 0 && !ownSkipRef.current
+            && looksLikeIntroSkip(state.time, reading.time, state.duration)) {
+          const from = introFromRef.current ?? state.time;
+          introFromRef.current = from;
+          clearTimeout(introReportTimerRef.current);
+          const landing = reading.time;
+          const duration = state.duration;
+          introReportTimerRef.current = setTimeout(() => {
+            introFromRef.current = null;
+            reportIntro({ mediaId: item.id, season, episode, start: from, end: landing, duration });
+          }, 6000);
+        }
+        if (ownSkipRef.current && reading.time > (ownSkipRef.current - 3)) ownSkipRef.current = 0;
         if (Math.abs(reading.time - state.time) > 0.25) {
           state.lastAdvanceAt = now;
           if (reading.state !== 'pause') state.playing = true;
@@ -503,9 +524,69 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const [upNext, setUpNext] = useState(null); // { secondsLeft }
   const upNextDismissedRef = useRef('');
 
+  // ── Intro / credits markers (see utils/episodeMarkers) ───────────
+  const [markers, setMarkers] = useState({});
+  const [showSkipIntro, setShowSkipIntro] = useState(false);
+  useEffect(() => {
+    setMarkers({});
+    setShowSkipIntro(false);
+    if (!isTV || !item?.id) return undefined;
+    let cancelled = false;
+    fetchEpisodeMarkers(item, season, episode).then((found) => { if (!cancelled) setMarkers(found || {}); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTV, item?.id, season, episode]);
+
+  // Skipping needs a server we can move: VidRift by message, the other
+  // resumable servers by reloading at the new second.
+  const canJump = provider === 'vidrift' || RESUMABLE.has(provider);
+  useEffect(() => {
+    if (!markers.intro || !canJump || !PAUSE_AWARE.has(provider)) { setShowSkipIntro(false); return undefined; }
+    const timer = setInterval(() => {
+      const { time } = playbackRef.current;
+      setShowSkipIntro(time > 0 && time >= markers.intro.start - 0.5 && time < markers.intro.end - 2);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [markers.intro, canJump, provider]);
+
+  function skipIntro() {
+    const target = markers.intro?.end;
+    if (!target) return;
+    haptic();
+    ownSkipRef.current = target;
+    setShowSkipIntro(false);
+    if (provider === 'vidrift' && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'vidrift:resume', currentTime: target }, 'https://embed.vidrift.net');
+    } else if (RESUMABLE.has(provider)) {
+      pendingStartRef.current = Math.floor(target);
+      setResumeNonce((n) => n + 1);
+    }
+  }
+
+  const skipIntroButton = showSkipIntro && (
+    <button type="button" className="st-skip-intro" onClick={skipIntro}>
+      <SkipForward size={18} weight="fill" aria-hidden="true" /> Skip intro
+    </button>
+  );
+
+  // Warm the next episode in the last 90s (or a minute before the credits):
+  // its player page, scripts and stream lookup load in a hidden frame, so
+  // the switch starts much faster. The frame has no autoplay permission,
+  // so it can't make a sound. Skipped with data saver on.
+  const [preloadNext, setPreloadNext] = useState(false);
   useEffect(() => {
     setUpNext(null);
+    setPreloadNext(false);
   }, [season, episode, item?.id]);
+  useEffect(() => {
+    if (!isTV || !nextEpisode || preloadNext || prefersLowBandwidth()) return undefined;
+    const timer = setInterval(() => {
+      const { time, duration } = playbackRef.current;
+      const creditsSoon = markers.credits && time >= markers.credits.start - 60;
+      if (duration > 0 && time > 0 && (duration - time <= 90 || creditsSoon)) setPreloadNext(true);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [isTV, nextEpisode, preloadNext, markers.credits]);
 
   useEffect(() => {
     if (!isTV || !nextEpisode) return undefined;
@@ -513,12 +594,14 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       const state = playbackRef.current;
       const key = `${season}:${episode}`;
       if (upNextDismissedRef.current === key) return;
-      const nearEnd = state.duration > 0 && state.time > 0 && state.duration - state.time <= UP_NEXT_SECONDS;
+      // At the credits when we know where they start, else the last 30s.
+      const atCredits = markers.credits && state.time >= markers.credits.start && state.duration - state.time > 5;
+      const nearEnd = atCredits || (state.duration > 0 && state.time > 0 && state.duration - state.time <= UP_NEXT_SECONDS);
       // With autoplay off in Settings the card waits for a tap (no countdown).
       if ((nearEnd || state.ended) && !upNext) setUpNext({ secondsLeft: getSettings().autoNext ? UP_NEXT_COUNTDOWN : null });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isTV, nextEpisode, season, episode, upNext]);
+  }, [isTV, nextEpisode, season, episode, upNext, markers.credits]);
 
   useEffect(() => {
     if (!upNext || upNext.secondsLeft == null) return undefined;
@@ -531,6 +614,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   function playNextEpisode() {
     if (!nextEpisode) return;
     haptic();
+    // Moving on before the Up Next card showed up: the credits had started.
+    const state = playbackRef.current;
+    if (!upNext && item?.id) reportCredits({ mediaId: item.id, season, episode, start: state.time, duration: state.duration });
     if (item?.id && !watched.has(`${season}:${episode}`)) {
       markEpisodeWatched({ mediaId: item.id, season, episode })
         .then(() => setWatched((previous) => new Set([...previous, `${season}:${episode}`])))
@@ -753,6 +839,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     health: providerHealth,
   };
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
+  const preloadUrl = preloadNext && nextEpisode
+    ? buildUrl(provider, externalId, mediaType, nextEpisode.season, nextEpisode.episode, subtitleLang)
+    : null;
+  const preloadFrame = preloadUrl && (
+    <iframe className="st-preload-frame" src={preloadUrl} title="Next episode (loading)" aria-hidden="true" tabIndex={-1} referrerPolicy="no-referrer-when-downgrade" />
+  );
 
   const [rotationLocked, setRotationLocked] = useState(false);
   const [rotateHint, setRotateHint] = useState(false);
@@ -1234,7 +1326,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
               <p>{lookupState === 'loading' ? 'Preparing stream…' : 'Stream unavailable.'}</p>
             </div>
           )}
+          {skipIntroButton}
           {upNextCard}
+          {preloadFrame}
           {rotateHint && (
             <div className="mp-rotate-hint" role="status">
               <DeviceRotate size={22} weight="bold" aria-hidden="true" /> Turn your phone sideways for a bigger picture
@@ -1496,7 +1590,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
             </div>
           )}
 
+          {skipIntroButton}
           {upNextCard}
+          {preloadFrame}
           <div
             className={`player-controls-overlay ${controlsVisible ? 'visible' : ''}`}
             onMouseEnter={() => clearTimeout(hideControlsTimerRef.current)}

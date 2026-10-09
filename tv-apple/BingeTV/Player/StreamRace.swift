@@ -43,10 +43,16 @@ final class StreamRace {
     // isn't always the best-looking one.
     private var upgradeUntil: Date?
     private var heights: [String: Int] = [:]
+    private var times: [String: Double] = [:]
+    private var playingHeights: [String: Int] = [:]
+    private var firstPlayAt: Date?
     private var memoryObserver: NSObjectProtocol?
 
     // Multiview tiles decide their own sound; the winner stays muted.
     let keepMuted: Bool
+    // Set by the player when the viewer pauses, so shopping for a sharper
+    // stream never "un-pauses" them.
+    var userPaused = false
 
     init(request: PlayRequest, servers: [StreamServer], mode: Mode, keepMuted: Bool = false) {
         self.request = request
@@ -129,14 +135,23 @@ final class StreamRace {
         }
 
         // Mute every contender, nudge any that loaded but wait for a click,
-        // and crown the first whose clock moves.
+        // and crown the first whose clock moves. "Best quality" (movies and
+        // shows) gives the others 1.5s more and takes the sharpest playing.
+        let shopping = !request.isLive && mode == .live && QualityPreference.current == .best && candidates.count > 1
         for candidate in candidates {
             candidate.web.send(.mute)
             candidate.web.poll { [weak self] state in
                 guard let self, self.winner == nil, let state,
                       self.candidates.contains(where: { $0.server == candidate.server }) else { return }
                 if state.paused, state.ready >= 2 { candidate.web.send(.play) }
-                if state.t > 0.4, !state.paused { self.crown(candidate) }
+                guard state.t > 0.4, !state.paused else { return }
+                guard shopping else { self.crown(candidate); return }
+                self.playingHeights[candidate.server.id] = state.height
+                if self.firstPlayAt == nil { self.firstPlayAt = Date() }
+                if state.height >= 2000 || Date().timeIntervalSince(self.firstPlayAt!) > 1.5 {
+                    let best = self.candidates.max { (self.playingHeights[$0.server.id] ?? -1) < (self.playingHeights[$1.server.id] ?? -1) }
+                    self.crown(best ?? candidate)
+                }
             }
         }
 
@@ -156,7 +171,12 @@ final class StreamRace {
             return
         }
         winner.web.poll { [weak self] state in
-            if let state, state.height > 0 { self?.heights[winner.server.id] = state.height }
+            guard let self, let state else { return }
+            if state.height > 0 { self.heights[winner.server.id] = state.height }
+            self.times[winner.server.id] = state.t
+            // Another page starting its video can pause this one (tvOS
+            // gives one video the audio at a time); keep it going.
+            if state.paused, !state.ended, !self.userPaused { winner.web.send(.play) }
         }
         for other in others {
             other.web.send(.mute)
@@ -170,6 +190,10 @@ final class StreamRace {
                 #if DEBUG
                 print("[race] upgrade \(winner.server.name) \(current)p -> \(other.server.name) \(state.height)p")
                 #endif
+                // A movie or episode picks up where the first stream was.
+                if !self.request.isLive, let at = self.times[winner.server.id], at > 1, other.web.canSeek {
+                    other.web.send(.seekTo(at))
+                }
                 winner.web.view.alpha = 0
                 Self.tearDown(winner.web)
                 self.candidates.removeAll { $0.server == winner.server }
@@ -186,7 +210,7 @@ final class StreamRace {
         #if DEBUG
         print("[race] \(mode == .warm ? "warm" : "live") winner \(candidate.server.name) after \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s")
         #endif
-        if request.isLive, mode == .live, candidates.count > 1 {
+        if request.isLive, mode == .live, candidates.count > 1, QualityPreference.current == .best {
             upgradeUntil = Date().addingTimeInterval(6)
         } else {
             for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
@@ -201,6 +225,18 @@ final class StreamRace {
             if !keepMuted { candidate.web.send(.unmute) }
         }
         onChange?()
+    }
+}
+
+// "Best quality" (default) keeps shopping for a sharper stream for a few
+// seconds after the first one plays, movies and shows included; "Fastest
+// start" takes the first stream that plays and stops there.
+enum QualityPreference: String, CaseIterable, Identifiable {
+    case best, fastest
+    var id: String { rawValue }
+    var label: String { self == .best ? "Best quality" : "Fastest start" }
+    static var current: QualityPreference {
+        QualityPreference(rawValue: UserDefaults.standard.string(forKey: "binge.quality") ?? "") ?? .best
     }
 }
 

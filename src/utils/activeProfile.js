@@ -45,3 +45,21 @@ export function subscribeActiveProfile(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
+
+// Whether the active profile also owns rows with no profile_id (saved before
+// profiles existed). True for the default profile and for an account's only
+// profile — the same rule as the TV app. Remembered so the first queries
+// after a reload (before the profile list arrives) agree with later ones.
+const LEGACY_KEY = 'activeProfileOwnsLegacy';
+let ownsLegacy = (() => {
+  try { return window.localStorage.getItem(LEGACY_KEY) !== '0'; } catch { return true; }
+})();
+
+export function activeProfileOwnsLegacyRows() {
+  return ownsLegacy;
+}
+
+export function setActiveProfileOwnsLegacyRows(value) {
+  ownsLegacy = Boolean(value);
+  try { window.localStorage.setItem(LEGACY_KEY, ownsLegacy ? '1' : '0'); } catch { /* storage unavailable */ }
+}

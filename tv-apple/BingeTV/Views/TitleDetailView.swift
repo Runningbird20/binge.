@@ -23,6 +23,8 @@ struct TitleDetailView: View {
     @State private var outside: OutsideRatings?
     @State private var myStars: Double?
     @State private var rating = false
+    @State private var sending = false
+    @State private var sentTo: String?
     @State private var heatmap: [(season: Int, episodes: [TMDBSeason.Episode])] = []
     @State private var franchise: Franchises.Order?
     @State private var previously: [TMDBSeason.Episode] = []
@@ -159,6 +161,22 @@ struct TitleDetailView: View {
                     Label(myStars == nil ? "Rate" : "Rated", systemImage: myStars == nil ? "star" : "star.fill")
                 }
                 .disabled(!app.isSignedIn)
+
+                // Household queue: put it in another profile's "Sent to you".
+                if app.isSignedIn, app.profiles.count > 1 {
+                    Button { sending = true } label: {
+                        Label(sentTo.map { "Sent to \($0)" } ?? "Send to…", systemImage: sentTo == nil ? "paperplane" : "checkmark")
+                    }
+                    .confirmationDialog("Send \(title.name) to", isPresented: $sending, titleVisibility: .visible) {
+                        ForEach(app.profiles.filter { $0.id != app.profile?.id }) { profile in
+                            Button(profile.name) {
+                                Task {
+                                    if (try? await app.send(title, to: profile)) != nil { sentTo = profile.name }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 if let progress = resumeProgress {
                     ProgressView(value: progress)

@@ -83,9 +83,19 @@ final class PlayerModel: ObservableObject {
     private var recoveries = 0
     private var handPicked = false
     private var lifecycle: [NSObjectProtocol] = []
+    private var lastResume = Date.distantPast
+    // Paused a long time: the player shows ambient art (AmbientView).
+    @Published var pausedAmbient = false
+    private var pausedSince: Date?
     // Servers already raced for this video; ones that haven't raced yet go
     // first when recovering.
     private var raced = Set<String>()
+    // Intro/credits markers for this episode, and a viewer's skip in
+    // progress (where it started, last seek) so it can be reported.
+    @Published private(set) var markers = EpisodeMarkers()
+    private var introSeekFrom: Double?
+    private var introSeekAt = Date.distantPast
+    private var ownIntroSkip = false
 
     init(request: PlayRequest, app: AppModel) {
         self.request = request
@@ -105,6 +115,7 @@ final class PlayerModel: ObservableObject {
             self.originalLanguage = language
         }
         observeLifecycle()
+        loadMarkers()
         if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
             Task {
                 let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
@@ -114,6 +125,18 @@ final class PlayerModel: ObservableObject {
     }
 
     var isEpisode: Bool { request.title.kind == .tvShow }
+
+    // What's actually on screen, from the video's own height.
+    var resolutionLabel: String? {
+        switch playback.height {
+        case 2000...: return "4K"
+        case 1400..<2000: return "1440p"
+        case 1000..<1400: return "1080p"
+        case 700..<1000: return "720p"
+        case 1..<700: return "SD"
+        default: return nil
+        }
+    }
     var episodeLabel: String? {
         if let subtitle = request.subtitle { return subtitle }
         guard isEpisode, let s = request.season, let e = request.episode else { return nil }
@@ -152,6 +175,7 @@ final class PlayerModel: ObservableObject {
         racingNames = next.candidates.map(\.server.name).joined(separator: ", ")
         started = false
         warmedNext = false
+        userPaused = false
         playback = Playback()
         buffering = false
         resetStallClock()
@@ -195,8 +219,15 @@ final class PlayerModel: ObservableObject {
 
     // MARK: Remote
 
+    func leaveAmbient() {
+        pausedAmbient = false
+        pausedSince = Date()
+        showHUD()
+    }
+
     func togglePlay() {
         autoAdvances = 0
+        pausedAmbient = false
         if stillWatching {
             stillWatching = false
             playNext()
@@ -204,6 +235,7 @@ final class PlayerModel: ObservableObject {
         }
         if let countdown = upNextCountdown, countdown >= 0 { playNext(); return }
         userPaused = !playback.paused
+        race?.userPaused = userPaused
         web?.send(.toggle)
         showHUD()
     }
@@ -236,7 +268,17 @@ final class PlayerModel: ObservableObject {
         #if DEBUG
         print("[tracks] prefs audio=\(PlaybackPrefs.audio) original=\(request.title.originalLanguage ?? "nil") want=\(audio) langs=\(audioTracks.prefix(16).map(\.language))")
         #endif
-        if !audio.isEmpty, let match = audioTracks.first(where: { Self.matches($0, audio) }), !match.on {
+        // Audio description first, when asked for and the video has one
+        // (servers label it "Audio Description", "Descriptive", "AD").
+        let describes = { (track: MediaTrack) in
+            track.label.range(of: #"descri|\bAD\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        if PlaybackPrefs.audioDescription,
+           let match = audioTracks.first(where: { describes($0) && (audio.isEmpty || Self.matches($0, audio)) })
+            ?? audioTracks.first(where: describes) {
+            if !match.on { web.send(.audioTrack(match.index)) }
+        } else if !audio.isEmpty, let match = audioTracks.first(where: { Self.matches($0, audio) && !describes($0) })
+                    ?? audioTracks.first(where: { Self.matches($0, audio) }), !match.on {
             web.send(.audioTrack(match.index))
             #if DEBUG
             print("[tracks] audio -> \(Self.displayName(match))")
@@ -266,11 +308,32 @@ final class PlayerModel: ObservableObject {
         return "Track \(track.index + 1)"
     }
 
-    // ▲ during the first minutes of an episode.
+    private func loadMarkers() {
+        guard isEpisode, let season = request.season, let episode = request.episode else { return }
+        let title = request.title
+        Task {
+            let found = await EpisodeMarkerStore.markers(for: title, season: season, episode: episode)
+            guard self.request.season == season, self.request.episode == episode else { return }
+            self.markers = found
+            #if DEBUG
+            print("[markers] S\(season)E\(episode) intro=\(found.intro.map { "\($0.start)-\($0.end) (\($0.source))" } ?? "none") credits=\(found.credits.map { "\($0)" } ?? "none")")
+            #endif
+        }
+    }
+
+    // ▲ during the intro: straight to its end when we know it (viewers'
+    // timings or AniSkip), else a typical 85s.
     func skipIntro() {
         skippedIntro = true
         showSkipIntro = false
-        seek(by: 85)
+        if let intro = markers.intro, let web, web.canSeek {
+            ownIntroSkip = true
+            web.send(.seekTo(intro.end))
+            playback.t = intro.end
+            showHUD()
+        } else {
+            seek(by: 85)
+        }
     }
 
     func seek(by seconds: Double) {
@@ -280,6 +343,10 @@ final class PlayerModel: ObservableObject {
             showHUD()
             return
         }
+        // Skipping forward early on: remember where it started so the
+        // intro's timing can be shared once the seeking settles.
+        if seconds > 0, isEpisode, !ownIntroSkip, introSeekFrom == nil, playback.t < 600 { introSeekFrom = playback.t }
+        introSeekAt = Date()
         web.send(.seekBy(seconds))
         playback.t = max(0, playback.t + seconds) // instant HUD feedback
         showHUD()
@@ -328,6 +395,10 @@ final class PlayerModel: ObservableObject {
         recoveries = 0
         handPicked = false
         raced = []
+        markers = EpisodeMarkers()
+        introSeekFrom = nil
+        ownIntroSkip = false
+        loadMarkers()
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
@@ -399,6 +470,14 @@ final class PlayerModel: ObservableObject {
         notice = message
     }
 
+    // A pause the app means (sleep timer, still watching, leaving the app):
+    // treated like the viewer's own, so it isn't undone.
+    private func holdPause() {
+        userPaused = true
+        race?.userPaused = true
+        web?.send(.pause)
+    }
+
     // MARK: Leaving the app
 
     private func observeLifecycle() {
@@ -410,8 +489,7 @@ final class PlayerModel: ObservableObject {
                 guard let self, !self.closed else { return }
                 self.saveProgress(force: true)
                 if !self.request.isLive, self.started, !self.playback.paused {
-                    self.userPaused = true
-                    self.web?.send(.pause)
+                    self.holdPause()
                 }
             }
         })
@@ -424,9 +502,19 @@ final class PlayerModel: ObservableObject {
         })
     }
 
+    #if DEBUG
+    private var lastDebugAt = Date.distantPast
+    #endif
+
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
         watchClock(state)
+        #if DEBUG
+        if Date().timeIntervalSince(lastDebugAt) > 4 {
+            lastDebugAt = Date()
+            print("[state] t=\(String(format: "%.1f", state.t)) paused=\(state.paused) ready=\(state.ready) h=\(state.height) server=\(server?.name ?? "-") started=\(started)")
+        }
+        #endif
         #if DEBUG
         // -BingeStallAfter N: N seconds in, the video claims to be playing
         // but its clock stops (a network stall). -BingeKillAfter N: the page
@@ -454,6 +542,16 @@ final class PlayerModel: ObservableObject {
             web.send(.unmute)
             web.send(.play)
         }
+        // Some servers pause themselves a few seconds in (an overlay, a
+        // second player on the page). Only the remote pauses here, so any
+        // other pause is undone, at most every 2s.
+        if started, state.paused, !state.ended, !userPaused, Date().timeIntervalSince(lastResume) > 2 {
+            lastResume = Date()
+            web.send(.play)
+            #if DEBUG
+            print("[player] server paused itself at \(String(format: "%.1f", state.t))s — resuming")
+            #endif
+        }
         if !started, state.t > 0.4, !state.paused {
             started = true
             #if DEBUG
@@ -462,16 +560,38 @@ final class PlayerModel: ObservableObject {
         }
 
         if hudVisible, Date() > hudHideAt, !state.paused { hudVisible = false }
+        if started, state.paused, userPaused {
+            if pausedSince == nil { pausedSince = Date() }
+            if let since = pausedSince, Date().timeIntervalSince(since) > 180,
+               UserDefaults.standard.object(forKey: "binge.ambient") as? Bool ?? true { pausedAmbient = true }
+        } else {
+            pausedSince = nil
+            pausedAmbient = false
+        }
         if state.paused, started { hudVisible = true }
 
         // Keep the video pinned full screen (servers sometimes swap the
         // <video> element when they change quality or source).
-        if fillScreen, started, Date().timeIntervalSince(lastFill) > 3 {
+        if started, Date().timeIntervalSince(lastFill) > 3 {
             lastFill = Date()
-            web.send(.fill)
+            if fillScreen { web.send(.fill) }
+            // Subtitle size/background from Settings (re-sent, as servers
+            // can swap the <video> element).
+            web.send(.captionStyle(size: PlaybackPrefs.captionSize, background: PlaybackPrefs.captionBackground))
         }
 
-        showSkipIntro = isEpisode && started && !skippedIntro && state.t > 15 && state.t < 240
+        if let intro = markers.intro {
+            showSkipIntro = isEpisode && started && !skippedIntro && state.t >= intro.start - 0.5 && state.t < intro.end - 2
+        } else {
+            showSkipIntro = isEpisode && started && !skippedIntro && state.t > 15 && state.t < 240
+        }
+        // A viewer's skip has settled: share where the intro was.
+        if let from = introSeekFrom, Date().timeIntervalSince(introSeekAt) > 6 {
+            introSeekFrom = nil
+            if let season = request.season, let episode = request.episode {
+                EpisodeMarkerStore.reportIntro(request.title, season: season, episode: episode, start: from, end: state.t, duration: state.d)
+            }
+        }
 
         if isEpisode, !markedWatched, state.d > 120, state.t / state.d > 0.9,
            let app, let season = request.season, let episode = request.episode {
@@ -483,7 +603,7 @@ final class PlayerModel: ObservableObject {
         if let sleepAt, Date() > sleepAt {
             self.sleepAt = nil
             sleep = .off
-            web.send(.pause)
+            holdPause()
             notice = "Sleep timer: paused."
             hudVisible = true
         }
@@ -505,12 +625,13 @@ final class PlayerModel: ObservableObject {
         guard let next = nextEpisode, started, state.d > 120 else { return }
         let remaining = state.d - state.t
         // Load the next episode in the background so it starts instantly.
-        if remaining < 90, !warmedNext {
+        let atCredits = markers.credits.map { state.t >= $0 && remaining > 5 } ?? false
+        if remaining < 90 || markers.credits.map({ state.t >= $0 - 60 }) == true, !warmedNext {
             warmedNext = true
             Warmup.shared.prepare(PlayRequest(title: request.title, season: next.season, episode: next.episode,
                                               seasons: request.seasons))
         }
-        if state.ended || remaining < 25 {
+        if state.ended || remaining < 25 || atCredits {
             // Sleep at the end of this episode, or check someone's still
             // there after 3 episodes in a row with no remote input.
             if sleep == .episode || autoAdvances >= 3 {
@@ -521,7 +642,7 @@ final class PlayerModel: ObservableObject {
                     } else {
                         stillWatching = true
                     }
-                    web?.send(.pause)
+                    holdPause()
                     upNextCountdown = nil
                 }
                 return
@@ -536,6 +657,10 @@ final class PlayerModel: ObservableObject {
 
     func playNext(automatic: Bool = false) {
         guard let next = nextEpisode else { return }
+        // Moving on before Up Next showed: the credits had started.
+        if !automatic, upNextCountdown == nil, let season = request.season, let episode = request.episode {
+            EpisodeMarkerStore.reportCredits(request.title, season: season, episode: episode, start: playback.t, duration: playback.d)
+        }
         play(season: next.season, episode: next.episode, automatic: automatic)
     }
 

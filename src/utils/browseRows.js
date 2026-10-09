@@ -181,7 +181,10 @@ export function orderRowsForTaste(rows, taste) {
   const scored = tasteRows.map((entry, index) => {
     let rank = 100 + index;
     if (entry.kind === 'language' && languageRank.has(entry.language) && entry.language !== 'en') {
-      rank = languageRank.get(entry.language);
+      // A language row leads only when the viewer clearly leans on it
+      // (a third of their history); otherwise it comes after their genres.
+      const share = taste?.languageShare?.[entry.language];
+      rank = share == null || share >= 0.33 ? languageRank.get(entry.language) : 20 + languageRank.get(entry.language);
     } else if (entry.kind === 'genre' && genreRank.has(String(entry.genre).toLowerCase())) {
       rank = 10 + genreRank.get(String(entry.genre).toLowerCase());
     }

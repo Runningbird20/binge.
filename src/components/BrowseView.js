@@ -49,7 +49,11 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
     return () => { cancelled = true; };
   }, [headline, mediaType, kidsSafe, refreshKey]);
 
-  const heroItems = personal?.hasHistory && personal.topPicks.length >= 3 ? personal.topPicks : trending || [];
+  // Wait for both, so the spotlight doesn't show trending and then swap
+  // to your picks a second later (null = loading placeholder).
+  const heroItems = personal === null || trending === null
+    ? null
+    : (personal?.hasHistory && personal.topPicks.length >= 3 ? personal.topPicks : trending || []);
 
   const loaders = useMemo(() => {
     const map = new Map();
