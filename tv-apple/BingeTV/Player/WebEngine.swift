@@ -111,8 +111,14 @@ enum WebEngines {
       function pin(el){ if(!document.getElementById('__bf-style')){ var st=document.createElement('style'); st.id='__bf-style'; st.textContent=FILL_CSS; (document.head||document.documentElement).appendChild(st); }
         document.documentElement.classList.add('__bf'); el.classList.add('__bf-el');
         try{ window.scrollTo(0,0); }catch(e){}
-        // A transformed ancestor would trap position:fixed inside it.
-        for (var a=el.parentElement; a && a!==document.documentElement; a=a.parentElement){ a.style.setProperty('transform','none','important'); a.style.setProperty('filter','none','important'); a.style.setProperty('contain','none','important'); }
+        // Any ancestor that becomes a containing block for fixed elements
+        // would trap the video inside it (Vidy's player wrapper uses
+        // container-type: size), and clip-path/mask would crop it. Walk up
+        // through shadow roots too.
+        var TRAPS=['transform','filter','contain','will-change','perspective','backdrop-filter','-webkit-backdrop-filter','container-type','clip-path','mask','-webkit-mask','content-visibility','zoom'];
+        var RESET={'transform':'none','filter':'none','contain':'none','will-change':'auto','perspective':'none','backdrop-filter':'none','-webkit-backdrop-filter':'none','container-type':'normal','clip-path':'none','mask':'none','-webkit-mask':'none','content-visibility':'visible','zoom':'1'};
+        for (var a=el.parentElement || (el.getRootNode && el.getRootNode().host); a && a!==document.documentElement; a=a.parentElement || (a.getRootNode && a.getRootNode().host) || null){
+          for (var t=0;t<TRAPS.length;t++) a.style.setProperty(TRAPS[t], RESET[TRAPS[t]], 'important'); }
         if (window.parent !== window) { try{ window.parent.postMessage({__bingeFillUp:true},'*'); }catch(e){} } }
       function unpin(){ document.documentElement.classList.remove('__bf'); var els=document.querySelectorAll('.__bf-el'); for (var i=0;i<els.length;i++) els[i].classList.remove('__bf-el'); }
       window.addEventListener('message', function(e){ if(!(e.data && e.data.__bingeFillUp)) return;
