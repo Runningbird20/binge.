@@ -117,6 +117,17 @@ private struct HUD: View {
                 if let notice = model.notice {
                     Text(notice).font(.callout.weight(.semibold)).foregroundStyle(Theme.gold)
                 }
+                if model.request.isLive {
+                    HStack(spacing: 20) {
+                        Label("LIVE", systemImage: "circle.fill")
+                            .font(.callout.weight(.heavy))
+                            .foregroundStyle(Color(hex: 0xFF5A50))
+                        Image(systemName: model.playback.paused ? "play.fill" : "pause.fill")
+                    }
+                    Text("Click  Pause / play     ▼  Other streams     Back  Exit")
+                        .font(.caption)
+                        .foregroundStyle(Theme.muted)
+                } else {
                 HStack(spacing: 24) {
                     Image(systemName: model.playback.paused ? "play.fill" : "pause.fill")
                         .font(.title3)
@@ -135,6 +146,7 @@ private struct HUD: View {
                 Text("◀ ▶  10 seconds     ▼  Servers & episodes     Back  Exit")
                     .font(.caption)
                     .foregroundStyle(Theme.muted)
+                }
             }
             .padding(.horizontal, Theme.edge)
             .padding(.bottom, 50)
@@ -197,7 +209,7 @@ private struct PlayerPanel: View {
         VStack(alignment: .leading, spacing: 30) {
             Spacer()
             VStack(alignment: .leading, spacing: 26) {
-                Text("Server").font(.headline).foregroundStyle(Theme.muted)
+                Text(model.request.isLive ? "Stream" : "Server").font(.headline).foregroundStyle(Theme.muted)
                 HStack(spacing: 24) {
                     ForEach(model.servers) { server in
                         Button {

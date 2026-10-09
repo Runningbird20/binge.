@@ -200,3 +200,33 @@ extension Title {
             .joined(separator: "  ·  ")
     }
 }
+
+// Focus-aware pill (season pickers, chips). Text colors follow focus, so a
+// label is never gold-on-gold or white-on-white the way a hard-coded
+// foregroundStyle on a system button can be.
+struct PillButtonStyle: ButtonStyle {
+    var selected = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        PillBody(configuration: configuration, selected: selected)
+    }
+
+    private struct PillBody: View {
+        let configuration: ButtonStyleConfiguration
+        let selected: Bool
+        @Environment(\.isFocused) private var focused
+
+        var body: some View {
+            configuration.label
+                .font(.callout.weight(selected ? .bold : .semibold))
+                .foregroundStyle(focused ? Color.black : (selected ? Theme.gold : Color.white))
+                .padding(.horizontal, 34)
+                .padding(.vertical, 16)
+                .background(Capsule().fill(focused ? Color.white : (selected ? Theme.gold.opacity(0.18) : Color.white.opacity(0.08))))
+                .overlay(Capsule().strokeBorder(selected && !focused ? Theme.gold.opacity(0.6) : .clear, lineWidth: 2))
+                .scaleEffect(focused ? 1.08 : (configuration.isPressed ? 0.97 : 1))
+                .shadow(color: .black.opacity(focused ? 0.45 : 0), radius: 14, y: 8)
+                .animation(.easeOut(duration: 0.15), value: focused)
+        }
+    }
+}

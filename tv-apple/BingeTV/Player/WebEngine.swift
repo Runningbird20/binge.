@@ -5,6 +5,33 @@ import ObjectiveC
 // reached through the Objective-C runtime. Fine for a sideloaded app; App
 // Review would reject it. The server's own player page loads top-level,
 // exactly like the website's iframe.
+
+struct MediaState: Decodable, Equatable {
+    var t: Double = 0
+    var d: Double = 0       // 0 for live streams (infinite duration)
+    var paused = true
+    var ended = false
+    var ready: Int = 0      // HTMLMediaElement.readyState
+    var video = false
+}
+
+enum MediaCommand {
+    case play, pause, toggle, mute, unmute, seekBy(Double), seekTo(Double), stop
+
+    var js: String {
+        switch self {
+        case .play: return "play"
+        case .pause: return "pause"
+        case .toggle: return "toggle"
+        case .mute: return "mute"
+        case .unmute: return "unmute"
+        case .seekBy(let s): return "seekBy:\(s)"
+        case .seekTo(let s): return "seekTo:\(s)"
+        case .stop: return "stop"
+        }
+    }
+}
+
 @MainActor
 protocol WebEngine: AnyObject {
     var view: UIView { get }
@@ -12,8 +39,9 @@ protocol WebEngine: AnyObject {
     var canSeek: Bool { get }
     func load(_ url: URL)
     func setAllowedHost(_ host: String?)
-    // Runs a script in the page; the result comes back as a string.
-    func evaluate(_ script: String, _ completion: ((String?) -> Void)?)
+    // The page's main video, wherever it lives (nested iframes included).
+    func poll(_ completion: @escaping (MediaState?) -> Void)
+    func send(_ command: MediaCommand)
 }
 
 enum WebEngines {
@@ -29,6 +57,52 @@ enum WebEngines {
     static var isAvailable: Bool {
         ModernWebView.isAvailable || LegacyWebView.isAvailable
     }
+
+    // Runs in every frame. Each frame with a video reports it to the app;
+    // commands arrive at the top frame and are relayed down to every child
+    // frame (cross-origin included) with postMessage.
+    static let bridgeScript = """
+    (function(){
+      if (window.__bingeBridge) return; window.__bingeBridge = true;
+      function pick(){ var vs=document.getElementsByTagName('video'), best=null;
+        for (var i=0;i<vs.length;i++){ var v=vs[i]; if(!best || v.readyState>best.readyState || (v.duration||0)>(best.duration||0)) best=v; }
+        return best; }
+      function state(v){ return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true}; }
+      function apply(cmd){ var v=pick(); if(!v) return; var p;
+        if(cmd==='play'){ p=v.play(); } else if(cmd==='pause'){ v.pause(); }
+        else if(cmd==='toggle'){ if(v.paused){p=v.play()} else {v.pause()} }
+        else if(cmd==='mute'){ v.muted=true; } else if(cmd==='unmute'){ v.muted=false; }
+        else if(cmd==='stop'){ v.pause(); v.muted=true; }
+        else if(cmd.indexOf('seekBy:')===0){ var x=parseFloat(cmd.slice(7)); v.currentTime=Math.max(0,Math.min((isFinite(v.duration)?v.duration:1e9)-1,v.currentTime+x)); }
+        else if(cmd.indexOf('seekTo:')===0){ v.currentTime=parseFloat(cmd.slice(7)); }
+        if(p&&p.catch) p.catch(function(){}); }
+      function relay(cmd){ apply(cmd); for (var i=0;i<window.frames.length;i++){ try{ window.frames[i].postMessage({__binge:cmd},'*'); }catch(e){} } }
+      window.__bingeRun = relay;
+      window.addEventListener('message', function(e){ if(e.data && e.data.__binge) relay(e.data.__binge); });
+      setInterval(function(){ var v=pick(); if(!v) return;
+        try{ window.webkit.messageHandlers.binge.postMessage(state(v)); }catch(e){} }, 400);
+    })();
+    """
+}
+
+// Receives the bridge's messages without the content controller retaining
+// the web view's owner.
+private final class BridgeProxy: NSObject {
+    weak var target: ModernWebView?
+
+    @objc(userContentController:didReceiveScriptMessage:)
+    func userContentController(_ controller: NSObject, didReceive message: NSObject) {
+        guard let body = message.value(forKey: "body") as? [String: Any] else { return }
+        let state = MediaState(
+            t: (body["t"] as? NSNumber)?.doubleValue ?? 0,
+            d: (body["d"] as? NSNumber)?.doubleValue ?? 0,
+            paused: (body["paused"] as? NSNumber)?.boolValue ?? true,
+            ended: (body["ended"] as? NSNumber)?.boolValue ?? false,
+            ready: (body["ready"] as? NSNumber)?.intValue ?? 0,
+            video: true
+        )
+        MainActor.assumeIsolated { target?.receive(state) }
+    }
 }
 
 @MainActor
@@ -36,6 +110,12 @@ final class ModernWebView: NSObject, WebEngine {
     let view: UIView
     let canSeek = true
     private var allowedHost: String?
+    private let proxy = BridgeProxy()
+    private var contentController: NSObject?
+    // Several frames may have a <video> (ads, previews). The main one is the
+    // one that has made the most progress recently.
+    private var latest: MediaState?
+    private var latestAt = Date.distantPast
 
     nonisolated static var isAvailable: Bool {
         _ = loaded
@@ -43,19 +123,34 @@ final class ModernWebView: NSObject, WebEngine {
     }
 
     private nonisolated static let loaded: Bool = {
-        dlopen("/System/Library/Frameworks/WebKit.framework/WebKit", RTLD_NOW) != nil
+        guard dlopen("/System/Library/Frameworks/WebKit.framework/WebKit", RTLD_NOW) != nil else { return false }
+        if let proto = objc_getProtocol("WKScriptMessageHandler") { class_addProtocol(BridgeProxy.self, proto) }
+        return true
     }()
 
     init?(allowedHost: String?) {
         guard Self.isAvailable,
               let webClass = NSClassFromString("WKWebView") as? UIView.Type,
-              let configClass = NSClassFromString("WKWebViewConfiguration") as? NSObject.Type else { return nil }
+              let configClass = NSClassFromString("WKWebViewConfiguration") as? NSObject.Type,
+              let scriptClass = NSClassFromString("WKUserScript") as? NSObject.Type else { return nil }
 
         let config = configClass.init()
         config.setValue(true, forKey: "allowsInlineMediaPlayback")
         config.setValue(0, forKey: "mediaTypesRequiringUserActionForPlayback") // autoplay with sound
         if let prefs = config.value(forKey: "preferences") as? NSObject {
             prefs.setValue(false, forKey: "javaScriptCanOpenWindowsAutomatically")
+        }
+
+        // The bridge, in every frame: [[WKUserScript alloc] initWithSource:injectionTime:forMainFrameOnly:]
+        let scriptInit = NSSelectorFromString("initWithSource:injectionTime:forMainFrameOnly:")
+        let controller = config.value(forKey: "userContentController") as? NSObject
+        if let method = class_getInstanceMethod(scriptClass, scriptInit), let controller {
+            typealias ScriptInit = @convention(c) (AnyObject, Selector, NSString, Int, Bool) -> NSObject
+            let make = unsafeBitCast(method_getImplementation(method), to: ScriptInit.self)
+            let allocated = (scriptClass as AnyObject).perform(NSSelectorFromString("alloc"))!.takeUnretainedValue()
+            let script = make(allocated, scriptInit, WebEngines.bridgeScript as NSString, 1, false) // atDocumentEnd, all frames
+            _ = controller.perform(NSSelectorFromString("addUserScript:"), with: script)
+            _ = controller.perform(NSSelectorFromString("addScriptMessageHandler:name:"), with: proxy, with: "binge" as NSString)
         }
 
         // [[WKWebView alloc] initWithFrame:configuration:]
@@ -67,7 +162,9 @@ final class ModernWebView: NSObject, WebEngine {
         view = initFn(allocated, initSelector, CGRect(x: 0, y: 0, width: 1920, height: 1080), config)
 
         self.allowedHost = allowedHost
+        contentController = controller
         super.init()
+        proxy.target = self
         view.backgroundColor = .black
         view.isOpaque = true
         view.setValue(self, forKey: "navigationDelegate")
@@ -77,18 +174,39 @@ final class ModernWebView: NSObject, WebEngine {
 
     deinit {
         let web = view
+        let controller = contentController
         Task { @MainActor in
+            _ = controller?.perform(NSSelectorFromString("removeScriptMessageHandlerForName:"), with: "binge" as NSString)
             web.setValue(nil, forKey: "navigationDelegate")
             web.setValue(nil, forKey: "UIDelegate")
         }
     }
 
+    fileprivate func receive(_ state: MediaState) {
+        // Prefer whichever frame's video is further along / actually playing.
+        if let latest, Date().timeIntervalSince(latestAt) < 1.5,
+           state.ready < latest.ready || (latest.t > state.t + 1 && !latest.paused) {
+            return
+        }
+        latest = state
+        latestAt = Date()
+    }
+
     func setAllowedHost(_ host: String?) { allowedHost = host }
 
     func load(_ url: URL) {
+        latest = nil
         var request = URLRequest(url: url)
         request.setValue("https://\(Config.siteHost)/", forHTTPHeaderField: "Referer")
         _ = view.perform(NSSelectorFromString("loadRequest:"), with: request as NSURLRequest)
+    }
+
+    func poll(_ completion: @escaping (MediaState?) -> Void) {
+        completion(Date().timeIntervalSince(latestAt) < 3 ? latest : nil)
+    }
+
+    func send(_ command: MediaCommand) {
+        evaluate("window.__bingeRun && window.__bingeRun('\(command.js)')", nil)
     }
 
     func evaluate(_ script: String, _ completion: ((String?) -> Void)?) {
@@ -134,5 +252,27 @@ extension LegacyWebView: WebEngine {
 
     func evaluate(_ script: String, _ completion: ((String?) -> Void)?) {
         completion?(run(script))
+    }
+
+    // Top-level <video> only (the legacy engine can't reach into frames).
+    func poll(_ completion: @escaping (MediaState?) -> Void) {
+        let json = run("""
+        (function(){var v=document.querySelector('video');if(!v)return '';
+        return JSON.stringify({t:v.currentTime||0,d:isFinite(v.duration)?v.duration:0,paused:v.paused,ended:v.ended,ready:v.readyState,video:true})})()
+        """)
+        completion(json.flatMap { $0.data(using: .utf8) }.flatMap { try? JSONDecoder().decode(MediaState.self, from: $0) })
+    }
+
+    func send(_ command: MediaCommand) {
+        let body: String
+        switch command {
+        case .play: body = "var p=v.play(); if(p&&p.catch)p.catch(function(){})"
+        case .pause, .stop: body = "v.pause()"
+        case .toggle: body = "if(v.paused){var p=v.play(); if(p&&p.catch)p.catch(function(){})} else {v.pause()}"
+        case .mute: body = "v.muted=true"
+        case .unmute: body = "v.muted=false"
+        case .seekBy, .seekTo: return // crashes WebKit's legacy engine
+        }
+        run("(function(){var v=document.querySelector('video'); if(v){\(body)}})()")
     }
 }
