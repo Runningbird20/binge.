@@ -50,6 +50,11 @@ final class StreamRace {
 
     // Multiview tiles decide their own sound; the winner stays muted.
     let keepMuted: Bool
+    // The real runtime (TMDB), filled in shortly after the race starts; a
+    // stream whose length is clearly different is the wrong video.
+    var expectedDuration: Double?
+    private(set) var rejected = Set<String>()
+
     // Set by the player when the viewer pauses, so shopping for a sharper
     // stream never "un-pauses" them.
     var userPaused = false
@@ -144,6 +149,10 @@ final class StreamRace {
                 guard let self, self.winner == nil, let state,
                       self.candidates.contains(where: { $0.server == candidate.server }) else { return }
                 if state.paused, state.ready >= 2 { candidate.web.send(.play) }
+                if let expected = self.expectedDuration, ExpectedRuntime.isWrong(state.d, expected: expected) {
+                    self.reject(candidate, length: state.d)
+                    return
+                }
                 guard state.t > 0.4, !state.paused else { return }
                 guard shopping else { self.crown(candidate); return }
                 self.playingHeights[candidate.server.id] = state.height
@@ -202,6 +211,21 @@ final class StreamRace {
                 if !self.keepMuted { other.web.send(.unmute) }
                 self.onChange?()
             }
+        }
+    }
+
+    private func reject(_ candidate: Candidate, length: Double) {
+        #if DEBUG
+        print("[race] \(candidate.server.name) is the wrong video (\(Int(length / 60)) min, expected \(Int((expectedDuration ?? 0) / 60)))")
+        #endif
+        rejected.insert(candidate.server.id)
+        Self.tearDown(candidate.web)
+        candidates.removeAll { $0.server == candidate.server }
+        playingHeights[candidate.server.id] = nil
+        if candidates.isEmpty {
+            failed = true
+            stop()
+            onChange?()
         }
     }
 
@@ -278,6 +302,7 @@ final class Warmup {
             guard self.pendingKey == key else { return }
             self.pendingKey = nil
             let fresh = StreamRace(request: request, servers: servers.isEmpty ? StreamServer.all : servers, mode: .warm)
+            Task { fresh.expectedDuration = await ExpectedRuntime.seconds(for: request) }
             fresh.container.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
             self.host.addSubview(fresh.container)
             self.race = fresh

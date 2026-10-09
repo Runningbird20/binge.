@@ -65,7 +65,7 @@ struct AmbientView: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Color.black.ignoresSafeArea()
-            if let current, let art = current.backdrop ?? current.poster {
+            if let current, let art = TMDB.resized(current.backdrop, TMDB.fullScreen) ?? TMDB.resized(current.poster, TMDB.fullScreen) {
                 AsyncImage(url: art) { image in
                     image.resizable().scaledToFill()
                 } placeholder: { Color.black }
@@ -93,6 +93,11 @@ struct AmbientView: View {
         .task {
             // A new picture every 14s, cross-faded.
             while !Task.isCancelled {
+                // Fetch the next full-size picture during this one, so the
+                // cross-fade lands on a ready image (URLCache serves it).
+                if !titles.isEmpty, let next = TMDB.resized(titles[(index + 1) % titles.count].backdrop, TMDB.fullScreen) {
+                    _ = try? await URLSession.shared.data(from: next)
+                }
                 try? await Task.sleep(for: .seconds(14))
                 zoom = false
                 withAnimation(.easeInOut(duration: 1.6)) { index += 1 }

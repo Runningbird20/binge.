@@ -78,7 +78,7 @@ struct TitleDetailView: View {
     // MARK: Header
 
     private var backdrop: some View {
-        AsyncImage(url: TMDB.image(details?.backdropPath, "w1280") ?? title.backdrop) { image in
+        AsyncImage(url: TMDB.image(details?.backdropPath, TMDB.fullScreen) ?? TMDB.resized(title.backdrop, TMDB.fullScreen)) { image in
             image.resizable().aspectRatio(contentMode: .fill)
         } placeholder: {
             Theme.background
@@ -98,7 +98,7 @@ struct TitleDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if let logo = TMDB.image(details?.logoPath, "w500") {
+            if let logo = TMDB.image(details?.logoPath, TMDB.fullScreen) {
                 AsyncImage(url: logo) { image in
                     image.resizable().scaledToFit()
                 } placeholder: {
@@ -376,7 +376,7 @@ struct EpisodeCard: View {
         VStack(alignment: .leading, spacing: 14) {
             Button(action: action) {
                 ZStack(alignment: .bottomLeading) {
-                    PosterImage(url: TMDB.image(episode.stillPath, "w500") ?? fallback, name: "Episode \(episode.episodeNumber)")
+                    PosterImage(url: TMDB.image(episode.stillPath, TMDB.fullScreen) ?? fallback, name: "Episode \(episode.episodeNumber)")
                         .frame(width: 400, height: 225)
                         .clipped()
                     if isCurrent { Badge(text: "Up next").padding(14) }

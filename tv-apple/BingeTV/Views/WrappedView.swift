@@ -270,7 +270,7 @@ struct WrappedView: View {
             let shows = (try? await Catalog.titles(.tvShow, ids: [58132])) ?? [:]
             var show = shows[58132]
             if let tmdbId = show?.tmdbId, let details: TMDBDetails = try? await TMDB.shared.get("tv/\(tmdbId)") {
-                show?.backdrop = TMDB.image(details.backdropPath, "w1280")
+                show?.backdrop = TMDB.image(details.backdropPath, TMDB.fullScreen)
             }
             stats = Stats(titles: 64, episodes: 486, movies: 37, minutes: 412 * 60, ratings: 41,
                           genres: ["Thriller", "Drama", "Comedy"], topShow: show, topShowEpisodes: 22,
@@ -318,7 +318,7 @@ struct WrappedView: View {
         let counts = Dictionary(grouping: progress, by: \.mediaId).mapValues(\.count)
         if let top = counts.max(by: { $0.value < $1.value }), var show = shows[top.key] {
             if let tmdbId = show.tmdbId, let details: TMDBDetails = try? await TMDB.shared.get("tv/\(tmdbId)") {
-                show.backdrop = TMDB.image(details.backdropPath, "w1280")
+                show.backdrop = TMDB.image(details.backdropPath, TMDB.fullScreen)
             }
             stats.topShow = show
             stats.topShowEpisodes = top.value

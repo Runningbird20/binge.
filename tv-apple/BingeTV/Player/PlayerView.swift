@@ -40,6 +40,17 @@ struct PlayerView: View {
                 }
                 .ignoresSafeArea()
 
+            // Subtitles, drawn here from the video's own track (WebKit
+            // doesn't draw them reliably on tvOS, and servers' own caption
+            // overlays are hidden in fill mode). Style from Settings.
+            if model.started, !model.playback.cue.isEmpty {
+                SubtitleLine(text: model.playback.cue)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, model.hudVisible ? 200 : 70)
+                    .animation(.easeOut(duration: 0.2), value: model.hudVisible)
+                    .allowsHitTesting(false)
+            }
+
             if !model.started {
                 LoadingCard(model: model)
             } else if model.buffering {
@@ -176,6 +187,31 @@ private func clock(_ seconds: Double) -> String {
     let total = Int(seconds)
     let h = total / 3600, m = (total % 3600) / 60, s = total % 60
     return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+}
+
+private struct SubtitleLine: View {
+    let text: String
+
+    private var background: Color {
+        switch PlaybackPrefs.captionBackground {
+        case "transparent": return .clear
+        case "rgba(0,0,0,1)": return .black
+        default: return .black.opacity(0.6)
+        }
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 46 * CGFloat(PlaybackPrefs.captionSize) / 100, weight: .semibold))
+            .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
+            .shadow(color: .black.opacity(PlaybackPrefs.captionBackground == "transparent" ? 0.95 : 0), radius: 3)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .background(background, in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: 1500)
+            .accessibilityLabel("Subtitle: \(text)")
+    }
 }
 
 private struct HUD: View {
@@ -418,7 +454,7 @@ private struct PlayerPanel: View {
                                     close()
                                 } label: {
                                     VStack(alignment: .leading, spacing: 0) {
-                                        PosterImage(url: TMDB.image(episode.stillPath, "w300"), name: "Episode \(episode.episodeNumber)")
+                                        PosterImage(url: TMDB.image(episode.stillPath, TMDB.fullScreen), name: "Episode \(episode.episodeNumber)")
                                             .frame(width: 300, height: 169)
                                             .clipped()
                                         Text("\(episode.episodeNumber). \(episode.name ?? "")")

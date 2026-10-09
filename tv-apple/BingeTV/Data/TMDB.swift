@@ -109,6 +109,19 @@ actor TMDB {
         return try decoder.decode(T.self, from: data)
     }
 
+    // Sizes for an Apple TV 4K (1920×1080 points drawn at 2×): full-screen
+    // art needs TMDB's original (up to 3840 wide), wide cards w1280,
+    // posters w780.
+    nonisolated static let fullScreen = "original"
+    nonisolated static let wide = "w1280"
+    nonisolated static let poster = "w780"
+
+    // Same image at another size ("…/w780/abc.jpg" → "…/original/abc.jpg").
+    nonisolated static func resized(_ url: URL?, _ size: String) -> URL? {
+        guard let url, url.host == "image.tmdb.org" else { return url }
+        return URL(string: url.absoluteString.replacingOccurrences(of: #"/t/p/[a-z0-9]+/"#, with: "/t/p/\(size)/", options: .regularExpression))
+    }
+
     nonisolated static func image(_ path: String?, _ size: String = "w500") -> URL? {
         guard let path, !path.isEmpty else { return nil }
         return URL(string: "https://image.tmdb.org/t/p/\(size)\(path)")

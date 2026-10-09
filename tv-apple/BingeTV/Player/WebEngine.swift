@@ -11,6 +11,7 @@ struct MediaTrack: Equatable, Identifiable {
     let label: String
     let language: String
     let on: Bool
+    var cues: Int = 0 // subtitle lines loaded (0 = an empty or unloaded track)
     var id: Int { index }
 }
 
@@ -24,6 +25,8 @@ struct MediaState: Decodable, Equatable {
     var height: Int = 0     // videoHeight: what resolution is actually showing
     var audio: [MediaTrack] = []
     var text: [MediaTrack] = []
+    // The subtitle line on screen right now (drawn by the app, not WebKit).
+    var cue: String = ""
 
     enum CodingKeys: String, CodingKey { case t, d, paused, ended, ready, video }
 }
@@ -93,9 +96,25 @@ enum WebEngines {
         return best; }
       function tracks(v){ var a=[], x=[], i;
         if (v.audioTracks) for (i=0;i<v.audioTracks.length;i++){ var at=v.audioTracks[i]; a.push({i:i, l:at.label||'', g:at.language||'', on:!!at.enabled}); }
-        if (v.textTracks) for (i=0;i<v.textTracks.length;i++){ var tt=v.textTracks[i]; if(tt.kind==='subtitles'||tt.kind==='captions') x.push({i:i, l:tt.label||'', g:tt.language||'', on:tt.mode==='showing'}); }
+        if (v.textTracks) for (i=0;i<v.textTracks.length;i++){ var tt=v.textTracks[i]; if(tt.kind==='subtitles'||tt.kind==='captions') x.push({i:i, l:tt.label||'', g:tt.language||'', on:i===window.__bingeTextIdx, n:tt.cues?tt.cues.length:0}); }
         return {a:a, x:x}; }
-      function state(v){ var tr=tracks(v); return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, at:tr.a, tt:tr.x}; }
+      // Subtitles are drawn by the app: the chosen track is kept "hidden"
+      // (cues load, WebKit draws nothing, and the server's own caption
+      // overlay is hidden by fill), and its current line goes up with the
+      // state. A track the server turned on itself is adopted the same way.
+      if (window.__bingeTextIdx === undefined) window.__bingeTextIdx = -2; // -2 = not chosen yet, -1 = off
+      function cueText(v){ var tl=v.textTracks; if(!tl) return '';
+        if (window.__bingeTextIdx===-2){ for (var k=0;k<tl.length;k++){ if(tl[k].mode==='showing' && (tl[k].kind==='subtitles'||tl[k].kind==='captions')){ window.__bingeTextIdx=k; break; } } }
+        var idx=window.__bingeTextIdx; if(idx<0 || !tl[idx]) return '';
+        var tr=tl[idx]; if(tr.mode!=='hidden') tr.mode='hidden';
+        // activeCues isn't kept up to date for hidden tracks everywhere, so
+        // fall back to finding the cue for the current time ourselves.
+        var cues=tr.activeCues; if(!cues||!cues.length){ var all=tr.cues, now=v.currentTime, hit=[];
+          if(all) for (var q=0;q<all.length;q++){ if(all[q].startTime<=now && all[q].endTime>now) hit.push(all[q]); else if(all[q].startTime>now) break; }
+          cues=hit; } if(!cues.length) return '';
+        var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')); }
+        return parts.join('\\n').trim(); }
+      function state(v){ var tr=tracks(v); return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, at:tr.a, tt:tr.x, cue:cueText(v)}; }
       // Fill: pin this frame's video to the viewport, then ask each parent
       // frame to pin the iframe it lives in, all the way up, so the video
       // covers the whole screen instead of the server's page layout.
@@ -134,7 +153,7 @@ enum WebEngines {
         var v=pick(); if(!v) return; var p;
         if(cmd==='fill'){ if(v.readyState>0 || v.duration>0) pin(v); return; }
         if(cmd.indexOf('audio:')===0){ var ai=parseInt(cmd.slice(6),10); if(v.audioTracks) for (var k=0;k<v.audioTracks.length;k++) v.audioTracks[k].enabled=(k===ai); return; }
-        if(cmd.indexOf('text:')===0){ var ti=parseInt(cmd.slice(5),10); if(v.textTracks) for (var j=0;j<v.textTracks.length;j++){ var t2=v.textTracks[j]; if(t2.kind==='subtitles'||t2.kind==='captions') t2.mode=(j===ti?'showing':'disabled'); } return; }
+        if(cmd.indexOf('text:')===0){ var ti=parseInt(cmd.slice(5),10); window.__bingeTextIdx=ti; if(v.textTracks) for (var j=0;j<v.textTracks.length;j++){ var t2=v.textTracks[j]; if(t2.kind==='subtitles'||t2.kind==='captions') t2.mode=(j===ti?'hidden':'disabled'); } return; }
         if(cmd==='play'){ p=v.play(); } else if(cmd==='pause'){ v.pause(); }
         else if(cmd==='toggle'){ if(v.paused){p=v.play()} else {v.pause()} }
         else if(cmd==='mute'){ v.muted=true; } else if(cmd==='unmute'){ v.muted=false; }
@@ -160,7 +179,7 @@ private final class BridgeProxy: NSObject {
         (value as? [[String: Any]] ?? []).compactMap { item in
             guard let index = (item["i"] as? NSNumber)?.intValue else { return nil }
             return MediaTrack(index: index, label: item["l"] as? String ?? "", language: item["g"] as? String ?? "",
-                              on: (item["on"] as? NSNumber)?.boolValue ?? false)
+                              on: (item["on"] as? NSNumber)?.boolValue ?? false, cues: (item["n"] as? NSNumber)?.intValue ?? 0)
         }
     }
 
@@ -176,7 +195,8 @@ private final class BridgeProxy: NSObject {
             video: true,
             height: (body["h"] as? NSNumber)?.intValue ?? 0,
             audio: Self.tracks(body["at"]),
-            text: Self.tracks(body["tt"])
+            text: Self.tracks(body["tt"]),
+            cue: body["cue"] as? String ?? ""
         )
         MainActor.assumeIsolated { target?.receive(state) }
     }
