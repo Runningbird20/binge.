@@ -30,6 +30,7 @@ final class StreamRace {
     var onChange: (() -> Void)?
 
     static let giveUpSeconds: TimeInterval = 45
+    static let maxLiveContenders = 4
 
     var key: String { Self.key(for: request) }
     static func key(for request: PlayRequest) -> String {
@@ -53,7 +54,9 @@ final class StreamRace {
         self.keepMuted = keepMuted
         container.backgroundColor = .black
         guard let tmdbId = request.title.tmdbId ?? (request.isLive ? 0 : nil) else { failed = true; return }
-        for server in servers {
+        // A live race opens at most 4 pages at once (Apple TV memory); the
+        // player keeps the rest as backups for recovery.
+        for server in request.isLive ? Array(servers.prefix(Self.maxLiveContenders)) : servers {
             let url = server.build(tmdbId, request.title.kind, request.season ?? 1, request.episode ?? 1)
             guard let web = WebEngines.make(allowedHost: url.host) else { continue }
             web.view.frame = container.bounds
@@ -65,6 +68,9 @@ final class StreamRace {
             candidates.append(Candidate(server: server, web: web, url: url))
         }
         if candidates.isEmpty { failed = true }
+        #if DEBUG
+        print("[race] racing \(candidates.map(\.server.name)) of \(servers.count)")
+        #endif
         // Low on memory: stop shopping for a sharper live stream.
         memoryObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main

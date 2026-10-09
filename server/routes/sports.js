@@ -89,18 +89,24 @@ async function fetchPpvNormalized() {
       const rawCategory = s.category_name || cat.category || 'Other';
       // PPV.st's "24/7 Streams" bucket is non-sports (cartoon reruns etc.).
       if (rawCategory === '24/7 Streams') continue;
-      out.push({
-        name: s.name,
-        category: rawCategory,
-        poster: s.poster || null,
-        tag: s.tag || null,
-        colors: Array.isArray(s.colors) ? s.colors : null,
-        startsAt: s.starts_at,
-        endsAt: s.ends_at,
-        alwaysLive,
-        replay: ended && isTruthy(s.allowpaststreams),
-        provider: { id: 'ppv', embedUrl: s.iframe, label: s.source_tag ? `PPV · ${s.source_tag}` : 'PPV' },
-      });
+      // The main embed plus any mirrors ("substreams", each with its own tag).
+      const embeds = [{ iframe: s.iframe, tag: s.source_tag }, ...(Array.isArray(s.substreams) ? s.substreams : [])
+        .filter((sub) => sub && sub.iframe && sub.iframe !== s.iframe)
+        .map((sub) => ({ iframe: sub.iframe, tag: sub.source_tag }))];
+      for (const embed of embeds) {
+        out.push({
+          name: s.name,
+          category: rawCategory,
+          poster: s.poster || null,
+          tag: s.tag || null,
+          colors: Array.isArray(s.colors) ? s.colors : null,
+          startsAt: s.starts_at,
+          endsAt: s.ends_at,
+          alwaysLive,
+          replay: ended && isTruthy(s.allowpaststreams),
+          provider: { id: 'ppv', embedUrl: embed.iframe, label: embed.tag ? `PPV · ${embed.tag}` : 'PPV' },
+        });
+      }
     }
   }
   return out;
@@ -147,6 +153,13 @@ async function fetchStreamedNormalized() {
   return out;
 }
 
+// "…/football/redzone1080p" → "StreamFree 1080p"; numbered when unclear.
+function streamfreeLabel(url, index, count) {
+  const quality = /(2160|1080|720|480)p/.exec(url);
+  if (quality) return `StreamFree ${quality[1] === '2160' ? '4K' : `${quality[1]}p`}`;
+  return count > 1 ? `StreamFree ${index + 1}` : 'StreamFree';
+}
+
 async function fetchStreamfreeNormalized() {
   const res = await fetch('https://streamfree.top/api/v1/streams', {
     headers: { Accept: 'application/json' },
@@ -163,23 +176,30 @@ async function fetchStreamfreeNormalized() {
     const startsAt = s.match_timestamp || 0;
     const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
     const endsAt = startsAt ? startsAt + duration : now + duration;
-    if (startsAt && now > endsAt) continue;
-    if (!s.embed_url) continue;
+    // Embeds appear in "sources" near game time (older API: embed_url).
+    const embeds = [...new Set([...(Array.isArray(s.sources) ? s.sources : []), s.embed_url].filter((url) => typeof url === 'string' && url.startsWith('http')))];
+    if (embeds.length === 0) continue;
+    // Channels (RedZone, Sky Sports F1, Willow) keep a timestamp from weeks
+    // ago; anything with embeds that "started" over 2 days back is one.
+    const channel = Boolean(startsAt) && now - startsAt > 2 * 86400;
+    if (startsAt && now > endsAt && !channel) continue;
     const home = s.team1 ? s.team1.name : null;
     const away = s.team2 ? s.team2.name : null;
-    out.push({
-      name: s.name,
-      category,
-      poster: s.thumbnail_url || null,
-      tag: s.league || null,
-      teams: home && away ? { home, away } : null,
-      logos: home && away ? { home: (s.team1 && s.team1.logo) || null, away: (s.team2 && s.team2.logo) || null } : null,
-      startsAt,
-      endsAt,
-      alwaysLive: !startsAt,
-      replay: false,
-      provider: { id: 'streamfree', embedUrl: s.embed_url, label: 'StreamFree' },
-    });
+    for (const [index, embedUrl] of embeds.entries()) {
+      out.push({
+        name: s.name,
+        category,
+        poster: s.thumbnail_url || null,
+        tag: s.league || null,
+        teams: home && away ? { home, away } : null,
+        logos: home && away ? { home: (s.team1 && s.team1.logo) || null, away: (s.team2 && s.team2.logo) || null } : null,
+        startsAt: channel ? 0 : startsAt,
+        endsAt: channel ? now + duration : endsAt,
+        alwaysLive: !startsAt || channel,
+        replay: false,
+        provider: { id: 'streamfree', embedUrl, label: streamfreeLabel(embedUrl, index, embeds.length) },
+      });
+    }
   }
   return out;
 }
@@ -224,10 +244,13 @@ router.get('/streams', async (req, res) => {
 
 router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
   const { source, matchId } = req.params;
+  // ?all=1: every stream of this source (numbered feeds, HD and SD,
+  // commentary languages), not just the best one.
+  const all = req.query.all === '1';
   const cacheKey = `${source}/${matchId}`;
   const cached = resolveCache.get(cacheKey);
   if (cached && Date.now() - cached.time < RESOLVE_CACHE_TTL) {
-    return res.json({ embedUrl: cached.embedUrl });
+    return res.json(all ? { embedUrl: cached.embedUrl, streams: cached.streams } : { embedUrl: cached.embedUrl });
   }
 
   try {
@@ -240,8 +263,11 @@ router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
     if (!Array.isArray(list) || list.length === 0) throw new Error('no streams for source');
     const best = list.find((s) => s.hd) || list[0];
     const embedUrl = best.embedUrl || null;
-    resolveCache.set(cacheKey, { embedUrl, time: Date.now() });
-    res.json({ embedUrl });
+    const streams = list
+      .filter((s) => typeof s.embedUrl === 'string')
+      .map((s) => ({ embedUrl: s.embedUrl, streamNo: s.streamNo, hd: Boolean(s.hd), language: s.language || '' }));
+    resolveCache.set(cacheKey, { embedUrl, streams, time: Date.now() });
+    res.json(all ? { embedUrl, streams } : { embedUrl });
   } catch (err) {
     console.error('[sports] resolve streamed', err.message);
     res.status(502).json({ error: 'Could not resolve stream', details: err.message });

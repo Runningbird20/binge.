@@ -1,4 +1,4 @@
-import { canonicalCategory, countFeedsBySwitch, mergeNormalized, splitTeamsFromTitle, sportsSwitchKeys, teamsMatch, withoutDisabledFeeds } from './sportsProviders';
+import { canonicalCategory, countFeedsBySwitch, expandStreamProviders, mergeNormalized, splitTeamsFromTitle, sportsSwitchKeys, teamsMatch, withoutDisabledFeeds } from './sportsProviders';
 
 const T = 1791500000;
 
@@ -78,5 +78,32 @@ describe('admin feed switches', () => {
     expect(countFeedsBySwitch(feeds)).toEqual({
       'sports:ppv': 1, 'sports:streamed': 2, 'sports:streamed:alpha': 1, 'sports:streamed:bravo': 1, 'sports:streamfree': 1,
     });
+  });
+});
+
+describe('expandStreamProviders', () => {
+  const realFetch = global.fetch;
+  const realTimeout = AbortSignal.timeout;
+  beforeEach(() => { AbortSignal.timeout = () => undefined; }); // jsdom has none
+  afterEach(() => { global.fetch = realFetch; AbortSignal.timeout = realTimeout; });
+
+  test('turns a Streamed source into its streams, HD first, and keeps the rest', async () => {
+    global.fetch = jest.fn(async (url) => ({
+      ok: true,
+      json: async () => (String(url).includes('/admin/')
+        ? { streams: [
+          { embedUrl: 'https://e/admin/m/2', streamNo: 2, hd: false, language: 'English' },
+          { embedUrl: 'https://e/admin/m/1', streamNo: 1, hd: true, language: 'Main' },
+        ] }
+        : { streams: [] }),
+    }));
+    const ppv = { id: 'ppv', embedUrl: 'https://p/x', label: 'PPV' };
+    const admin = { id: 'streamed', source: 'admin', matchId: 'm', label: 'Streamed · admin' };
+    const golf = { id: 'streamed', source: 'golf', matchId: 'm', label: 'Streamed · golf' };
+    const out = await expandStreamProviders([ppv, admin, golf]);
+    expect(out.map((p) => p.embedUrl || p.label)).toEqual(['https://p/x', 'https://e/admin/m/1', 'https://e/admin/m/2', 'Streamed · golf']);
+    expect(out[1].label).toBe('Streamed · admin 1 HD');
+    expect(out[2].label).toBe('Streamed · admin 2 · English');
+    expect(sportsSwitchKeys(out[2])).toEqual(['sports:streamed', 'sports:streamed:admin']);
   });
 });

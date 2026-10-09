@@ -155,11 +155,18 @@ enum SportsFeed {
                 let ends = date(s["ends_at"])
                 if !alwaysLive, let ends, ends < now { continue }
                 let tag = s["source_tag"] as? String
+                // The main embed plus any mirrors ("substreams").
+                var streams = [SportStream(label: tag.map { "PPV · \($0)" } ?? "PPV", source: .embed(iframe))]
+                for sub in s["substreams"] as? [[String: Any]] ?? [] {
+                    guard let url = (sub["iframe"] as? String).flatMap(URL.init(string:)), url != iframe else { continue }
+                    let subTag = sub["source_tag"] as? String
+                    streams.append(SportStream(label: subTag.map { "PPV · \($0)" } ?? "PPV mirror", source: .embed(url)))
+                }
                 out.append(SportGame(
                     id: "ppv:\(s["id"] ?? s["name"] ?? UUID().uuidString)", title: s["name"] as? String ?? "Live",
                     category: name, startsAt: date(s["starts_at"]), endsAt: ends, alwaysLive: alwaysLive,
                     teams: nil, logos: nil, poster: (s["poster"] as? String).flatMap(URL.init(string:)),
-                    streams: [SportStream(label: tag.map { "PPV · \($0)" } ?? "PPV", source: .embed(iframe))],
+                    streams: streams,
                     tag: s["tag"] as? String, colors: s["colors"] as? [String]))
             }
         }
@@ -201,10 +208,19 @@ enum SportsFeed {
         let now = Date()
         var out: [SportGame] = []
         for s in streams {
-            guard let embed = (s["embed_url"] as? String).flatMap(URL.init(string:)) else { continue }
+            // Embeds appear in "sources" near game time (older API: embed_url).
+            var seen = Set<String>()
+            let embeds = ((s["sources"] as? [String] ?? []) + [s["embed_url"] as? String].compactMap { $0 })
+                .filter { $0.hasPrefix("http") && seen.insert($0).inserted }
+                .compactMap(URL.init(string:))
+            guard !embeds.isEmpty else { continue }
             let category = streamfreeCategories[s["category"] as? String ?? ""] ?? "Other"
-            let starts = date(s["match_timestamp"])
-            let ends = starts?.addingTimeInterval((durations[category] ?? 3) * 3600)
+            var starts = date(s["match_timestamp"])
+            var ends = starts?.addingTimeInterval((durations[category] ?? 3) * 3600)
+            // Channels (RedZone, Sky Sports F1, Willow) keep a weeks-old
+            // timestamp; with embeds and 2+ days "in", it's a channel.
+            let channel = starts.map { now.timeIntervalSince($0) > 2 * 86400 } ?? false
+            if channel { starts = nil; ends = nil }
             if let ends, now > ends { continue }
             let t1 = s["team1"] as? [String: Any], t2 = s["team2"] as? [String: Any]
             let names = (t1?["name"] as? String).flatMap { h in (t2?["name"] as? String).map { (home: h, away: $0) } }
@@ -214,10 +230,21 @@ enum SportsFeed {
                 teams: names,
                 logos: names == nil ? nil : ((t1?["logo"] as? String).flatMap(URL.init(string:)), (t2?["logo"] as? String).flatMap(URL.init(string:))),
                 poster: (s["thumbnail_url"] as? String).flatMap(URL.init(string:)),
-                streams: [SportStream(label: "StreamFree", source: .embed(embed))],
+                streams: embeds.enumerated().map { index, url in
+                    SportStream(label: Self.streamfreeLabel(url, index: index, count: embeds.count), source: .embed(url))
+                },
                 tag: s["league"] as? String))
         }
         return out
+    }
+
+    // "…/football/redzone1080p" → "StreamFree 1080p" (same as the website).
+    static func streamfreeLabel(_ url: URL, index: Int, count: Int) -> String {
+        if let match = url.absoluteString.range(of: #"(2160|1080|720|480)p"#, options: .regularExpression) {
+            let quality = url.absoluteString[match]
+            return "StreamFree " + (quality == "2160p" ? "4K" : String(quality))
+        }
+        return count > 1 ? "StreamFree \(index + 1)" : "StreamFree"
     }
 
     // MARK: Merging (one entry per game)
@@ -282,7 +309,7 @@ enum SportsFeed {
     // Cached for 90s: focusing a card and then pressing Play shouldn't
     // resolve the same streams twice.
     @MainActor
-    static func servers(for game: SportGame, limit: Int = 4) async -> [StreamServer] {
+    static func servers(for game: SportGame, limit: Int = 10) async -> [StreamServer] {
         let key = "\(game.id):\(limit)"
         if let hit = serverCache[key], hit.at.timeIntervalSinceNow > -90 { return hit.servers }
         let fresh = await resolveServers(for: game, limit: limit)
@@ -291,25 +318,48 @@ enum SportsFeed {
     }
 
     private static func resolveServers(for game: SportGame, limit: Int) async -> [StreamServer] {
-        var urls: [(String, URL)] = []
-        for stream in game.streams {
-            switch stream.source {
-            case .embed(let url):
-                urls.append((stream.label, url))
-            case .streamed(let source, let id):
-                let path = "https://streamed.pk/api/stream/\(source)/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)"
-                let list = await json(path) as? [[String: Any]] ?? []
-                let sorted = list.sorted { truthy($0["hd"]) && !truthy($1["hd"]) }
-                for (index, item) in sorted.prefix(2).enumerated() {
-                    if let url = (item["embedUrl"] as? String).flatMap(URL.init(string:)) {
-                        urls.append(("\(stream.label) \(index + 1)\(truthy(item["hd"]) ? " HD" : "")", url))
-                    }
-                }
+        // Each feed's streams, looked up in parallel, kept in feed order.
+        let perFeed: [[(String, URL)]] = await withTaskGroup(of: (Int, [(String, URL)]).self) { group in
+            for (position, stream) in game.streams.enumerated() {
+                group.addTask { (position, await streams(of: stream)) }
             }
-            if urls.count >= limit { break }
+            var found = Array(repeating: [(String, URL)](), count: game.streams.count)
+            for await (position, list) in group { found[position] = list }
+            return found
+        }
+        // Interleave (each feed's best, then each feed's second…) so the
+        // first few raced are from different feeds; the rest are backups.
+        var urls: [(String, URL)] = []
+        var seen = Set<URL>()
+        for round in 0..<(perFeed.map(\.count).max() ?? 0) {
+            for list in perFeed where round < list.count && seen.insert(list[round].1).inserted {
+                urls.append(list[round])
+            }
         }
         return urls.prefix(limit).map { label, url in
             StreamServer(id: url.absoluteString, name: label) { _, _, _, _ in url }
+        }
+    }
+
+    // Streamed sources resolve to every stream of that source (numbered
+    // feeds, HD and SD, commentary languages), HD first, up to 4.
+    private static func streams(of stream: SportStream) async -> [(String, URL)] {
+        switch stream.source {
+        case .embed(let url):
+            return [(stream.label, url)]
+        case .streamed(let source, let id):
+            let path = "https://streamed.pk/api/stream/\(source)/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)"
+            let list = await json(path) as? [[String: Any]] ?? []
+            let sorted = list.sorted {
+                (truthy($0["hd"]) ? 0 : 1, ($0["streamNo"] as? NSNumber)?.intValue ?? 0)
+                    < (truthy($1["hd"]) ? 0 : 1, ($1["streamNo"] as? NSNumber)?.intValue ?? 0)
+            }
+            return sorted.prefix(4).compactMap { item in
+                guard let url = (item["embedUrl"] as? String).flatMap(URL.init(string:)) else { return nil }
+                let number = list.count > 1 ? " \((item["streamNo"] as? NSNumber)?.intValue ?? 1)" : ""
+                let language = (item["language"] as? String).flatMap { $0.isEmpty || $0.lowercased() == "main" ? nil : " · \($0)" } ?? ""
+                return ("\(stream.label)\(number)\(truthy(item["hd"]) ? " HD" : "")\(language)", url)
+            }
         }
     }
 }
