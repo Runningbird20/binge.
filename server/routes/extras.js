@@ -6,6 +6,7 @@ const router = express.Router();
 //   GET  /api/extras/ratings?type=movie|tv&tmdb=ID     IMDb / RT / Metacritic
 //   GET  /api/extras/episodes?tmdb=ID&season=N          IMDb episode ratings
 //   POST /api/extras/ai/picks { q }                     conversational search
+//   GET  /api/extras/subtitles?type=&tmdb=&season=&episode=&lang=  OpenSubtitles (cached)
 // OMDB_API_KEY (free, 1,000 requests/day) and GROQ_API_KEY are server-only.
 // Results are cached in Supabase (title_ratings, episode_ratings_cache) via
 // the service role so the OMDb quota is shared across all users.
@@ -116,6 +117,85 @@ router.get('/episodes', async (req, res) => {
     });
     if (db && episodes.length) await db.from('episode_ratings_cache').upsert({ imdb_id: imdbId, season, episodes, fetched_at: new Date().toISOString() });
     res.set('Cache-Control', 'public, max-age=3600').json({ imdb_id: imdbId, episodes });
+  } catch (error) {
+    res.status(502).json({ error: error.message });
+  }
+});
+
+// ── Subtitles (OpenSubtitles) ──────────────────────────────────────────
+// GET /api/extras/subtitles?type=movie|tv&tmdb=ID[&season=N&episode=N]&lang=en[&version=0]
+// The TV app draws these itself instead of relying on each server's tracks.
+// OpenSubtitles' free API allows only a few downloads a day, so every file
+// is fetched once and cached for everyone in subtitle_cache (service role).
+// Needs OPENSUBTITLES_API_KEY (free at opensubtitles.com/consumers);
+// OPENSUBTITLES_USERNAME/PASSWORD raise the daily download allowance.
+
+const OS_API = 'https://api.opensubtitles.com/api/v1';
+const OS_AGENT = 'binge v1.0';
+let osToken = null; // { token, at }
+
+async function osHeaders() {
+  const headers = { 'Api-Key': process.env.OPENSUBTITLES_API_KEY, 'User-Agent': OS_AGENT, Accept: 'application/json', 'Content-Type': 'application/json' };
+  const { OPENSUBTITLES_USERNAME: username, OPENSUBTITLES_PASSWORD: password } = process.env;
+  if (username && password) {
+    if (!osToken || Date.now() - osToken.at > 12 * 3600000) {
+      const res = await fetch(`${OS_API}/login`, { method: 'POST', headers, body: JSON.stringify({ username, password }), signal: AbortSignal.timeout(10000) });
+      if (res.ok) osToken = { token: (await res.json()).token, at: Date.now() };
+    }
+    if (osToken?.token) headers.Authorization = `Bearer ${osToken.token}`;
+  }
+  return headers;
+}
+
+// Best first: human-made, most downloaded, trusted uploaders; hearing-
+// impaired versions only if nothing else.
+function rankSubtitleFiles(data) {
+  return (data || [])
+    .map((item) => item.attributes || {})
+    .filter((a) => a.files?.length && !a.ai_translated && !a.machine_translated)
+    .sort((a, b) => Number(a.hearing_impaired) - Number(b.hearing_impaired)
+      || Number(b.from_trusted) - Number(a.from_trusted)
+      || (b.download_count || 0) - (a.download_count || 0))
+    .map((a) => ({ fileId: a.files[0].file_id, release: a.release || a.files[0].file_name || '' }));
+}
+
+router.get('/subtitles', async (req, res) => {
+  const type = req.query.type === 'tv' ? 'tv' : 'movie';
+  const season = Number(req.query.season) || 0;
+  const episode = Number(req.query.episode) || 0;
+  const lang = String(req.query.lang || 'en').toLowerCase().slice(0, 5).replace(/[^a-z-]/g, '');
+  const version = Math.max(0, Math.min(9, Number(req.query.version) || 0));
+  if (!validId(req.query.tmdb) || (type === 'tv' && !(season > 0 && episode > 0))) return res.status(400).json({ error: 'bad params' });
+  const key = `${type}:${req.query.tmdb}:${season}:${episode}:${lang}:${version}`;
+  const db = adminDb();
+  try {
+    if (db) {
+      const { data: cached } = await db.from('subtitle_cache').select('vtt, release, versions').eq('key', key).maybeSingle();
+      if (cached) return res.set('Cache-Control', 'public, max-age=86400').json({ ...cached, source: 'opensubtitles' });
+    }
+    if (!process.env.OPENSUBTITLES_API_KEY) return res.json({ unavailable: 'no-opensubtitles-key' });
+    const result = await remember(`subs:${key}`, 6 * 3600000, async () => {
+      const headers = await osHeaders();
+      const params = new URLSearchParams({ languages: lang, order_by: 'download_count' });
+      if (type === 'tv') {
+        params.set('parent_tmdb_id', req.query.tmdb);
+        params.set('season_number', String(season));
+        params.set('episode_number', String(episode));
+      } else {
+        params.set('tmdb_id', req.query.tmdb);
+      }
+      const search = await getJson(`${OS_API}/subtitles?${params}`, { headers });
+      const files = rankSubtitleFiles(search.data);
+      const pick = files[version];
+      if (!pick) return { vtt: null, versions: files.length };
+      const dl = await fetch(`${OS_API}/download`, { method: 'POST', headers, body: JSON.stringify({ file_id: pick.fileId, sub_format: 'webvtt' }), signal: AbortSignal.timeout(10000) });
+      if (!dl.ok) throw new Error(`opensubtitles download ${dl.status}`);
+      const { link } = await dl.json();
+      const text = await (await fetch(link, { signal: AbortSignal.timeout(15000) })).text();
+      return { vtt: text.slice(0, 600000), release: pick.release, versions: files.length };
+    });
+    if (db && result.vtt) await db.from('subtitle_cache').upsert({ key, vtt: result.vtt, release: result.release, versions: result.versions, created_at: new Date().toISOString() });
+    res.set('Cache-Control', result.vtt ? 'public, max-age=86400' : 'public, max-age=3600').json({ ...result, source: 'opensubtitles' });
   } catch (error) {
     res.status(502).json({ error: error.message });
   }

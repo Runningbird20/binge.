@@ -18,6 +18,14 @@ final class MultiviewTile: ObservableObject, Identifiable {
     // pauses it (tvOS pauses one video when another starts making sound)
     // is undone.
     private var userPaused = false
+    // Leaving Multiview stops every tile, including ones still waiting for
+    // their staggered start: a tile that started after you left kept its
+    // video pages loaded off-screen, and enough of those ran the Apple TV
+    // out of memory (the crash).
+    private var stopped = false
+    private var lastStateAt = Date()
+    private var restarts = 0
+    private var streamsPerTile = 1
     var audible = false {
         didSet { if oldValue != audible { applyAudio() } }
     }
@@ -30,7 +38,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
     }
 
     func start(streamsPerTile: Int) async {
+        guard !stopped else { return }
+        self.streamsPerTile = streamsPerTile
         let servers = await SportsFeed.servers(for: game, limit: streamsPerTile)
+        guard !stopped else { return }
         guard !servers.isEmpty else { status = "No stream found"; return }
         let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
         let race = StreamRace(request: PlayRequest(title: title, liveStreams: servers), servers: servers,
@@ -44,6 +55,8 @@ final class MultiviewTile: ObservableObject, Identifiable {
             if race.failed { self.status = "No stream could play" }
         }
         self.race = race
+        lastStateAt = Date()
+        timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -56,7 +69,15 @@ final class MultiviewTile: ObservableObject, Identifiable {
         // Video edge to edge in the tile, not the server's page layout.
         if started { web.send(.fill) }
         web.poll { [weak self] state in
-            guard let self, let state else { return }
+            guard let self else { return }
+            guard let state else {
+                // The tile's page stopped reporting (its web process was
+                // closed for memory, or the stream page broke): start over,
+                // a couple of times at most.
+                if self.started, Date().timeIntervalSince(self.lastStateAt) > 10, self.restarts < 2 { self.restart() }
+                return
+            }
+            self.lastStateAt = Date()
             self.paused = state.paused
             if !self.started, state.t > 0.4, !state.paused { self.started = true }
             if self.started, state.paused, !state.ended, !self.userPaused {
@@ -76,10 +97,24 @@ final class MultiviewTile: ObservableObject, Identifiable {
     }
 
     func stop() {
+        stopped = true
         timer?.invalidate()
         timer = nil
         race?.stop()
+        race?.container.removeFromSuperview()
         race = nil
+    }
+
+    private func restart() {
+        restarts += 1
+        timer?.invalidate()
+        timer = nil
+        race?.stop()
+        race?.container.removeFromSuperview()
+        race = nil
+        started = false
+        status = "Reconnecting…"
+        Task { await start(streamsPerTile: streamsPerTile) }
     }
 }
 
@@ -87,6 +122,8 @@ struct MultiviewView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var tiles: [MultiviewTile]
     @State private var expanded: String?
+    // With 2–3 games one is big ("main") and the rest stack beside it.
+    @State private var main: String?
     @FocusState private var focused: String?
 
     init(games: [SportGame]) {
@@ -102,8 +139,14 @@ struct MultiviewView: View {
                     let frame = frames[tile.id] ?? .zero
                     let hidden = expanded != nil && expanded != tile.id
                     TileButton(tile: tile, focused: focused == tile.id, showFocus: expanded == nil) {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            expanded = expanded == nil ? tile.id : nil
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            if expanded != nil {
+                                expanded = nil
+                            } else if (2...3).contains(tiles.count), tile.id != mainId {
+                                main = tile.id // a small game: make it the big one
+                            } else {
+                                expanded = tile.id
+                            }
                         }
                     }
                     .focused($focused, equals: tile.id)
@@ -136,6 +179,8 @@ struct MultiviewView: View {
             }
         }
         .task {
+            // Free memory for the games: no background preload while here.
+            Warmup.shared.cancel()
             focused = tiles.first?.id
             tiles.first?.audible = true
             // Fewer contenders per tile when there are more tiles: an Apple
@@ -151,7 +196,11 @@ struct MultiviewView: View {
         .onDisappear { tiles.forEach { $0.stop() } }
     }
 
-    // 2 games: side by side. 3–4: a 2×2 grid. Expanded: one full screen.
+    private var mainId: String? { main ?? tiles.first?.id }
+
+    // 1 game: full screen. 2–3: the main game large on the left, the others
+    // stacked on the right (uses most of the screen instead of two small
+    // side-by-side boxes). 4: a 2×2 grid. Expanded: one full screen.
     private func layout(in size: CGSize) -> [String: CGRect] {
         var frames: [String: CGRect] = [:]
         if let expanded {
@@ -161,21 +210,45 @@ struct MultiviewView: View {
             return frames
         }
         let gap: CGFloat = 16
-        let columns = 2
-        let rows = tiles.count <= 2 ? 1 : 2
-        let width = (size.width - gap * CGFloat(columns + 1)) / CGFloat(columns)
-        let height = min(width * 9 / 16, (size.height - gap * CGFloat(rows + 1)) / CGFloat(rows))
-        let tileWidth = height * 16 / 9
-        let totalHeight = CGFloat(rows) * height + CGFloat(rows - 1) * gap
-        let top = (size.height - totalHeight) / 2
-        for (index, tile) in tiles.enumerated() {
-            let row = index / columns, column = index % columns
-            let inRow = min(columns, tiles.count - row * columns)
-            let rowWidth = CGFloat(inRow) * tileWidth + CGFloat(inRow - 1) * gap
-            let left = (size.width - rowWidth) / 2
-            frames[tile.id] = CGRect(x: left + CGFloat(column) * (tileWidth + gap),
-                                     y: top + CGFloat(row) * (height + gap),
-                                     width: tileWidth, height: height)
+        func fit(width: CGFloat, height: CGFloat) -> CGSize {
+            let w = min(width, height * 16 / 9)
+            return CGSize(width: w, height: w * 9 / 16)
+        }
+        switch tiles.count {
+        case 0:
+            return frames
+        case 1:
+            frames[tiles[0].id] = CGRect(origin: .zero, size: size)
+        case 2, 3:
+            let others = tiles.filter { $0.id != mainId }
+            let rows = CGFloat(others.count)
+            // Side column holds `rows` 16:9 tiles stacked; the main tile
+            // takes the remaining width. Solve for the side width so both
+            // columns fill the screen height as well as possible.
+            let sideWidth = min(size.width * (rows == 1 ? 0.27 : 0.3),
+                                ((size.height - gap * (rows + 1)) / rows) * 16 / 9)
+            let side = CGSize(width: sideWidth, height: sideWidth * 9 / 16)
+            let big = fit(width: size.width - side.width - gap * 3, height: size.height - gap * 2)
+            let totalWidth = big.width + gap + side.width
+            let left = (size.width - totalWidth) / 2
+            if let main = tiles.first(where: { $0.id == mainId }) {
+                frames[main.id] = CGRect(x: left, y: (size.height - big.height) / 2, width: big.width, height: big.height)
+            }
+            let columnHeight = rows * side.height + (rows - 1) * gap
+            var y = (size.height - columnHeight) / 2
+            for tile in others {
+                frames[tile.id] = CGRect(x: left + big.width + gap, y: y, width: side.width, height: side.height)
+                y += side.height + gap
+            }
+        default:
+            let cell = fit(width: (size.width - gap * 3) / 2, height: (size.height - gap * 3) / 2)
+            let left = (size.width - (cell.width * 2 + gap)) / 2
+            let top = (size.height - (cell.height * 2 + gap)) / 2
+            for (index, tile) in tiles.prefix(4).enumerated() {
+                frames[tile.id] = CGRect(x: left + CGFloat(index % 2) * (cell.width + gap),
+                                         y: top + CGFloat(index / 2) * (cell.height + gap),
+                                         width: cell.width, height: cell.height)
+            }
         }
         return frames
     }

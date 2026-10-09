@@ -72,6 +72,9 @@ protocol WebEngine: AnyObject {
 }
 
 enum WebEngines {
+    // Video pages alive right now (each is a WebKit process with a decoder).
+    // An Apple TV has limited memory; optional work (preloads) checks this.
+    @MainActor static var liveCount = 0
     // The modern engine (WKWebView: separate process, current media stack)
     // is preferred. The legacy one crashes inside WebKit whenever a video
     // seeks, so it is only a fallback.
@@ -299,6 +302,7 @@ final class ModernWebView: NSObject, WebEngine {
             scroll.contentInset = .zero
         }
         view.insetsLayoutMarginsFromSafeArea = false
+        WebEngines.liveCount += 1
         // Silent until something deliberately unmutes it (race contenders,
         // warm preloads and background tiles never make sound).
         setPageMuted(true)
@@ -308,6 +312,7 @@ final class ModernWebView: NSObject, WebEngine {
         let web = view
         let controller = contentController
         Task { @MainActor in
+            WebEngines.liveCount = max(0, WebEngines.liveCount - 1)
             _ = controller?.perform(NSSelectorFromString("removeScriptMessageHandlerForName:"), with: "binge" as NSString)
             web.setValue(nil, forKey: "navigationDelegate")
             web.setValue(nil, forKey: "UIDelegate")
