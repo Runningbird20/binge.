@@ -130,6 +130,7 @@ struct SearchView: View {
 struct MeView: View {
     @EnvironmentObject private var app: AppModel
     @ObservedObject private var pip = PiPController.shared
+    @State private var wrappedOpen = UserDefaults.standard.bool(forKey: "BingeOpenWrapped")
 
     var body: some View {
         HStack(alignment: .top, spacing: 90) {
@@ -160,7 +161,13 @@ struct MeView: View {
                 Section {
                     row("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
                     row("Calendar", "calendar", "Upcoming episodes and releases") { CalendarView() }
-                    row("Wrapped", "sparkles", "Your year on binge.") { WrappedView() }
+                    Button { wrappedOpen = true } label: {
+                        HStack(spacing: 24) {
+                            Label { Text("Wrapped") } icon: { Image(systemName: "sparkles").foregroundStyle(.white) }
+                            Spacer()
+                            Text("Your year on binge.").foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 Section {
                     row("Playback", "captions.bubble", "Audio, subtitles, trailers") { PlaybackSettingsView() }
@@ -183,6 +190,7 @@ struct MeView: View {
         }
         .padding(.vertical, 40)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fullScreenCover(isPresented: $wrappedOpen) { WrappedView() }
     }
 
     private func row<Destination: View>(_ title: String, _ icon: String, _ detail: String,

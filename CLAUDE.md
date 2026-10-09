@@ -167,7 +167,13 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **No big-number / small-label stat tiles.**
   - Profile and Home stats are one line of facts (`.pf-stats`).
   - Admin overview is a table (`.adm-facts`).
-  - Wrapped tells each fact as a sentence with the fact in bold, on both web and TV.
+- **Wrapped is the one exception, a deliberate showpiece: your year as movie tickets** (web `.wp-*` in `Wrapped.js`/`streaming.css`, TV `WrappedView.swift`). The user rejected an editorial-serif version, so keep it tickets.
+  - Each stat is a ticket: a gold ADMIT ONE stub with a ticket number, a perforation with real notches, and a paper body.
+  - Type: a Barlow Condensed marquee headline, IBM Plex Mono printed line items (mono is legitimate here because it's printed data), and a generated barcode. The last ticket gets an oxblood ADMITTED stamp.
+  - Fonts: the web loads them only on that page; the TV bundles them in `BingeTV/Fonts` (Open Font License).
+  - Motion: tickets "print" in with a top-to-bottom reveal and auto-advance. Honors Reduce Motion.
+  - Class prefix is `wp-`, because `wr-` belongs to the old Watch Room CSS in App.css.
+  - `/wrapped?demo=1` shows sample data in development.
 - **No identical icon-card grids.** The TV Me tab is a native `List`.
 - **Gold only marks actions, selection or state** (never taglines, section icons or captions).
 - **No purple/blue gradients or frosted glass as decoration.**
