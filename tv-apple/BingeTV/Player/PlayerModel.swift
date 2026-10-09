@@ -83,6 +83,9 @@ final class PlayerModel: ObservableObject {
     private var recoveries = 0
     private var handPicked = false
     private var lifecycle: [NSObjectProtocol] = []
+    // Servers already raced for this video; ones that haven't raced yet go
+    // first when recovering.
+    private var raced = Set<String>()
 
     init(request: PlayRequest, app: AppModel) {
         self.request = request
@@ -132,10 +135,13 @@ final class PlayerModel: ObservableObject {
     }
 
     private func startRace(_ list: [StreamServer]) {
-        adopt(StreamRace(request: request, servers: list, mode: .live))
+        let fresh = list.filter { !raced.contains($0.id) }
+        let ordered = fresh + list.filter { raced.contains($0.id) }
+        adopt(StreamRace(request: request, servers: ordered, mode: .live))
     }
 
     private func adopt(_ next: StreamRace) {
+        raced.formUnion(next.candidates.map(\.server.id))
         race?.stop()
         race?.container.removeFromSuperview()
         race = next
@@ -160,6 +166,13 @@ final class PlayerModel: ObservableObject {
             server = winner.server
             notice = nil
         } else if race.failed {
+            // Live: nothing in this race played, but there are backups.
+            if request.isLive, !handPicked, recoveries < 3, servers.contains(where: { !raced.contains($0.id) }) {
+                recoveries += 1
+                notice = "Trying more streams…"
+                startRace(servers)
+                return
+            }
             notice = "No server could play this right now. Swipe down to try one again."
         }
     }
@@ -286,6 +299,9 @@ final class PlayerModel: ObservableObject {
         request = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)", game: game)
         upNextCountdown = nil
         stillWatching = false
+        raced = []
+        recoveries = 0
+        handPicked = false
         startRace(servers)
     }
 
@@ -311,6 +327,7 @@ final class PlayerModel: ObservableObject {
         openedAt = Date()
         recoveries = 0
         handPicked = false
+        raced = []
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {

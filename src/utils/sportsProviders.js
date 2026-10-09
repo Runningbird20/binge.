@@ -230,18 +230,24 @@ async function fetchPpvNormalized() {
       const rawCategory = s.category_name || cat.category || 'Other';
       // PPV.st's "24/7 Streams" bucket is non-sports (cartoon reruns etc.).
       if (rawCategory === '24/7 Streams') continue;
-      out.push({
-        name: s.name,
-        category: rawCategory,
-        poster: s.poster || null,
-        tag: s.tag || null,
-        colors: Array.isArray(s.colors) ? s.colors : null,
-        startsAt: s.starts_at,
-        endsAt: s.ends_at,
-        alwaysLive,
-        replay: ended && truthy(s.allowpaststreams),
-        provider: { id: 'ppv', embedUrl: s.iframe, label: s.source_tag ? `PPV · ${s.source_tag}` : 'PPV' },
-      });
+      // The main embed plus any mirrors ("substreams", each with its own tag).
+      const embeds = [{ iframe: s.iframe, tag: s.source_tag }, ...(Array.isArray(s.substreams) ? s.substreams : [])
+        .filter((sub) => sub && sub.iframe && sub.iframe !== s.iframe)
+        .map((sub) => ({ iframe: sub.iframe, tag: sub.source_tag }))];
+      for (const embed of embeds) {
+        out.push({
+          name: s.name,
+          category: rawCategory,
+          poster: s.poster || null,
+          tag: s.tag || null,
+          colors: Array.isArray(s.colors) ? s.colors : null,
+          startsAt: s.starts_at,
+          endsAt: s.ends_at,
+          alwaysLive,
+          replay: ended && truthy(s.allowpaststreams),
+          provider: { id: 'ppv', embedUrl: embed.iframe, label: embed.tag ? `PPV · ${embed.tag}` : 'PPV' },
+        });
+      }
     }
   }
   return out;
@@ -286,6 +292,13 @@ async function fetchStreamedNormalized() {
   return out;
 }
 
+// "…/football/redzone1080p" → "StreamFree 1080p"; numbered when unclear.
+function streamfreeLabel(url, index, count) {
+  const quality = /(2160|1080|720|480)p/.exec(url);
+  if (quality) return `StreamFree ${quality[1] === '2160' ? '4K' : `${quality[1]}p`}`;
+  return count > 1 ? `StreamFree ${index + 1}` : 'StreamFree';
+}
+
 async function fetchStreamfreeNormalized() {
   const res = await fetch('https://streamfree.top/api/v1/streams', {
     headers: { Accept: 'application/json' },
@@ -302,23 +315,30 @@ async function fetchStreamfreeNormalized() {
     const startsAt = s.match_timestamp || 0;
     const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
     const endsAt = startsAt ? startsAt + duration : now + duration;
-    if (startsAt && now > endsAt) continue;
-    if (!s.embed_url) continue;
+    // Embeds appear in "sources" near game time (older API: embed_url).
+    const embeds = [...new Set([...(Array.isArray(s.sources) ? s.sources : []), s.embed_url].filter((url) => typeof url === 'string' && url.startsWith('http')))];
+    if (embeds.length === 0) continue;
+    // Channels (RedZone, Sky Sports F1, Willow) keep a timestamp from weeks
+    // ago; anything with embeds that "started" over 2 days back is one.
+    const channel = Boolean(startsAt) && now - startsAt > 2 * 86400;
+    if (startsAt && now > endsAt && !channel) continue;
     const home = s.team1?.name || null;
     const away = s.team2?.name || null;
-    out.push({
-      name: s.name,
-      category,
-      poster: s.thumbnail_url || null,
-      tag: s.league || null,
-      teams: home && away ? { home, away } : null,
-      logos: home && away ? { home: s.team1?.logo || null, away: s.team2?.logo || null } : null,
-      startsAt,
-      endsAt,
-      alwaysLive: !startsAt,
-      replay: false,
-      provider: { id: 'streamfree', embedUrl: s.embed_url, label: 'StreamFree' },
-    });
+    for (const [index, embedUrl] of embeds.entries()) {
+      out.push({
+        name: s.name,
+        category,
+        poster: s.thumbnail_url || null,
+        tag: s.league || null,
+        teams: home && away ? { home, away } : null,
+        logos: home && away ? { home: s.team1?.logo || null, away: s.team2?.logo || null } : null,
+        startsAt: channel ? 0 : startsAt,
+        endsAt: channel ? now + duration : endsAt,
+        alwaysLive: !startsAt || channel,
+        replay: false,
+        provider: { id: 'streamfree', embedUrl, label: streamfreeLabel(embedUrl, index, embeds.length) },
+      });
+    }
   }
   return out;
 }
@@ -540,6 +560,64 @@ export async function resolveProviderEmbedUrl(provider) {
 }
 
 // "Server 2 · Streamed · admin" style label for the server dropdown.
+// ── Streamed: every stream of every source ─────────────────────────────
+// A Streamed source usually has several streams (numbered feeds, HD and SD,
+// different commentary). Feed lists only say which sources a game has, so
+// the player expands them when a game opens.
+
+const MAX_STREAMS_PER_SOURCE = 4;
+
+async function fetchStreamedStreams(source, matchId) {
+  const path = `${encodeURIComponent(source)}/${encodeURIComponent(matchId)}`;
+  try {
+    const res = await fetch(`/api/sports/resolve/streamed/${path}?all=1`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.streams) && data.streams.length) return data.streams;
+    }
+  } catch { /* fall through */ }
+  try {
+    const res = await fetch(`https://streamed.pk/api/stream/${path}`, {
+      headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const list = await res.json();
+    return Array.isArray(list) ? list.filter((s) => typeof s.embedUrl === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+export function streamedStreamLabel(source, stream, count) {
+  const language = stream.language && !/^main$/i.test(stream.language) ? ` · ${stream.language}` : '';
+  const number = count > 1 ? ` ${stream.streamNo || ''}`.trimEnd() : '';
+  return `Streamed · ${source}${number}${stream.hd ? ' HD' : ''}${language}`;
+}
+
+// Replaces each Streamed source with its streams (HD first, capped per
+// source). A source that can't be looked up stays as it was and is resolved
+// on demand, so expanding never loses a server.
+export async function expandStreamProviders(providers) {
+  const expanded = await Promise.all(providers.map(async (provider) => {
+    if (provider.id !== 'streamed' || provider.embedUrl || !provider.source || !provider.matchId) return [provider];
+    const streams = await fetchStreamedStreams(provider.source, provider.matchId);
+    if (!streams || streams.length === 0) return [provider];
+    const sorted = [...streams].sort((a, b) => Number(Boolean(b.hd)) - Number(Boolean(a.hd)) || (a.streamNo || 0) - (b.streamNo || 0));
+    return sorted.slice(0, MAX_STREAMS_PER_SOURCE).map((stream) => ({
+      ...provider,
+      embedUrl: stream.embedUrl,
+      label: streamedStreamLabel(provider.source, stream, streams.length),
+    }));
+  }));
+  const seen = new Set();
+  return expanded.flat().filter((provider) => {
+    const key = provider.embedUrl || `${provider.source}|${provider.matchId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function providerLabel(provider) {
   if (!provider) return '';
   return provider.label || PROVIDER_NAMES[provider.id] || provider.id;

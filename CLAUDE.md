@@ -150,7 +150,13 @@ Book reading goes through `src/utils/bookAccess.js`: one Open Library search (~0
 
 ### Sports
 
-`src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge (fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, ±3h window, league inference). `server/routes/sports.js` only fetches + normalizes and returns `{ raw }`; the client merges. Each game's provider feeds are its selectable servers. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
+`src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge (fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, ±3h window, league inference). `server/routes/sports.js` only fetches + normalizes and returns `{ raw }`; the client merges. Keep the normalizers in both files in sync. Each game's provider feeds are its selectable servers:
+- **PPV:** `substreams` mirrors are extra servers.
+- **StreamFree:** `sources` (an array of embeds, filled near game time; the old `embed_url` is gone) gives one server per quality. Entries with embeds and a timestamp more than 2 days old are 24/7 channels (RedZone, Sky Sports F1, Willow).
+- **Streamed:** when a game opens, `expandStreamProviders` (via `/api/sports/resolve/streamed/:source/:id?all=1`) turns each source into all its streams, HD first, at most 4 per source.
+- **Ranking:** the player orders servers with `rankFeeds` (`utils/sportsServerMemory.js`). The server that last worked for this game goes first, then feed families that worked lately. "Worked" means 60s on a server; leaving within the minute or a load failure counts against it.
+
+The TV does the same, interleaving feeds so its 4-page race (`StreamRace.maxLiveContenders`) spans different feeds; the rest are backups that recovery tries first. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
 
 ### Caching & load performance
 

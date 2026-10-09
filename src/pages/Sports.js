@@ -9,7 +9,8 @@ import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import LiveScorePanel from '../components/LiveScorePanel';
 import useDeviceType from '../hooks/useDeviceType';
-import { fetchSportsStreams, resolveProviderEmbedUrl, providerLabel, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { expandStreamProviders, fetchSportsStreams, resolveProviderEmbedUrl, providerLabel, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { rankFeeds, recordFeedFailed, recordFeedWorked } from '../utils/sportsServerMemory';
 import { listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
 import { hostOf, isHostReachable, reachabilityMap } from '../utils/hostReachability';
 
@@ -19,6 +20,10 @@ const POLL_MS = 60_000;
 // that loads but shows a dead stream looks identical from outside, which is
 // what the "Next server" button is for.
 const LOAD_TIMEOUT_MS = 8_000;
+// Staying this long on a server counts as "it worked" (see sportsServerMemory).
+const WORKED_AFTER_MS = 60_000;
+// Expanding Streamed sources waits at most this long before starting.
+const EXPAND_TIMEOUT_MS = 3_500;
 const MULTIVIEW_MAX = 4;
 
 // League rows, in the order a US-centric sports home would show them; any
@@ -207,31 +212,45 @@ function useServerRotation(stream, status) {
   const [failed, setFailed] = useState(new Set());
   // Servers whose host this network blocks (see utils/hostReachability).
   const [blocked, setBlocked] = useState(new Set());
+  // Every stream of every feed, best first; null while it's being worked out.
+  const [list, setList] = useState(null);
   const loadedRef = useRef(false);
-  const servers = stream.providers;
+  const workedRef = useRef(false);
+  const servers = useMemo(() => list || [], [list]);
 
   useEffect(() => {
     setServerIndex(0);
     setFailed(new Set());
     setBlocked(new Set());
     setRetryNonce(0);
+    setList(null);
     let cancelled = false;
-    // Probe the hosts we already know (PPV / StreamFree embed URLs) and
-    // start on the first server this network can actually reach.
-    reachabilityMap(stream.providers.map((provider) => hostOf(provider.embedUrl))).then((reach) => {
+    (async () => {
+      // Each Streamed source becomes all of its streams; don't wait on a
+      // slow lookup for long (unexpanded sources still resolve on demand).
+      const expanded = await Promise.race([
+        expandStreamProviders(stream.providers).catch(() => stream.providers),
+        new Promise((resolve) => { setTimeout(() => resolve(stream.providers), EXPAND_TIMEOUT_MS); }),
+      ]);
+      const ranked = rankFeeds(expanded, stream.id);
+      // Probe the hosts we know and start on the first server this network
+      // can actually reach.
+      const reach = await reachabilityMap(ranked.map((provider) => hostOf(provider.embedUrl)));
       if (cancelled) return;
-      const blockedNow = new Set(stream.providers
+      const blockedNow = new Set(ranked
         .map((provider, index) => (provider.embedUrl && reach[hostOf(provider.embedUrl)] === false ? index : -1))
         .filter((index) => index >= 0));
       setBlocked(blockedNow);
-      const firstOk = stream.providers.findIndex((_, index) => !blockedNow.has(index));
-      if (firstOk > 0) setServerIndex(firstOk);
-    });
+      setList(ranked);
+      const firstOk = ranked.findIndex((_, index) => !blockedNow.has(index));
+      setServerIndex(Math.max(0, firstOk));
+    })();
     return () => { cancelled = true; };
   }, [stream.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-advance past a server that failed, unless every server has.
   const advance = useCallback(() => {
+    recordFeedFailed(servers[serverIndex], stream.id);
     setFailed((current) => {
       const next = new Set(current);
       next.add(serverIndex);
@@ -244,11 +263,11 @@ function useServerRotation(stream, status) {
       }
       return index;
     });
-  }, [serverIndex, servers.length, failed, blocked]);
+  }, [serverIndex, servers, failed, blocked, stream.id]);
 
   useEffect(() => {
     const provider = servers[serverIndex];
-    if (!provider || status === 'upcoming') { setEmbedUrl(null); return undefined; }
+    if (!provider || status === 'upcoming') { setEmbedUrl(null); setResolving(false); return undefined; }
     let cancelled = false;
     setResolving(true);
     setEmbedUrl(null);
@@ -267,7 +286,7 @@ function useServerRotation(stream, status) {
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stream.id, serverIndex, retryNonce, status === 'upcoming']);
+  }, [stream.id, list, serverIndex, retryNonce, status === 'upcoming']);
 
   useEffect(() => {
     loadedRef.current = false;
@@ -275,14 +294,23 @@ function useServerRotation(stream, status) {
     const timer = setTimeout(() => {
       if (!loadedRef.current) advance();
     }, LOAD_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [embedUrl, advance]);
+    // Still on this server a minute later: remember that it works.
+    const provider = servers[serverIndex];
+    const worked = setTimeout(() => {
+      if (loadedRef.current) { workedRef.current = true; recordFeedWorked(provider, stream.id); }
+    }, WORKED_AFTER_MS);
+    workedRef.current = false;
+    return () => { clearTimeout(timer); clearTimeout(worked); };
+  }, [embedUrl, advance]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const preparing = list === null;
   const unavailable = new Set([...failed, ...blocked]);
-  const allFailed = unavailable.size >= servers.length;
-  const allBlocked = blocked.size >= servers.length;
+  const allFailed = !preparing && unavailable.size >= servers.length;
+  const allBlocked = !preparing && blocked.size >= servers.length;
 
   function chooseServer(index) {
+    // Leaving a server within its first minute counts against it.
+    if (index !== serverIndex && embedUrl && !workedRef.current) recordFeedFailed(servers[serverIndex], stream.id);
     setFailed((current) => {
       const next = new Set(current);
       next.delete(index);
@@ -303,7 +331,7 @@ function useServerRotation(stream, status) {
   }
 
   return {
-    servers, serverIndex, retryNonce, embedUrl, resolving, failed, blocked,
+    servers, serverIndex, retryNonce, embedUrl, resolving: resolving || preparing, failed, blocked,
     allFailed, allBlocked, advance, chooseServer, nextServer, retryAll,
     onFrameLoad: () => { loadedRef.current = true; },
   };
@@ -359,7 +387,7 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
                 <p className="st-muted">The stream appears here when the game goes live.</p>
               </>
             ) : resolving ? (
-              <p>Connecting to {providerLabel(servers[serverIndex])}…</p>
+              <p>{servers[serverIndex] ? `Connecting to ${providerLabel(servers[serverIndex])}…` : 'Finding the best stream…'}</p>
             ) : allFailed ? (
               <>
                 <p>{allBlocked
