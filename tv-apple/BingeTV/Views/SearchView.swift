@@ -6,6 +6,10 @@ struct SearchView: View {
     @State private var results: [Title] = []
     @State private var trending: [Title] = []
     @State private var searching = false
+    @State private var ai: [(Title, String?)] = []
+    @State private var aiSummary: String?
+    @State private var aiLoading = false
+    @State private var aiError: String?
 
     private let columns = Array(repeating: GridItem(.fixed(220), spacing: 48), count: 7)
 
@@ -13,7 +17,10 @@ struct SearchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 let showing = query.trimmingCharacters(in: .whitespaces).isEmpty ? trending : results
-                if !query.isEmpty && !searching && results.isEmpty {
+                if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    askSection
+                }
+                if !query.isEmpty && !searching && results.isEmpty && ai.isEmpty && !aiLoading {
                     Text("Nothing on binge. matches “\(query)”.")
                         .font(.headline)
                         .foregroundStyle(Theme.muted)
@@ -40,6 +47,10 @@ struct SearchView: View {
             guard !Task.isCancelled else { return }
             results = found
             searching = false
+            ai = []
+            aiSummary = nil
+            aiError = nil
+            if AskBinge.isConversational(text) { await ask(text) }
         }
         .task {
             guard trending.isEmpty else { return }
@@ -51,16 +62,80 @@ struct SearchView: View {
             trending = (0..<max(a.count, b.count)).flatMap { i in [i < b.count ? b[i] : nil, i < a.count ? a[i] : nil].compactMap { $0 } }
         }
     }
+
+    // MARK: Ask binge.
+
+    @ViewBuilder
+    private var askSection: some View {
+        if aiLoading {
+            HStack(spacing: 20) {
+                ProgressView()
+                Text("Asking binge.…").font(.headline)
+            }
+        } else if !ai.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 18) {
+                    Label("Ask binge.", systemImage: "sparkles").font(.title3.weight(.bold)).foregroundStyle(Theme.gold)
+                    if let aiSummary { Text(aiSummary).font(.callout).foregroundStyle(Theme.muted).lineLimit(1) }
+                }
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 40) {
+                        ForEach(ai, id: \.0.id) { title, why in
+                            VStack(alignment: .leading, spacing: 10) {
+                                PosterCard(title: title)
+                                if let why {
+                                    Text(why).font(.caption2).foregroundStyle(Theme.muted).lineLimit(3)
+                                        .frame(width: 220, alignment: .leading)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 34)
+                }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+            }
+            .focusSection()
+        } else {
+            HStack(spacing: 24) {
+                Button {
+                    Task { await ask(query.trimmingCharacters(in: .whitespaces)) }
+                } label: {
+                    Label("Ask binge. for “\(query)”", systemImage: "sparkles")
+                }
+                .buttonStyle(PillButtonStyle(selected: true))
+                if let aiError { Text(aiError).font(.callout).foregroundStyle(Color(hex: 0xFFB4A8)) }
+                else { Text("Describe a mood: “a cozy mystery under 2 hours”").font(.callout).foregroundStyle(Theme.muted) }
+            }
+            .focusSection()
+        }
+    }
+
+    private func ask(_ text: String) async {
+        aiLoading = true
+        aiError = nil
+        do {
+            let result = try await AskBinge.ask(text, kids: app.isKids)
+            guard text == query.trimmingCharacters(in: .whitespaces) else { aiLoading = false; return }
+            ai = result.titles
+            aiSummary = result.summary
+            if result.titles.isEmpty { aiError = "Nothing on binge. fits that yet. Try saying it another way." }
+        } catch {
+            aiError = error.localizedDescription
+        }
+        aiLoading = false
+    }
 }
 
 struct MeView: View {
     @EnvironmentObject private var app: AppModel
+    @ObservedObject private var pip = PiPController.shared
 
     var body: some View {
-        HStack(alignment: .top, spacing: 100) {
-            VStack(alignment: .leading, spacing: 34) {
+        HStack(alignment: .top, spacing: 90) {
+            VStack(alignment: .leading, spacing: 30) {
                 if let profile = app.profile {
-                    ProfileAvatar(profile: profile, size: 200)
+                    ProfileAvatar(profile: profile, size: 180)
                 }
                 if let email = app.session?.email {
                     Text("Signed in as \(email)").font(.callout).foregroundStyle(Theme.muted)
@@ -80,17 +155,45 @@ struct MeView: View {
             }
             .focusSection()
 
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Ratings, history, books & settings")
-                    .font(.title3.weight(.bold))
-                Text("Scan to open binge. on your phone. Ratings, your watch history, books, Wrapped and settings live there, and stay in sync with this TV.")
-                    .font(.callout)
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: 640, alignment: .leading)
-                QRCodeView(url: Config.siteURL.appending(path: "home"), size: 300)
+            VStack(alignment: .leading, spacing: 26) {
+                Text("Your stuff").font(.title3.weight(.bold))
+                LazyVGrid(columns: [GridItem(.fixed(500), spacing: 40), GridItem(.fixed(500), spacing: 40)], alignment: .leading, spacing: 40) {
+                    tile("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
+                    tile("Calendar", "calendar", "Upcoming episodes & releases") { CalendarView() }
+                    tile("Wrapped", "sparkles", "Your year on binge.") { WrappedView() }
+                    tile("Playback", "captions.bubble", "Audio, subtitles, trailers") { PlaybackSettingsView() }
+                }
+                if let corner = pip.game {
+                    Button { PiPController.shared.close() } label: {
+                        Label("Close corner game (\(corner.title))", systemImage: "pip.remove")
+                    }
+                }
+                Text("Books, manga and account settings are on \(Config.siteHost).")
+                    .font(.caption).foregroundStyle(Theme.muted)
             }
+            .focusSection()
         }
         .padding(.vertical, 40)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tile<Destination: View>(_ title: String, _ icon: String, _ detail: String,
+                                         @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 22) {
+                Image(systemName: icon).font(.system(size: 40)).foregroundStyle(Theme.gold).frame(width: 60)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.headline)
+                    Text(detail).font(.caption).foregroundStyle(Theme.muted).lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(28)
+            .frame(width: 500, height: 150)
+            .background(Theme.surface)
+        }
+        .buttonStyle(.card)
     }
 }

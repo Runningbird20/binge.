@@ -12,6 +12,33 @@ project and TMDB lists as the website:
 - **Kids profiles:** kids rows only, and the same rating filter as the site.
 - **Release window:** titles more than 30 days out are hidden, and titles out within 30 days are marked Coming Soon (same as the site).
 
+## Also on the TV (from the website)
+
+- **Admin server switches:** servers turned off in the admin panel (`server_config`) are never raced. The list refreshes every 2 minutes.
+- **Your ratings:** Rate on a title page gives 1–5 stars, written to every criterion in `movie_ratings` / `tv_show_ratings`. A rated title leaves My List, like on the site.
+- **Audio and subtitles** (Me → Playback, saved to `account_profiles`):
+  - Subtitle language is passed to CineSrc.
+  - Audio language uses the community `stream_report_summary`: servers reported in your language race first, and ones reported in another language drop out.
+- **Outside ratings:** IMDb, Rotten Tomatoes and Metacritic via the site's `/api/extras/ratings`.
+- **Episode heatmap:** TMDB episode ratings, one row per season.
+- **Franchise watch order:** the same curated MCU / Star Wars / Fast lists as the site, otherwise the movie's TMDB collection.
+- **Previously on…:** shown when you're back on a show after 14+ days.
+- **Ask binge.:** the site's `/api/extras/ai/picks`. It runs automatically for sentence-style searches; otherwise there's a button.
+- **Followed teams:** a Your teams row on Sports. Follow or unfollow by holding a scoreboard card (`followed_teams`).
+- **Close-game alerts** (`Data/Teams.swift`): while the app is open, ESPN is checked every minute for your teams. The rules are starting soon, close and late, and overtime. A banner shows over everything, including movies. The player's swipe-down panel offers **Watch now** or **In the corner**.
+- **Picture-in-picture** (`Player/Overlay.swift`): a live game in the corner while you browse or watch something else. It sits in a second, non-interactive window above the app, and is muted while another player is open. Start it from a game (hold → Watch in the corner) or from the live player's panel; close or enlarge it from Sports, Me, or the player panel.
+- **History, Calendar, Wrapped** (Me tab):
+  - History can remove an entry, which clears its progress and watched episodes, like the site.
+  - Calendar lists next episodes and upcoming movies.
+  - Wrapped estimates time the way the site does.
+- **Trailers:** muted YouTube trailers fade into the Home spotlight once they're actually playing. Turn them off in Me → Playback.
+- **Skip intro / sleep timer / Still watching:**
+  - **Skip intro:** ▲ jumps 85s during the first 4 minutes of an episode.
+  - **Sleep timer:** 15/30/60 min or end of episode, from the swipe-down panel.
+  - **Still watching?:** after 3 episodes in a row with no remote input, playback pauses and asks.
+- **Watched episodes:** an episode passing 90% is written to `episode_progress`, like the site.
+- **Top Shelf** (`TopShelf/`, a TV app extension): with binge. in the top row of the home screen, Continue Watching and Top Picks show above it. The app writes them to the App Group `group.$(BINGE_BUNDLE_ID)`, and items open `binge://play?...` / `binge://title?...`.
+
 ## Playback
 
 Videos play on the TV. tvOS ships WebKit but leaves it out of the public
@@ -74,7 +101,7 @@ or an account: `-BingeDemo` (browse without signing in), `-BingeTab sports`,
 
 1. On the Apple TV, open Settings → Remotes and Devices → Remote App and Devices. The Apple TV and Mac must be on the same network.
 2. In Xcode, open Window → Devices and Simulators. Pair the Apple TV with the code it shows.
-3. Under the BingeTV target, open Signing & Capabilities. Choose your team (a free Apple ID works), and change the bundle id if Xcode asks (e.g. `com.<you>.binge.tv`).
+3. Under **both** targets (BingeTV and TopShelf), open Signing & Capabilities and choose your team. If Xcode says the bundle id is taken, change `BINGE_BUNDLE_ID` in `Config/Base.xcconfig` (e.g. `com.<you>.binge`); the extension and App Group follow it. If your account can't create the App Group, remove the App Groups capability from both targets. Everything else still works, only Top Shelf stays empty.
 4. Select the Apple TV as the run destination and press ⌘R.
 
 A free Apple ID signs the app for 7 days; after that, press ⌘R again to

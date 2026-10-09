@@ -24,6 +24,7 @@ struct Scoreboard: Decodable {
     struct Event: Decodable, Identifiable, Hashable {
         let id: String
         let shortName: String?
+        let date: String?
         let status: Status
         let competitions: [Competition]
 
@@ -37,12 +38,16 @@ struct Scoreboard: Decodable {
     struct Status: Decodable, Hashable {
         struct Kind: Decodable, Hashable { let state: String; let shortDetail: String? }
         let type: Kind
+        let period: Int?
+        let displayClock: String?
+        let clock: Double?
     }
     struct Competition: Decodable, Hashable {
         let competitors: [Competitor]
     }
     struct Competitor: Decodable, Hashable {
         struct Team: Decodable, Hashable {
+            let id: String?
             let displayName: String?
             let shortDisplayName: String?
             let abbreviation: String?

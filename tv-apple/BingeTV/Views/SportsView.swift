@@ -15,6 +15,8 @@ struct SportsView: View {
     @State private var message: String?
     @State private var multi: [SportGame] = []
     @State private var multiOpen = false
+    @ObservedObject private var teams = TeamCenter.shared
+    @ObservedObject private var pip = PiPController.shared
 
     private var playable: [SportGame] { games.filter { !$0.streams.isEmpty } }
     private var liveGames: [SportGame] { playable.filter { $0.isLive && !$0.is247 } }
@@ -69,6 +71,7 @@ struct SportsView: View {
                 }
 
                 if !multi.isEmpty { multiviewBar }
+                if let corner = pip.game { cornerBar(corner) }
 
                 if categories.count > 2 {
                     ScrollView(.horizontal) {
@@ -88,6 +91,8 @@ struct SportsView: View {
                     .scrollClipDisabled()
                     .focusSection()
                 }
+
+                if category == "All", !teams.teams.isEmpty { yourTeams }
 
                 let live = category == "All" ? liveGames : liveGames.filter { $0.category == category }
                 if !live.isEmpty {
@@ -116,7 +121,10 @@ struct SportsView: View {
                                                 message = event.isFinal ? "That game has ended." : "No streams for \(event.shortName ?? "this game") yet. They usually appear shortly before start."
                                             }
                                         }
-                                        .contextMenu { if let game { multiMenu(game) } }
+                                        .contextMenu {
+                                            if let game { multiMenu(game) }
+                                            followMenu(event)
+                                        }
                                     }
                                 }
                                 .padding(.vertical, 34)
@@ -149,6 +157,18 @@ struct SportsView: View {
                         multi = picks
                         multiOpen = true
                     }
+                }
+                // -BingeCorner celtics: put that live game in the corner.
+                if let wanted = UserDefaults.standard.string(forKey: "BingeCorner")?.lowercased(),
+                   let game = liveGames.first(where: { $0.title.lowercased().contains(wanted) }) {
+                    UserDefaults.standard.removeObject(forKey: "BingeCorner")
+                    PiPController.shared.show(game)
+                }
+                // -BingeAlertTest YES: show a sample game-alert banner.
+                if UserDefaults.standard.bool(forKey: "BingeAlertTest") {
+                    UserDefaults.standard.removeObject(forKey: "BingeAlertTest")
+                    TeamCenter.shared.debugShow(GameAlert(id: "test", headline: "Close game: Celtics vs Cavaliers",
+                                                          detail: "BOS 98 – 96 CLE · 1:32 - 4th", teams: ["celtics", "cavaliers"]))
                 }
                 // -BingeLive celtics: auto-play the first live game matching it.
                 if let wanted = UserDefaults.standard.string(forKey: "BingeLive")?.lowercased(), playing == nil, starting == nil,
@@ -202,6 +222,7 @@ struct SportsView: View {
     private func multiMenu(_ game: SportGame) -> some View {
         if game.isLive {
             Button { play(game) } label: { Label("Watch", systemImage: "play.fill") }
+            Button { PiPController.shared.show(game) } label: { Label("Watch in the corner", systemImage: "pip") }
             if multi.contains(game) {
                 Button(role: .destructive) { toggleMulti(game) } label: {
                     Label("Remove from Multiview", systemImage: "rectangle.grid.2x2")
@@ -212,6 +233,81 @@ struct SportsView: View {
                 }
             }
         }
+    }
+
+    // MARK: Followed teams & the corner game
+
+    @ViewBuilder
+    private func followMenu(_ event: Scoreboard.Event) -> some View {
+        if app.isSignedIn, let path = boards.first(where: { $0.1.contains(event) })?.0.path {
+            ForEach(event.competitors, id: \.self) { competitor in
+                let following = teams.isFollowing(competitor.team)
+                Button {
+                    Task { await teams.toggle(competitor.team, leaguePath: path) }
+                } label: {
+                    Label(following ? "Unfollow \(competitor.name)" : "Follow \(competitor.name)",
+                          systemImage: following ? "star.slash" : "star")
+                }
+            }
+        }
+    }
+
+    // Games involving teams you follow: live/upcoming first.
+    private var yourTeams: some View {
+        let ids = Set(teams.teams.map(\.teamId))
+        let events = boards.flatMap(\.1).filter { $0.competitors.contains { ids.contains($0.team.id ?? "") } }
+            .sorted { $0.sortRank < $1.sortRank }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 18) {
+                SectionTitle(text: "Your teams")
+                Text(teams.teams.map { $0.teamAbbr ?? $0.teamName }.joined(separator: " · "))
+                    .font(.callout).foregroundStyle(Theme.muted)
+            }
+            if events.isEmpty {
+                Text("No games today for your teams. You'll get a banner when one starts or gets close.")
+                    .font(.callout).foregroundStyle(Theme.muted).padding(.vertical, 20)
+            } else {
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 40) {
+                        ForEach(events) { event in
+                            let game = self.game(for: event)
+                            GameCard(event: event, watchable: game != nil, busy: game.map { starting == $0.id } ?? false) {
+                                if let game { play(game) } else {
+                                    message = event.isFinal ? "That game has ended." : "No streams for \(event.shortName ?? "this game") yet."
+                                }
+                            }
+                            .contextMenu {
+                                if let game { multiMenu(game) }
+                                followMenu(event)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 34)
+                }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+            }
+        }
+        .focusSection()
+    }
+
+    private func cornerBar(_ corner: SportGame) -> some View {
+        HStack(spacing: 24) {
+            Image(systemName: "pip.fill").font(.title3).foregroundStyle(Theme.gold)
+            Text("In the corner: \(corner.title)").font(.callout.weight(.semibold)).lineLimit(1)
+            Spacer(minLength: 20)
+            Button {
+                PiPController.shared.close()
+                play(corner)
+            } label: { Label("Full screen", systemImage: "arrow.up.left.and.arrow.down.right") }
+            .buttonStyle(PillButtonStyle(selected: true))
+            Button("Close") { PiPController.shared.close() }
+                .buttonStyle(PillButtonStyle())
+        }
+        .padding(.horizontal, 30)
+        .padding(.vertical, 18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 22))
+        .focusSection()
     }
 
     private func toggleMulti(_ game: SportGame) {
@@ -293,7 +389,7 @@ struct SportsView: View {
                 return
             }
             let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
-            playing = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)")
+            playing = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)", game: game)
         }
     }
 }

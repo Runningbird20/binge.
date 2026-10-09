@@ -6,11 +6,43 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B1A0000000000000000002C1 /* TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B1A0000000000000000002A1 /* TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B1A0000000000000000002D1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B1A000000000000000000121 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1A0000000000000000002F1;
+			remoteInfo = TopShelf;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B1A0000000000000000002E1 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B1A0000000000000000002C1 /* TopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		B1A0000000000000000000A1 /* BingeTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BingeTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1A0000000000000000000B1 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B1A0000000000000000000B2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1A0000000000000000000B3 /* Secrets.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.example.xcconfig; sourceTree = "<group>"; };
+		B1A0000000000000000002A1 /* TopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1A0000000000000000002B1 /* TopShelf-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "TopShelf-Info.plist"; sourceTree = "<group>"; };
+		B1A0000000000000000002B2 /* BingeTV.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BingeTV.entitlements; sourceTree = "<group>"; };
+		B1A0000000000000000002B3 /* TopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TopShelf.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -19,10 +51,22 @@
 			path = BingeTV;
 			sourceTree = "<group>";
 		};
+		B1A0000000000000000002C9 /* TopShelf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TopShelf;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		B1A0000000000000000000D1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A0000000000000000002F3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -36,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				B1A0000000000000000000C1 /* BingeTV */,
+				B1A0000000000000000002C9 /* TopShelf */,
 				B1A0000000000000000000E3 /* Config */,
 				B1A0000000000000000000E2 /* Products */,
 			);
@@ -45,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				B1A0000000000000000000A1 /* BingeTV.app */,
+				B1A0000000000000000002A1 /* TopShelf.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,6 +101,9 @@
 				B1A0000000000000000000B1 /* Base.xcconfig */,
 				B1A0000000000000000000B3 /* Secrets.example.xcconfig */,
 				B1A0000000000000000000B2 /* Info.plist */,
+				B1A0000000000000000002B1 /* TopShelf-Info.plist */,
+				B1A0000000000000000002B2 /* BingeTV.entitlements */,
+				B1A0000000000000000002B3 /* TopShelf.entitlements */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -69,10 +118,12 @@
 				B1A000000000000000000111 /* Sources */,
 				B1A0000000000000000000D1 /* Frameworks */,
 				B1A000000000000000000112 /* Resources */,
+				B1A0000000000000000002E1 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B1A0000000000000000002D2 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B1A0000000000000000000C1 /* BingeTV */,
@@ -81,6 +132,26 @@
 			productName = BingeTV;
 			productReference = B1A0000000000000000000A1 /* BingeTV.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B1A0000000000000000002F1 /* TopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1A0000000000000000002F9 /* Build configuration list for PBXNativeTarget "TopShelf" */;
+			buildPhases = (
+				B1A0000000000000000002F2 /* Sources */,
+				B1A0000000000000000002F3 /* Frameworks */,
+				B1A0000000000000000002F4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B1A0000000000000000002C9 /* TopShelf */,
+			);
+			name = TopShelf;
+			productName = TopShelf;
+			productReference = B1A0000000000000000002A1 /* TopShelf.appex */;
+			productType = "com.apple.product-type.tv-app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -93,6 +164,9 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					B1A0000000000000000000F1 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					B1A0000000000000000002F1 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -112,12 +186,20 @@
 			projectRoot = "";
 			targets = (
 				B1A0000000000000000000F1 /* BingeTV */,
+				B1A0000000000000000002F1 /* TopShelf */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		B1A000000000000000000112 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A0000000000000000002F4 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -134,7 +216,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1A0000000000000000002F2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B1A0000000000000000002D2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1A0000000000000000002F1 /* TopShelf */;
+			targetProxy = B1A0000000000000000002D1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B1A000000000000000000131 /* Debug */ = {
@@ -190,6 +287,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/BingeTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -203,7 +301,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.binge.tv;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -217,6 +315,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/BingeTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -230,8 +329,60 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.binge.tv;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Release;
+		};
+		B1A0000000000000000002FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1A0000000000000000000B1 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/TopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/TopShelf-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = TopShelf;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID).topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Debug;
+		};
+		B1A0000000000000000002FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1A0000000000000000000B1 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/TopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/TopShelf-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = TopShelf;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID).topshelf";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 3;
@@ -255,6 +406,15 @@
 			buildConfigurations = (
 				B1A000000000000000000133 /* Debug */,
 				B1A000000000000000000134 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1A0000000000000000002F9 /* Build configuration list for PBXNativeTarget "TopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1A0000000000000000002FA /* Debug */,
+				B1A0000000000000000002FB /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -12,6 +12,7 @@ struct PlayRequest: Identifiable {
     // Live sports: the streams to race instead of the movie servers.
     var liveStreams: [StreamServer] = []
     var subtitle: String?
+    var game: SportGame?
 
     var isLive: Bool { !liveStreams.isEmpty }
 }
@@ -32,6 +33,23 @@ final class PlayerModel: ObservableObject {
     @Published var notice: String?
     @Published var hudVisible = true
     @Published var upNextCountdown: Int?
+    @Published private(set) var showSkipIntro = false
+    @Published private(set) var stillWatching = false
+    @Published var sleep: SleepOption = .off {
+        didSet { sleepAt = sleep.minutes.map { Date().addingTimeInterval(Double($0) * 60) } }
+    }
+
+    enum SleepOption: String, CaseIterable, Identifiable {
+        case off = "Off", fifteen = "15 min", thirty = "30 min", hour = "1 hour", episode = "End of episode"
+        var id: String { rawValue }
+        var minutes: Int? { switch self { case .fifteen: 15; case .thirty: 30; case .hour: 60; default: nil } }
+    }
+
+    private var sleepAt: Date?
+    private var skippedIntro = false
+    private var markedWatched = false
+    // Episodes that started on their own with nobody touching the remote.
+    private var autoAdvances = 0
 
     var servers: [StreamServer] { request.isLive ? request.liveStreams : StreamServer.all }
     let surface = UIView()
@@ -48,10 +66,11 @@ final class PlayerModel: ObservableObject {
         self.request = request
         self.app = app
         surface.backgroundColor = .black
+        PiPController.shared.playerOpened()
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
-            startRace(request.isLive ? request.liveStreams : StreamServer.ranked(for: request.title))
+            if request.isLive { startRace(request.liveStreams) } else { startPlannedRace() }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -73,6 +92,17 @@ final class PlayerModel: ObservableObject {
     private var web: WebEngine? { race?.winner?.web }
 
     // MARK: Races
+
+    // Admin switches + audio preference decide which servers race.
+    private func startPlannedRace() {
+        let planned = request
+        racingNames = ""
+        Task {
+            let servers = await ServerPlan.servers(for: planned.title, originalLanguage: planned.title.originalLanguage)
+            guard StreamRace.key(for: planned) == StreamRace.key(for: self.request) else { return }
+            self.startRace(servers.isEmpty ? StreamServer.all : servers)
+        }
+    }
 
     private func startRace(_ list: [StreamServer]) {
         adopt(StreamRace(request: request, servers: list, mode: .live))
@@ -105,7 +135,12 @@ final class PlayerModel: ObservableObject {
         }
     }
 
+    private var closed = false
+
     func close() {
+        guard !closed else { return }
+        closed = true
+        PiPController.shared.playerClosed()
         timer?.invalidate()
         timer = nil
         saveProgress(force: true)
@@ -117,13 +152,27 @@ final class PlayerModel: ObservableObject {
     // MARK: Remote
 
     func togglePlay() {
+        autoAdvances = 0
+        if stillWatching {
+            stillWatching = false
+            playNext()
+            return
+        }
         if let countdown = upNextCountdown, countdown >= 0 { playNext(); return }
         userPaused = !playback.paused
         web?.send(.toggle)
         showHUD()
     }
 
+    // ▲ during the first minutes of an episode.
+    func skipIntro() {
+        skippedIntro = true
+        showSkipIntro = false
+        seek(by: 85)
+    }
+
     func seek(by seconds: Double) {
+        autoAdvances = 0
         guard let web, web.canSeek, !request.isLive else {
             notice = request.isLive ? "This is live — skipping isn't available." : "Skipping isn't available on this Apple TV."
             showHUD()
@@ -139,6 +188,18 @@ final class PlayerModel: ObservableObject {
         hudHideAt = Date().addingTimeInterval(4)
     }
 
+    // Switch this player to a live game (from a game alert).
+    func switchToLive(_ game: SportGame) async {
+        let servers = await SportsFeed.servers(for: game)
+        guard !servers.isEmpty else { notice = "Couldn't find a stream for \(game.title)."; return }
+        saveProgress(force: true)
+        let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
+        request = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)", game: game)
+        upNextCountdown = nil
+        stillWatching = false
+        startRace(servers)
+    }
+
     // A hand-picked server plays alone, from where you were.
     func choose(_ next: StreamServer) {
         saveProgress(force: true)
@@ -147,8 +208,12 @@ final class PlayerModel: ObservableObject {
         startRace([next])
     }
 
-    func play(season: Int, episode: Int) {
+    func play(season: Int, episode: Int, automatic: Bool = false) {
         saveProgress(force: true)
+        autoAdvances = automatic ? autoAdvances + 1 : 0
+        skippedIntro = false
+        markedWatched = false
+        showSkipIntro = false
         request.season = season
         request.episode = episode
         request.startAt = nil
@@ -157,7 +222,7 @@ final class PlayerModel: ObservableObject {
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
-            startRace(StreamServer.ranked(for: request.title))
+            startPlannedRace()
         }
     }
 
@@ -193,6 +258,23 @@ final class PlayerModel: ObservableObject {
         if hudVisible, Date() > hudHideAt, !state.paused { hudVisible = false }
         if state.paused, started { hudVisible = true }
 
+        showSkipIntro = isEpisode && started && !skippedIntro && state.t > 15 && state.t < 240
+
+        if isEpisode, !markedWatched, state.d > 120, state.t / state.d > 0.9,
+           let app, let season = request.season, let episode = request.episode {
+            markedWatched = true
+            let title = request.title
+            Task { await app.markEpisodeWatched(title, season: season, episode: episode) }
+        }
+
+        if let sleepAt, Date() > sleepAt {
+            self.sleepAt = nil
+            sleep = .off
+            web.send(.pause)
+            notice = "Sleep timer: paused."
+            hudVisible = true
+        }
+
         handleUpNext(state)
         saveProgress(force: false)
     }
@@ -216,17 +298,32 @@ final class PlayerModel: ObservableObject {
                                               seasons: request.seasons))
         }
         if state.ended || remaining < 25 {
+            // Sleep at the end of this episode, or check someone's still
+            // there after 3 episodes in a row with no remote input.
+            if sleep == .episode || autoAdvances >= 3 {
+                if state.ended || remaining < 2 {
+                    if sleep == .episode {
+                        sleep = .off
+                        notice = "Sleep timer: stopped after this episode."
+                    } else {
+                        stillWatching = true
+                    }
+                    web?.send(.pause)
+                    upNextCountdown = nil
+                }
+                return
+            }
             let value = upNextCountdown ?? 10
             if upNextCountdown == nil { upNextCountdown = value } else if value > 0 { upNextCountdown = value - 1 }
-            if upNextCountdown == 0 { playNext() }
+            if upNextCountdown == 0 { playNext(automatic: true) }
         }
     }
 
     func cancelUpNext() { upNextCountdown = -1 }
 
-    func playNext() {
+    func playNext(automatic: Bool = false) {
         guard let next = nextEpisode else { return }
-        play(season: next.season, episode: next.episode)
+        play(season: next.season, episode: next.episode, automatic: automatic)
     }
 
     // MARK: Progress (synced to continue_watching, like the site)
