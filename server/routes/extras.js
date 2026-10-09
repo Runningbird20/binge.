@@ -148,13 +148,18 @@ async function osHeaders() {
 }
 
 // Best first: human-made, most downloaded, trusted uploaders; hearing-
-// impaired versions only if nothing else.
+// impaired versions only if nothing else. Forced (signs-only) files are
+// useless as full subtitles, and "dubbed" releases follow the dub's script
+// rather than the original audio, so they go after the rest.
+const isForced = (a) => a.foreign_parts_only || /\bforced\b/i.test(a.release || '');
+const isDubScript = (a) => /\bdub(bed)?\b/i.test(a.release || '');
 function rankSubtitleFiles(data) {
   return (data || [])
     .map((item) => item.attributes || {})
-    .filter((a) => a.files?.length && !a.ai_translated && !a.machine_translated)
-    .sort((a, b) => Number(a.hearing_impaired) - Number(b.hearing_impaired)
-      || Number(b.from_trusted) - Number(a.from_trusted)
+    .filter((a) => a.files?.length && !a.ai_translated && !a.machine_translated && !isForced(a))
+    .sort((a, b) => Number(isDubScript(a)) - Number(isDubScript(b))
+      || Number(Boolean(a.hearing_impaired)) - Number(Boolean(b.hearing_impaired))
+      || Number(Boolean(b.from_trusted)) - Number(Boolean(a.from_trusted))
       || (b.download_count || 0) - (a.download_count || 0))
     .map((a) => ({ fileId: a.files[0].file_id, release: a.release || a.files[0].file_name || '' }));
 }
@@ -166,7 +171,8 @@ router.get('/subtitles', async (req, res) => {
   const lang = String(req.query.lang || 'en').toLowerCase().slice(0, 5).replace(/[^a-z-]/g, '');
   const version = Math.max(0, Math.min(9, Number(req.query.version) || 0));
   if (!validId(req.query.tmdb) || (type === 'tv' && !(season > 0 && episode > 0))) return res.status(400).json({ error: 'bad params' });
-  const key = `${type}:${req.query.tmdb}:${season}:${episode}:${lang}:${version}`;
+  // r2: ranking revision (bump when rankSubtitleFiles changes which file a version means).
+  const key = `r2:${type}:${req.query.tmdb}:${season}:${episode}:${lang}:${version}`;
   const db = adminDb();
   try {
     if (db) {
