@@ -44,6 +44,7 @@ struct TMDBDetails: Decodable {
     let backdropPath: String?
     let posterPath: String?
     let numberOfSeasons: Int?
+    let originalLanguage: String?
     let seasons: [Season]?
     let lastEpisodeToAir: AiredEpisode?
     let nextEpisodeToAir: AiredEpisode?
