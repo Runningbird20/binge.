@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check } from '@phosphor-icons/react';
+import { ArrowRight, Check } from '@phosphor-icons/react';
 import { AVATAR_COLORS, AVATAR_EMOJI } from './ProfileAvatar';
 
 function ProgressDots({ current, total }) {
@@ -77,7 +77,7 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
               ))}
             </div>
             <div className="onboarding-actions">
-              <button className="btn-primary" type="button" onClick={() => setStep(1)}>Continue →</button>
+              <button className="btn-primary" type="button" onClick={() => setStep(1)}>Continue <ArrowRight size={16} weight="bold" aria-hidden="true" /></button>
               <button className="btn-ghost" type="button" onClick={onCancel}>Cancel</button>
             </div>
           </>
@@ -97,7 +97,7 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
               onKeyDown={(event) => { if (event.key === 'Enter' && name.trim()) setStep(2); }}
             />
             <div className="onboarding-actions">
-              <button className="btn-primary" type="button" onClick={() => setStep(2)} disabled={!name.trim()}>Continue →</button>
+              <button className="btn-primary" type="button" onClick={() => setStep(2)} disabled={!name.trim()}>Continue <ArrowRight size={16} weight="bold" aria-hidden="true" /></button>
               <button className="btn-ghost" type="button" onClick={onCancel}>Cancel</button>
             </div>
           </>

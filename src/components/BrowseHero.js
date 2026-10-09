@@ -73,8 +73,8 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
       <section className="st-hero st-hero--empty" aria-label="Featured titles">
         <div className="st-hero-scrim" aria-hidden="true" />
         <div className="st-hero-content">
-          {kicker && <p className="st-hero-kicker">{kicker}</p>}
           <h1 className="st-hero-title">{emptyTitle}</h1>
+          {kicker && <p className="st-hero-overview">{kicker}</p>}
         </div>
       </section>
     );
@@ -134,9 +134,9 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
       )}
 
       <div className="st-hero-content" aria-live="polite">
-        {kicker && <p className="st-hero-kicker">{kicker}</p>}
         <h1 className="st-hero-title" title={item.title}>{displayTitle(item.title)}</h1>
         <div className="st-hero-meta">
+          {kicker && <span className="st-hero-context">{kicker}</span>}
           {item._match && <span className="st-match">{item._match}% match</span>}
           {year && <span>{year}</span>}
           {genres.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}

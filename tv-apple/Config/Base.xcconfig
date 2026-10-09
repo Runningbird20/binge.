@@ -5,8 +5,17 @@ BINGE_SUPABASE_URL =
 BINGE_SUPABASE_KEY =
 BINGE_TMDB_KEY =
 BINGE_SITE_URL = https:/$()/binge-26.vercel.app
-// Change this to your own (e.g. com.yourname.binge) if Xcode says the id is
-// taken when signing; the Top Shelf extension and App Group follow it.
+// Signing. scripts/setup-signing.sh fills BINGE_TEAM and a unique
+// BINGE_BUNDLE_ID into Secrets.xcconfig after you add your Apple ID to Xcode.
 BINGE_BUNDLE_ID = com.binge.tv
+BINGE_TEAM =
+
+// App Groups need a paid Apple Developer account (free "Personal Team"
+// signing rejects them). Without them Top Shelf shows "Trending on binge.";
+// with them it also shows your Continue Watching. setup-signing.sh --paid
+// turns these on.
+BINGE_APP_ENTITLEMENTS =
+BINGE_SHELF_ENTITLEMENTS =
 
 #include? "Secrets.xcconfig"
+#include? "Signing.xcconfig"

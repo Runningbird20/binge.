@@ -75,7 +75,7 @@ struct SearchView: View {
         } else if !ai.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 18) {
-                    Label("Ask binge.", systemImage: "sparkles").font(.title3.weight(.bold)).foregroundStyle(Theme.gold)
+                    Label("Ask binge.", systemImage: "sparkles").font(.title3.weight(.bold))
                     if let aiSummary { Text(aiSummary).font(.callout).foregroundStyle(Theme.muted).lineLimit(1) }
                 }
                 ScrollView(.horizontal) {
@@ -155,45 +155,50 @@ struct MeView: View {
             }
             .focusSection()
 
-            VStack(alignment: .leading, spacing: 26) {
-                Text("Your stuff").font(.title3.weight(.bold))
-                LazyVGrid(columns: [GridItem(.fixed(500), spacing: 40), GridItem(.fixed(500), spacing: 40)], alignment: .leading, spacing: 40) {
-                    tile("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
-                    tile("Calendar", "calendar", "Upcoming episodes & releases") { CalendarView() }
-                    tile("Wrapped", "sparkles", "Your year on binge.") { WrappedView() }
-                    tile("Playback", "captions.bubble", "Audio, subtitles, trailers") { PlaybackSettingsView() }
+            // A plain tvOS list, like Settings: no tile grid.
+            List {
+                Section {
+                    row("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
+                    row("Calendar", "calendar", "Upcoming episodes and releases") { CalendarView() }
+                    row("Wrapped", "sparkles", "Your year on binge.") { WrappedView() }
+                }
+                Section {
+                    row("Playback", "captions.bubble", "Audio, subtitles, trailers") { PlaybackSettingsView() }
                 }
                 if let corner = pip.game {
-                    Button { PiPController.shared.close() } label: {
-                        Label("Close corner game (\(corner.title))", systemImage: "pip.remove")
+                    Section {
+                        Button { PiPController.shared.close() } label: {
+                            Label("Close the corner game (\(corner.title))", systemImage: "pip.remove")
+                        }
                     }
                 }
-                Text("Books, manga and account settings are on \(Config.siteHost).")
-                    .font(.caption).foregroundStyle(Theme.muted)
+                Section {
+                } footer: {
+                    Text("Books, manga and account settings are on \(Config.siteHost).")
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(maxWidth: 1100)
             .focusSection()
         }
         .padding(.vertical, 40)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func tile<Destination: View>(_ title: String, _ icon: String, _ detail: String,
-                                         @ViewBuilder destination: @escaping () -> Destination) -> some View {
+    private func row<Destination: View>(_ title: String, _ icon: String, _ detail: String,
+                                        @ViewBuilder destination: @escaping () -> Destination) -> some View {
         NavigationLink {
             destination()
         } label: {
-            HStack(spacing: 22) {
-                Image(systemName: icon).font(.system(size: 40)).foregroundStyle(Theme.gold).frame(width: 60)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title).font(.headline)
-                    Text(detail).font(.caption).foregroundStyle(Theme.muted).lineLimit(2)
+            HStack(spacing: 24) {
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(systemName: icon).foregroundStyle(.white) // decoration, not state: no accent
                 }
-                Spacer(minLength: 0)
+                Spacer()
+                Text(detail).foregroundStyle(.secondary)
             }
-            .padding(28)
-            .frame(width: 500, height: 150)
-            .background(Theme.surface)
         }
-        .buttonStyle(.card)
     }
 }

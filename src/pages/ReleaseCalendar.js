@@ -43,8 +43,8 @@ export default function ReleaseCalendar() {
       <main className="page-content cal-page">
         <header className="st-page-head">
           <div>
-            <p className="st-page-kicker">Your shows & movies</p>
             <h1 className="st-page-title">Release Calendar</h1>
+            <p className="st-page-sub">New episodes and releases from your list and what you’re watching.</p>
           </div>
           {data?.events?.length > 0 && (
             <button type="button" className="st-btn st-btn--primary" onClick={() => exportToCalendar(data.events)}>

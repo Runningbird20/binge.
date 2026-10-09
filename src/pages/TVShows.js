@@ -753,7 +753,6 @@ export default function TVShows() {
           <>
           <header className="st-page-head">
             <div>
-              <p className="st-page-kicker">Browse all</p>
               <h1 className="st-page-title">Series</h1>
             </div>
             <Link className="st-btn st-btn--ghost" to="/tv-shows">Back to highlights</Link>

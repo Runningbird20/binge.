@@ -61,7 +61,6 @@ body {
   color: var(--exp-text);
 }
 
-.page-kicker { color: var(--exp-text-faint); }
 .page-subtitle { color: var(--exp-text-dim); }
 
 /* ── Buttons ────────────────────────────────────────────────── */
@@ -235,14 +234,6 @@ body {
   padding: 2.5rem 2.75rem;
 }
 
-.stream-hero-kicker {
-  margin: 0 0 0.6rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--exp-text-dim);
-}
 
 .stream-hero-title {
   margin: 0 0 0.75rem;

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowsOut, CaretDown, Check, CornersOut, GridFour, Play, SkipForward, SquaresFour, X } from '@phosphor-icons/react';
+import {
+  ArrowLeft, ArrowsOut, Baseball, Basketball, BoxingGlove, CaretDown, Check, CornersOut, Cricket, FlagCheckered, Football,
+  Golf, GridFour, Hockey, Play, SkipForward, SoccerBall, SquaresFour, Target, TennisBall, Trophy, Volleyball, X,
+} from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
@@ -25,14 +28,16 @@ const LEAGUE_ORDER = [
   'Serie A', 'Bundesliga', 'Ligue 1', 'Liga MX', 'Formula 1', 'UFC', 'Wrestling', 'Combat Sports',
 ];
 
+// One icon family for every sport (no emoji standing in for icons).
 const CAT_ICONS = {
-  'American Football': '🏈', 'Australian Football': '🏉', Basketball: '🏀', Soccer: '⚽',
-  Baseball: '⚾', Hockey: '🏒', 'Combat Sports': '🥊', Tennis: '🎾', Golf: '⛳', Racing: '🏎️',
-  Rugby: '🏉', Cricket: '🏏', Volleyball: '🏐', Billiards: '🎱', Darts: '🎯',
+  'American Football': Football, 'Australian Football': Football, Rugby: Football, Basketball, Soccer: SoccerBall,
+  Baseball, Hockey, 'Combat Sports': BoxingGlove, Tennis: TennisBall, Golf, Racing: FlagCheckered,
+  Cricket, Volleyball, Darts: Target,
 };
 
-function catIcon(category) {
-  return CAT_ICONS[category] || '🏆';
+function CatIcon({ category, size = 16 }) {
+  const Icon = CAT_ICONS[category] || Trophy;
+  return <Icon size={size} weight="bold" aria-hidden="true" className="st-cat-icon" />;
 }
 
 function fmtTime(unix) {
@@ -106,7 +111,7 @@ function GameArt({ stream }) {
           <img src={stream.logos.away} alt="" loading="lazy" referrerPolicy="no-referrer" />
         </>
       ) : (
-        <span className="st-game-art-icon">{catIcon(stream.category)}</span>
+        <span className="st-game-art-icon"><CatIcon category={stream.category} size={44} /></span>
       )}
     </div>
   );
@@ -134,7 +139,7 @@ function GameCard({ stream, nowMs, onSelect, active = false, multi }) {
       </div>
       <p className="st-game-title">{stream.name}</p>
       <p className="st-game-meta">
-        {catIcon(stream.category)} {stream.league}
+        <CatIcon category={stream.category} /> {stream.league}
         <span aria-hidden="true"> · </span>
         {stream.providers.length} server{stream.providers.length === 1 ? '' : 's'}
       </p>
@@ -327,7 +332,7 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
         <div className="st-sp-player-title">
           {status === 'live' && <span className="st-game-status st-game-status--live"><span className="st-live-dot" aria-hidden="true" />{stream.alwaysLive ? '24/7' : 'LIVE'}</span>}
           <h1>{stream.name}</h1>
-          <span className="st-sp-player-league">{catIcon(stream.category)} {stream.league}</span>
+          <span className="st-sp-player-league"><CatIcon category={stream.category} /> {stream.league}</span>
         </div>
       </div>
 
@@ -347,7 +352,7 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
           />
         ) : (
           <div className="st-sp-frame-empty">
-            <span className="st-game-art-icon">{catIcon(stream.category)}</span>
+            <span className="st-game-art-icon"><CatIcon category={stream.category} size={44} /></span>
             {status === 'upcoming' ? (
               <>
                 <p>Starts {fmtDay(stream.startsAt)} at {fmtTime(stream.startsAt)}{timeUntil(stream.startsAt) ? ` (${timeUntil(stream.startsAt)})` : ''}</p>
@@ -447,7 +452,7 @@ function MultiviewTile({ stream, nowMs, focused, order, autoplay, onFocus, onRem
           />
         ) : (
           <div className="st-sp-frame-empty">
-            <span className="st-game-art-icon">{catIcon(stream.category)}</span>
+            <span className="st-game-art-icon"><CatIcon category={stream.category} size={44} /></span>
             {resolving ? <p>Connecting…</p> : allFailed ? (
               <>
                 <p>{allBlocked ? 'Blocked on this network.' : 'No server responded.'}</p>
@@ -711,7 +716,7 @@ export default function Sports() {
                 {statusLabel(featured, nowMs)}
               </span>
               <h1 className="st-hero-title">{featured.name}</h1>
-              <p className="st-sp-feature-meta">{catIcon(featured.category)} {featured.league} · {featured.providers.length} server{featured.providers.length === 1 ? '' : 's'}</p>
+              <p className="st-sp-feature-meta"><CatIcon category={featured.category} /> {featured.league} · {featured.providers.length} server{featured.providers.length === 1 ? '' : 's'}</p>
               <button type="button" className="st-btn st-btn--primary" onClick={() => select(featured)}>
                 <Play size={18} weight="fill" /> {getStatus(featured, nowMs) === 'live' ? 'Watch live' : 'View game'}
               </button>
@@ -728,7 +733,7 @@ export default function Sports() {
               aria-pressed={category === cat}
               onClick={() => setCategory(cat)}
             >
-              {cat !== 'All' ? `${catIcon(cat)} ` : ''}{cat}
+              {cat !== 'All' && <CatIcon category={cat} />}{cat}
             </button>
           ))}
         </GenreScrollBar>

@@ -118,8 +118,8 @@ function PreviouslyOn({ tmdbId, season, episode, daysAway, onPlay, onCancel }) {
   return (
     <div className="td-recap" role="dialog" aria-modal="true" aria-labelledby="td-recap-title">
       <div className="td-recap-card">
-        <p className="td-recap-kicker"><ClockCounterClockwise size={16} weight="bold" /> It’s been {daysAway} days</p>
         <h3 id="td-recap-title">Previously on…</h3>
+        <p className="td-recap-note"><ClockCounterClockwise size={16} weight="bold" aria-hidden="true" /> You were last here {daysAway} days ago.</p>
         {!recap && <div className="td-recap-skeleton skeleton-block" aria-hidden="true" />}
         <ol className="td-recap-list">
           {recap?.map((ep) => (

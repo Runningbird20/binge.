@@ -209,7 +209,6 @@
     border-radius: var(--exp-radius-lg, 16px);
   }
   .stream-hero-content { padding: 1.4rem 1.15rem; }
-  .stream-hero-kicker { font-size: 0.7rem; margin-bottom: 0.4rem; }
   .stream-hero-title { font-size: 1.45rem; margin-bottom: 0.5rem; }
   .stream-hero-meta { font-size: 0.78rem; margin-bottom: 1rem; }
 

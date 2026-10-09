@@ -1,5 +1,6 @@
 # Generated from ../.env by scripts/make-secrets.sh
 Config/Secrets.xcconfig
+Config/Signing.xcconfig
 build/
 DerivedData/
 xcuserdata/
