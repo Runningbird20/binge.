@@ -24,6 +24,9 @@ import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libr
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { findNewEpisodes } from '../utils/newEpisodes';
+import { seasonStatus } from '../utils/seasonStatus';
+import { precacheUpNext } from '../utils/smartPrecache';
+import { fetchSharedWithMe, markSharesSeen } from '../utils/profileShares';
 import { enableNewEpisodeAlerts, isSubscribed, pushSupported } from '../utils/pushNotifications';
 import { Bell, BellRinging } from '@phosphor-icons/react';
 
@@ -78,7 +81,7 @@ function NotifyButton() {
   );
 }
 
-function ContinueWatchingCard({ item, onRemove, priority }) {
+function ContinueWatchingCard({ item, onRemove, priority, note }) {
   const location = useLocation();
   const episodeLabel = computeProgressBadge(item);
   const resume = computeResumeProgress(item);
@@ -93,6 +96,7 @@ function ContinueWatchingCard({ item, onRemove, priority }) {
           ...asTitle(item),
           _progress: resume ? Math.max(0.03, resume.fraction) : null,
           _subtitle: subtitle || episodeLabel,
+          _note: note,
           _match: null,
         }}
         to={resumeUrl(item)}
@@ -200,19 +204,53 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
 }
 
 export default function Home() {
-  const { user, authLoading, activeProfile, profilesLoading } = useAuth();
+  const { user, authLoading, activeProfile, profilesLoading, profiles } = useAuth();
   const location = useLocation();
   const [watchlistItems, setWatchlistItems] = useState([]);
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
+  // "2 episodes left in Season 3" / "New season Friday" per show in
+  // Continue Watching (TMDB details are cached for 30 minutes).
+  const [seasonNotes, setSeasonNotes] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    const shows = continueWatchingItems.filter((item) => item.media_type === 'tv_show').slice(0, 24);
+    Promise.all(shows.map(async (item) => {
+      const tmdbId = tmdbIdFromItem(item);
+      if (!tmdbId) return null;
+      const details = await tmdbGet(`/tv/${tmdbId}`).catch(() => null);
+      const note = seasonStatus(details, Number(item.current_season) || 1, Number(item.current_episode) || 1);
+      return note ? [`tv_show:${item.media_id ?? item.id}`, note] : null;
+    })).then((pairs) => { if (!cancelled) setSeasonNotes(Object.fromEntries(pairs.filter(Boolean))); });
+    return () => { cancelled = true; };
+  }, [continueWatchingItems]);
+
+  // Smart downloads: warm the next episodes' pages/art while idle.
+  useEffect(() => { precacheUpNext(continueWatchingItems); }, [continueWatchingItems]);
   const jumpToContinue = new URLSearchParams(location.search).get('jump') === 'continue';
   const [dataLoading, setDataLoading] = useState(true);
   const [personal, setPersonal] = useState(null);
-  const [heroItems, setHeroItems] = useState([]);
+  const [heroItems, setHeroItems] = useState(null); // null = still loading
   const [refreshKey, setRefreshKey] = useState(0);
   const [newEpisodes, setNewEpisodes] = useState([]);
 
   const userId = user?.id;
+
+  // Titles other profiles on the account sent to this one.
+  const [shared, setShared] = useState([]);
+  useEffect(() => {
+    if (!userId || profilesLoading) return undefined;
+    let cancelled = false;
+    fetchSharedWithMe(profiles || []).then((items) => {
+      if (cancelled) return;
+      setShared(items);
+      const unseen = items.filter((item) => item._badge).map((item) => item._shareId);
+      // Seen once they've been on screen a moment ("New" stays this visit).
+      if (unseen.length) setTimeout(() => markSharesSeen(unseen).catch(() => {}), 4000);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId, profilesLoading, profiles, refreshKey]);
+
   const kidsSafe = Boolean(activeProfile?.is_kids);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -291,12 +329,29 @@ export default function Home() {
         .filter((item) => item.media_type !== 'book')
         .slice(0, 1)
         .map((item) => ({ ...asTitle(item), _playUrl: resumeUrl(item), _playLabel: 'Resume', _reason: computeProgressBadge(item) ? `Continue ${computeProgressBadge(item)}` : 'Continue where you left off' }));
-      let picks = personal?.topPicks?.slice(0, 4) || [];
-      if (!picks.length && personal) {
-        picks = (await loadRowItems(rowsFor('movie', { kidsSafe })[0], 'movie', { kidsSafe }).catch(() => [])).slice(0, 4);
+      // A mix that changes every visit: a few of your picks (one per
+      // language/genre, chosen at random from the top dozen) and what's
+      // trending this week, interleaved.
+      const shuffled = (list) => list.map((item) => ({ item, r: Math.random() })).sort((a, b) => a.r - b.r).map(({ item }) => item);
+      const seen = new Set();
+      const picks = [];
+      for (const item of shuffled(personal?.topPicks?.slice(0, 12) || [])) {
+        const flavour = `${item.original_language || ''}|${String(item.genre || '').split(',')[0].trim()}`;
+        if (seen.has(flavour)) continue;
+        seen.add(flavour);
+        picks.push(item);
+        if (picks.length >= 3) break;
       }
+      const trending = personal ? (await Promise.all([
+        loadRowItems(rowsFor('tv_show', { kidsSafe })[0], 'tv_show', { kidsSafe }).catch(() => []),
+        loadRowItems(rowsFor('movie', { kidsSafe })[0], 'movie', { kidsSafe }).catch(() => []),
+      ])).flatMap((list) => shuffled(list.slice(0, 8)).slice(0, picks.length ? 1 : 3)) : [];
+      const mixed = [];
+      const queues = [picks, shuffled(trending)];
+      while (queues.some((queue) => queue.length)) queues.forEach((queue) => { if (queue.length) mixed.push(queue.shift()); });
       const withArt = await Promise.all(resume.map(withBackdrop));
-      if (!cancelled) setHeroItems([...withArt, ...picks]);
+      const keys = new Set(withArt.map((item) => `${item.media_type}:${item.id}`));
+      if (!cancelled) setHeroItems([...withArt, ...mixed.filter((item) => !keys.has(`${item.media_type}:${item.id}`))]);
     }
     buildHero();
     return () => { cancelled = true; };
@@ -398,7 +453,7 @@ export default function Home() {
               items={continueWatchingItems}
               eager
               renderItem={(item, index) => (
-                <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} />
+                <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} note={seasonNotes[`${item.media_type}:${item.media_id ?? item.id}`]} />
               )}
             />
             </div>
@@ -418,6 +473,10 @@ export default function Home() {
                 />
               )}
             />
+          )}
+
+          {shared.length > 0 && (
+            <TitleRow title="Sent to you" subtitle="From other profiles on this account" items={shared} />
           )}
 
           <div id="for-you" />

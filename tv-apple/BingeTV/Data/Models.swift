@@ -126,6 +126,8 @@ struct ContinueItem: Identifiable, Hashable {
     let duration: Double?
     // Set when an episode newer than the one you're on aired recently.
     var newEpisode: String?
+    // "2 episodes left in Season 3", "New season Friday" (SeasonStatus).
+    var seasonNote: String?
 
     var id: String { title.id }
 

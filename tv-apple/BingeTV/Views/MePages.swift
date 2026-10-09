@@ -175,10 +175,16 @@ struct CalendarView: View {
 struct PlaybackSettingsView: View {
     @EnvironmentObject private var app: AppModel
     @AppStorage("binge.trailers") private var trailers = true
+    @AppStorage("binge.quality") private var quality = QualityPreference.best.rawValue
+    @AppStorage("binge.captionSize") private var captionSize = 100
+    @AppStorage("binge.captionBackground") private var captionBackground = "rgba(0,0,0,0.6)"
+    @AppStorage("binge.audioDescription") private var audioDescription = false
+    @AppStorage("binge.largeText") private var largeText = false
     @State private var audio = PlaybackPrefs.audio
     @State private var subtitle = PlaybackPrefs.subtitle
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 40) {
             Text("Playback").font(.system(size: 54, weight: .heavy))
             group("Audio language", "Servers viewers reported in this language are tried first.") {
@@ -199,6 +205,30 @@ struct PlaybackSettingsView: View {
                     .buttonStyle(PillButtonStyle(selected: subtitle == code))
                 }
             }
+            group("Quality", "Best quality looks for a sharper stream, up to 4K, for a few seconds after a video starts.") {
+                ForEach(QualityPreference.allCases) { option in
+                    Button(option.label) { quality = option.rawValue }
+                        .buttonStyle(PillButtonStyle(selected: quality == option.rawValue))
+                }
+            }
+            group("Subtitle size", "How big subtitles are drawn over the video.") {
+                ForEach(PlaybackPrefs.captionSizes, id: \.0) { size, label in
+                    Button(label) { captionSize = size }.buttonStyle(PillButtonStyle(selected: captionSize == size))
+                }
+            }
+            group("Subtitle background", "A box behind the words makes them easier to read on bright scenes.") {
+                ForEach(PlaybackPrefs.captionBackgrounds, id: \.0) { value, label in
+                    Button(label) { captionBackground = value }.buttonStyle(PillButtonStyle(selected: captionBackground == value))
+                }
+            }
+            group("Audio description", "Picks a described audio track automatically when a server has one.") {
+                Button("On") { audioDescription = true }.buttonStyle(PillButtonStyle(selected: audioDescription))
+                Button("Off") { audioDescription = false }.buttonStyle(PillButtonStyle(selected: !audioDescription))
+            }
+            group("Larger text", "Bigger text across the whole app.") {
+                Button("On") { largeText = true }.buttonStyle(PillButtonStyle(selected: largeText))
+                Button("Off") { largeText = false }.buttonStyle(PillButtonStyle(selected: !largeText))
+            }
             group("Trailers", "Muted trailers in the Home spotlight.") {
                 Button("On") { trailers = true }.buttonStyle(PillButtonStyle(selected: trailers))
                 Button("Off") { trailers = false }.buttonStyle(PillButtonStyle(selected: !trailers))
@@ -207,6 +237,8 @@ struct PlaybackSettingsView: View {
         }
         .padding(.vertical, 30)
         .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollClipDisabled()
     }
 
     private func group<Content: View>(_ title: String, _ note: String, @ViewBuilder content: () -> Content) -> some View {

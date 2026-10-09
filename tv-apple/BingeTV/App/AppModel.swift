@@ -141,6 +141,52 @@ final class AppModel: ObservableObject {
 
     func isInList(_ title: Title) -> Bool { listIds[title.id] != nil }
 
+    // MARK: Household queue (profile_shares, same as the website)
+
+    func send(_ title: Title, to target: AccountProfile) async throws {
+        guard let session else { throw BingeError.signedOut }
+        try await Supabase.shared.upsert("profile_shares", onConflict: "to_profile,media_type,media_id", [
+            "user_id": session.userId,
+            "from_profile": profile?.id ?? NSNull(),
+            "to_profile": target.id,
+            "media_type": title.kind.rawValue,
+            "media_id": title.dbId,
+            "created_at": ISO8601DateFormatter().string(from: Date()),
+            "seen_at": NSNull(),
+        ])
+    }
+
+    // Titles other profiles sent to this one, badged with who sent them.
+    func sharedWithMe() async -> [Title] {
+        guard isSignedIn, let me = profile?.id else { return [] }
+        struct Share: Decodable { let id: Int; let fromProfile: String?; let mediaType: String; let mediaId: Int; let seenAt: String? }
+        let rows: [Share] = (try? await Supabase.shared.select("profile_shares", [
+            URLQueryItem(name: "select", value: "id,from_profile,media_type,media_id,seen_at"),
+            URLQueryItem(name: "to_profile", value: "eq.\(me)"),
+            URLQueryItem(name: "media_type", value: "in.(movie,tv_show)"),
+            URLQueryItem(name: "order", value: "created_at.desc"),
+            URLQueryItem(name: "limit", value: "40"),
+        ])) ?? []
+        guard !rows.isEmpty else { return [] }
+        async let movies = Catalog.titles(.movie, ids: rows.filter { $0.mediaType == "movie" }.map(\.mediaId))
+        async let shows = Catalog.titles(.tvShow, ids: rows.filter { $0.mediaType == "tv_show" }.map(\.mediaId))
+        let (m, t) = ((try? await movies) ?? [:], (try? await shows) ?? [:])
+        let names = Dictionary(profiles.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let unseen = rows.filter { $0.seenAt == nil }.map(\.id)
+        if !unseen.isEmpty {
+            Task {
+                try? await Supabase.shared.update("profile_shares", [
+                    URLQueryItem(name: "id", value: "in.(\(unseen.map(String.init).joined(separator: ",")))"),
+                ], ["seen_at": ISO8601DateFormatter().string(from: Date())])
+            }
+        }
+        return rows.compactMap { row in
+            guard var title = row.mediaType == "movie" ? m[row.mediaId] : t[row.mediaId] else { return nil }
+            title.badge = "From \(row.fromProfile.flatMap { names[$0] } ?? "family")"
+            return title
+        }
+    }
+
     func toggleList(_ title: Title) async throws {
         guard let session else { throw BingeError.signedOut }
         if let rowId = listIds[title.id] {
@@ -164,7 +210,7 @@ final class AppModel: ObservableObject {
             URLQueryItem(name: "select", value: "id,media_type,media_id"),
             URLQueryItem(name: "media_type", value: "in.(movie,tv_show)"),
             URLQueryItem(name: "order", value: "added_at.desc"),
-            URLQueryItem(name: "limit", value: "40"),
+            URLQueryItem(name: "limit", value: "500"),
         ] + ownerFilter)
         async let movies = Catalog.titles(.movie, ids: rows.filter { $0.mediaType == "movie" }.map(\.mediaId))
         async let shows = Catalog.titles(.tvShow, ids: rows.filter { $0.mediaType == "tv_show" }.map(\.mediaId))
@@ -217,6 +263,9 @@ final class AppModel: ObservableObject {
                    ReleaseWindow.isRecent(date, days: 14),
                    (aired.seasonNumber, aired.episodeNumber) > (result[index].season ?? 0, result[index].episode ?? 0) {
                     result[index].newEpisode = "S\(aired.seasonNumber):E\(aired.episodeNumber)"
+                }
+                if result[index].title.kind == .tvShow {
+                    result[index].seasonNote = SeasonStatus.note(details, season: result[index].season ?? 1, episode: result[index].episode ?? 1)
                 }
             }
             return result

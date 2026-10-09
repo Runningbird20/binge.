@@ -34,6 +34,8 @@ enum MediaCommand {
     case fill, unfill
     // Choose an audio track / subtitle track (-1 = subtitles off).
     case audioTrack(Int), textTrack(Int)
+    // Subtitle look: size in % and a CSS background colour.
+    case captionStyle(size: Int, background: String)
 
     var js: String {
         switch self {
@@ -49,6 +51,7 @@ enum MediaCommand {
         case .unfill: return "unfill"
         case .audioTrack(let i): return "audio:\(i)"
         case .textTrack(let i): return "text:\(i)"
+        case .captionStyle(let size, let background): return "cue:\(size):\(background)"
         }
     }
 }
@@ -114,8 +117,14 @@ enum WebEngines {
       function unpin(){ document.documentElement.classList.remove('__bf'); var els=document.querySelectorAll('.__bf-el'); for (var i=0;i<els.length;i++) els[i].classList.remove('__bf-el'); }
       window.addEventListener('message', function(e){ if(!(e.data && e.data.__bingeFillUp)) return;
         var fs=document.getElementsByTagName('iframe'); for (var i=0;i<fs.length;i++){ if(fs[i].contentWindow===e.source){ pin(fs[i]); break; } } });
+      function cue(cmd){ var parts=cmd.split(':'), size=parseInt(parts[1],10)||100, bg=parts.slice(2).join(':')||'transparent';
+        var st=document.getElementById('__bcue'); if(!st){ st=document.createElement('style'); st.id='__bcue'; (document.head||document.documentElement).appendChild(st); }
+        st.textContent='video::cue{font-size:'+size+'%!important;background-color:'+bg+'!important;color:#fff!important}'+
+          'video::-webkit-media-text-track-display{font-size:'+size+'%!important}'+
+          'video::-webkit-media-text-track-display-backdrop{background-color:'+bg+'!important}'; }
       function apply(cmd){
         if(cmd==='unfill'){ unpin(); return; }
+        if(cmd.indexOf('cue:')===0){ cue(cmd); return; }
         var v=pick(); if(!v) return; var p;
         if(cmd==='fill'){ if(v.readyState>0 || v.duration>0) pin(v); return; }
         if(cmd.indexOf('audio:')===0){ var ai=parseInt(cmd.slice(6),10); if(v.audioTracks) for (var k=0;k<v.audioTracks.length;k++) v.audioTracks[k].enabled=(k===ai); return; }
@@ -390,6 +399,8 @@ extension LegacyWebView: WebEngine {
         case .unfill: body = "v.style.cssText=''"
         case .audioTrack(let i): body = "if(v.audioTracks){for(var k=0;k<v.audioTracks.length;k++){v.audioTracks[k].enabled=(k===\(i))}}"
         case .textTrack(let i): body = "if(v.textTracks){for(var k=0;k<v.textTracks.length;k++){v.textTracks[k].mode=(k===\(i)?'showing':'disabled')}}"
+        case .captionStyle(let size, let background):
+            body = "var st=document.getElementById('__bcue')||document.head.appendChild(document.createElement('style'));st.id='__bcue';st.textContent='video::cue{font-size:\(size)%;background-color:\(background)}'"
         }
         run("(function(){var v=document.querySelector('video'); if(v){\(body)}})()")
     }

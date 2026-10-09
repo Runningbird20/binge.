@@ -226,7 +226,7 @@ test('shows avatar and welcome message on the signed-in home page', async () => 
 
   render(<Home />);
 
-  expect(screen.getByText(/welcome back, mediafan/i)).toBeInTheDocument();
+  expect(await screen.findByText(/welcome back, mediafan/i)).toBeInTheDocument();
 
   await waitFor(() => {
     expect(

@@ -135,6 +135,12 @@ actor Supabase {
         _ = try await send("POST", table: table, query: [], body: row, auth: .required, prefer: "return=minimal")
     }
 
+    // Insert or replace on the given unique columns.
+    func upsert(_ table: String, onConflict: String, _ row: [String: Any]) async throws {
+        _ = try await send("POST", table: table, query: [URLQueryItem(name: "on_conflict", value: onConflict)], body: row,
+                           auth: .required, prefer: "resolution=merge-duplicates,return=minimal")
+    }
+
     func rpc<T: Decodable>(_ name: String, _ params: [String: Any], auth: Auth = .optional) async throws -> T {
         let data = try await send("POST", table: "rpc/\(name)", query: [], body: params, auth: auth)
         return try decoder.decode(T.self, from: data)

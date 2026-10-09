@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
 import RemindButton from './RemindButton';
+import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
@@ -491,6 +492,7 @@ export default function MediaDetailsModal({
                     <Star size={20} weight={userRating ? 'fill' : 'bold'} />
                   </button>
                   {allowActions && <RemindButton item={item} mediaType={mediaType} />}
+                  {allowActions && <SendToProfileButton item={item} mediaType={mediaType} />}
                 </div>
               </div>
             )}

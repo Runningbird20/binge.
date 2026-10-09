@@ -125,6 +125,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
       </div>
       <p className="st-card-title">{item.title}</p>
       {item._subtitle ? <p className="st-card-sub">{item._subtitle}</p> : item.author && <p className="st-card-sub">{item.author}</p>}
+      {item._note && <p className="st-card-note">{item._note}</p>}
     </Link>
     {previewRect && (
       <HoverPreview

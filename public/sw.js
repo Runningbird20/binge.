@@ -1,9 +1,20 @@
-// v4: push notifications (new-episode alerts) added to this worker.
-const CACHE_NAME = 'binge-shell-v4';
+// v5: TMDB title data cached network-first (binge-data) for flaky connections.
+const CACHE_NAME = 'binge-shell-v5';
 // v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
 const IMAGE_CACHE_NAME = 'binge-images-v2';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
-const VALID_CACHE_NAMES = [CACHE_NAME, IMAGE_CACHE_NAME];
+// Title details/seasons from TMDB's API: network-first, this copy is only
+// used when the network fails, so title and episode pages still open on a
+// bad connection. Stored without the api_key parameter.
+const DATA_CACHE_NAME = 'binge-data-v1';
+const DATA_CACHE_MAX_ENTRIES = 300;
+const VALID_CACHE_NAMES = [CACHE_NAME, IMAGE_CACHE_NAME, DATA_CACHE_NAME];
+
+function dataCacheKey(url) {
+  const copy = new URL(url.href);
+  copy.searchParams.delete('api_key');
+  return copy.href;
+}
 const SHELL_ASSETS = ['/', '/index.html', '/manifest.json'];
 const BLOCKED_AD_HOST_PARTS = [
   'doubleclick.net',
@@ -99,6 +110,23 @@ self.addEventListener('fetch', (event) => {
           return response;
         });
       })
+    );
+    return;
+  }
+
+  if (url.hostname === 'api.themoviedb.org') {
+    const key = dataCacheKey(url);
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(DATA_CACHE_NAME).then((cache) => {
+            cache.put(key, copy);
+            trimCache(DATA_CACHE_NAME, DATA_CACHE_MAX_ENTRIES);
+          });
+        }
+        return response;
+      }).catch(() => caches.match(key).then((cached) => cached || Response.error()))
     );
     return;
   }

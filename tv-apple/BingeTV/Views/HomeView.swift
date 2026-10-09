@@ -5,6 +5,7 @@ struct HomeView: View {
     @State private var continueItems: [ContinueItem] = []
     @State private var myList: [Title] = []
     @State private var personal = Personal.Rows()
+    @State private var shared: [Title] = []
     @State private var rows: [LoadedRow] = []
     @State private var loading = true
     @State private var play: PlayRequest?
@@ -12,9 +13,21 @@ struct HomeView: View {
 
     private var name: String { app.profile?.name ?? "you" }
 
+    // A different title most visits: one of your top picks or something
+    // trending, chosen when the rows load (not always the first pick).
+    @State private var spotlightPick: Title?
     private var spotlight: Title? {
-        (personal.topPicks?.items ?? []).first(where: { $0.backdrop != nil })
+        spotlightPick
+            ?? (personal.topPicks?.items ?? []).first(where: { $0.backdrop != nil })
             ?? rows.first?.items.first(where: { $0.backdrop != nil })
+    }
+
+    private func chooseSpotlight() {
+        let picks = (personal.topPicks?.items ?? []).prefix(10).filter { $0.backdrop != nil }
+        let trending = rows.prefix(2).flatMap { $0.items.prefix(6) }.filter { $0.backdrop != nil }
+        let pool = Array(picks) + trending
+        guard !pool.isEmpty else { return }
+        spotlightPick = pool.randomElement()
     }
 
     // Netflix order: your stuff first, then picks, with "Because you…" rows
@@ -22,6 +35,7 @@ struct HomeView: View {
     private var feed: [LoadedRow] {
         var out: [LoadedRow] = []
         if let row = personal.newEpisodes { out.append(row) }
+        if !shared.isEmpty { out.append(LoadedRow(id: "sent-to-you", title: "Sent to you", items: shared)) }
         if let row = personal.topPicks { out.append(row) }
         if !myList.isEmpty { out.append(LoadedRow(id: "my-list", title: "My List", items: myList)) }
         var because = personal.because[...]
@@ -107,6 +121,12 @@ struct HomeView: View {
         let exclude = (await rated).union(items.map(\.id)).union(listTitles.map(\.id))
         personal = await Personal.build(watched: items, loved: await loved, exclude: exclude,
                                         kids: kids, name: app.profile?.name)
+        chooseSpotlight()
+        // Ambient mode's slideshow: what you're watching, then your picks.
+        AmbientStore.shared.titles = Array((items.map(\.title) + (personal.topPicks?.items ?? []) + myList + (rows.first?.items ?? []))
+            .filter { $0.backdrop != nil }.prefix(20))
+        AmbientStore.shared.resume = items.first
+        shared = await app.sharedWithMe()
         TopShelfStore.save(continueItems: items, picks: personal.topPicks?.items ?? rows.first?.items ?? [])
     }
 }
@@ -152,6 +172,7 @@ enum Personal {
 
         var scores: [String: (title: Title, score: Double)] = [:]
         var usedInBecause = Set<String>()
+        var usedFlavours = Set<String>()
         for (index, items) in recs {
             let seed = seeds[index]
             let candidates = items.filter { !exclude.contains($0.id) && $0.id != seed.title.id }
@@ -159,14 +180,29 @@ enum Personal {
                 let add = seed.weight * (1 - Double(position) / 25)
                 scores[title.id] = (title, (scores[title.id]?.score ?? 0) + add)
             }
-            if rows.because.count < 4, candidates.count >= 5 {
+            // Seeds that look alike (same language and main genre) share one
+        // "Because you…" row, so two recent K-dramas don't fill the page.
+        let flavour = "\(seed.title.originalLanguage ?? "")|\(seed.title.genre?.split(separator: ",").first.map(String.init) ?? "")"
+        if rows.because.count < 4, candidates.count >= 5, usedFlavours.insert(flavour).inserted {
                 rows.because.append(LoadedRow(id: "because-\(seed.title.id)",
                                               title: "Because you \(seed.verb) \(seed.title.name)",
                                               items: candidates))
                 candidates.prefix(3).forEach { usedInBecause.insert($0.id) }
             }
         }
-        let picks = scores.values.sorted { $0.score > $1.score }.map(\.title).prefix(24)
+        // After 4 titles in one non-English language, further ones are
+        // nudged down so Top Picks stays a mix.
+        var languageCount: [String: Int] = [:]
+        let picks = scores.values.sorted { $0.score > $1.score }
+            .map { entry -> (Title, Double) in
+                let language = entry.title.originalLanguage ?? "en"
+                let seen = languageCount[language, default: 0]
+                languageCount[language] = seen + 1
+                return (entry.title, entry.score - (language == "en" ? 0 : Double(max(0, seen - 3)) * 0.35))
+            }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+            .prefix(24)
         if picks.count >= 5 {
             rows.topPicks = LoadedRow(id: "top-picks", title: "Top Picks for \(name ?? "You")", items: Array(picks))
         }
@@ -326,7 +362,8 @@ struct ContinueCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(item.title.name).font(.headline).lineLimit(1)
                     if let label = item.episodeLabel {
-                        Text(label).font(.caption.weight(.semibold)).foregroundStyle(Theme.muted)
+                        Text([label, item.seasonNote].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption.weight(.semibold)).foregroundStyle(Theme.muted).lineLimit(1)
                     }
                     if let progress = item.progress {
                         GeometryReader { proxy in

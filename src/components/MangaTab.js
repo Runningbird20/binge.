@@ -744,7 +744,7 @@ export default function MangaTab() {
     <div className="st-browse st-manga">
       {!isSearching && (
         <BrowseHero
-          items={(popular || []).filter((m) => m.cover && m.description).slice(0, 6).map((m) => asHeroItem(m, setSelected))}
+          items={popular == null ? null : popular.filter((m) => m.cover).sort((a, b) => Number(Boolean(b.description)) - Number(Boolean(a.description))).slice(0, 6).map((m) => asHeroItem(m, setSelected))}
           kicker={`Popular on ${provider.label}`}
           emptyTitle="Manga, manhwa & comics"
           playLabel="Read"

@@ -27,6 +27,7 @@ struct TMDBDetails: Decodable {
         let seasonNumber: Int
         let name: String?
         let episodeCount: Int?
+        var airDate: String? = nil
         var id: Int { seasonNumber }
     }
     struct Cast: Decodable, Hashable { let name: String }
@@ -49,6 +50,7 @@ struct TMDBDetails: Decodable {
     let lastEpisodeToAir: AiredEpisode?
     let nextEpisodeToAir: AiredEpisode?
     let releaseDate: String?
+    let status: String?
     struct AiredEpisode: Decodable, Hashable { let airDate: String?; let seasonNumber: Int; let episodeNumber: Int; let name: String? }
     let credits: Credits?
     let images: Images?
