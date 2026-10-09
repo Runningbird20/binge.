@@ -17,31 +17,26 @@ struct DebugProbeView: UIViewRepresentable {
         web.load(url)
         let began = Date()
         var reported = false
-        // Time to first frame: same play() nudge the real player uses.
+        // Time to first frame, with the same play() nudge the player uses.
+        // -BingeProbeSeek YES also seeks +30s three seconds after it starts.
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in MainActor.assumeIsolated {
-            web.evaluate("(function(){var v=document.querySelector('video');if(!v)return -1;if(v.paused&&v.duration>0){var p=v.play();if(p&&p.catch)p.catch(function(){})}return v.currentTime})()") { value in
-                let t = Double(value ?? "") ?? -1
-                guard t > 0.5, !reported else { return }
+            web.poll { state in
+                guard let state else { return }
+                if state.paused, state.ready >= 2 { web.send(.play) }
+                guard state.t > 0.5, !state.paused, !reported else { return }
                 reported = true
                 timer.invalidate()
-                print("[probe] STARTED after \(String(format: "%.1f", Date().timeIntervalSince(began) - t))s")
-                // -BingeProbeSeek <js>: try a seek 3s after it starts.
-                if let seek = UserDefaults.standard.string(forKey: "BingeProbeSeek") {
+                print("[probe] STARTED after \(String(format: "%.1f", Date().timeIntervalSince(began)))s (t=\(state.t), live=\(state.d == 0))")
+                if UserDefaults.standard.bool(forKey: "BingeProbeSeek") {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        print("[probe] seeking with: \(seek)")
-                        web.evaluate("(function(){var v=document.querySelector('video');\(seek);return 'ok'})()", nil)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                            web.evaluate("document.querySelector('video').currentTime") { print("[probe] after seek t=\($0 ?? "nil")") }
-                        }
+                        web.send(.seekBy(30))
+                        print("[probe] seeking +30")
                     }
                 }
             }
         } }
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in MainActor.assumeIsolated {
-            web.evaluate("""
-            (function(){var v=document.querySelector('video');var f=[].slice.call(document.querySelectorAll('iframe')).map(function(x){return (x.src||'').slice(0,80)});
-            return JSON.stringify({title:document.title,host:location.host,video:!!v,t:v?v.currentTime:null,paused:v?v.paused:null,ready:v?v.readyState:null,iframes:f,mse:!!window.MediaSource,mms:!!window.ManagedMediaSource})})()
-            """) { print("[probe] \($0 ?? "nil")") }
+            web.poll { state in print("[probe] state \(state.map { "t=\(Int($0.t)) d=\(Int($0.d)) paused=\($0.paused) ready=\($0.ready)" } ?? "no video")") }
         } }
         return web.view
     }

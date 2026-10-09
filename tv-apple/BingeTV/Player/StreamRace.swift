@@ -40,7 +40,7 @@ final class StreamRace {
         self.request = request
         self.mode = mode
         container.backgroundColor = .black
-        guard let tmdbId = request.title.tmdbId else { failed = true; return }
+        guard let tmdbId = request.title.tmdbId ?? (request.isLive ? 0 : nil) else { failed = true; return }
         for server in servers {
             let url = server.build(tmdbId, request.title.kind, request.season ?? 1, request.episode ?? 1)
             guard let web = WebEngines.make(allowedHost: url.host) else { continue }
@@ -61,7 +61,8 @@ final class StreamRace {
     func goLive() {
         mode = .live
         if let winner {
-            winner.web.evaluate("var v=document.querySelector('video'); if(v){v.muted=false; var p=v.play(); if(p&&p.catch)p.catch(function(){})}", nil)
+            winner.web.send(.unmute)
+            winner.web.send(.play)
         }
         onChange?()
     }
@@ -75,38 +76,35 @@ final class StreamRace {
     }
 
     private static func tearDown(_ web: WebEngine) {
-        web.evaluate("var v=document.querySelector('video'); if(v){v.pause(); v.removeAttribute('src'); v.load()}", nil)
+        web.send(.stop)
         web.load(URL(string: "about:blank")!)
         web.view.removeFromSuperview()
     }
-
-    // Mute every contender, nudge any that loaded but wait for a click, and
-    // crown the first whose clock moves.
-    private static let raceScript = """
-    (function(){var v=document.querySelector('video');if(!v)return -1;v.muted=true;
-    if(v.paused&&v.duration>0){var p=v.play();if(p&&p.catch)p.catch(function(){})}return v.currentTime||0})()
-    """
 
     private func tick() {
         if let winner {
             // Warm: hold the winner on the start point, buffered and silent.
             if mode == .warm {
-                winner.web.evaluate("var v=document.querySelector('video'); if(v){v.muted=true; if(!v.paused){v.pause()}}", nil)
-                if !seekedToStart, winner.web.canSeek {
+                winner.web.send(.mute)
+                winner.web.send(.pause)
+                if !seekedToStart, winner.web.canSeek, !request.isLive {
                     seekedToStart = true
                     let saved = request.startAt ?? 0
-                    let start = saved > 30 ? Int(saved) : 0
-                    winner.web.evaluate("var v=document.querySelector('video'); if(v){v.currentTime=\(start)}", nil)
+                    winner.web.send(.seekTo(saved > 30 ? saved : 0))
                 }
             }
             return
         }
 
+        // Mute every contender, nudge any that loaded but wait for a click,
+        // and crown the first whose clock moves.
         for candidate in candidates {
-            candidate.web.evaluate(Self.raceScript) { [weak self] value in
-                guard let self, self.winner == nil, (Double(value ?? "") ?? -1) > 0.4,
+            candidate.web.send(.mute)
+            candidate.web.poll { [weak self] state in
+                guard let self, self.winner == nil, let state,
                       self.candidates.contains(where: { $0.server == candidate.server }) else { return }
-                self.crown(candidate)
+                if state.paused, state.ready >= 2 { candidate.web.send(.play) }
+                if state.t > 0.4, !state.paused { self.crown(candidate) }
             }
         }
 
@@ -125,14 +123,12 @@ final class StreamRace {
         for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
         candidates = [candidate]
         candidate.web.view.alpha = 1
-        StreamServer.rememberWorking(candidate.server, for: request.title)
+        if !request.isLive { StreamServer.rememberWorking(candidate.server, for: request.title) }
         if mode == .live {
             let start = request.startAt ?? 0
             // Resume: the race started from 0, so jump to the saved second.
-            if start > 30, candidate.web.canSeek {
-                candidate.web.evaluate("var v=document.querySelector('video'); if(v){v.currentTime=\(Int(start))}", nil)
-            }
-            candidate.web.evaluate("var v=document.querySelector('video'); if(v){v.muted=false}", nil)
+            if start > 30, candidate.web.canSeek, !request.isLive { candidate.web.send(.seekTo(start)) }
+            candidate.web.send(.unmute)
         }
         onChange?()
     }

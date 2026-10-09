@@ -7,7 +7,7 @@ project and TMDB lists as the website:
 - **Home (Netflix-style):** your whole Continue Watching row (click resumes, hold for details/remove), New Episodes, Top Picks for you, My List, and several "Because you watched/liked…" rows woven between Trending, K-Dramas, Hidden Gems, Anime and Top Rated.
 - **Movies / Series:** popular, new, top-rated and genre rows.
 - **Title pages:** logo art, details, seasons and episodes, More Like This, and add or remove from My List.
-- **Sports:** live and upcoming scores (ESPN), refreshed every 30 seconds.
+- **Sports:** live games play on the TV. The Live now row covers every live event in the feeds, then come ESPN scoreboards (a ▶ marks games with streams) and Coming up, refreshed every 30 seconds.
 - **Search:** titles, plus people's best-known work.
 - **Kids profiles:** kids rows only, and the same rating filter as the site.
 - **Release window:** titles more than 30 days out are hidden, and titles out within 30 days are marked Coming Soon (same as the site).
@@ -38,7 +38,9 @@ drives its `<video>` from the Siri remote:
 | Cold start (Play with nothing preloaded) | 6–40s, and 45s per dead server | 2.3–3.3s |
 | Warm start (preloaded) | — | 0.8s |
 
-**Servers:** tvOS has no Media Source Extensions, so only servers that fall back to native HLS work: **VidRift, Vidy and CineSrc** (`Player/Servers.swift`). VidLink, Videasy and the vidsrc servers never produced a playable video. A server you pick by hand plays alone, from where you were. Progress goes to `continue_watching` every 30 seconds and on exit (same row as the website), and Up Next counts down 10 seconds at the end of an episode. Pop-ups are refused, and the top-level page is locked to the server's host. If no web engine is available, Play falls back to the phone QR handoff.
+**Live sports** (`Data/SportsFeed.swift`): the app fetches the same three feeds as the website directly (PPV, Streamed, StreamFree), merges them into one entry per game by team nicknames (±3h), and matches games to ESPN scoreboards the same way. A game's feeds, with Streamed sources resolved to their HD embeds first and at most 4 per game, are raced exactly like movie servers. Live embeds keep the video in nested cross-origin iframes, so the engine injects a small bridge into **every frame**. It reports the main video to the app and relays play/pause/mute/seek down through `postMessage`. Measured: the live Celtics–Cavaliers game played 3.6s after Play. Skipping is off for live streams.
+
+**Servers:** tvOS has no Media Source Extensions, so only servers that fall back to native HLS work: **VidRift, Vidy and CineSrc** (`Player/Servers.swift`). VidLink, Videasy and the vidsrc servers never produced a playable video. A server you pick by hand plays alone, from where you were. Progress goes to `continue_watching` every 30 seconds and on exit (same row as the website), and Up Next counts down 10 seconds at the end of an episode. Pop-ups are refused, and the top-level page is locked to the server's host. If no web engine is available, Play falls back to the phone QR handoff. Debug `-BingeLive celtics` auto-plays the first live game matching that text.
 
 Use `-BingeProbe <url>` (plus `-BingeProbeSeek <js>`, `-BingeEngine legacy`) in a Debug build to time another server. `-BingePlayAfter N` opens a title page, waits N seconds, then presses Play, which measures the warm start.
 

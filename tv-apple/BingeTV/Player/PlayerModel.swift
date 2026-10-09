@@ -9,6 +9,11 @@ struct PlayRequest: Identifiable {
     var startAt: Double?
     // Episode counts per season, for Up Next.
     var seasons: [TMDBDetails.Season] = []
+    // Live sports: the streams to race instead of the movie servers.
+    var liveStreams: [StreamServer] = []
+    var subtitle: String?
+
+    var isLive: Bool { !liveStreams.isEmpty }
 }
 
 // Drives the server's own player page from the Siri remote. The <video> is
@@ -17,13 +22,7 @@ struct PlayRequest: Identifiable {
 // plays is decided by a StreamRace (all servers at once, first to play wins).
 @MainActor
 final class PlayerModel: ObservableObject {
-    struct Playback: Decodable, Equatable {
-        var t: Double = 0
-        var d: Double = 0
-        var paused = true
-        var ended = false
-        var video = false
-    }
+    typealias Playback = MediaState
 
     @Published private(set) var request: PlayRequest
     @Published private(set) var server: StreamServer?
@@ -34,7 +33,7 @@ final class PlayerModel: ObservableObject {
     @Published var hudVisible = true
     @Published var upNextCountdown: Int?
 
-    let servers = StreamServer.all
+    var servers: [StreamServer] { request.isLive ? request.liveStreams : StreamServer.all }
     let surface = UIView()
     private var race: StreamRace?
     private weak var app: AppModel?
@@ -52,7 +51,7 @@ final class PlayerModel: ObservableObject {
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
-            startRace(StreamServer.ranked(for: request.title))
+            startRace(request.isLive ? request.liveStreams : StreamServer.ranked(for: request.title))
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -67,6 +66,7 @@ final class PlayerModel: ObservableObject {
 
     var isEpisode: Bool { request.title.kind == .tvShow }
     var episodeLabel: String? {
+        if let subtitle = request.subtitle { return subtitle }
         guard isEpisode, let s = request.season, let e = request.episode else { return nil }
         return "S\(s):E\(e)"
     }
@@ -119,17 +119,17 @@ final class PlayerModel: ObservableObject {
     func togglePlay() {
         if let countdown = upNextCountdown, countdown >= 0 { playNext(); return }
         userPaused = !playback.paused
-        web?.evaluate("var v=document.querySelector('video'); if(v){ if(v.paused){v.play()} else {v.pause()} }", nil)
+        web?.send(.toggle)
         showHUD()
     }
 
     func seek(by seconds: Double) {
-        guard let web, web.canSeek else {
-            notice = "Skipping isn't available on this Apple TV."
+        guard let web, web.canSeek, !request.isLive else {
+            notice = request.isLive ? "This is live — skipping isn't available." : "Skipping isn't available on this Apple TV."
             showHUD()
             return
         }
-        web.evaluate("var v=document.querySelector('video'); if(v){ v.currentTime=Math.max(0, Math.min((v.duration||1e9)-1, v.currentTime+(\(seconds)))) }", nil)
+        web.send(.seekBy(seconds))
         playback.t = max(0, playback.t + seconds) // instant HUD feedback
         showHUD()
     }
@@ -163,22 +163,15 @@ final class PlayerModel: ObservableObject {
 
     // MARK: Polling
 
-    private static let probe = """
-    (function(){var v=document.querySelector('video');if(!v)return JSON.stringify({video:false});
-    return JSON.stringify({video:true,t:v.currentTime||0,d:isFinite(v.duration)?v.duration:0,paused:v.paused,ended:v.ended})})()
-    """
-
     private var polling = false
 
     private func tick() {
         guard let web, !polling else { return }
         polling = true
-        web.evaluate(Self.probe) { [weak self] json in
+        web.poll { [weak self] state in
             guard let self else { return }
             self.polling = false
-            guard let data = json?.data(using: .utf8),
-                  let state = try? JSONDecoder().decode(Playback.self, from: data) else { return }
-            self.apply(state, web: web)
+            if let state { self.apply(state, web: web) }
         }
     }
 
@@ -187,7 +180,8 @@ final class PlayerModel: ObservableObject {
         // A handed-over warm race is paused on its first frame; keep asking
         // it to play until the clock moves (unmuting can pause it again).
         if !started, state.video, state.paused, !userPaused {
-            web.evaluate("var v=document.querySelector('video'); if(v){v.muted=false; var p=v.play(); if(p&&p.catch)p.catch(function(){})}", nil)
+            web.send(.unmute)
+            web.send(.play)
         }
         if !started, state.t > 0.4, !state.paused {
             started = true
@@ -238,7 +232,7 @@ final class PlayerModel: ObservableObject {
     // MARK: Progress (synced to continue_watching, like the site)
 
     private func saveProgress(force: Bool) {
-        guard let app, started, playback.d > 0 else { return }
+        guard let app, started, playback.d > 0, !request.isLive else { return }
         guard force || Date().timeIntervalSince(lastSaved) > 30 else { return }
         lastSaved = Date()
         let request = self.request

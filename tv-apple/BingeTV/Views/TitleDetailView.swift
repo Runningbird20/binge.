@@ -180,15 +180,14 @@ struct TitleDetailView: View {
     private var episodesSection: some View {
         VStack(alignment: .leading, spacing: 20) {
             ScrollView(.horizontal) {
-                HStack(spacing: 20) {
+                HStack(spacing: 24) {
                     ForEach(seasons) { entry in
                         Button {
                             season = entry.seasonNumber
                         } label: {
                             Text(entry.name ?? "Season \(entry.seasonNumber)")
-                                .fontWeight(season == entry.seasonNumber ? .bold : .regular)
-                                .foregroundStyle(season == entry.seasonNumber ? Theme.gold : .primary)
                         }
+                        .buttonStyle(PillButtonStyle(selected: season == entry.seasonNumber))
                     }
                 }
                 .padding(.vertical, 20)
