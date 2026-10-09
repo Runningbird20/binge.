@@ -163,8 +163,17 @@ final class PlayerModel: ObservableObject {
         adopt(StreamRace(request: request, servers: ordered, mode: .live))
     }
 
+    private var expected: Double?
+
     private func adopt(_ next: StreamRace) {
         raced.formUnion(next.candidates.map(\.server.id))
+        let request = self.request
+        Task {
+            let seconds = await ExpectedRuntime.seconds(for: request)
+            guard StreamRace.key(for: request) == StreamRace.key(for: self.request) else { return }
+            self.expected = seconds
+            next.expectedDuration = seconds
+        }
         race?.stop()
         race?.container.removeFromSuperview()
         race = next
@@ -176,6 +185,8 @@ final class PlayerModel: ObservableObject {
         started = false
         warmedNext = false
         userPaused = false
+        triedSubtitleTracks = []
+        emptySubtitleSince = nil
         playback = Playback()
         buffering = false
         resetStallClock()
@@ -287,8 +298,50 @@ final class PlayerModel: ObservableObject {
         let subtitles = PlaybackPrefs.subtitle
         if subtitles == "off" {
             if textTracks.contains(where: \.on) { web.send(.textTrack(-1)) }
-        } else if let match = textTracks.first(where: { Self.matches($0, subtitles) }), !match.on {
+        } else if let match = bestSubtitleTrack(subtitles), !match.on {
             web.send(.textTrack(match.index))
+        }
+    }
+
+    // Servers list several tracks per language, some empty (VidRift's first
+    // "English" has no lines, a later one has all of them): prefer the one
+    // with the most lines loaded.
+    private func bestSubtitleTrack(_ code: String) -> MediaTrack? {
+        textTracks.filter { Self.matches($0, code) }.max { $0.cues < $1.cues }
+    }
+
+    // The chosen subtitle track has no lines. Servers list several tracks
+    // per language and WebKit only loads a video's own (in-stream) tracks
+    // once they're switched on, so try the same language's other tracks in
+    // turn, 5s each, until one has lines.
+    private var emptySubtitleSince: Date?
+    private var triedSubtitleTracks = Set<Int>()
+
+    private func fixEmptySubtitles(_ state: Playback, web: WebEngine) {
+        guard started, let current = state.text.first(where: \.on) else { emptySubtitleSince = nil; return }
+        if current.cues > 0 { emptySubtitleSince = nil; return }
+        triedSubtitleTracks.insert(current.index)
+        if emptySubtitleSince == nil { emptySubtitleSince = Date(); return }
+        guard Date().timeIntervalSince(emptySubtitleSince!) > 2.5 else { return }
+        emptySubtitleSince = nil
+        let language = String(current.language.prefix(2)).lowercased()
+        let sameLanguage = state.text.filter { track in
+            !triedSubtitleTracks.contains(track.index)
+                && (String(track.language.prefix(2)).lowercased() == language
+                    || Self.displayName(track).hasPrefix(Self.displayName(current)))
+        }
+        // Plain "English" before "English 2" / "English [CC]": the stream's
+        // own track is usually labelled with just the language.
+        let plain = PlaybackPrefs.languageName(language).lowercased()
+        let ordered = sameLanguage.sorted { a, b in
+            if a.cues != b.cues { return a.cues > b.cues }
+            return (a.label.lowercased() == plain ? 0 : 1) < (b.label.lowercased() == plain ? 0 : 1)
+        }
+        if let next = ordered.first {
+            #if DEBUG
+            print("[tracks] subtitle #\(current.index) is empty, trying #\(next.index) \(next.label)")
+            #endif
+            web.send(.textTrack(next.index))
         }
     }
 
@@ -420,6 +473,26 @@ final class PlayerModel: ObservableObject {
         }
     }
 
+    // MARK: Subtitles needed but missing
+
+    private var noSubsSince: Date?
+    #if DEBUG
+    private var lastCue = "-"
+    #endif
+
+    // A foreign-language title with subtitles wanted, on a server that has
+    // none (Vidy draws its own and exposes no tracks): move to one that has.
+    private func checkSubtitlesAvailable(_ state: Playback) {
+        let wanted = PlaybackPrefs.subtitle
+        guard started, !request.isLive, wanted != "off", state.text.isEmpty,
+              let original = originalLanguage, !original.hasPrefix(wanted) else { noSubsSince = nil; return }
+        if noSubsSince == nil { noSubsSince = Date() }
+        if let since = noSubsSince, Date().timeIntervalSince(since) > 8 {
+            noSubsSince = nil
+            recover(reason: "has no subtitles")
+        }
+    }
+
     // MARK: Stall recovery
 
     private func resetStallClock() {
@@ -509,10 +582,16 @@ final class PlayerModel: ObservableObject {
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
         watchClock(state)
+        // Playing, but the video's length says it's a different title.
+        if started, let expected, ExpectedRuntime.isWrong(state.d, expected: expected) {
+            self.expected = nil
+            recover(reason: "had the wrong video")
+            return
+        }
         #if DEBUG
         if Date().timeIntervalSince(lastDebugAt) > 4 {
             lastDebugAt = Date()
-            print("[state] t=\(String(format: "%.1f", state.t)) paused=\(state.paused) ready=\(state.ready) h=\(state.height) server=\(server?.name ?? "-") started=\(started)")
+            print("[state] t=\(String(format: "%.1f", state.t)) paused=\(state.paused) ready=\(state.ready) h=\(state.height) server=\(server?.name ?? "-") started=\(started) sub=\(state.text.filter(\.on).map { "\($0.label)#\($0.index):\($0.cues)" }) cue=\(state.cue.prefix(30))")
         }
         #endif
         #if DEBUG
@@ -534,7 +613,26 @@ final class PlayerModel: ObservableObject {
             print("[tracks] now: \(state.audio.filter(\.on).map(Self.displayName)) of \(state.audio.count) audio, \(state.text.count) subtitle, h=\(state.height)")
             #endif
         }
-        if state.text != textTracks { textTracks = state.text }
+        // One entry per label (VidRift lists ~150 tracks, many repeats).
+        // Keep the chosen one, else the one with the most lines loaded.
+        var bestByLabel: [String: MediaTrack] = [:]
+        var order: [String] = []
+        for track in state.text {
+            let label = Self.displayName(track)
+            if let kept = bestByLabel[label] {
+                if !kept.on && (track.on || track.cues > kept.cues) { bestByLabel[label] = track }
+            } else {
+                bestByLabel[label] = track
+                order.append(label)
+            }
+        }
+        let uniqueText = order.compactMap { bestByLabel[$0] }
+        if uniqueText != textTracks { textTracks = uniqueText }
+        checkSubtitlesAvailable(state)
+        fixEmptySubtitles(state, web: web)
+        #if DEBUG
+        if state.cue != lastCue { lastCue = state.cue; print("[cue] \(state.cue.replacingOccurrences(of: "\n", with: " / ")) (tracks: \(state.text.count), on: \(state.text.filter(\.on).map(\.label)))") }
+        #endif
         applyPreferredTracks(web)
         // A handed-over warm race is paused on its first frame; keep asking
         // it to play until the clock moves (unmuting can pause it again).

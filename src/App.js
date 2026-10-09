@@ -27,6 +27,37 @@ import './mobile.css';
 // theme-experiment tokens, so it loads after everything else.
 import './streaming.css';
 
+// Every page's code, fetched in the background once the first screen is up,
+// so moving between pages never waits on a download (no loading skeleton
+// between Home, Movies, Series, Sports, Books, Search, Profile…). Skipped
+// with data saver / Save-Data.
+const PAGE_LOADERS = [
+  () => import('./pages/Home'),
+  () => import('./pages/Movies'),
+  () => import('./pages/TVShows'),
+  () => import('./pages/Sports'),
+  () => import('./pages/Books'),
+  () => import('./pages/SearchResults'),
+  () => import('./components/MediaOverlay'),
+  () => import('./pages/Profile'),
+  () => import('./pages/History'),
+  () => import('./pages/Settings'),
+  () => import('./pages/ReleaseCalendar'),
+  () => import('./pages/Wrapped'),
+];
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    if (navigator.connection?.saveData) return;
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+    let index = 0;
+    const next = () => {
+      if (index >= PAGE_LOADERS.length) return;
+      PAGE_LOADERS[index++]().catch(() => {}).finally(() => idle(next));
+    };
+    idle(next);
+  }, { once: true });
+}
+
 const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));

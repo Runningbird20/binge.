@@ -35,6 +35,7 @@ import {
 import PlaybackOptions, { MobilePlaybackPickers } from './PlaybackOptions';
 import { haptic } from '../utils/haptics';
 import { fetchEpisodeMarkers, looksLikeIntroSkip, reportCredits, reportIntro } from '../utils/episodeMarkers';
+import { expectedRuntimeSeconds, isWrongLength } from '../utils/runtimeCheck';
 
 // Embed servers, best first. VidRift and Vidy lead: in testing they played
 // every title tried, including a new 2026 K-drama episode that vidsrc.ru
@@ -458,6 +459,10 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       state.ended = reading.state === 'ended' ? true : (reading.state === 'play' ? false : state.ended);
       if (reading.state === 'play') { state.playing = true; state.lastAdvanceAt = now; }
       if (reading.duration > 0) state.duration = reading.duration;
+      // A different video under this title's id (see utils/runtimeCheck).
+      if (!manualPickRef.current && isWrongLength(state.duration, expectedRuntimeRef.current)) {
+        setWrongVideo(provider);
+      }
 
       if (Number.isFinite(reading.time) && reading.time > 0) {
         // A viewer skipping ahead early in an episode is timing its intro
@@ -721,6 +726,33 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     setFailoverNotice(null);
   }, [item?.id, season, episode]);
 
+  // The real runtime, for spotting a server that plays the wrong video.
+  const expectedRuntimeRef = useRef(null);
+  const [wrongVideo, setWrongVideo] = useState(null);
+  useEffect(() => {
+    expectedRuntimeRef.current = null;
+    setWrongVideo(null);
+    let cancelled = false;
+    expectedRuntimeSeconds({ tmdbId, mediaType, season, episode })
+      .then((seconds) => { if (!cancelled) expectedRuntimeRef.current = seconds; });
+    return () => { cancelled = true; };
+  }, [tmdbId, mediaType, season, episode]);
+
+  useEffect(() => {
+    if (!wrongVideo || wrongVideo !== provider || manualPickRef.current || !item?.id) return;
+    setWrongVideo(null);
+    triedRef.current.add(provider);
+    submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: false }).catch(() => {});
+    const memory = getServerMemory(memoryType, item.id);
+    const ranking = rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory });
+    const next = ranking.find((server) => !triedRef.current.has(server.id) && server.id !== provider);
+    if (!next) return;
+    setServerMemory(memory);
+    setFailoverNotice({ from: provider, to: next.id, reason: 'wrong' });
+    setProvider(next.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wrongVideo, provider]);
+
   useEffect(() => {
     playbackSeenRef.current = false;
     if (!item?.id || !externalId || manualPickRef.current || !EVENT_PROVIDERS.has(provider)) return undefined;
@@ -789,7 +821,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const failoverBar = stallBar || (failoverNotice && (
     <div className="st-failover" role="status">
       <span>
-        {failoverNotice.reason === 'buffering'
+        {failoverNotice.reason === 'wrong'
+          ? `${SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} was playing a different video, so we switched to ${SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}.`
+          : failoverNotice.reason === 'buffering'
           ? `${SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} kept buffering, so we switched to ${SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}${failoverNotice.at ? ` at ${formatClock(failoverNotice.at)}` : ''}.`
           : `${SERVER_LABELS[failoverNotice.from]?.label || failoverNotice.from} couldn't play this ${isTV ? 'episode' : 'title'}, so we switched to ${SERVER_LABELS[failoverNotice.to]?.label || failoverNotice.to}.`}
       </span>

@@ -35,8 +35,8 @@ enum Catalog {
             guard let row = byKey["tmdb:\(kind.tmdbPath):\(item.id)"], seen.insert(row.id).inserted else { return nil }
             if kids && !KidsFilter.allows(row.ageRating) { return nil }
             var title = row.asTitle(kind)
-            title.poster = TMDB.image(item.posterPath, "w342") ?? title.poster
-            title.backdrop = TMDB.image(item.backdropPath, "w780")
+            title.poster = TMDB.image(item.posterPath, TMDB.poster) ?? title.poster
+            title.backdrop = TMDB.image(item.backdropPath, TMDB.wide)
             title.tmdbId = item.id
             title.comingSoon = ReleaseWindow.isComingSoon(item.date)
             return title

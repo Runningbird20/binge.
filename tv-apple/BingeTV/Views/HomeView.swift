@@ -252,7 +252,7 @@ struct HeroView: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             ZStack {
-                AsyncImage(url: title.backdrop.flatMap { URL(string: $0.absoluteString.replacingOccurrences(of: "/w780/", with: "/w1280/")) }) { image in
+                AsyncImage(url: TMDB.resized(title.backdrop, TMDB.fullScreen)) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Theme.surface

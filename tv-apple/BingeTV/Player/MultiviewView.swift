@@ -14,6 +14,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
     @Published private(set) var streamName: String?
     private var race: StreamRace?
     private var timer: Timer?
+    // Only Play/Pause on the remote pauses a tile; anything else that
+    // pauses it (tvOS pauses one video when another starts making sound)
+    // is undone.
+    private var userPaused = false
     var audible = false {
         didSet { if oldValue != audible { applyAudio() } }
     }
@@ -55,6 +59,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
             guard let self, let state else { return }
             self.paused = state.paused
             if !self.started, state.t > 0.4, !state.paused { self.started = true }
+            if self.started, state.paused, !state.ended, !self.userPaused {
+                web.send(self.audible ? .unmute : .mute)
+                web.send(.play)
+            }
         }
     }
 
@@ -63,6 +71,7 @@ final class MultiviewTile: ObservableObject, Identifiable {
     }
 
     func togglePause() {
+        userPaused = !paused
         race?.winner?.web.send(.toggle)
     }
 
@@ -116,7 +125,15 @@ struct MultiviewView: View {
             }
         }
         .onChange(of: focused) { _, id in
-            for tile in tiles { tile.audible = tile.id == id }
+            // Silence the others first; a moment later give the focused tile
+            // sound. Unmuting first would briefly have two videos with sound,
+            // and tvOS answers that by pausing one of them.
+            for tile in tiles where tile.id != id { tile.audible = false }
+            Task {
+                try? await Task.sleep(for: .milliseconds(150))
+                guard focused == id else { return }
+                tiles.first { $0.id == id }?.audible = true
+            }
         }
         .task {
             focused = tiles.first?.id

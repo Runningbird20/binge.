@@ -297,7 +297,7 @@ enum Franchises {
             let posters = await withTaskGroup(of: (Int, URL?).self) { group in
                 for id in byId.keys { group.addTask {
                     let d: TMDBDetails? = try? await TMDB.shared.get("movie/\(id)")
-                    return (id, TMDB.image(d?.posterPath, "w342"))
+                    return (id, TMDB.image(d?.posterPath, TMDB.poster))
                 } }
                 var out: [Int: URL] = [:]
                 for await (id, url) in group { if let url { out[id] = url } }
