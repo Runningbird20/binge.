@@ -49,6 +49,8 @@ final class MultiviewTile: ObservableObject, Identifiable {
         guard let web = race?.winner?.web else { return }
         // Re-assert sound every second: some players reset muted themselves.
         web.send(audible ? .unmute : .mute)
+        // Video edge to edge in the tile, not the server's page layout.
+        if started { web.send(.fill) }
         web.poll { [weak self] state in
             guard let self, let state else { return }
             self.paused = state.paused

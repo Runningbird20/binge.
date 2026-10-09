@@ -17,6 +17,8 @@ struct MediaState: Decodable, Equatable {
 
 enum MediaCommand {
     case play, pause, toggle, mute, unmute, seekBy(Double), seekTo(Double), stop
+    // Pin the video (and every frame it sits in) to the whole screen.
+    case fill, unfill
 
     var js: String {
         switch self {
@@ -28,6 +30,8 @@ enum MediaCommand {
         case .seekBy(let s): return "seekBy:\(s)"
         case .seekTo(let s): return "seekTo:\(s)"
         case .stop: return "stop"
+        case .fill: return "fill"
+        case .unfill: return "unfill"
         }
     }
 }
@@ -68,7 +72,26 @@ enum WebEngines {
         for (var i=0;i<vs.length;i++){ var v=vs[i]; if(!best || v.readyState>best.readyState || (v.duration||0)>(best.duration||0)) best=v; }
         return best; }
       function state(v){ return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true}; }
-      function apply(cmd){ var v=pick(); if(!v) return; var p;
+      // Fill: pin this frame's video to the viewport, then ask each parent
+      // frame to pin the iframe it lives in, all the way up, so the video
+      // covers the whole screen instead of the server's page layout.
+      var FILL_CSS='html.__bf,html.__bf body{background:#000!important;overflow:hidden!important;margin:0!important}'+
+        '.__bf-el{position:fixed!important;left:0!important;top:0!important;right:auto!important;bottom:auto!important;width:100vw!important;height:100vh!important;'+
+        'max-width:none!important;max-height:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;'+
+        'border-radius:0!important;transform:none!important;z-index:2147483646!important;background:#000!important}'+
+        'video.__bf-el{object-fit:contain!important}';
+      function pin(el){ if(!document.getElementById('__bf-style')){ var st=document.createElement('style'); st.id='__bf-style'; st.textContent=FILL_CSS; (document.head||document.documentElement).appendChild(st); }
+        document.documentElement.classList.add('__bf'); el.classList.add('__bf-el');
+        // A transformed ancestor would trap position:fixed inside it.
+        for (var a=el.parentElement; a && a!==document.documentElement; a=a.parentElement){ a.style.setProperty('transform','none','important'); a.style.setProperty('filter','none','important'); a.style.setProperty('contain','none','important'); }
+        if (window.parent !== window) { try{ window.parent.postMessage({__bingeFillUp:true},'*'); }catch(e){} } }
+      function unpin(){ document.documentElement.classList.remove('__bf'); var els=document.querySelectorAll('.__bf-el'); for (var i=0;i<els.length;i++) els[i].classList.remove('__bf-el'); }
+      window.addEventListener('message', function(e){ if(!(e.data && e.data.__bingeFillUp)) return;
+        var fs=document.getElementsByTagName('iframe'); for (var i=0;i<fs.length;i++){ if(fs[i].contentWindow===e.source){ pin(fs[i]); break; } } });
+      function apply(cmd){
+        if(cmd==='unfill'){ unpin(); return; }
+        var v=pick(); if(!v) return; var p;
+        if(cmd==='fill'){ if(v.readyState>0 || v.duration>0) pin(v); return; }
         if(cmd==='play'){ p=v.play(); } else if(cmd==='pause'){ v.pause(); }
         else if(cmd==='toggle'){ if(v.paused){p=v.play()} else {v.pause()} }
         else if(cmd==='mute'){ v.muted=true; } else if(cmd==='unmute'){ v.muted=false; }
@@ -169,7 +192,14 @@ final class ModernWebView: NSObject, WebEngine {
         view.isOpaque = true
         view.setValue(self, forKey: "navigationDelegate")
         view.setValue(self, forKey: "UIDelegate")
-        if let scroll = view.value(forKey: "scrollView") as? UIScrollView { scroll.isScrollEnabled = false }
+        if let scroll = view.value(forKey: "scrollView") as? UIScrollView {
+            scroll.isScrollEnabled = false
+            // tvOS safe-area insets would otherwise inset the page itself,
+            // leaving a black border around the video.
+            scroll.contentInsetAdjustmentBehavior = .never
+            scroll.contentInset = .zero
+        }
+        view.insetsLayoutMarginsFromSafeArea = false
     }
 
     deinit {
@@ -272,6 +302,8 @@ extension LegacyWebView: WebEngine {
         case .mute: body = "v.muted=true"
         case .unmute: body = "v.muted=false"
         case .seekBy, .seekTo: return // crashes WebKit's legacy engine
+        case .fill: body = "v.style.cssText='position:fixed;left:0;top:0;width:100vw;height:100vh;object-fit:contain;z-index:2147483646;background:#000'"
+        case .unfill: body = "v.style.cssText=''"
         }
         run("(function(){var v=document.querySelector('video'); if(v){\(body)}})()")
     }

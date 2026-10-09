@@ -109,5 +109,9 @@ or an account: `-BingeDemo` (browse without signing in), `-BingeTab sports`,
 
 A free Apple ID signs the app for **7 days**; run `install-on-tv.sh` again to renew. A paid account ($99/yr) lasts a year and also allows **App Groups** (`setup-signing.sh --paid`). App Groups let Top Shelf show your personal Continue Watching. Without them it shows Trending on binge., which needs no setup.
 
+### Or: an .ipa for Sideloadly
+
+`tv-apple/scripts/make-ipa.sh` builds an unsigned Release `binge-tv.ipa` (Top Shelf included) and copies it to your Desktop. Sideloadly signs it with your Apple ID while installing. The free-account 7-day limit still applies; Sideloadly's auto-refresh can renew it.
+
 New Swift files only need to go inside `BingeTV/`. The project uses a
 folder-synced group, so Xcode picks them up without editing the project file.
