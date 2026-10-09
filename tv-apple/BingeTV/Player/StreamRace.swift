@@ -42,6 +42,7 @@ final class StreamRace {
     // isn't always the best-looking one.
     private var upgradeUntil: Date?
     private var heights: [String: Int] = [:]
+    private var memoryObserver: NSObjectProtocol?
 
     // Multiview tiles decide their own sound; the winner stays muted.
     let keepMuted: Bool
@@ -64,6 +65,12 @@ final class StreamRace {
             candidates.append(Candidate(server: server, web: web, url: url))
         }
         if candidates.isEmpty { failed = true }
+        // Low on memory: stop shopping for a sharper live stream.
+        memoryObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.upgradeUntil != nil { self?.upgradeUntil = Date() } }
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -81,6 +88,8 @@ final class StreamRace {
     func stop() {
         timer?.invalidate()
         timer = nil
+        if let memoryObserver { NotificationCenter.default.removeObserver(memoryObserver) }
+        memoryObserver = nil
         for candidate in candidates { Self.tearDown(candidate.web) }
         candidates = []
         winner = nil
@@ -202,6 +211,13 @@ final class Warmup {
         host.alpha = 0.01
         host.isUserInteractionEnabled = false
         host.clipsToBounds = true
+        // A preload is the first thing to give up when memory runs low or
+        // the app leaves the screen.
+        for name in [UIApplication.didReceiveMemoryWarningNotification, UIApplication.didEnterBackgroundNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { Warmup.shared.cancel() }
+            }
+        }
     }
 
     private var pendingKey: String?

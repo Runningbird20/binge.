@@ -75,6 +75,14 @@ final class PlayerModel: ObservableObject {
     private var warmedNext = false
     private var openedAt = Date()
     private var userPaused = false
+    // Stall recovery: when the clock last moved / the page last reported.
+    @Published private(set) var buffering = false
+    private var lastClock: Double = -1
+    private var clockMovedAt = Date()
+    private var stateAt = Date()
+    private var recoveries = 0
+    private var handPicked = false
+    private var lifecycle: [NSObjectProtocol] = []
 
     init(request: PlayRequest, app: AppModel) {
         self.request = request
@@ -93,6 +101,7 @@ final class PlayerModel: ObservableObject {
             let language = await OriginalLanguage.of(self.request.title)
             self.originalLanguage = language
         }
+        observeLifecycle()
         if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
             Task {
                 let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
@@ -138,6 +147,8 @@ final class PlayerModel: ObservableObject {
         started = false
         warmedNext = false
         playback = Playback()
+        buffering = false
+        resetStallClock()
         next.goLive()
         raceChanged()
         showHUD()
@@ -161,6 +172,8 @@ final class PlayerModel: ObservableObject {
         PiPController.shared.playerClosed()
         timer?.invalidate()
         timer = nil
+        lifecycle.forEach(NotificationCenter.default.removeObserver)
+        lifecycle = []
         saveProgress(force: true)
         race?.stop()
         race = nil
@@ -281,6 +294,7 @@ final class PlayerModel: ObservableObject {
         saveProgress(force: true)
         if playback.t > 30 { request.startAt = playback.t }
         notice = nil
+        handPicked = true
         startRace([next])
     }
 
@@ -295,6 +309,8 @@ final class PlayerModel: ObservableObject {
         request.startAt = nil
         upNextCountdown = nil
         openedAt = Date()
+        recoveries = 0
+        handPicked = false
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
@@ -312,12 +328,101 @@ final class PlayerModel: ObservableObject {
         web.poll { [weak self] state in
             guard let self else { return }
             self.polling = false
-            if let state { self.apply(state, web: web) }
+            if let state { self.apply(state, web: web) } else { self.checkLost() }
         }
+    }
+
+    // MARK: Stall recovery
+
+    private func resetStallClock() {
+        lastClock = -1
+        clockMovedAt = Date()
+        stateAt = Date()
+    }
+
+    // The page stopped reporting its video altogether (its web process
+    // died, or the server replaced the page).
+    private func checkLost() {
+        guard started, Date().timeIntervalSince(stateAt) > 8 else { return }
+        recover(reason: "lost the video")
+    }
+
+    // Called with every state: notices buffering, and switches servers when
+    // the clock has been stuck long enough that it isn't coming back.
+    private func watchClock(_ state: Playback) {
+        let now = Date()
+        stateAt = now
+        if state.paused || state.ended || abs(state.t - lastClock) > 0.15 {
+            lastClock = state.t
+            clockMovedAt = now
+        }
+        let stuck = started ? now.timeIntervalSince(clockMovedAt) : 0
+        buffering = stuck > 1.5
+        if stuck > (request.isLive ? 12 : 20) { recover(reason: "stopped playing") }
+    }
+
+    private func recover(reason: String) {
+        guard let current = server else { return }
+        resetStallClock()
+        // A server you chose yourself is never swapped out behind your back.
+        if handPicked || recoveries >= 3 {
+            notice = "\(current.name) \(reason). Swipe down to pick another server."
+            hudVisible = true
+            return
+        }
+        recoveries += 1
+        saveProgress(force: true)
+        if !request.isLive, playback.t > 5 { request.startAt = playback.t }
+        let others = servers.filter { $0 != current }
+        #if DEBUG
+        print("[player] \(current.name) \(reason) — recovering (\(recoveries))")
+        #endif
+        let message = "\(current.name) \(reason). Switching servers…"
+        startRace(others.isEmpty ? servers : others)
+        notice = message
+    }
+
+    // MARK: Leaving the app
+
+    private func observeLifecycle() {
+        let center = NotificationCenter.default
+        // Home button, Control Center or a screensaver: pause and save, like
+        // any streaming app. Live streams just keep going.
+        lifecycle.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.closed else { return }
+                self.saveProgress(force: true)
+                if !self.request.isLive, self.started, !self.playback.paused {
+                    self.userPaused = true
+                    self.web?.send(.pause)
+                }
+            }
+        })
+        lifecycle.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.closed else { return }
+                self.resetStallClock()
+                self.showHUD()
+            }
+        })
     }
 
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
+        watchClock(state)
+        #if DEBUG
+        // -BingeStallAfter N: N seconds in, the video claims to be playing
+        // but its clock stops (a network stall). -BingeKillAfter N: the page
+        // goes away entirely.
+        let stallAfter = UserDefaults.standard.double(forKey: "BingeStallAfter")
+        if stallAfter > 0, recoveries == 0, started, state.t > stallAfter, let modern = web as? ModernWebView {
+            modern.evaluate("var v=document.querySelector('video'); if(v&&!v.__frozen){v.__frozen=1; var t=v.currentTime; Object.defineProperty(v,'currentTime',{get:function(){return t},set:function(){}}); Object.defineProperty(v,'paused',{get:function(){return false}});}", nil)
+        }
+        let killAfter = UserDefaults.standard.double(forKey: "BingeKillAfter")
+        if killAfter > 0, recoveries == 0, started, state.t > killAfter {
+            web.load(URL(string: "about:blank")!)
+        }
+        #endif
         if state.audio != audioTracks {
             audioTracks = state.audio
             #if DEBUG

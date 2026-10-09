@@ -342,6 +342,18 @@ final class ModernWebView: NSObject, WebEngine {
         decisionHandler(ok ? 1 : 0)
     }
 
+    // The page's web process died (usually memory pressure on the Apple
+    // TV). Drop the last state right away so the player notices and moves
+    // on instead of waiting on a frozen frame.
+    @objc(webViewWebContentProcessDidTerminate:)
+    func webViewWebContentProcessDidTerminate(_ webView: UIView) {
+        latest = nil
+        latestAt = .distantPast
+        #if DEBUG
+        print("[web] content process terminated")
+        #endif
+    }
+
     // MARK: WKUIDelegate — never open popup windows.
     @objc(webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:)
     func webView(_ webView: UIView, createWith configuration: NSObject, for action: NSObject, windowFeatures: NSObject) -> UIView? {
