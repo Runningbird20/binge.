@@ -36,9 +36,13 @@ final class StreamRace {
         "\(request.title.id):\(request.season ?? 0):\(request.episode ?? 0)"
     }
 
-    init(request: PlayRequest, servers: [StreamServer], mode: Mode) {
+    // Multiview tiles decide their own sound; the winner stays muted.
+    let keepMuted: Bool
+
+    init(request: PlayRequest, servers: [StreamServer], mode: Mode, keepMuted: Bool = false) {
         self.request = request
         self.mode = mode
+        self.keepMuted = keepMuted
         container.backgroundColor = .black
         guard let tmdbId = request.title.tmdbId ?? (request.isLive ? 0 : nil) else { failed = true; return }
         for server in servers {
@@ -128,7 +132,7 @@ final class StreamRace {
             let start = request.startAt ?? 0
             // Resume: the race started from 0, so jump to the saved second.
             if start > 30, candidate.web.canSeek, !request.isLive { candidate.web.send(.seekTo(start)) }
-            candidate.web.send(.unmute)
+            if !keepMuted { candidate.web.send(.unmute) }
         }
         onChange?()
     }

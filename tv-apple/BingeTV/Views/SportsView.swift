@@ -10,6 +10,8 @@ struct SportsView: View {
     @State private var playing: PlayRequest?
     @State private var starting: String?
     @State private var message: String?
+    @State private var multi: [SportGame] = []
+    @State private var multiOpen = false
 
     private var liveGames: [SportGame] { games.filter { $0.isLive && !$0.streams.isEmpty } }
     private var upcoming: [SportGame] {
@@ -31,10 +33,14 @@ struct SportsView: View {
                 }
                 if !loaded { ProgressView().frame(maxWidth: .infinity).padding(.top, 80) }
 
+                if !multi.isEmpty { multiviewBar }
+
                 if !liveGames.isEmpty {
                     section("Live now") {
                         ForEach(liveGames) { game in
-                            LiveGameCard(game: game, event: event(for: game), busy: starting == game.id) { play(game) }
+                            LiveGameCard(game: game, event: event(for: game), busy: starting == game.id,
+                                         inMulti: multi.contains(game)) { play(game) }
+                                .contextMenu { multiMenu(game) }
                         }
                     }
                 }
@@ -51,6 +57,7 @@ struct SportsView: View {
                                     message = event.isFinal ? "That game has ended." : "No streams for \(event.shortName ?? "this game") yet — they usually appear shortly before start."
                                 }
                             }
+                            .contextMenu { if let game, !game.streams.isEmpty { multiMenu(game) } }
                         }
                     }
                 }
@@ -58,7 +65,7 @@ struct SportsView: View {
                 if !upcoming.isEmpty {
                     section("Coming up") {
                         ForEach(upcoming) { game in
-                            LiveGameCard(game: game, event: event(for: game), busy: starting == game.id) {
+                            LiveGameCard(game: game, event: event(for: game), busy: starting == game.id, inMulti: false) {
                                 message = "\(game.title) starts \(game.startsAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "soon")."
                             }
                         }
@@ -73,10 +80,20 @@ struct SportsView: View {
         }
         .scrollClipDisabled()
         .fullScreenCover(item: $playing) { PlayerView(request: $0, app: app) }
+        .fullScreenCover(isPresented: $multiOpen) { MultiviewView(games: multi) }
         .task {
             while !Task.isCancelled {
                 await load()
                 #if DEBUG
+                // -BingeMulti "celtics,flyers": open Multiview with those live games.
+                if let wanted = UserDefaults.standard.string(forKey: "BingeMulti")?.lowercased(), !multiOpen {
+                    let picks = wanted.split(separator: ",").compactMap { word in liveGames.first { $0.title.lowercased().contains(word) } }
+                    if picks.count >= 2 {
+                        UserDefaults.standard.removeObject(forKey: "BingeMulti")
+                        multi = picks
+                        multiOpen = true
+                    }
+                }
                 // -BingeLive celtics: auto-play the first live game matching it.
                 if let wanted = UserDefaults.standard.string(forKey: "BingeLive")?.lowercased(), playing == nil, starting == nil,
                    let game = liveGames.first(where: { $0.title.lowercased().contains(wanted) }) {
@@ -87,6 +104,51 @@ struct SportsView: View {
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+    }
+
+    // MARK: Multiview
+
+    @ViewBuilder
+    private func multiMenu(_ game: SportGame) -> some View {
+        if multi.contains(game) {
+            Button(role: .destructive) { multi.removeAll { $0 == game } } label: {
+                Label("Remove from Multiview", systemImage: "rectangle.grid.2x2")
+            }
+        } else {
+            Button { addToMulti(game) } label: {
+                Label("Add to Multiview", systemImage: "rectangle.grid.2x2.fill")
+            }
+        }
+        Button { play(game) } label: { Label("Watch", systemImage: "play.fill") }
+    }
+
+    private func addToMulti(_ game: SportGame) {
+        guard multi.count < 4 else { message = "Multiview holds up to 4 games."; return }
+        multi.append(game)
+        message = multi.count == 1 ? "Added. Add one more game to watch them together." : nil
+    }
+
+    private var multiviewBar: some View {
+        HStack(spacing: 24) {
+            Image(systemName: "rectangle.grid.2x2.fill").font(.title3).foregroundStyle(Theme.gold)
+            Text(multi.map(\.title).joined(separator: "  ·  "))
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+            Spacer(minLength: 20)
+            Button {
+                multiOpen = true
+            } label: {
+                Label("Watch \(multi.count) at once", systemImage: "play.fill")
+            }
+            .buttonStyle(PillButtonStyle(selected: true))
+            .disabled(multi.count < 2)
+            Button("Clear") { multi = [] }
+                .buttonStyle(PillButtonStyle())
+        }
+        .padding(.horizontal, 30)
+        .padding(.vertical, 18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 22))
+        .focusSection()
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -163,6 +225,7 @@ struct LiveGameCard: View {
     let game: SportGame
     let event: Scoreboard.Event?
     let busy: Bool
+    var inMulti = false
     let action: () -> Void
 
     var body: some View {
@@ -180,6 +243,7 @@ struct LiveGameCard: View {
                     Text(game.category).font(.caption.weight(.semibold)).foregroundStyle(Theme.muted)
                     Spacer()
                     if busy { ProgressView() }
+                    if inMulti { Image(systemName: "rectangle.grid.2x2.fill").foregroundStyle(Theme.gold) }
                 }
                 if let event, let away = event.away, let home = event.home {
                     TeamScore(name: away.name, logo: away.logoURL, score: event.status.type.state == "pre" ? nil : away.score)
@@ -191,7 +255,7 @@ struct LiveGameCard: View {
                     Text(game.title).font(.headline).lineLimit(2)
                     Spacer(minLength: 0)
                 }
-                Text(game.streams.count == 1 ? "1 stream" : "\(game.streams.count) streams")
+                Text((game.streams.count == 1 ? "1 stream" : "\(game.streams.count) streams") + (game.isLive ? "  ·  hold for Multiview" : ""))
                     .font(.caption2).foregroundStyle(Theme.muted)
             }
             .padding(26)
