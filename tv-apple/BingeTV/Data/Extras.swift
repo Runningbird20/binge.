@@ -28,6 +28,10 @@ actor ServerSwitches {
 // MARK: - Playback preferences (account_profiles.audio_pref / subtitle_pref)
 
 enum PlaybackPrefs {
+    // Settings › Playback › Skip intro button (on by default).
+    static let skipIntroKey = "binge.skipIntroButton"
+    static var skipIntroButton: Bool { UserDefaults.standard.object(forKey: skipIntroKey) as? Bool ?? true }
+
     static let audioChoices: [(String, String)] = [
         ("original", "Original language"), ("en", "English"), ("es", "Spanish"), ("fr", "French"),
         ("ja", "Japanese"), ("ko", "Korean"), ("hi", "Hindi"),

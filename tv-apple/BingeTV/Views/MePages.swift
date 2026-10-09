@@ -180,6 +180,8 @@ struct PlaybackSettingsView: View {
     @AppStorage("binge.captionBackground") private var captionBackground = "rgba(0,0,0,0.6)"
     @AppStorage("binge.audioDescription") private var audioDescription = false
     @AppStorage("binge.largeText") private var largeText = false
+    @AppStorage(MultiviewLayout.key) private var multiviewLayout = MultiviewLayout.grid.rawValue
+    @AppStorage(PlaybackPrefs.skipIntroKey) private var skipIntroButton = true
     @State private var audio = PlaybackPrefs.audio
     @State private var subtitle = PlaybackPrefs.subtitle
 
@@ -209,6 +211,16 @@ struct PlaybackSettingsView: View {
                 ForEach(QualityPreference.allCases) { option in
                     Button(option.label) { quality = option.rawValue }
                         .buttonStyle(PillButtonStyle(selected: quality == option.rawValue))
+                }
+            }
+            group("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.") {
+                Button("On") { skipIntroButton = true }.buttonStyle(PillButtonStyle(selected: skipIntroButton))
+                Button("Off") { skipIntroButton = false }.buttonStyle(PillButtonStyle(selected: !skipIntroButton))
+            }
+            group("Multiview layout", "With 2 or 3 games: equal tiles, or one big game with the others stacked beside it.") {
+                ForEach(MultiviewLayout.allCases) { option in
+                    Button(option.label) { multiviewLayout = option.rawValue }
+                        .buttonStyle(PillButtonStyle(selected: multiviewLayout == option.rawValue))
                 }
             }
             group("Subtitle size", "How big subtitles are drawn over the video.") {

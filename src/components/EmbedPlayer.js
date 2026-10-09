@@ -532,9 +532,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // ── Intro / credits markers (see utils/episodeMarkers) ───────────
   const [markers, setMarkers] = useState({});
   const [showSkipIntro, setShowSkipIntro] = useState(false);
+  // "Hide" on the Skip intro button: gone for the rest of this episode.
+  const [introHidden, setIntroHidden] = useState(false);
   useEffect(() => {
     setMarkers({});
     setShowSkipIntro(false);
+    setIntroHidden(false);
     if (!isTV || !item?.id) return undefined;
     let cancelled = false;
     fetchEpisodeMarkers(item, season, episode).then((found) => { if (!cancelled) setMarkers(found || {}); });
@@ -568,10 +571,15 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     }
   }
 
-  const skipIntroButton = showSkipIntro && (
-    <button type="button" className="st-skip-intro" onClick={skipIntro}>
-      <SkipForward size={18} weight="fill" aria-hidden="true" /> Skip intro
-    </button>
+  const skipIntroButton = showSkipIntro && !introHidden && (
+    <div className="st-skip-intro-wrap">
+      <button type="button" className="st-skip-intro" onClick={skipIntro}>
+        <SkipForward size={18} weight="fill" aria-hidden="true" /> Skip intro
+      </button>
+      <button type="button" className="st-skip-intro-hide" onClick={() => setIntroHidden(true)} aria-label="Hide Skip intro">
+        <X size={16} weight="bold" aria-hidden="true" />
+      </button>
+    </div>
   );
 
   // Warm the next episode in the last 90s (or a minute before the credits):

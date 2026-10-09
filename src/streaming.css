@@ -2197,11 +2197,30 @@
 .st-preload-frame { position: absolute; width: 1px; height: 1px; left: -9999px; top: 0; border: 0; opacity: 0; pointer-events: none; }
 
 /* Skip intro: bottom-right over the video, like the streaming apps. */
-.st-skip-intro {
+.st-skip-intro-wrap {
   position: absolute;
   right: clamp(12px, 3vw, 32px);
   bottom: clamp(56px, 9vh, 96px);
   z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.st-skip-intro-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(12, 14, 20, 0.82);
+  color: #fff;
+  cursor: pointer;
+}
+.st-skip-intro-hide:hover { border-color: #fff; }
+.st-skip-intro-hide:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.st-skip-intro {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -2217,7 +2236,7 @@
 }
 .st-skip-intro:hover { background: #fff; color: #0b0d12; }
 .st-skip-intro:focus-visible { outline: none; box-shadow: var(--st-focus); }
-@media (max-width: 768px) { .st-skip-intro { bottom: 12px; right: 12px; } }
+@media (max-width: 768px) { .st-skip-intro-wrap { bottom: 12px; right: 12px; } }
 
 .st-upnext {
   position: absolute;

@@ -122,8 +122,10 @@ struct MultiviewView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var tiles: [MultiviewTile]
     @State private var expanded: String?
-    // With 2–3 games one is big ("main") and the rest stack beside it.
+    // Layout 2 ("main"): with 2–3 games one is big and the rest stack
+    // beside it. Layout 1 (default): equal tiles. Chosen in Settings › Playback.
     @State private var main: String?
+    @AppStorage(MultiviewLayout.key) private var layoutChoice = MultiviewLayout.grid.rawValue
     @FocusState private var focused: String?
 
     init(games: [SportGame]) {
@@ -142,7 +144,7 @@ struct MultiviewView: View {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             if expanded != nil {
                                 expanded = nil
-                            } else if (2...3).contains(tiles.count), tile.id != mainId {
+                            } else if usesMain, tile.id != mainId {
                                 main = tile.id // a small game: make it the big one
                             } else {
                                 expanded = tile.id
@@ -197,10 +199,34 @@ struct MultiviewView: View {
     }
 
     private var mainId: String? { main ?? tiles.first?.id }
+    private var usesMain: Bool { layoutChoice == MultiviewLayout.main.rawValue && (2...3).contains(tiles.count) }
 
-    // 1 game: full screen. 2–3: the main game large on the left, the others
-    // stacked on the right (uses most of the screen instead of two small
-    // side-by-side boxes). 4: a 2×2 grid. Expanded: one full screen.
+    // Layout 1: equal 16:9 tiles, two per row, rows centred.
+    private func gridLayout(in size: CGSize) -> [String: CGRect] {
+        var frames: [String: CGRect] = [:]
+        let gap: CGFloat = 16
+        let columns = 2
+        let rows = tiles.count <= 2 ? 1 : 2
+        let width = (size.width - gap * CGFloat(columns + 1)) / CGFloat(columns)
+        let height = min(width * 9 / 16, (size.height - gap * CGFloat(rows + 1)) / CGFloat(rows))
+        let tileWidth = height * 16 / 9
+        let totalHeight = CGFloat(rows) * height + CGFloat(rows - 1) * gap
+        let top = (size.height - totalHeight) / 2
+        for (index, tile) in tiles.enumerated() {
+            let row = index / columns, column = index % columns
+            let inRow = min(columns, tiles.count - row * columns)
+            let rowWidth = CGFloat(inRow) * tileWidth + CGFloat(inRow - 1) * gap
+            let left = (size.width - rowWidth) / 2
+            frames[tile.id] = CGRect(x: left + CGFloat(column) * (tileWidth + gap),
+                                     y: top + CGFloat(row) * (height + gap),
+                                     width: tileWidth, height: height)
+        }
+        return frames
+    }
+
+    // Layout 2 — 1 game: full screen. 2–3: the main game large on the left,
+    // the others stacked on the right. 4: a 2×2 grid. Expanded (either
+    // layout): one full screen.
     private func layout(in size: CGSize) -> [String: CGRect] {
         var frames: [String: CGRect] = [:]
         if let expanded {
@@ -209,6 +235,7 @@ struct MultiviewView: View {
             }
             return frames
         }
+        if layoutChoice != MultiviewLayout.main.rawValue { return gridLayout(in: size) }
         let gap: CGFloat = 16
         func fit(width: CGFloat, height: CGFloat) -> CGSize {
             let w = min(width, height * 16 / 9)
@@ -308,4 +335,11 @@ private struct TileSurface: UIViewRepresentable {
         return tile.surface
     }
     func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
+enum MultiviewLayout: String, CaseIterable, Identifiable {
+    case grid, main
+    static let key = "binge.multiviewLayout"
+    var id: String { rawValue }
+    var label: String { self == .grid ? "Equal tiles" : "One big, others beside" }
 }

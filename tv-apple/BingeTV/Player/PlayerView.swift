@@ -24,6 +24,7 @@ struct PlayerView: View {
                     switch direction {
                     case .left: model.seek(by: -10)
                     case .right: model.seek(by: 10)
+                    case .down where model.showSkipIntro: model.dismissSkipIntro()
                     case .down: panelOpen = true
                     case .up where model.showSkipIntro: model.skipIntro()
                     default: model.showHUD()
@@ -46,7 +47,8 @@ struct PlayerView: View {
             if model.started, !model.subtitleText.isEmpty {
                 SubtitleLine(text: model.subtitleText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, model.hudVisible ? 200 : 70)
+                    // Above the corner Skip intro button while it shows.
+                    .padding(.bottom, model.hudVisible ? 200 : (model.showSkipIntro ? 150 : 70))
                     .animation(.easeOut(duration: 0.2), value: model.hudVisible)
                     .allowsHitTesting(false)
             }
@@ -66,21 +68,26 @@ struct PlayerView: View {
                 HUD(model: model).transition(.opacity)
             }
 
+            // Bottom-right corner, out of the picture's way; lifts above the
+            // HUD's progress bar only while that shows. ▲ skips, ▼ hides it.
             if model.showSkipIntro {
-                Label("Skip intro", systemImage: "forward.fill")
-                    .font(.headline)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 16)
-                    .background(.white, in: Capsule())
-                    .foregroundStyle(.black)
-                    .overlay(alignment: .top) {
-                        Text("Press \(Image(systemName: "chevron.up"))").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted).offset(y: -30)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.trailing, Theme.edge)
-                    .padding(.bottom, 190)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
+                VStack(alignment: .trailing, spacing: 10) {
+                    Label("Skip intro", systemImage: "forward.fill")
+                        .font(.headline)
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 16)
+                        .background(.white, in: Capsule())
+                        .foregroundStyle(.black)
+                    Text("\(Image(systemName: "chevron.up")) skip · \(Image(systemName: "chevron.down")) hide")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .shadow(color: .black.opacity(0.8), radius: 4)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, 60)
+                .padding(.bottom, model.hudVisible ? 190 : 50)
+                .allowsHitTesting(false)
+                .transition(.opacity)
             }
 
             if model.stillWatching {
