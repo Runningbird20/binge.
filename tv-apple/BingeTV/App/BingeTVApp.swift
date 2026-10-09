@@ -46,7 +46,15 @@ struct RootView: View {
             #endif
         }
         .animation(.easeInOut(duration: 0.25), value: app.phase)
-        .task { await app.start() }
+        .task {
+            OverlayWindow.install()
+            await app.start()
+        }
+        .onOpenURL { url in app.deepLink = DeepLink(url) }
+        .onChange(of: app.phase) { _, phase in
+            if phase == .ready, app.isSignedIn { TeamCenter.shared.start(app: app) }
+            if phase == .signedOut { TeamCenter.shared.stop(); PiPController.shared.close() }
+        }
     }
 }
 
@@ -80,6 +88,7 @@ struct MainTabs: View {
         #if DEBUG
         .overlay { DebugLaunch.overlay() }
         #endif
+        .onChange(of: app.deepLink) { _, link in if link != nil { tab = "home" } }
         // A different profile means different rows, list and history.
         .id(app.profile?.id ?? "none")
     }

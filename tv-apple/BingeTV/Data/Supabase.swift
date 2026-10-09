@@ -135,6 +135,11 @@ actor Supabase {
         _ = try await send("POST", table: table, query: [], body: row, auth: .required, prefer: "return=minimal")
     }
 
+    func rpc<T: Decodable>(_ name: String, _ params: [String: Any], auth: Auth = .optional) async throws -> T {
+        let data = try await send("POST", table: "rpc/\(name)", query: [], body: params, auth: auth)
+        return try decoder.decode(T.self, from: data)
+    }
+
     func update(_ table: String, _ query: [URLQueryItem], _ row: [String: Any]) async throws {
         _ = try await send("PATCH", table: table, query: query, body: row, auth: .required, prefer: "return=minimal")
     }

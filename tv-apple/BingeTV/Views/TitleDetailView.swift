@@ -20,6 +20,12 @@ struct TitleDetailView: View {
     @State private var playing: PlayRequest?
     @State private var listBusy = false
     @State private var listError: String?
+    @State private var outside: OutsideRatings?
+    @State private var myStars: Double?
+    @State private var rating = false
+    @State private var heatmap: [(season: Int, episodes: [TMDBSeason.Episode])] = []
+    @State private var franchise: Franchises.Order?
+    @State private var previously: [TMDBSeason.Episode] = []
     @FocusState private var playFocused: Bool
 
     private var seasons: [TMDBDetails.Season] {
@@ -33,11 +39,23 @@ struct TitleDetailView: View {
             VStack(alignment: .leading, spacing: 46) {
                 header
                     .frame(minHeight: 760, alignment: .bottomLeading)
+                if !previously.isEmpty {
+                    PreviouslyOn(episodes: previously) { episode in
+                        start(season: episode.seasonNumber, episode: episode.episodeNumber, name: episode.name)
+                    }
+                }
                 if title.kind == .tvShow && !seasons.isEmpty {
                     episodesSection
                 }
+                if let franchise {
+                    FranchiseSection(order: franchise)
+                }
                 if !more.isEmpty {
                     TitleRowView(row: LoadedRow(id: "more", title: "More Like This", items: more))
+                }
+                if heatmap.count > 0, heatmap.flatMap(\.episodes).count > 3 {
+                    EpisodeHeatmap(seasons: heatmap,
+                                   current: resume.flatMap { r in r.currentSeason.flatMap { s in r.currentEpisode.map { (s, $0) } } })
                 }
             }
             .padding(.bottom, 80)
@@ -47,6 +65,9 @@ struct TitleDetailView: View {
             PlayerView(request: $0, app: app)
         }
         .background(alignment: .top) { backdrop }
+        .sheet(isPresented: $rating) {
+            RateView(title: title, current: myStars) { stars in myStars = Double(stars) }
+        }
         .fullScreenCover(item: $handoff) { HandoffView(handoff: $0) }
         .task { await load() }
         .task(id: season) { await loadEpisodes() }
@@ -91,6 +112,17 @@ struct TitleDetailView: View {
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(Theme.muted)
 
+            if outside != nil || myStars != nil {
+                HStack(spacing: 30) {
+                    if let outside { OutsideRatingsRow(ratings: outside) }
+                    if let myStars {
+                        Label("You: " + String(repeating: "★", count: Int(myStars.rounded())), systemImage: "person.fill")
+                            .font(.callout.weight(.bold))
+                            .foregroundStyle(Theme.gold)
+                    }
+                }
+            }
+
             if let tagline = details?.tagline, !tagline.isEmpty {
                 Text(tagline).font(.headline).italic().foregroundStyle(Theme.gold)
             }
@@ -122,6 +154,11 @@ struct TitleDetailView: View {
                           systemImage: app.isInList(title) ? "checkmark" : "plus")
                 }
                 .disabled(listBusy || !app.isSignedIn)
+
+                Button { rating = true } label: {
+                    Label(myStars == nil ? "Rate" : "Rated", systemImage: myStars == nil ? "star" : "star.fill")
+                }
+                .disabled(!app.isSignedIn)
 
                 if let progress = resumeProgress {
                     ProgressView(value: progress)
@@ -266,11 +303,34 @@ struct TitleDetailView: View {
             season = resume?.currentSeason ?? seasons.first?.seasonNumber
         }
         warmUp()
+        async let outsideTask = OutsideRatings.load(title)
+        async let starsTask = app.myRating(for: title)
+        async let franchiseTask = Franchises.find(for: title, kids: app.isKids)
+        if title.kind == .tvShow, let tmdbId = title.tmdbId {
+            await loadPreviously(tmdbId: tmdbId)
+            heatmap = await EpisodeHeatmap.load(tmdbId: tmdbId, seasons: seasons)
+        }
+        (outside, myStars, franchise) = await (outsideTask, starsTask, franchiseTask)
         if let tmdbId = title.tmdbId {
             let spec = RowSpec(id: "more", title: "More Like This", kind: title.kind,
                                path: "\(title.kind.tmdbPath)/\(tmdbId)/recommendations")
             more = await Catalog.load(spec, kids: app.isKids)?.items.filter { $0.id != title.id } ?? []
         }
+    }
+
+    // "Previously on…": back after 14+ days, show the 3 episodes before
+    // the one you're on.
+    private func loadPreviously(tmdbId: Int) async {
+        guard let resume, let updated = resume.updatedDate, Date().timeIntervalSince(updated) > 14 * 86_400,
+              let season = resume.currentSeason, let episode = resume.currentEpisode, episode + season > 2 else { return }
+        var collected: [TMDBSeason.Episode] = []
+        let this: TMDBSeason? = try? await TMDB.shared.get("tv/\(tmdbId)/season/\(season)")
+        collected = (this?.episodes ?? []).filter { $0.episodeNumber < episode }
+        if collected.count < 3, season > 1 {
+            let previous: TMDBSeason? = try? await TMDB.shared.get("tv/\(tmdbId)/season/\(season - 1)")
+            collected = (previous?.episodes ?? []) + collected
+        }
+        previously = Array(collected.suffix(3))
     }
 
     // Start loading what Play will play while you read the page.

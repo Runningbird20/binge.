@@ -46,7 +46,9 @@ struct TMDBDetails: Decodable {
     let numberOfSeasons: Int?
     let seasons: [Season]?
     let lastEpisodeToAir: AiredEpisode?
-    struct AiredEpisode: Decodable, Hashable { let airDate: String?; let seasonNumber: Int; let episodeNumber: Int }
+    let nextEpisodeToAir: AiredEpisode?
+    let releaseDate: String?
+    struct AiredEpisode: Decodable, Hashable { let airDate: String?; let seasonNumber: Int; let episodeNumber: Int; let name: String? }
     let credits: Credits?
     let images: Images?
 
@@ -66,6 +68,7 @@ struct TMDBSeason: Decodable {
         let stillPath: String?
         let runtime: Int?
         let airDate: String?
+        let voteAverage: Double?
     }
     let episodes: [Episode]
 }

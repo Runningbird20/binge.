@@ -5,5 +5,8 @@ BINGE_SUPABASE_URL =
 BINGE_SUPABASE_KEY =
 BINGE_TMDB_KEY =
 BINGE_SITE_URL = https:/$()/binge-26.vercel.app
+// Change this to your own (e.g. com.yourname.binge) if Xcode says the id is
+// taken when signing; the Top Shelf extension and App Group follow it.
+BINGE_BUNDLE_ID = com.binge.tv
 
 #include? "Secrets.xcconfig"

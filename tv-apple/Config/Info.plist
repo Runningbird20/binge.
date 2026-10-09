@@ -8,6 +8,19 @@
 	<string>$(BINGE_SUPABASE_KEY)</string>
 	<key>BingeTMDBKey</key>
 	<string>$(BINGE_TMDB_KEY)</string>
+	<key>BingeAppGroup</key>
+	<string>group.$(BINGE_BUNDLE_ID)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(BINGE_BUNDLE_ID)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>binge</string>
+			</array>
+		</dict>
+	</array>
 	<key>BingeSiteURL</key>
 	<string>$(BINGE_SITE_URL)</string>
 </dict>

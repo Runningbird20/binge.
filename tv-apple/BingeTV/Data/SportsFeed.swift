@@ -248,6 +248,11 @@ enum SportsFeed {
         return games
     }
 
+    // The live game an alert is about (matched by team nicknames).
+    static func game(for alert: GameAlert) async -> SportGame? {
+        await load().first { $0.isLive && $0.teamTokens == alert.teams && !$0.streams.isEmpty }
+    }
+
     // MARK: Streams → player servers
 
     // Streamed sources resolve to one or more embeds (HD first). Capped so a

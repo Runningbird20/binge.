@@ -25,6 +25,7 @@ struct PlayerView: View {
                     case .left: model.seek(by: -10)
                     case .right: model.seek(by: 10)
                     case .down: panelOpen = true
+                    case .up where model.showSkipIntro: model.skipIntro()
                     default: model.showHUD()
                     }
                 }
@@ -47,6 +48,34 @@ struct PlayerView: View {
                 HUD(model: model).transition(.opacity)
             }
 
+            if model.showSkipIntro {
+                Label("Skip intro", systemImage: "forward.fill")
+                    .font(.headline)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 16)
+                    .background(.white, in: Capsule())
+                    .foregroundStyle(.black)
+                    .overlay(alignment: .top) {
+                        Text("Press ▲").font(.caption2.weight(.bold)).foregroundStyle(Theme.muted).offset(y: -30)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, Theme.edge)
+                    .padding(.bottom, 190)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+
+            if model.stillWatching {
+                VStack(spacing: 18) {
+                    Text("Still watching?").font(.system(size: 52, weight: .heavy))
+                    Text(model.request.title.name).font(.title3).foregroundStyle(Theme.muted)
+                    Text("Click to keep going · Back to stop").font(.callout).foregroundStyle(Theme.gold)
+                }
+                .padding(60)
+                .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 30))
+                .allowsHitTesting(false)
+            }
+
             if let countdown = model.upNextCountdown, countdown > 0, let next = model.nextEpisode {
                 UpNextCard(season: next.season, episode: next.episode, seconds: countdown)
             }
@@ -60,9 +89,57 @@ struct PlayerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: model.hudVisible)
+        .animation(.easeInOut(duration: 0.25), value: model.showSkipIntro)
         .animation(.easeInOut(duration: 0.25), value: panelOpen)
         .onAppear { surfaceFocused = true }
         .onDisappear { model.close() }
+    }
+}
+
+private extension PlayerPanel {
+    // Corner game + a recent game alert, when there's anything to show.
+    @ViewBuilder
+    var extrasRow: some View {
+        let alert = teams.recent.flatMap { Date().timeIntervalSince($0.at) < 20 * 60 ? $0 : nil }
+        if model.request.isLive || pip.tile != nil || alert != nil {
+            HStack(spacing: 20) {
+                if let alert {
+                    Label(alert.headline, systemImage: "sportscourt.fill").font(.callout.weight(.semibold)).lineLimit(1)
+                    Button("Watch now") { watchAlert(alert, inCorner: false) }.buttonStyle(PillButtonStyle(selected: true))
+                    Button("In the corner") { watchAlert(alert, inCorner: true) }.buttonStyle(PillButtonStyle())
+                }
+                if model.request.isLive, let game = model.request.game, pip.game != game {
+                    Button {
+                        PiPController.shared.show(game)
+                        model.close()
+                        dismissPlayer()
+                    } label: { Label("Keep watching in the corner", systemImage: "pip") }
+                    .buttonStyle(PillButtonStyle())
+                }
+                if let corner = pip.game {
+                    Button {
+                        Task { await model.switchToLive(corner); PiPController.shared.close(); close() }
+                    } label: { Label("Full screen: \(corner.title)", systemImage: "arrow.up.left.and.arrow.down.right") }
+                    .buttonStyle(PillButtonStyle())
+                    Button("Close corner game") { PiPController.shared.close() }
+                        .buttonStyle(PillButtonStyle())
+                }
+            }
+            .focusSection()
+        }
+    }
+
+    func watchAlert(_ alert: GameAlert, inCorner: Bool) {
+        alertBusy = true
+        Task {
+            if let game = await SportsFeed.game(for: alert) {
+                if inCorner { PiPController.shared.show(game) } else { await model.switchToLive(game) }
+                close()
+            } else {
+                model.notice = "No stream for that game yet."
+            }
+            alertBusy = false
+        }
     }
 }
 
@@ -198,10 +275,15 @@ private struct UpNextCard: View {
     }
 }
 
-// Swipe down: switch server, jump to another episode.
+// Swipe down: switch server, jump to another episode, sleep timer, the
+// corner game and game alerts.
 private struct PlayerPanel: View {
     @ObservedObject var model: PlayerModel
+    @ObservedObject private var pip = PiPController.shared
+    @ObservedObject private var teams = TeamCenter.shared
+    @Environment(\.dismiss) private var dismissPlayer
     let close: () -> Void
+    @State private var alertBusy = false
     @State private var episodes: [TMDBSeason.Episode] = []
     @FocusState private var focusedServer: String?
 
@@ -209,6 +291,7 @@ private struct PlayerPanel: View {
         VStack(alignment: .leading, spacing: 30) {
             Spacer()
             VStack(alignment: .leading, spacing: 26) {
+                extrasRow
                 Text(model.request.isLive ? "Stream" : "Server").font(.headline).foregroundStyle(Theme.muted)
                 HStack(spacing: 24) {
                     ForEach(model.servers) { server in
@@ -219,6 +302,20 @@ private struct PlayerPanel: View {
                             Label(server.name, systemImage: server == model.server ? "checkmark.circle.fill" : "play.circle")
                         }
                         .focused($focusedServer, equals: server.id)
+                    }
+                }
+                .focusSection()
+
+                Text("Sleep timer").font(.headline).foregroundStyle(Theme.muted)
+                HStack(spacing: 20) {
+                    ForEach(PlayerModel.SleepOption.allCases) { option in
+                        if option != .episode || model.isEpisode {
+                            Button(option.rawValue) {
+                                model.sleep = option
+                                close()
+                            }
+                            .buttonStyle(PillButtonStyle(selected: model.sleep == option))
+                        }
                     }
                 }
                 .focusSection()
@@ -260,6 +357,7 @@ private struct PlayerPanel: View {
         }
         .ignoresSafeArea()
         .onAppear { focusedServer = model.server?.id ?? model.servers.first?.id }
+        .disabled(alertBusy)
         .onExitCommand(perform: close)
         .task {
             guard model.isEpisode, let tmdbId = model.request.title.tmdbId else { return }

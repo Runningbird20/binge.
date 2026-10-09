@@ -31,6 +31,11 @@ struct StreamServer: Identifiable, Hashable {
             var items = [URLQueryItem(name: "autoplay", value: "true"), URLQueryItem(name: "autonext", value: "false"),
                          URLQueryItem(name: "color", value: "#f4f6f8")]
             if kind == .tvShow { items = [URLQueryItem(name: "s", value: String(s)), URLQueryItem(name: "e", value: String(e))] + items }
+            // CineSrc can switch subtitles on in the profile's language.
+            if PlaybackPrefs.subtitle != "off" {
+                items.append(URLQueryItem(name: "subtitles", value: "auto"))
+                items.append(URLQueryItem(name: "subtitlelang", value: PlaybackPrefs.languageName(PlaybackPrefs.subtitle)))
+            }
             c.queryItems = items
             return c.url!
         },

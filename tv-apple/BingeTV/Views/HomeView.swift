@@ -62,8 +62,25 @@ struct HomeView: View {
         .fullScreenCover(item: $play, onDismiss: { Task { await refreshContinue() } }) { request in
             PlayerView(request: request, app: app)
         }
-        .task { await load() }
+        .task {
+            await openDeepLink()
+            await load()
+        }
+        .onChange(of: app.deepLink) { _, _ in Task { await openDeepLink() } }
         .onChange(of: app.listIds) { _, _ in Task { myList = (try? await app.myList()) ?? myList } }
+    }
+
+    // A Top Shelf item: play it, or open its title page.
+    private func openDeepLink() async {
+        guard let link = app.deepLink else { return }
+        app.deepLink = nil
+        guard let title = try? await Catalog.titles(link.kind, ids: [link.id])[link.id] else { return }
+        if link.play {
+            play = PlayRequest(title: title, season: link.kind == .tvShow ? (link.season ?? 1) : nil,
+                               episode: link.kind == .tvShow ? (link.episode ?? 1) : nil, startAt: link.seconds)
+        } else {
+            detail = title
+        }
     }
 
     private func refreshContinue() async {
@@ -90,6 +107,7 @@ struct HomeView: View {
         let exclude = (await rated).union(items.map(\.id)).union(listTitles.map(\.id))
         personal = await Personal.build(watched: items, loved: await loved, exclude: exclude,
                                         kids: kids, name: app.profile?.name)
+        TopShelfStore.save(continueItems: items, picks: personal.topPicks?.items ?? rows.first?.items ?? [])
     }
 }
 
@@ -193,13 +211,21 @@ struct BrowseView: View {
 // The big spotlight at the top of Home / Movies / Series.
 struct HeroView: View {
     let title: Title
+    @StateObject private var trailer = TrailerPlayer()
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: title.backdrop.flatMap { URL(string: $0.absoluteString.replacingOccurrences(of: "/w780/", with: "/w1280/")) }) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Theme.surface
+            ZStack {
+                AsyncImage(url: title.backdrop.flatMap { URL(string: $0.absoluteString.replacingOccurrences(of: "/w780/", with: "/w1280/")) }) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Theme.surface
+                }
+                // 16:9 trailer scaled to cover the wide spotlight.
+                TrailerLayer(player: trailer)
+                    .frame(width: 1920 * 1.12, height: 1080 * 1.12)
+                    .opacity(trailer.playing ? 1 : 0)
+                    .animation(.easeIn(duration: 0.8), value: trailer.playing)
             }
             .frame(height: 620)
             .frame(maxWidth: .infinity)
@@ -236,6 +262,11 @@ struct HeroView: View {
             .padding(.bottom, 40)
         }
         .focusSection()
+        .task(id: title.id) {
+            trailer.stop()
+            await trailer.start(title)
+        }
+        .onDisappear { trailer.stop() }
     }
 }
 

@@ -11,6 +11,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var profile: AccountProfile?
     @Published private(set) var listIds: [String: Int] = [:] // Title.id → watchlist row id
     @Published var profileLoadError: String?
+    // From Top Shelf (binge:// links); Home opens it once a profile is set.
+    @Published var deepLink: DeepLink?
     // Debug-only: browse without an account (-BingeDemo launch argument).
     @Published private(set) var isDemo = false
 
@@ -74,9 +76,23 @@ final class AppModel: ObservableObject {
 
     func choose(_ next: AccountProfile?) {
         profile = next
+        applyPrefs()
         if let next { UserDefaults.standard.set(next.id, forKey: lastProfileKey) }
         phase = .ready
         Task { await refreshList() }
+    }
+
+    var ownerQuery: [URLQueryItem] { ownerFilter }
+
+    func reloadProfile() async {
+        guard let id = profile?.id,
+              let rows: [AccountProfile] = try? await Supabase.shared.select("account_profiles", [
+                URLQueryItem(name: "select", value: AccountProfile.columns),
+                URLQueryItem(name: "id", value: "eq.\(id)"),
+              ]), let fresh = rows.first else { return }
+        profile = fresh
+        if let index = profiles.firstIndex(where: { $0.id == id }) { profiles[index] = fresh }
+        applyPrefs()
     }
 
     func switchProfile() {

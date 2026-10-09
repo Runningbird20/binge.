@@ -24,6 +24,7 @@ struct Title: Identifiable, Hashable, Sendable {
     var tmdbId: Int?
     var comingSoon = false
     var badge: String?
+    var originalLanguage: String?
 
     var id: String { "\(kind.rawValue):\(dbId)" }
 
@@ -45,7 +46,7 @@ struct Title: Identifiable, Hashable, Sendable {
 }
 
 struct CatalogRow: Decodable {
-    static let columns = "id,title,year,genre,overview,poster_url,source_key,age_rating"
+    static let columns = "id,title,year,genre,overview,poster_url,source_key,age_rating,original_language"
 
     let id: Int
     let title: String
@@ -55,6 +56,7 @@ struct CatalogRow: Decodable {
     let posterUrl: String?
     let sourceKey: String?
     let ageRating: String?
+    let originalLanguage: String?
 
     func asTitle(_ kind: MediaKind) -> Title {
         let tmdbId = sourceKey.flatMap { $0.split(separator: ":").last.flatMap { Int($0) } }
@@ -68,13 +70,14 @@ struct CatalogRow: Decodable {
             ageRating: ageRating,
             poster: posterUrl.flatMap(URL.init(string:)),
             backdrop: nil,
-            tmdbId: tmdbId
+            tmdbId: tmdbId,
+            originalLanguage: originalLanguage
         )
     }
 }
 
 struct AccountProfile: Decodable, Identifiable, Hashable {
-    static let columns = "id,name,avatar_url,avatar_color,is_kids,is_default"
+    static let columns = "id,name,avatar_url,avatar_color,is_kids,is_default,audio_pref,subtitle_pref"
 
     let id: String
     let name: String
@@ -82,6 +85,8 @@ struct AccountProfile: Decodable, Identifiable, Hashable {
     let avatarColor: String?
     let isKids: Bool
     let isDefault: Bool
+    var audioPref: String?
+    var subtitlePref: String?
 
     var avatarImageURL: URL? {
         guard let avatarUrl, !avatarUrl.isEmpty else { return nil }
@@ -100,6 +105,17 @@ struct ContinueRow: Decodable {
     let currentEpisode: Int?
     let positionSeconds: Double?
     let durationSeconds: Double?
+    let updatedAt: String?
+
+    var updatedDate: Date? { updatedAt.flatMap(ISODate.parse) }
+}
+
+enum ISODate {
+    private static let withFraction: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f
+    }()
+    private static let plain = ISO8601DateFormatter()
+    static func parse(_ text: String) -> Date? { withFraction.date(from: text) ?? plain.date(from: text) }
 }
 
 struct ContinueItem: Identifiable, Hashable {

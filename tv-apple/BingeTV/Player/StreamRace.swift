@@ -145,7 +145,7 @@ final class StreamRace {
 final class Warmup {
     static let shared = Warmup()
     let host = UIView()
-    private var race: StreamRace?
+    private(set) var race: StreamRace?
 
     private init() {
         host.alpha = 0.01
@@ -153,19 +153,29 @@ final class Warmup {
         host.clipsToBounds = true
     }
 
+    private var pendingKey: String?
+
     func prepare(_ request: PlayRequest) {
         guard WebEngines.isAvailable, request.title.tmdbId != nil else { return }
         let key = StreamRace.key(for: request)
-        if race?.key == key { return }
+        if race?.key == key || pendingKey == key { return }
         race?.stop()
-        let fresh = StreamRace(request: request, servers: StreamServer.ranked(for: request.title), mode: .warm)
-        fresh.container.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        host.addSubview(fresh.container)
-        race = fresh
-        // Don't keep buffering something nobody played.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 180) { [weak self, weak fresh] in
-            guard let self, let fresh, self.race === fresh else { return }
-            self.cancel()
+        race?.container.removeFromSuperview()
+        race = nil
+        pendingKey = key
+        Task {
+            let servers = await ServerPlan.servers(for: request.title, originalLanguage: request.title.originalLanguage)
+            guard self.pendingKey == key else { return }
+            self.pendingKey = nil
+            let fresh = StreamRace(request: request, servers: servers.isEmpty ? StreamServer.all : servers, mode: .warm)
+            fresh.container.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            self.host.addSubview(fresh.container)
+            self.race = fresh
+            // Don't keep buffering something nobody played.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 180) { [weak fresh] in
+                guard let fresh, Warmup.shared.race === fresh else { return }
+                Warmup.shared.cancel()
+            }
         }
     }
 
@@ -179,6 +189,7 @@ final class Warmup {
 
     func cancel(_ request: PlayRequest? = nil) {
         if let request, race?.key != StreamRace.key(for: request) { return }
+        pendingKey = nil
         race?.stop()
         race?.container.removeFromSuperview()
         race = nil
