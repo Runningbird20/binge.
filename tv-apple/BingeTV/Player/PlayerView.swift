@@ -42,6 +42,13 @@ struct PlayerView: View {
 
             if !model.started {
                 LoadingCard(model: model)
+            } else if model.buffering {
+                ProgressView()
+                    .scaleEffect(1.6)
+                    .padding(40)
+                    .background(.black.opacity(0.45), in: Circle())
+                    .allowsHitTesting(false)
+                    .accessibilityLabel("Buffering")
             }
 
             if model.hudVisible || !model.started {

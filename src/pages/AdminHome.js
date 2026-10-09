@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import AdminOverview from './admin/AdminOverview';
 import AdminServers from './admin/AdminServers';
+import AdminSportsServers from './admin/AdminSportsServers';
 import AdminErrors from './admin/AdminErrors';
 import AdminAnnouncements from './admin/AdminAnnouncements';
 import AdminBroadcast from './admin/AdminBroadcast';
@@ -62,7 +63,7 @@ export default function AdminHome() {
         </nav>
 
         {tab === 'overview' && <AdminOverview onOpenTab={open} />}
-        {tab === 'servers' && <AdminServers />}
+        {tab === 'servers' && <><AdminServers /><AdminSportsServers /></>}
         {tab === 'errors' && <AdminErrors />}
         {tab === 'announcements' && <AdminAnnouncements />}
         {tab === 'notify' && <AdminBroadcast deviceCount={badges.devices} />}

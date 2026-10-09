@@ -12,6 +12,16 @@ struct SportStream: Hashable {
     }
     let label: String
     let source: Source
+
+    // Admin switches (server_config, same keys as the website's
+    // sportsSwitchKeys): sports:ppv, sports:streamfree, sports:streamed and
+    // sports:streamed:<source>.
+    var switchKeys: [String] {
+        switch source {
+        case .streamed(let source, _): return ["sports:streamed", "sports:streamed:\(source)"]
+        case .embed: return [label.hasPrefix("PPV") ? "sports:ppv" : "sports:streamfree"]
+        }
+    }
 }
 
 struct SportGame: Identifiable, Hashable {
@@ -97,7 +107,15 @@ enum SportsFeed {
         async let ppv = fetchPPV()
         async let streamed = fetchStreamed()
         async let streamfree = fetchStreamFree()
-        let all = await (ppv + streamed + streamfree)
+        let disabled = await ServerSwitches.shared.disabledServers()
+        // Feeds an admin switched off go before merging; a game stays if
+        // another feed still carries it.
+        let all = await (ppv + streamed + streamfree).compactMap { game -> SportGame? in
+            guard !disabled.isEmpty else { return game }
+            var game = game
+            game.streams = game.streams.filter { !$0.switchKeys.contains(where: disabled.contains) }
+            return game.streams.isEmpty ? nil : game
+        }
         return merge(all).sorted { ($0.isLive ? 0 : 1, $0.startsAt ?? .distantFuture) < ($1.isLive ? 0 : 1, $1.startsAt ?? .distantFuture) }
     }
 

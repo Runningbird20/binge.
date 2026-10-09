@@ -17,6 +17,8 @@
 // The server route (/api/sports/streams) fetches + normalizes the same
 // three providers and returns the unmerged list; merging only happens here.
 
+import { fetchDisabledServers } from './streamPreferences';
+
 const PROVIDER_NAMES = {
   ppv: 'PPV',
   streamed: 'Streamed',
@@ -433,6 +435,35 @@ export function mergeNormalized(rawItems) {
   return merged;
 }
 
+// ── Admin switches ─────────────────────────────────────────────────────
+// Sports feeds share server_config with the movie servers, under a
+// "sports:" prefix: sports:ppv, sports:streamfree, sports:streamed (all of
+// Streamed) and sports:streamed:<source> (one Streamed source, e.g. alpha).
+
+export const SPORTS_PROVIDER_IDS = Object.keys(PROVIDER_NAMES);
+
+export function sportsSwitchKeys(provider) {
+  if (!provider?.id) return [];
+  const keys = [`sports:${provider.id}`];
+  if (provider.id === 'streamed' && provider.source) keys.push(`sports:streamed:${provider.source}`);
+  return keys;
+}
+
+export function withoutDisabledFeeds(rawItems, disabled) {
+  if (!disabled || disabled.size === 0) return rawItems;
+  return rawItems.filter((item) => !sportsSwitchKeys(item.provider).some((key) => disabled.has(key)));
+}
+
+// How many feeds each provider (and each Streamed source) has right now,
+// for the admin panel.
+export function countFeedsBySwitch(rawItems) {
+  const counts = {};
+  for (const item of rawItems) {
+    for (const key of sportsSwitchKeys(item.provider)) counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
 // ── Public API ─────────────────────────────────────────────────────────
 
 export async function fetchRawSportsStreams() {
@@ -453,19 +484,25 @@ export async function fetchAllSportsStreams() {
   return mergeNormalized(await fetchRawSportsStreams());
 }
 
-export async function fetchSportsStreams() {
-  // Server proxy first (one shared cache, and a server IP is less likely to
-  // trip streamed.pk's ddos-guard), direct browser fetch as a fallback.
+// Unmerged feeds: server proxy first (one shared cache, and a server IP is
+// less likely to trip streamed.pk's ddos-guard), direct browser fetch as a
+// fallback.
+export async function fetchSportsFeeds() {
   try {
     const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(6000) });
     if (res.ok) {
       const data = await res.json();
-      if (!data.error && Array.isArray(data.raw) && data.raw.length > 0) {
-        return mergeNormalized(data.raw);
-      }
+      if (!data.error && Array.isArray(data.raw) && data.raw.length > 0) return data.raw;
     }
   } catch { /* fall through */ }
-  return fetchAllSportsStreams();
+  return fetchRawSportsStreams();
+}
+
+// Feeds an admin switched off are left out before merging, so a game only
+// shows if some enabled feed still carries it.
+export async function fetchSportsStreams() {
+  const [raw, disabled] = await Promise.all([fetchSportsFeeds(), fetchDisabledServers()]);
+  return mergeNormalized(withoutDisabledFeeds(raw, disabled));
 }
 
 // Resolves one server entry into an embeddable iframe URL. PPV and

@@ -1,4 +1,4 @@
-import { canonicalCategory, mergeNormalized, splitTeamsFromTitle, teamsMatch } from './sportsProviders';
+import { canonicalCategory, countFeedsBySwitch, mergeNormalized, splitTeamsFromTitle, sportsSwitchKeys, teamsMatch, withoutDisabledFeeds } from './sportsProviders';
 
 const T = 1791500000;
 
@@ -53,4 +53,30 @@ test('racing sessions are not parsed as two teams, and schedule listings are dro
   expect(merged).toHaveLength(1);
   expect(merged[0].name).toBe('Singapore Grand Prix - Practice 1');
   expect(merged[0].teams).toBeNull();
+});
+
+describe('admin feed switches', () => {
+  const feeds = [
+    { name: 'A vs B', provider: { id: 'ppv', embedUrl: 'x' } },
+    { name: 'A vs B', provider: { id: 'streamed', source: 'alpha', matchId: '1' } },
+    { name: 'A vs B', provider: { id: 'streamed', source: 'bravo', matchId: '1' } },
+    { name: 'C vs D', provider: { id: 'streamfree', embedUrl: 'y' } },
+  ];
+
+  test('keys cover the provider and a Streamed source', () => {
+    expect(sportsSwitchKeys(feeds[1].provider)).toEqual(['sports:streamed', 'sports:streamed:alpha']);
+    expect(sportsSwitchKeys(feeds[0].provider)).toEqual(['sports:ppv']);
+  });
+
+  test('a switched-off source or provider drops only its feeds', () => {
+    expect(withoutDisabledFeeds(feeds, new Set(['sports:streamed:alpha']))).toHaveLength(3);
+    expect(withoutDisabledFeeds(feeds, new Set(['sports:streamed'])).map((f) => f.provider.id)).toEqual(['ppv', 'streamfree']);
+    expect(withoutDisabledFeeds(feeds, new Set())).toBe(feeds);
+  });
+
+  test('counts feeds per switch', () => {
+    expect(countFeedsBySwitch(feeds)).toEqual({
+      'sports:ppv': 1, 'sports:streamed': 2, 'sports:streamed:alpha': 1, 'sports:streamed:bravo': 1, 'sports:streamfree': 1,
+    });
+  });
 });
