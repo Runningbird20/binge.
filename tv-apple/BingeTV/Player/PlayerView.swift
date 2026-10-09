@@ -43,8 +43,8 @@ struct PlayerView: View {
             // Subtitles, drawn here from the video's own track (WebKit
             // doesn't draw them reliably on tvOS, and servers' own caption
             // overlays are hidden in fill mode). Style from Settings.
-            if model.started, !model.playback.cue.isEmpty {
-                SubtitleLine(text: model.playback.cue)
+            if model.started, !model.subtitleText.isEmpty {
+                SubtitleLine(text: model.subtitleText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, model.hudVisible ? 200 : 70)
                     .animation(.easeOut(duration: 0.2), value: model.hudVisible)
@@ -385,18 +385,36 @@ private struct PlayerPanel: View {
                 .scrollClipDisabled()
                 .focusSection()
 
-                Text("Subtitles").font(.headline).foregroundStyle(Theme.muted)
+                // binge.'s own subtitles (OpenSubtitles), the same on every server.
+                HStack(alignment: .firstTextBaseline, spacing: 16) {
+                    Text("Subtitles").font(.headline).foregroundStyle(Theme.muted)
+                    if model.usingExternalSubtitles, let release = model.external?.release, !release.isEmpty {
+                        Text(release).font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                    } else if model.useExternal && model.externalLoading {
+                        Text("Finding subtitles…").font(.caption).foregroundStyle(Theme.muted)
+                    } else if model.useExternal && model.subtitleLanguage != "off" && model.external == nil {
+                        Text("None found for this episode; the server's are below.").font(.caption).foregroundStyle(Theme.muted)
+                    }
+                }
                 ScrollView(.horizontal) {
                     HStack(spacing: 20) {
-                        if model.textTracks.isEmpty {
-                            Text("This server doesn't offer subtitle choices. CineSrc usually does.")
-                                .font(.callout).foregroundStyle(Theme.muted)
-                        } else {
-                            Button("Off") { model.selectSubtitles(nil); close() }
-                                .buttonStyle(PillButtonStyle(selected: !model.textTracks.contains(where: \.on)))
-                            ForEach(model.textTracks) { track in
-                                Button(PlayerModel.displayName(track)) { model.selectSubtitles(track); close() }
-                                    .buttonStyle(PillButtonStyle(selected: track.on))
+                        ForEach(PlaybackPrefs.subtitleChoices, id: \.0) { code, label in
+                            Button(label) { model.chooseSubtitleLanguage(code); close() }
+                                .buttonStyle(PillButtonStyle(selected: code == "off"
+                                    ? (!model.useExternal && !model.textTracks.contains(where: \.on))
+                                    : (model.useExternal && model.subtitleLanguage == code)))
+                        }
+                        if model.usingExternalSubtitles {
+                            Button { model.nudgeSubtitles(by: -0.5) } label: { Label("Earlier", systemImage: "backward") }
+                                .buttonStyle(PillButtonStyle())
+                            Button { model.nudgeSubtitles(by: 0.5) } label: { Label("Later", systemImage: "forward") }
+                                .buttonStyle(PillButtonStyle())
+                            if model.subtitleOffset != 0 {
+                                Text(String(format: "%+.1fs", model.subtitleOffset)).font(.callout.monospacedDigit()).foregroundStyle(Theme.muted)
+                            }
+                            if (model.external?.versions ?? 0) > 1 {
+                                Button("Another version") { model.nextSubtitleVersion() }
+                                    .buttonStyle(PillButtonStyle())
                             }
                         }
                     }
@@ -404,6 +422,21 @@ private struct PlayerPanel: View {
                 }
                 .scrollClipDisabled()
                 .focusSection()
+
+                if !model.textTracks.isEmpty {
+                    Text("Server's subtitles").font(.headline).foregroundStyle(Theme.muted)
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 20) {
+                            ForEach(model.textTracks.prefix(30)) { track in
+                                Button(PlayerModel.displayName(track)) { model.selectSubtitles(track); close() }
+                                    .buttonStyle(PillButtonStyle(selected: !model.useExternal && track.on))
+                            }
+                        }
+                        .padding(.vertical, 10)
+                    }
+                    .scrollClipDisabled()
+                    .focusSection()
+                }
 
                 Text("Picture").font(.headline).foregroundStyle(Theme.muted)
                 HStack(spacing: 20) {

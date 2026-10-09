@@ -116,6 +116,7 @@ final class PlayerModel: ObservableObject {
         }
         observeLifecycle()
         loadMarkers()
+        loadExternalSubtitles()
         if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
             Task {
                 let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
@@ -259,8 +260,68 @@ final class PlayerModel: ObservableObject {
     }
 
     func selectSubtitles(_ track: MediaTrack?) {
+        useExternal = false
+        if track == nil { subtitleLanguage = "off" }
         web?.send(.textTrack(track?.index ?? -1))
         showHUD()
+    }
+
+    // MARK: Subtitles from OpenSubtitles (drawn by the app on any server)
+
+    @Published private(set) var external: ExternalSubtitleFile?
+    @Published private(set) var externalLoading = false
+    @Published private(set) var useExternal = true
+    @Published private(set) var subtitleLanguage = PlaybackPrefs.subtitle
+    @Published private(set) var subtitleOffset: Double = 0
+    private var externalKey: String?
+
+    // The line to draw now: our file (shifted by the viewer's offset), else
+    // the server's own track.
+    var subtitleText: String {
+        if useExternal, let external { return external.text(at: playback.t + subtitleOffset) }
+        return useExternal && externalLoading ? "" : playback.cue
+    }
+
+    var usingExternalSubtitles: Bool { useExternal && external != nil }
+
+    func chooseSubtitleLanguage(_ code: String) {
+        subtitleLanguage = code
+        useExternal = code != "off"
+        if code == "off" { web?.send(.textTrack(-1)) }
+        loadExternalSubtitles(force: true)
+        showHUD()
+    }
+
+    func nudgeSubtitles(by seconds: Double) {
+        subtitleOffset = (subtitleOffset + seconds).clamped(to: -30...30)
+        showHUD()
+    }
+
+    func nextSubtitleVersion() {
+        guard let external, external.versions > 1 else { return }
+        loadExternalSubtitles(force: true, version: (external.version + 1) % min(external.versions, 10))
+    }
+
+    private func loadExternalSubtitles(force: Bool = false, version: Int = 0) {
+        guard !request.isLive, subtitleLanguage != "off" else { external = nil; return }
+        let request = self.request
+        let key = "\(StreamRace.key(for: request)):\(subtitleLanguage):\(version)"
+        guard force || externalKey != key else { return }
+        externalKey = key
+        externalLoading = true
+        if version == 0 { subtitleOffset = 0 }
+        let language = subtitleLanguage
+        Task {
+            let file = await ExternalSubtitles.load(request, language: language, version: version)
+            guard self.externalKey == key else { return }
+            self.externalLoading = false
+            self.external = file
+            #if DEBUG
+            print("[subs] \(file.map { "\($0.cues.count) lines from OpenSubtitles (\($0.release ?? "?"), version \($0.version + 1)/\($0.versions))" } ?? "none from OpenSubtitles; using the server's")")
+            #endif
+            // Ours are drawn instead of the server's.
+            if file != nil, self.useExternal { self.web?.send(.textTrack(-1)) }
+        }
     }
 
     // Once per video, as soon as its tracks show up: the profile's saved
@@ -296,7 +357,9 @@ final class PlayerModel: ObservableObject {
             #endif
         }
         let subtitles = PlaybackPrefs.subtitle
-        if subtitles == "off" {
+        if usingExternalSubtitles {
+            if textTracks.contains(where: \.on) { web.send(.textTrack(-1)) }
+        } else if subtitles == "off" {
             if textTracks.contains(where: \.on) { web.send(.textTrack(-1)) }
         } else if let match = bestSubtitleTrack(subtitles), !match.on {
             web.send(.textTrack(match.index))
@@ -318,7 +381,7 @@ final class PlayerModel: ObservableObject {
     private var triedSubtitleTracks = Set<Int>()
 
     private func fixEmptySubtitles(_ state: Playback, web: WebEngine) {
-        guard started, let current = state.text.first(where: \.on) else { emptySubtitleSince = nil; return }
+        guard started, !usingExternalSubtitles, !(useExternal && externalLoading), let current = state.text.first(where: \.on) else { emptySubtitleSince = nil; return }
         if current.cues > 0 { emptySubtitleSince = nil; return }
         triedSubtitleTracks.insert(current.index)
         if emptySubtitleSince == nil { emptySubtitleSince = Date(); return }
@@ -452,6 +515,8 @@ final class PlayerModel: ObservableObject {
         introSeekFrom = nil
         ownIntroSkip = false
         loadMarkers()
+        external = nil
+        loadExternalSubtitles()
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
@@ -484,7 +549,7 @@ final class PlayerModel: ObservableObject {
     // none (Vidy draws its own and exposes no tracks): move to one that has.
     private func checkSubtitlesAvailable(_ state: Playback) {
         let wanted = PlaybackPrefs.subtitle
-        guard started, !request.isLive, wanted != "off", state.text.isEmpty,
+        guard started, !request.isLive, wanted != "off", state.text.isEmpty, !usingExternalSubtitles, !externalLoading,
               let original = originalLanguage, !original.hasPrefix(wanted) else { noSubsSince = nil; return }
         if noSubsSince == nil { noSubsSince = Date() }
         if let since = noSubsSince, Date().timeIntervalSince(since) > 8 {
@@ -577,6 +642,8 @@ final class PlayerModel: ObservableObject {
 
     #if DEBUG
     private var lastDebugAt = Date.distantPast
+    private var debugAudioSwitched = false
+    private var debugAudioReported = false
     #endif
 
     private func apply(_ state: Playback, web: WebEngine) {
@@ -595,6 +662,18 @@ final class PlayerModel: ObservableObject {
         }
         #endif
         #if DEBUG
+        // -BingeAudioTest fr: 20s in, switch audio to that language (tests
+        // switching on a server with several dubs).
+        if let wanted = UserDefaults.standard.string(forKey: "BingeAudioTest"), started, state.t > 20, !debugAudioSwitched,
+           let target = audioTracks.first(where: { Self.matches($0, wanted) }) {
+            debugAudioSwitched = true
+            print("[audiotest] switching from \(audioTracks.filter(\.on).map(Self.displayName)) to \(Self.displayName(target)) at \(String(format: "%.1f", state.t))s")
+            selectAudio(target)
+        }
+        if debugAudioSwitched, !debugAudioReported, state.t > 30 {
+            debugAudioReported = true
+            print("[audiotest] 10s later: on=\(audioTracks.filter(\.on).map(Self.displayName)) t=\(String(format: "%.1f", state.t)) paused=\(state.paused)")
+        }
         // -BingeStallAfter N: N seconds in, the video claims to be playing
         // but its clock stops (a network stall). -BingeKillAfter N: the page
         // goes away entirely.
@@ -773,4 +852,8 @@ final class PlayerModel: ObservableObject {
         Task { await app.saveProgress(title: request.title, season: request.season, episode: request.episode,
                                       position: position, duration: duration) }
     }
+}
+
+extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self { min(max(self, range.lowerBound), range.upperBound) }
 }

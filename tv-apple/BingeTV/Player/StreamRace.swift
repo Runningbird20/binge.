@@ -234,7 +234,7 @@ final class StreamRace {
         #if DEBUG
         print("[race] \(mode == .warm ? "warm" : "live") winner \(candidate.server.name) after \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s")
         #endif
-        if request.isLive, mode == .live, candidates.count > 1, QualityPreference.current == .best {
+        if request.isLive, mode == .live, !keepMuted, candidates.count > 1, QualityPreference.current == .best {
             upgradeUntil = Date().addingTimeInterval(6)
         } else {
             for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
@@ -290,6 +290,9 @@ final class Warmup {
 
     func prepare(_ request: PlayRequest) {
         guard WebEngines.isAvailable, request.title.tmdbId != nil || request.isLive else { return }
+        // A preload is optional: skip it when several video pages are already
+        // open (Multiview, a corner game), rather than risk running out of memory.
+        if race == nil, WebEngines.liveCount >= 5 { return }
         let key = StreamRace.key(for: request)
         if race?.key == key || pendingKey == key { return }
         race?.stop()
