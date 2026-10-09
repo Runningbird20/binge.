@@ -46,6 +46,14 @@ final class PlayerModel: ObservableObject {
     }
 
     private var sleepAt: Date?
+    private var lastFill = Date.distantPast
+    // Picture: fill the screen (default) or keep the server's own layout.
+    @Published var fillScreen = UserDefaults.standard.object(forKey: "binge.fillScreen") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(fillScreen, forKey: "binge.fillScreen")
+            web?.send(fillScreen ? .fill : .unfill)
+        }
+    }
     private var skippedIntro = false
     private var markedWatched = false
     // Episodes that started on their own with nobody touching the remote.
@@ -257,6 +265,13 @@ final class PlayerModel: ObservableObject {
 
         if hudVisible, Date() > hudHideAt, !state.paused { hudVisible = false }
         if state.paused, started { hudVisible = true }
+
+        // Keep the video pinned full screen (servers sometimes swap the
+        // <video> element when they change quality or source).
+        if fillScreen, started, Date().timeIntervalSince(lastFill) > 3 {
+            lastFill = Date()
+            web.send(.fill)
+        }
 
         showSkipIntro = isEpisode && started && !skippedIntro && state.t > 15 && state.t < 240
 

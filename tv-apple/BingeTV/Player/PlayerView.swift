@@ -306,6 +306,17 @@ private struct PlayerPanel: View {
                 }
                 .focusSection()
 
+                Text("Picture").font(.headline).foregroundStyle(Theme.muted)
+                HStack(spacing: 20) {
+                    Button("Fill screen") { model.fillScreen = true; close() }
+                        .buttonStyle(PillButtonStyle(selected: model.fillScreen))
+                    Button("Server's layout") { model.fillScreen = false; close() }
+                        .buttonStyle(PillButtonStyle(selected: !model.fillScreen))
+                    Text("Switch if subtitles or the server's buttons go missing.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
+                .focusSection()
+
                 Text("Sleep timer").font(.headline).foregroundStyle(Theme.muted)
                 HStack(spacing: 20) {
                     ForEach(PlayerModel.SleepOption.allCases) { option in
