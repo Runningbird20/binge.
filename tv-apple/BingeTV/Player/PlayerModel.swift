@@ -437,6 +437,12 @@ final class PlayerModel: ObservableObject {
         }
     }
 
+    // ▼ while "Skip intro" shows: hide it for the rest of this episode.
+    func dismissSkipIntro() {
+        skippedIntro = true
+        showSkipIntro = false
+    }
+
     // ▲ during the intro: straight to its end when we know it (viewers'
     // timings or AniSkip), else a typical 85s.
     func skipIntro() {
@@ -758,9 +764,9 @@ final class PlayerModel: ObservableObject {
         }
 
         if let intro = markers.intro {
-            showSkipIntro = isEpisode && started && !skippedIntro && state.t >= intro.start - 0.5 && state.t < intro.end - 2
+            showSkipIntro = PlaybackPrefs.skipIntroButton && isEpisode && started && !skippedIntro && state.t >= intro.start - 0.5 && state.t < intro.end - 2
         } else {
-            showSkipIntro = isEpisode && started && !skippedIntro && state.t > 15 && state.t < 240
+            showSkipIntro = PlaybackPrefs.skipIntroButton && isEpisode && started && !skippedIntro && state.t > 15 && state.t < 240
         }
         // A viewer's skip has settled: share where the intro was.
         if let from = introSeekFrom, Date().timeIntervalSince(introSeekAt) > 6 {
