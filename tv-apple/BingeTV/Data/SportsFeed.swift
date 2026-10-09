@@ -25,6 +25,8 @@ struct SportGame: Identifiable, Hashable {
     var logos: (home: URL?, away: URL?)?
     var poster: URL?
     var streams: [SportStream]
+    var tag: String? = nil
+    var colors: [String]? = nil
 
     static func == (lhs: SportGame, rhs: SportGame) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -38,9 +40,41 @@ struct SportGame: Identifiable, Hashable {
 
     // Team nicknames ("celtics", "cavaliers"): what matching keys on.
     var teamTokens: Set<String>? { SportsFeed.tokens(teams: teams, name: title) }
+
+    var is247: Bool { alwaysLive || (tag?.contains("24/7") ?? false) }
+
+    // Same rules as the site's inferLeague (sportsProviders.js).
+    var league: String {
+        if let tag, !tag.contains("24/7"), !tag.isEmpty { return tag }
+        if is247 { return "24/7 Channels" }
+        if let tokens = teamTokens {
+            let inSet = { (set: Set<String>) in tokens.allSatisfy { set.contains($0) } }
+            switch category {
+            case "American Football": return inSet(SportsFeed.nflTeams) ? "NFL" : "College Football"
+            case "Basketball" where inSet(SportsFeed.nbaTeams): return "NBA"
+            case "Hockey" where inSet(SportsFeed.nhlTeams): return "NHL"
+            case "Baseball": return "MLB"
+            default: break
+            }
+        }
+        return category
+    }
+
+    var icon: String { SportsFeed.icons[category] ?? "🏆" }
 }
 
 enum SportsFeed {
+    static let icons: [String: String] = [
+        "American Football": "🏈", "Australian Football": "🏉", "Basketball": "🏀", "Soccer": "⚽",
+        "Baseball": "⚾", "Hockey": "🏒", "Combat Sports": "🥊", "Tennis": "🎾", "Golf": "⛳", "Racing": "🏎️",
+        "Rugby": "🏉", "Cricket": "🏏", "Volleyball": "🏐", "Billiards": "🎱", "Darts": "🎯",
+    ]
+    static let nflTeams: Set<String> = ["cardinals", "falcons", "ravens", "bills", "panthers", "bears", "bengals", "browns", "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars", "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots", "saints", "giants", "jets", "eagles", "steelers", "49ers", "seahawks", "buccaneers", "titans", "commanders"]
+    static let nbaTeams: Set<String> = ["hawks", "celtics", "nets", "hornets", "bulls", "cavaliers", "mavericks", "nuggets", "pistons", "warriors", "rockets", "pacers", "clippers", "lakers", "grizzlies", "heat", "bucks", "timberwolves", "pelicans", "knicks", "thunder", "magic", "76ers", "suns", "blazers", "kings", "spurs", "raptors", "jazz", "wizards"]
+    static let nhlTeams: Set<String> = ["ducks", "bruins", "sabres", "flames", "hurricanes", "blackhawks", "avalanche", "jackets", "stars", "wings", "oilers", "panthers", "kings", "wild", "canadiens", "predators", "devils", "islanders", "rangers", "senators", "flyers", "penguins", "sharks", "kraken", "blues", "lightning", "leafs", "canucks", "knights", "capitals", "jets", "mammoth"]
+    // PPV's own category names → the site's.
+    private static let ppvCategories: [String: String] = ["Ice Hockey": "Hockey", "Football": "Soccer", "MMA": "Combat Sports", "Boxing": "Combat Sports", "Wrestling": "Combat Sports", "Motorsport": "Racing", "Motorsports": "Racing"]
+
     private static let durations: [String: Double] = [
         "Basketball": 3, "Soccer": 2.25, "American Football": 3.5, "Baseball": 3.5, "Hockey": 3,
         "Combat Sports": 5, "Tennis": 3, "Golf": 5, "Racing": 3, "Rugby": 2, "Cricket": 8,
@@ -94,8 +128,9 @@ enum SportsFeed {
             let catLive = truthy(category["always_live"])
             for s in category["streams"] as? [[String: Any]] ?? [] {
                 guard let iframe = (s["iframe"] as? String).flatMap(URL.init(string:)) else { continue }
-                let name = s["category_name"] as? String ?? category["category"] as? String ?? "Other"
-                if name == "24/7 Streams" { continue }
+                let rawName = s["category_name"] as? String ?? category["category"] as? String ?? "Other"
+                if rawName == "24/7 Streams" { continue }
+                let name = ppvCategories[rawName] ?? rawName
                 let alwaysLive = catLive || truthy(s["always_live"])
                 let ends = date(s["ends_at"])
                 if !alwaysLive, let ends, ends < now { continue }
@@ -104,7 +139,8 @@ enum SportsFeed {
                     id: "ppv:\(s["id"] ?? s["name"] ?? UUID().uuidString)", title: s["name"] as? String ?? "Live",
                     category: name, startsAt: date(s["starts_at"]), endsAt: ends, alwaysLive: alwaysLive,
                     teams: nil, logos: nil, poster: (s["poster"] as? String).flatMap(URL.init(string:)),
-                    streams: [SportStream(label: tag.map { "PPV · \($0)" } ?? "PPV", source: .embed(iframe))]))
+                    streams: [SportStream(label: tag.map { "PPV · \($0)" } ?? "PPV", source: .embed(iframe))],
+                    tag: s["tag"] as? String, colors: s["colors"] as? [String]))
             }
         }
         return out
@@ -158,7 +194,8 @@ enum SportsFeed {
                 teams: names,
                 logos: names == nil ? nil : ((t1?["logo"] as? String).flatMap(URL.init(string:)), (t2?["logo"] as? String).flatMap(URL.init(string:))),
                 poster: (s["thumbnail_url"] as? String).flatMap(URL.init(string:)),
-                streams: [SportStream(label: "StreamFree", source: .embed(embed))]))
+                streams: [SportStream(label: "StreamFree", source: .embed(embed))],
+                tag: s["league"] as? String))
         }
         return out
     }
@@ -199,6 +236,8 @@ enum SportsFeed {
                 if game.teams == nil { game.teams = entry.teams }
                 if game.logos == nil { game.logos = entry.logos }
                 if game.poster == nil { game.poster = entry.poster }
+                if game.tag == nil { game.tag = entry.tag }
+                if game.colors == nil { game.colors = entry.colors }
                 if game.category == "Other" { game.category = entry.category }
                 game.alwaysLive = game.alwaysLive && entry.alwaysLive
                 games[index] = game

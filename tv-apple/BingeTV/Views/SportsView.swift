@@ -1,82 +1,138 @@
 import SwiftUI
 
-// Live games play right here: a game's feeds are raced like movie servers
-// (first stream to actually play wins). ESPN supplies the scoreboards.
+// Mirrors the website's Sports page: a spotlight game, category chips, then
+// rows of 16:9 thumbnails (Live Now, one row per league, 24/7 channels),
+// with ESPN scores at the end. Games play right here: a game's feeds are
+// raced like movie servers (first stream to actually play wins).
 struct SportsView: View {
     @EnvironmentObject private var app: AppModel
     @State private var boards: [(League, [Scoreboard.Event])] = []
     @State private var games: [SportGame] = []
     @State private var loaded = false
+    @State private var category = "All"
     @State private var playing: PlayRequest?
     @State private var starting: String?
     @State private var message: String?
     @State private var multi: [SportGame] = []
     @State private var multiOpen = false
 
-    private var liveGames: [SportGame] { games.filter { $0.isLive && !$0.streams.isEmpty } }
-    private var upcoming: [SportGame] {
-        let soon = Date().addingTimeInterval(8 * 3600)
-        return games.filter { !$0.isLive && ($0.startsAt ?? .distantFuture) < soon }.prefix(20).map { $0 }
+    private var playable: [SportGame] { games.filter { !$0.streams.isEmpty } }
+    private var liveGames: [SportGame] { playable.filter { $0.isLive && !$0.is247 } }
+
+    private var categories: [String] {
+        ["All"] + Array(Set(playable.map(\.category))).filter { $0 != "Other" }.sorted()
+    }
+
+    private var filtered: [SportGame] {
+        category == "All" ? playable : playable.filter { $0.category == category }
+    }
+
+    // One row per league: leagues with live games first, live games first
+    // within each row, then by start time. 24/7 channels get their own row.
+    private var leagueRows: [(String, [SportGame])] {
+        let soon = Date().addingTimeInterval(24 * 3600)
+        let groups = Dictionary(grouping: filtered.filter { !$0.is247 && ($0.isLive || ($0.startsAt ?? .distantFuture) < soon) }, by: \.league)
+        return groups
+            .map { league, items in
+                (league, items.sorted { ($0.isLive ? 0 : 1, $0.startsAt ?? .distantFuture) < ($1.isLive ? 0 : 1, $1.startsAt ?? .distantFuture) })
+            }
+            .sorted { lhs, rhs in
+                let l = lhs.1.filter(\.isLive).count, r = rhs.1.filter(\.isLive).count
+                return l != r ? l > r : (lhs.1.first?.startsAt ?? .distantFuture) < (rhs.1.first?.startsAt ?? .distantFuture)
+            }
+    }
+
+    private var channels: [SportGame] { filtered.filter(\.is247) }
+
+    // Spotlight: a live game with good art, preferring one ESPN knows about.
+    private var featured: SportGame? {
+        let live = filtered.filter { $0.isLive && !$0.is247 }
+        return live.first { event(for: $0) != nil && ($0.logos != nil || $0.poster != nil) }
+            ?? live.first { $0.poster != nil || $0.logos != nil }
+            ?? live.first
     }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 40) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Sports").font(.system(size: 54, weight: .heavy))
-                    Spacer()
-                    if let message {
-                        Text(message).font(.callout.weight(.semibold)).foregroundStyle(Theme.gold)
-                    } else {
-                        Text("Scores update every 30 seconds").font(.caption).foregroundStyle(Theme.muted)
-                    }
+            LazyVStack(alignment: .leading, spacing: 34) {
+                if let featured {
+                    SportsSpotlight(game: featured, event: event(for: featured), busy: starting == featured.id,
+                                    inMulti: multi.contains(featured),
+                                    watch: { play(featured) },
+                                    toggleMulti: { toggleMulti(featured) })
+                } else if !loaded {
+                    ProgressView().frame(maxWidth: .infinity).padding(.top, 160)
                 }
-                if !loaded { ProgressView().frame(maxWidth: .infinity).padding(.top, 80) }
+
+                if let message {
+                    Text(message).font(.callout.weight(.semibold)).foregroundStyle(Theme.gold)
+                }
 
                 if !multi.isEmpty { multiviewBar }
 
-                if !liveGames.isEmpty {
-                    section("Live now") {
-                        ForEach(liveGames) { game in
-                            LiveGameCard(game: game, event: event(for: game), busy: starting == game.id,
-                                         inMulti: multi.contains(game)) { play(game) }
-                                .contextMenu { multiMenu(game) }
-                        }
-                    }
-                }
-
-                ForEach(boards, id: \.0.id) { league, events in
-                    section(league.name) {
-                        ForEach(events) { event in
-                            let game = self.game(for: event)
-                            GameCard(event: event, watchable: game != nil && !(game?.streams.isEmpty ?? true),
-                                     busy: game.map { starting == $0.id } ?? false) {
-                                if let game, !game.streams.isEmpty {
-                                    play(game)
-                                } else {
-                                    message = event.isFinal ? "That game has ended." : "No streams for \(event.shortName ?? "this game") yet — they usually appear shortly before start."
+                if categories.count > 2 {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 20) {
+                            ForEach(categories, id: \.self) { name in
+                                Button {
+                                    category = name
+                                } label: {
+                                    Text(name == "All" ? "All" : "\(SportsFeed.icons[name] ?? "🏆") \(name)")
                                 }
+                                .buttonStyle(PillButtonStyle(selected: category == name))
                             }
-                            .contextMenu { if let game, !game.streams.isEmpty { multiMenu(game) } }
                         }
+                        .padding(.vertical, 16)
+                    }
+                    .scrollIndicators(.hidden)
+                    .scrollClipDisabled()
+                    .focusSection()
+                }
+
+                let live = category == "All" ? liveGames : liveGames.filter { $0.category == category }
+                if !live.isEmpty {
+                    row("Live Now · \(live.count)", games: live)
+                }
+                ForEach(leagueRows, id: \.0) { league, items in
+                    let liveCount = items.filter(\.isLive).count
+                    row(league, subtitle: liveCount > 0 ? "\(liveCount) live now" : items.first?.startsAt.map { "Next: \(Self.when($0))" },
+                        games: items)
+                }
+                if !channels.isEmpty {
+                    row("24/7 Sports Channels", games: channels)
+                }
+
+                if category == "All" {
+                    let scores = boards.flatMap(\.1).sorted { $0.sortRank < $1.sortRank }
+                    if !scores.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            SectionTitle(text: "Scores")
+                            ScrollView(.horizontal) {
+                                LazyHStack(spacing: 40) {
+                                    ForEach(scores) { event in
+                                        let game = self.game(for: event)
+                                        GameCard(event: event, watchable: game != nil, busy: game.map { starting == $0.id } ?? false) {
+                                            if let game { play(game) } else {
+                                                message = event.isFinal ? "That game has ended." : "No streams for \(event.shortName ?? "this game") yet. They usually appear shortly before start."
+                                            }
+                                        }
+                                        .contextMenu { if let game { multiMenu(game) } }
+                                    }
+                                }
+                                .padding(.vertical, 34)
+                            }
+                            .scrollIndicators(.hidden)
+                            .scrollClipDisabled()
+                        }
+                        .focusSection()
                     }
                 }
 
-                if !upcoming.isEmpty {
-                    section("Coming up") {
-                        ForEach(upcoming) { game in
-                            LiveGameCard(game: game, event: event(for: game), busy: starting == game.id, inMulti: false) {
-                                message = "\(game.title) starts \(game.startsAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "soon")."
-                            }
-                        }
-                    }
-                }
-
-                if loaded && boards.isEmpty && games.isEmpty {
+                if loaded && playable.isEmpty && boards.isEmpty {
                     Text("No games right now.").font(.headline).foregroundStyle(Theme.muted)
                 }
             }
-            .padding(.vertical, 30)
+            .padding(.bottom, 60)
         }
         .scrollClipDisabled()
         .fullScreenCover(item: $playing) { PlayerView(request: $0, app: app) }
@@ -106,23 +162,63 @@ struct SportsView: View {
         }
     }
 
+    private func row(_ title: String, subtitle: String? = nil, games: [SportGame]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 18) {
+                SectionTitle(text: title)
+                if let subtitle { Text(subtitle).font(.callout).foregroundStyle(Theme.muted) }
+            }
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 40) {
+                    ForEach(games) { game in
+                        SportThumbCard(game: game, event: event(for: game), busy: starting == game.id,
+                                       inMulti: multi.contains(game)) {
+                            if game.isLive { play(game) } else {
+                                message = "\(game.title) starts \(game.startsAt.map(Self.when) ?? "soon")."
+                            }
+                        }
+                        .contextMenu { multiMenu(game) }
+                    }
+                }
+                .padding(.vertical, 34)
+            }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+        }
+        .focusSection()
+    }
+
+    static func when(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDateInToday(date) { return "Today \(time)" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow \(time)" }
+        return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+    }
+
     // MARK: Multiview
 
     @ViewBuilder
     private func multiMenu(_ game: SportGame) -> some View {
-        if multi.contains(game) {
-            Button(role: .destructive) { multi.removeAll { $0 == game } } label: {
-                Label("Remove from Multiview", systemImage: "rectangle.grid.2x2")
-            }
-        } else {
-            Button { addToMulti(game) } label: {
-                Label("Add to Multiview", systemImage: "rectangle.grid.2x2.fill")
+        if game.isLive {
+            Button { play(game) } label: { Label("Watch", systemImage: "play.fill") }
+            if multi.contains(game) {
+                Button(role: .destructive) { toggleMulti(game) } label: {
+                    Label("Remove from Multiview", systemImage: "rectangle.grid.2x2")
+                }
+            } else {
+                Button { toggleMulti(game) } label: {
+                    Label("Add to Multiview", systemImage: "rectangle.grid.2x2.fill")
+                }
             }
         }
-        Button { play(game) } label: { Label("Watch", systemImage: "play.fill") }
     }
 
-    private func addToMulti(_ game: SportGame) {
+    private func toggleMulti(_ game: SportGame) {
+        if multi.contains(game) {
+            multi.removeAll { $0 == game }
+            return
+        }
         guard multi.count < 4 else { message = "Multiview holds up to 4 games."; return }
         multi.append(game)
         message = multi.count == 1 ? "Added. Add one more game to watch them together." : nil
@@ -151,19 +247,6 @@ struct SportsView: View {
         .focusSection()
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(text: title)
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 40) { content() }
-                    .padding(.vertical, 34)
-            }
-            .scrollIndicators(.hidden)
-            .scrollClipDisabled()
-        }
-        .focusSection()
-    }
-
     // MARK: Data
 
     private func load() async {
@@ -178,13 +261,7 @@ struct SportsView: View {
         }
         let (loadedGames, result) = await (feed, scores)
         games = loadedGames
-        // Leagues with a live game first, then the usual order.
-        boards = result
-            .sorted { lhs, rhs in
-                let l = lhs.1.contains(where: \.isLive), r = rhs.1.contains(where: \.isLive)
-                return l != r ? l : lhs.0 < rhs.0
-            }
-            .map { (League.all[$0.0], $0.1) }
+        boards = result.sorted { $0.0 < $1.0 }.map { (League.all[$0.0], $0.1) }
         loaded = true
     }
 
@@ -196,7 +273,7 @@ struct SportsView: View {
 
     private func game(for event: Scoreboard.Event) -> SportGame? {
         guard let wanted = tokens(event) else { return nil }
-        return games.first { $0.teamTokens == wanted }
+        return playable.first { $0.teamTokens == wanted }
     }
 
     private func event(for game: SportGame) -> Scoreboard.Event? {
@@ -216,56 +293,231 @@ struct SportsView: View {
                 return
             }
             let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
-            playing = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.category)")
+            playing = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)")
         }
     }
 }
 
-struct LiveGameCard: View {
+// MARK: - Art
+
+// Same rule as the site's GameArt: crisp team logos on the teams' colors
+// beat the providers' low-res thumbnails; otherwise the thumbnail, then the
+// sport's icon.
+struct SportArt: View {
+    let game: SportGame
+    var large = false
+
+    private var split: (Color, Color) {
+        let colors = (game.colors ?? []).compactMap { Color(hexString: $0) }
+        return colors.count >= 2 ? (colors[0], colors[1]) : (Color(hex: 0x26304A), Color(hex: 0x121620))
+    }
+
+    var body: some View {
+        if let logos = game.logos, let home = logos.home, let away = logos.away {
+            ZStack {
+                // The split sits between the two logos (further right in
+                // the spotlight, where the logos are).
+                let mid = large ? 0.735 : 0.5
+                LinearGradient(stops: [.init(color: split.0, location: 0), .init(color: split.0, location: mid - 0.02),
+                                       .init(color: split.1, location: mid + 0.02), .init(color: split.1, location: 1)],
+                               startPoint: large ? .leading : .topLeading, endPoint: large ? .trailing : .bottomTrailing)
+                // Title order ("Away vs. Home") matches the feeds' color order.
+                HStack(spacing: large ? 60 : 28) {
+                    logo(away)
+                    Text("vs").font(large ? .title2.weight(.heavy) : .callout.weight(.heavy)).foregroundStyle(.white.opacity(0.85))
+                    logo(home)
+                }
+                .frame(maxWidth: .infinity, alignment: large ? .trailing : .center)
+                .padding(.trailing, large ? 220 : 0)
+            }
+        } else if let poster = game.poster {
+            AsyncImage(url: poster) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                iconArt
+            }
+        } else {
+            iconArt
+        }
+    }
+
+    private func logo(_ url: URL) -> some View {
+        AsyncImage(url: url) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
+            .frame(width: large ? 200 : 96, height: large ? 200 : 96)
+            .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+    }
+
+    private var iconArt: some View {
+        ZStack {
+            LinearGradient(colors: [split.0, split.1], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Text(game.icon).font(.system(size: large ? 140 : 72))
+        }
+    }
+}
+
+struct StatusPill: View {
+    let game: SportGame
+    var body: some View {
+        HStack(spacing: 8) {
+            if game.isLive {
+                Circle().fill(.white).frame(width: 10, height: 10)
+            }
+            Text(game.is247 ? "24/7" : game.isLive ? "LIVE" : (game.startsAt.map(SportsView.when) ?? "Soon"))
+                .font(.caption.weight(.heavy))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(game.isLive ? Color(hex: 0xE5383B) : Color.black.opacity(0.7), in: Capsule())
+        .foregroundStyle(.white)
+    }
+}
+
+// The live score from ESPN, laid over the thumbnail.
+struct ScoreChip: View {
+    let event: Scoreboard.Event
+    var body: some View {
+        let away = event.away, home = event.home
+        HStack(spacing: 10) {
+            Text("\(away?.team.abbreviation ?? "") \(away?.score ?? "")")
+            Text("–").foregroundStyle(.white.opacity(0.6))
+            Text("\(home?.score ?? "") \(home?.team.abbreviation ?? "")")
+            if let detail = event.status.type.shortDetail {
+                Text(detail).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+            }
+        }
+        .font(.caption.weight(.bold))
+        .monospacedDigit()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.75), in: Capsule())
+    }
+}
+
+struct SportThumbCard: View {
     let game: SportGame
     let event: Scoreboard.Event?
     let busy: Bool
-    var inMulti = false
+    let inMulti: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    if game.isLive {
-                        Label("LIVE", systemImage: "circle.fill")
-                            .font(.caption.weight(.heavy))
-                            .foregroundStyle(Color(hex: 0xFF5A50))
-                    } else if let start = game.startsAt {
-                        Text(start.formatted(date: .omitted, time: .shortened))
-                            .font(.caption.weight(.semibold)).foregroundStyle(Theme.muted)
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack {
+                    SportArt(game: game)
+                        .frame(width: 480, height: 270)
+                        .clipped()
+                    VStack {
+                        HStack {
+                            StatusPill(game: game)
+                            Spacer()
+                            if inMulti {
+                                Image(systemName: "rectangle.grid.2x2.fill")
+                                    .padding(8)
+                                    .background(.black.opacity(0.6), in: Circle())
+                                    .foregroundStyle(Theme.gold)
+                            }
+                        }
+                        Spacer()
+                        HStack {
+                            if let event, event.status.type.state != "pre" { ScoreChip(event: event) }
+                            Spacer()
+                            if busy { ProgressView() }
+                        }
                     }
-                    Text(game.category).font(.caption.weight(.semibold)).foregroundStyle(Theme.muted)
-                    Spacer()
-                    if busy { ProgressView() }
-                    if inMulti { Image(systemName: "rectangle.grid.2x2.fill").foregroundStyle(Theme.gold) }
+                    .padding(16)
                 }
-                if let event, let away = event.away, let home = event.home {
-                    TeamScore(name: away.name, logo: away.logoURL, score: event.status.type.state == "pre" ? nil : away.score)
-                    TeamScore(name: home.name, logo: home.logoURL, score: event.status.type.state == "pre" ? nil : home.score)
-                } else if let teams = game.teams {
-                    TeamScore(name: teams.away, logo: game.logos?.away, score: nil)
-                    TeamScore(name: teams.home, logo: game.logos?.home, score: nil)
-                } else {
-                    Text(game.title).font(.headline).lineLimit(2)
-                    Spacer(minLength: 0)
+                .frame(width: 480, height: 270)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(game.title).font(.callout.weight(.semibold)).lineLimit(1)
+                    Text("\(game.icon) \(game.league)  ·  \(game.streams.count) server\(game.streams.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
                 }
-                Text((game.streams.count == 1 ? "1 stream" : "\(game.streams.count) streams") + (game.isLive ? "  ·  hold for Multiview" : ""))
-                    .font(.caption2).foregroundStyle(Theme.muted)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .frame(width: 480, alignment: .leading)
+                .background(Theme.surface)
             }
-            .padding(26)
-            .frame(width: 460, height: 240, alignment: .topLeading)
-            .background(Theme.surface)
         }
         .buttonStyle(.card)
     }
 }
 
+struct SportsSpotlight: View {
+    let game: SportGame
+    let event: Scoreboard.Event?
+    let busy: Bool
+    let inMulti: Bool
+    let watch: () -> Void
+    let toggleMulti: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if game.logos == nil, let poster = game.poster {
+                    // Provider thumbnails are small: a blurred copy fills
+                    // the backdrop, the real one sits at a size it stays sharp.
+                    ZStack(alignment: .trailing) {
+                        AsyncImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Theme.surface }
+                            .blur(radius: 40)
+                            .opacity(0.6)
+                        AsyncImage(url: poster) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
+                            .frame(maxWidth: 900, maxHeight: 480)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .padding(.trailing, Theme.edge)
+                    }
+                } else {
+                    SportArt(game: game, large: true)
+                }
+            }
+            .frame(height: 600)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            .overlay {
+                LinearGradient(colors: [Theme.background.opacity(0.95), Theme.background.opacity(0.35), .clear],
+                               startPoint: .leading, endPoint: .trailing)
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [.clear, Theme.background], startPoint: .center, endPoint: .bottom)
+            }
+            .padding(.horizontal, -Theme.edge)
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 14) {
+                    StatusPill(game: game)
+                    if let event, event.status.type.state != "pre" { ScoreChip(event: event) }
+                }
+                Text(game.title)
+                    .font(.system(size: 60, weight: .heavy))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                Text("\(game.icon) \(game.league)  ·  \(game.streams.count) server\(game.streams.count == 1 ? "" : "s")")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Theme.muted)
+                HStack(spacing: 24) {
+                    Button(action: watch) {
+                        HStack {
+                            if busy { ProgressView() } else { Image(systemName: "play.fill") }
+                            Text("Watch live")
+                        }
+                    }
+                    Button(action: toggleMulti) {
+                        Label(inMulti ? "In Multiview" : "Add to Multiview",
+                              systemImage: inMulti ? "checkmark" : "rectangle.grid.2x2")
+                    }
+                }
+                .padding(.top, 6)
+            }
+            .frame(maxWidth: 900, alignment: .leading)
+            .padding(.bottom, 40)
+        }
+        .focusSection()
+    }
+}
+
+// ESPN scoreboard card (the Scores row).
 struct TeamScore: View {
     let name: String
     let logo: URL?
