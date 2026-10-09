@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val bingeUrl: String = (project.findProperty("binge.url") as String?) ?: "https://your-binge-site.vercel.app"
+val bingeUrl: String = (project.findProperty("binge.url") as String?) ?: "https://binge-26.vercel.app"
 
 android {
     namespace = "com.binge.tv"
