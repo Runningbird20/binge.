@@ -103,6 +103,7 @@ class MultiviewTile(val game: SportGame, context: Context) {
     var frozenMs by mutableStateOf(0L); private set
     // Waiting to start until the viewer picks it (the TV was already at its limit).
     private var deferredStreams = 0
+    private var failedBatches = 0
     private val ctx = context
     private val createdAt = System.currentTimeMillis()
 
@@ -114,7 +115,17 @@ class MultiviewTile(val game: SportGame, context: Context) {
         if (servers.isEmpty()) { status = "No stream found"; gaveUp = true; return }
         val next = StreamRace(ctx, liveRequest(game, servers), servers, StreamRace.Mode.LIVE, keepMuted = true)
         surface.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        next.onChange = { if (next.failed) { status = "No stream could play"; gaveUp = true } }
+        next.onChange = {
+            if (next.failed) {
+                // That batch failed: the next servers, a few times, before giving up.
+                if (failedBatches < 3) {
+                    failedBatches++
+                    servers.forEach { dropped += it.name }
+                    status = "Trying another stream…"
+                    surface.post { if (!stopped) { race?.stop(); race?.let { surface.removeView(it.container) }; race = null; AppModel.scope.launch { start(perTile) } } }
+                } else { status = "No stream could play"; gaveUp = true }
+            }
+        }
         race = next
         lastStateAt = System.currentTimeMillis()
         loop()
@@ -143,7 +154,7 @@ class MultiviewTile(val game: SportGame, context: Context) {
             started = true
             startedAt = System.currentTimeMillis()
             lastT = state.t
-            if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "multiview tile started ${game.title} in ${System.currentTimeMillis() - createdAt}ms on ${race?.winner?.server?.name}")
+            if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "multiview tile started ${game.title} in ${System.currentTimeMillis() - createdAt}ms on ${race?.winner?.server?.name}")
         }
         if (!started || held) return
         if (state.paused && !state.ended && !userPaused) web.send(MediaCommand.Play)
@@ -277,8 +288,9 @@ fun MultiviewScreen(games: List<SportGame>) {
                 val previous = tiles[index - 1]
                 withTimeoutOrNull(3_000) { while (!previous.started && !previous.gaveUp && !previous.throttled) delay(150) }
             }
-            // Already at this TV's limit: the rest wait until picked.
-            if (overloaded) tile.defer(perTile) else launch { tile.start(perTile) }
+            // Already at this TV's limit (seen now, or learned before): the rest wait until picked.
+            val smooth = PlaybackPrefs.multiviewMode != "all"
+            if (smooth && (overloaded || index >= MultiviewCapacity.games)) tile.defer(perTile) else launch { tile.start(perTile) }
         }
     }
     // Full screen: only that game is decoded; the others pause and rejoin
@@ -294,26 +306,37 @@ fun MultiviewScreen(games: List<SportGame>) {
             delay(2_000)
             if (expanded != null) continue
             val playing = tiles.filter { it.started && !it.isHeld }
+            // "All games": never pause one; a frozen picture alone still tries another server.
+            if (PlaybackPrefs.multiviewMode == "all") { if (playing.size == 1) playing.firstOrNull { it.frozenMs > 8_000 }?.switchServer(); continue }
             val now = System.currentTimeMillis()
             // A frozen picture: with other games on, the decoder is starved
             // (pause it); alone, the stream itself is bad (another server).
             val frozen = playing.firstOrNull { it.frozenMs > 8_000 }
             if (frozen != null) {
                 if (playing.size > 1 && frozen.game.id != focused) {
-                    if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "multiview frozen picture: pausing ${frozen.game.title}")
+                    if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "multiview frozen picture: pausing ${frozen.game.title}")
                     frozen.throttle(); overloaded = true; lastLoadAction = now
+                    MultiviewCapacity.lower(playing.size - 1)
                 } else if (playing.size == 1) frozen.switchServer()
                 continue
             }
+            // Smooth for a minute with more games than we thought it could take: remember that.
+            if (playing.size > MultiviewCapacity.games && now - lastLoadAction > 60_000 && playing.all { it.dropRate < 0.45f }) MultiviewCapacity.raise(playing.size)
             if (playing.size < 2 || now - lastLoadAction < 15_000) continue
-            if (playing.none { it.dropRate > 0.3f } || playing.map { it.dropRate }.average() < 0.2) continue
-            // Worst first; on a tie the later game (the first ones were picked first).
-            val victim = playing.filter { it.game.id != focused }
-                .maxWithOrNull(compareBy<MultiviewTile> { it.dropRate }.thenBy { tiles.indexOf(it) }) ?: continue
-            if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "multiview overloaded ${playing.map { "%.2f".format(it.dropRate) }}: pausing ${victim.game.title}")
+            // A Fire TV drops ~20% of a 60fps stream even alone, so choppy
+            // side tiles are fine (they're previews). Act when the game being
+            // watched suffers, or a side tile is a slideshow.
+            val main = playing.firstOrNull { it.game.id == focused }
+            val others = playing.filter { it.game.id != focused }
+            val slideshow = others.filter { it.dropRate > 0.6f }.maxByOrNull { it.dropRate }
+            val victim = slideshow ?: if ((main?.dropRate ?: 0f) > 0.45f)
+                others.maxWithOrNull(compareBy<MultiviewTile> { it.dropRate }.thenBy { tiles.indexOf(it) }) else null
+            if (victim == null) continue
+            if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "multiview overloaded ${playing.map { "%.2f".format(it.dropRate) }}: pausing ${victim.game.title}")
             victim.throttle()
             overloaded = true
             lastLoadAction = now
+            MultiviewCapacity.lower(playing.size - 1)
         }
     }
     // Silence the others first; a moment later give the focused tile sound.
@@ -366,7 +389,7 @@ fun MultiviewScreen(games: List<SportGame>) {
             ) {
                 AndroidView(factory = { tile.surface }, modifier = Modifier.fillMaxSize())
                 if (!tile.started && !tile.throttled) Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Spinner(22.dp)
+                    if (!tile.gaveUp) Spinner(22.dp)
                     Text(tile.status, style = Type.callout.copy(fontWeight = FontWeight.SemiBold))
                 }
                 if (tile.throttled) Column(
@@ -429,4 +452,13 @@ private fun layout(ids: List<String>, width: Dp, height: Dp, expanded: String?, 
         frames[id] = DpOffset(left + (cellW + gap) * col, top + (cellH + gap) * row) to DpSize(cellW, cellH)
     }
     return frames
+}
+
+// How many games this TV decodes smoothly at once, learned from Multiview
+// sessions (Fire TV models differ: a 4K Max handles about two 60fps games).
+object MultiviewCapacity {
+    private const val KEY = "multiviewCapacity"
+    val games get() = com.binge.tv.data.Prefs.int(KEY, 4).coerceIn(1, 4)
+    fun lower(to: Int) { if (to in 1 until games) com.binge.tv.data.Prefs.set(KEY, to) }
+    fun raise(to: Int) { if (to > games) com.binge.tv.data.Prefs.set(KEY, to.coerceAtMost(4)) }
 }
