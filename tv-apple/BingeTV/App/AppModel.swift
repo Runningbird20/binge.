@@ -31,6 +31,13 @@ final class AppModel: ObservableObject {
         }
         #endif
         session = await Supabase.shared.session
+        #if DEBUG
+        // -BingeEmail a@b.c -BingePassword x: sign in without the remote keyboard.
+        if session == nil, let email = UserDefaults.standard.string(forKey: "BingeEmail"),
+           let password = UserDefaults.standard.string(forKey: "BingePassword") {
+            session = try? await Supabase.shared.signIn(email: email, password: password)
+        }
+        #endif
         if session == nil {
             phase = .signedOut
         } else {

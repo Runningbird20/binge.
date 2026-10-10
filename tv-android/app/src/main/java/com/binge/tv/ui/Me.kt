@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,9 +86,17 @@ fun MeScreen() {
     // Focus enters on the list (My List & Ratings), never on Sign out or Quit.
     val listFirst = remember { FocusRequester() }
     var confirmQuit by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { repeat(3) { kotlinx.coroutines.delay(120); runCatching { listFirst.requestFocus() } } }
+    // The shell's focus container enters at the top-left item (Sign out), so
+    // the page enters on the list instead, back on the row last used there.
+    var entered by remember { mutableStateOf(false) }
+    val listGroup = remember { FocusRequester() }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        TabChrome.pageEntry = { runCatching { listGroup.requestFocus() }.isSuccess }
+        onDispose { TabChrome.pageEntry = null }
+    }
+    LaunchedEffect(Unit) { repeat(3) { kotlinx.coroutines.delay(120); if (!TabChrome.tabsFocused) runCatching { listFirst.requestFocus() } } }
     Row(Modifier.fillMaxSize().padding(start = Dimens.edge, end = Dimens.edge, top = 80.dp).focusRestorer { listFirst }, horizontalArrangement = Arrangement.spacedBy(46.dp)) {
-        Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.width(250.dp).onFocusChanged { if (it.hasFocus && !entered) { entered = true; runCatching { listFirst.requestFocus() } } }, verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AppModel.profile?.let { ProfileAvatar(it, 90.dp) }
             AppModel.session?.email?.let { Text("Signed in as $it", style = Type.callout, color = Palette.muted) }
             if (AppModel.profiles.size > 1) Pill("Switch profile", icon = Icons.Rounded.People) { AppModel.switchProfile() }
@@ -104,7 +113,7 @@ fun MeScreen() {
             Text("binge. for Fire TV ${BuildConfig.VERSION_NAME}", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 10.dp, bottom = 24.dp))
         }
         // A plain list, like Android TV settings: no tile grid.
-        LazyColumn(Modifier.weight(1f).focusRestorer(), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
+        LazyColumn(Modifier.weight(1f).focusRequester(listGroup).focusRestorer { listFirst }.onFocusChanged { if (it.hasFocus) entered = true }, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
             item { MeRow("My List & Ratings", "What you saved and what you rated", Icons.Rounded.Bookmarks, Modifier.focusRequester(listFirst)) { Nav.push(Screen.Library) } }
             item { MeRow("History", "Everything you've started", Icons.Rounded.History) { Nav.push(Screen.History) } }
             item { MeRow("Calendar", "Upcoming episodes and releases", Icons.Rounded.CalendarMonth) { Nav.push(Screen.Calendar) } }
@@ -134,8 +143,10 @@ private fun MeRow(title: String, detail: String, icon: ImageVector, modifier: Mo
 }
 
 @Composable
-private fun PageHeader(title: String, subtitle: String) {
-    Column(Modifier.padding(start = Dimens.edge, end = Dimens.edge, top = 28.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+// inset = false inside grids whose content padding already holds the margin.
+private fun PageHeader(title: String, subtitle: String, inset: Boolean = true) {
+    val side = if (inset) Dimens.edge else 0.dp
+    Column(Modifier.padding(start = side, end = side, top = 28.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = Type.page)
         Text(subtitle, style = Type.callout, color = Palette.muted)
     }
@@ -174,7 +185,7 @@ fun HistoryScreen() {
     }
     LazyVerticalGrid(GridCells.Fixed(4), Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(start = Dimens.edge, end = Dimens.edge, bottom = 40.dp),
         horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.padding(start = 0.dp)) { Column { PageHeader("History", "Everything you've started, newest first. Hold OK to remove something.") } } }
+        item(span = { GridItemSpan(maxLineSpan) }) { PageHeader("History", "Everything you've started, newest first. Hold OK to remove something.", inset = false) }
         if (!loaded) item(span = { GridItemSpan(maxLineSpan) }) { RowSkeleton(wide = true) }
         if (loaded && items.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
             Text("Nothing here yet. Anything you start playing on the TV, phone or web shows up here.", style = Type.body, color = Palette.muted)
@@ -345,7 +356,7 @@ fun LibraryScreen() {
         horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
-                PageHeader("My List & Ratings", "Saved to watch, and everything you rated. Same as the website and the other TV apps.")
+                PageHeader("My List & Ratings", "Saved to watch, and everything you rated. Same as the website and the other TV apps.", inset = false)
                 Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Pill("My List" + (list?.let { " · ${it.size}" } ?: ""), selected = tab == 0, modifier = Modifier.focusRequester(first)) { tab = 0 }
                     Pill("Ratings" + (rated?.let { " · ${it.size}" } ?: ""), selected = tab == 1) { tab = 1 }

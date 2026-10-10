@@ -120,6 +120,12 @@ object TabChrome {
     // Bumped when focus reaches the tab bar: the page scrolls back to its top,
     // so it's never left showing half of the spotlight under the tabs.
     var scrollToTop by mutableIntStateOf(0)
+    // Pages that focus something on open must leave focus alone while the
+    // tab bar has it, or ▼ skips past their first item.
+    var tabsFocused by mutableStateOf(false)
+    // A page whose layout the shell's focus restore can't handle (Me's two
+    // columns) sets where ▼ from the tab bar goes. Returns true if it took focus.
+    var pageEntry: (() -> Boolean)? = null
 }
 
 @Composable
@@ -192,11 +198,12 @@ private fun Shell() {
         ) {
             TabRow(
                 selectedTabIndex = selected,
-                modifier = Modifier.focusRestorer { tabRequesters.getOrElse(selected) { FocusRequester.Default } }.onFocusChanged { if (it.hasFocus && !tabsFocused) TabChrome.scrollToTop++; tabsFocused = it.hasFocus }
+                modifier = Modifier.focusRestorer { tabRequesters.getOrElse(selected) { FocusRequester.Default } }.onFocusChanged { if (it.hasFocus && !tabsFocused) TabChrome.scrollToTop++; tabsFocused = it.hasFocus; TabChrome.tabsFocused = it.hasFocus }
                     // ▼ from the tab bar into the page, back where focus last was there.
                     .onPreviewKeyEvent { event ->
                         if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
-                            val moved = runCatching { contentFocus.requestFocus() }.isSuccess && contentHasFocus
+                            val moved = TabChrome.pageEntry?.invoke() == true ||
+                                (runCatching { contentFocus.requestFocus() }.isSuccess && contentHasFocus)
                             if (!moved) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
                             true
                         } else false

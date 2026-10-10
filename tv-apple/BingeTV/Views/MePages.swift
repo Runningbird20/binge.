@@ -272,11 +272,13 @@ struct PlaybackSettingsView: View {
 
 struct LibraryView: View {
     @EnvironmentObject private var app: AppModel
-    @State private var tab = 0
+    @State private var tab: Int
     @State private var list: [Title]?
     @State private var rated: [(Title, Double)]?
 
-    private let columns = Array(repeating: GridItem(.fixed(220), spacing: 48), count: 7)
+    private let columns = [GridItem(.adaptive(minimum: 220, maximum: 220), spacing: 48, alignment: .top)]
+
+    init(tab: Int = 0) { _tab = State(initialValue: tab) }
 
     var body: some View {
         ScrollView {

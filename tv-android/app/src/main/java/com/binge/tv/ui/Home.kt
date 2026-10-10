@@ -248,7 +248,7 @@ fun ContinueRow(heading: String, items: List<ContinueItem>, onLongClick: (Contin
                 }
             }
         }
-        Text("OK to resume · hold OK for details", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = Dimens.edge))
+        Text("OK to resume · hold OK for details", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = Dimens.edge, bottom = 16.dp))
     }
 }
 

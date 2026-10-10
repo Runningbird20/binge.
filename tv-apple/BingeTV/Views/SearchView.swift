@@ -11,7 +11,7 @@ struct SearchView: View {
     @State private var aiLoading = false
     @State private var aiError: String?
 
-    private let columns = Array(repeating: GridItem(.fixed(220), spacing: 48), count: 7)
+    private let columns = [GridItem(.adaptive(minimum: 220, maximum: 220), spacing: 48, alignment: .top)]
 
     var body: some View {
         ScrollView {
