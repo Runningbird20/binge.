@@ -1,50 +1,68 @@
 # binge. for Fire TV / Android TV
 
-A thin Android TV app: the binge. website in a full-screen WebView. The site
-turns on **TV mode** when it sees the app (`BingeTV` in the user agent):
-bigger 10-foot layout, everything reachable with the d-pad, a clear focus
-highlight, the video takes the remote once it loads, and **Back** steps out of
-the video → closes the player/sheet → goes back a page → leaves the app.
+A native Android TV app (Kotlin + Compose for TV), a port of the Apple TV
+app in `tv-apple/`: the same Supabase account, profiles, rows, lists and
+progress as the website, with its own TV interface and its own player.
 
-You can preview TV mode in any browser with `?tv=1` (and `?tv=0` to turn it
-off again on that device).
+## What's in it
 
-## Build the APK
+- **Home / Movies / Series**: spotlight + rows from live TMDB lists matched to
+  the catalog, Continue Watching (hold OK for details / remove), Top Picks,
+  "Because you watched…", New Episodes, Sent to you, My List.
+- **Title pages**: resume, My List, 1–5★ rating, send to another profile,
+  seasons + episodes, Previously on…, franchise order, More Like This.
+- **Player** (`player/`): every server's page loads in a hidden WebView with a
+  script in every frame (`Bridge.kt`, the Apple TV bridge). Several servers race
+  at once and the first to play wins (`StreamRace.kt`); the video is pinned full
+  screen and the server's own buttons/ads are hidden; frames that aren't the
+  video are unloaded once it plays. Pop-up windows never open and the page can't
+  navigate away (ad redirects). Players that wait for a click on their own Play
+  button get it pressed for you. Subtitles come from OpenSubtitles (through the
+  site) and are drawn by the app; audio tracks, server subtitles, fill/server
+  layout, quality, sleep timer and episodes are on ▼. Skip intro (▲ skip,
+  ▼ hide), Up Next, wrong-video check, stall recovery, progress sync.
+- **Sports**: the website's feeds (PPV, Streamed, StreamFree) merged per game,
+  ESPN scores, category chips, Multiview (equal tiles or one big + others,
+  Settings → Playback). The feeds that work on this TV are remembered and tried
+  first.
+- **Search** (OK opens the keyboard; the remote's microphone works there) with
+  Ask binge., **Me**: History, Calendar, Wrapped tickets, Playback &
+  accessibility settings, profile switch. Ambient mode after 4 idle minutes.
 
-**Without Android Studio (GitHub Actions):**
-1. GitHub repo → Settings → Secrets and variables → Actions → **Variables** →
-   add `BINGE_URL` = your site, e.g. `https://your-site.vercel.app`.
-2. Actions tab → **Build TV app** → Run workflow.
-3. When it finishes, download the `binge-tv-apk` artifact (a zip containing
-   `app-debug.apk`).
+## Build
 
-**With Android Studio:** open the `tv-android/` folder, set `binge.url` in
-`gradle.properties`, then Build → Build APK(s).
+The build reads the public keys from the repo's `.env`
+(`REACT_APP_SUPABASE_URL`, `REACT_APP_SUPABASE_PUBLISHABLE_KEY`,
+`REACT_APP_TMDB_API_KEY`); the site URL defaults to https://binge-26.vercel.app
+(`-Pbinge.url=…` to change it).
 
-## Install on a Fire TV (sideload)
+```bash
+gradle -p tv-android assembleRelease   # app/build/outputs/apk/release/app-release.apk
+```
 
-The app isn't on the Amazon Appstore (embedded streams can't pass store
-review), so it's installed directly:
+Release builds are signed with this machine's Android debug key, so each new
+APK installs over the previous one. An APK from another machine (or CI) can't —
+uninstall the app first in that case.
 
-1. Fire TV → Settings → My Fire TV → Developer options → turn on
-   **Apps from Unknown Sources** (or allow it for the Downloader app) and
-   **ADB debugging**. If Developer options is hidden: Settings → My Fire TV →
-   About → click the device name 7 times.
-2. Either:
-   - **Downloader app** (free on the Appstore): put the APK somewhere with a
-     direct download link (e.g. attach it to a GitHub Release), enter that
-     URL in Downloader, install.
-   - **adb from your computer** (same Wi-Fi): find the TV's IP in Settings →
-     My Fire TV → About → Network, then
-     `adb connect <ip>:5555` and `adb install -r app-debug.apk`.
-3. It appears under **Your Apps & Channels** with the binge. banner.
+Debug builds take launch extras for testing, e.g.
+`adb shell am start -n com.binge.tv/.MainActivity --ez demo true --es tab sports`
+(`demo`, `tab`, `open kind:id`, `play s:e`, `server`, `live team`, `multi "a,b"`,
+`embed <url>`), and allow Chrome DevTools on the player's pages.
 
-Updating: build again and install the new APK over the old one (`-r`).
+## Install on a Fire TV
+
+1. Settings → My Fire TV → About → click the device name 7 times, then
+   My Fire TV → Developer options → **ADB debugging** on.
+2. Settings → My Fire TV → About → Network: note the IP address.
+3. From the Mac (same Wi-Fi): `adb connect <ip>:5555`, accept the prompt on
+   the TV, then `adb install -r binge-firetv.apk`.
 
 ## Notes
 
-- Remote: d-pad moves, OK selects, Back goes back, and once a video is
-  playing the remote controls that player (OK = play/pause on most servers).
-- Pop-up/redirect ads from the embedded players are blocked: the app only
-  lets the main window navigate within the binge. site.
-- Works on Android TV / Google TV devices the same way.
+- The Android emulator gets flagged as a bot by some sports pages (PPV shows
+  "Remove sandbox attributes"), so sports feeds should be checked on a real
+  Fire TV. StreamFree played in the emulator.
+- Servers: VidRift, Vidy and CineSrc race first (the Apple TV's set); VidLink,
+  Videasy and VidSrc are backups, tried when those fail. In the Android 12
+  emulator (WebView = Chrome 91) only VidRift and Vidy played, so check the
+  others on a real Fire TV, whose WebView is much newer.

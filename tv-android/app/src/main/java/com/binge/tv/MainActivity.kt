@@ -1,145 +1,117 @@
 package com.binge.tv
 
-import android.annotation.SuppressLint
-import android.app.Activity
-import android.net.Uri
+import android.app.Application
+import android.content.ComponentCallbacks2
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.webkit.CookieManager
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
+import com.binge.tv.data.Prefs
+import com.binge.tv.data.PlaybackPrefs
+import com.binge.tv.data.Supabase
+import com.binge.tv.player.Warmup
+import com.binge.tv.player.inert
+import com.binge.tv.ui.Ambient
+import com.binge.tv.ui.BingeApp
+import com.binge.tv.ui.BingeTheme
+import com.binge.tv.ui.Nav
+import com.binge.tv.ui.PlayerLifecycle
+import com.binge.tv.ui.Screen
+
+class BingeApplication : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        Prefs.init(this)
+        Supabase.init(this)
+    }
+
+    // A Fire TV stick has 1–2 GB for everything: a modest memory cache, a
+    // generous disk cache (posters come back instantly), fades on load.
+    override fun newImageLoader() = ImageLoader.Builder(this)
+        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }
+        .diskCache { DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(300L * 1024 * 1024).build() }
+        .crossfade(180)
+        .respectCacheHeaders(false)
+        .build()
+}
 
 /**
- * binge. for Fire TV / Android TV: the website in a full-screen WebView.
- *
- * The site switches itself into TV mode when it sees "BingeTV" in the user
- * agent (bigger layout, d-pad navigation, focus rings). This activity only
- * has to: keep the screen awake, let embedded players autoplay and go full
- * screen, keep navigation on the binge. site (blocking pop-up/redirect
- * ads), and route the remote's Back button to the page first.
+ * binge. for Fire TV / Android TV: a native app (Compose for TV), a port of
+ * the Apple TV app. Same Supabase account and data as the website; movies,
+ * series and sports play in the app's own player (see player/), which
+ * drives each server's page through a script in every frame, blocks pop-ups
+ * and redirects, and draws its own subtitles.
  */
-class MainActivity : Activity() {
-
-    private lateinit var web: WebView
-    private lateinit var root: FrameLayout
-    private var fullscreenView: View? = null
-    private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
-    private val homeHost: String? = Uri.parse(BuildConfig.BINGE_URL).host
-
-    @SuppressLint("SetJavaScriptEnabled")
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        root = FrameLayout(this)
-        web = WebView(this)
-        root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        setContentView(root)
-
-        web.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            mediaPlaybackRequiresUserGesture = false // let players autoplay
-            javaScriptCanOpenWindowsAutomatically = false // no pop-up ads
-            setSupportMultipleWindows(false)
-            userAgentString = "$userAgentString BingeTV/1.0"
-        }
-        // Embedded players keep their session in third-party cookies.
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
-
-        web.webViewClient = object : WebViewClient() {
-            // Main-frame navigations stay on binge.; anything else (an ad
-            // redirect from an embed) is dropped. Iframes are unaffected.
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (!request.isForMainFrame) return false
-                val host = request.url.host ?: return true
-                return homeHost != null && host != homeHost
-            }
-        }
-
-        web.webChromeClient = object : WebChromeClient() {
-            // A player's own fullscreen button.
-            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                if (fullscreenView != null) {
-                    callback.onCustomViewHidden()
-                    return
+        DebugLaunch.read(intent)
+        if (BuildConfig.DEBUG) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+        val root = FrameLayout(this)
+        // Preloads (Warmup) live here: in the window, behind the app, invisible.
+        val warmHost = FrameLayout(this).apply { alpha = 0.01f; inert() }
+        root.addView(warmHost, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        Warmup.host = warmHost
+        val compose = ComposeView(this).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                // Re-read when a setting changes.
+                @Suppress("UNUSED_VARIABLE") val version = Prefs.version
+                BingeTheme(largeText = PlaybackPrefs.largeText) { BingeApp() }
+                // The screen stays on while something plays (or ambient mode shows); otherwise the TV may sleep as usual.
+                val awake = Ambient.showing || Nav.stack.any { it is Screen.Player || it is Screen.Multiview }
+                LaunchedEffect(awake) {
+                    if (awake) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
-                fullscreenView = view
-                fullscreenCallback = callback
-                root.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                web.visibility = View.GONE
-            }
-
-            override fun onHideCustomView() {
-                exitFullscreen()
             }
         }
-
-        if (savedInstanceState != null) {
-            web.restoreState(savedInstanceState)
-        } else {
-            web.loadUrl(BuildConfig.BINGE_URL.trimEnd('/') + "/home")
-        }
+        root.addView(compose, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        setContentView(root)
     }
 
-    private fun exitFullscreen() {
-        val view = fullscreenView ?: return
-        root.removeView(view)
-        fullscreenView = null
-        web.visibility = View.VISIBLE
-        fullscreenCallback?.onCustomViewHidden()
-        fullscreenCallback = null
-        web.requestFocus()
-    }
-
-    // Back: leave a player's fullscreen; otherwise ask the page
-    // (window.bingeTvBack closes the player / sheet / goes back a page and
-    // returns true), and only leave the app when the page says it's done.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
-            if (event.action == KeyEvent.ACTION_UP) handleBack()
-            return true
-        }
+        Ambient.touch()
         return super.dispatchKeyEvent(event)
     }
 
-    private fun handleBack() {
-        if (fullscreenView != null) {
-            exitFullscreen()
-            return
-        }
-        web.evaluateJavascript("(window.bingeTvBack ? window.bingeTvBack() : false) === true") { handled ->
-            if (handled != "true") {
-                if (web.canGoBack()) web.goBack() else finish()
-            }
-        }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        web.saveState(outState)
-    }
-
+    // Home button, input switch or the screensaver: pause and save, like any streaming app.
     override fun onPause() {
-        web.onPause()
+        PlayerLifecycle.current?.onAppPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
-        web.onResume()
+        PlayerLifecycle.current?.onAppResume()
+    }
+
+    override fun onStop() {
+        Warmup.cancel()
+        super.onStop()
+    }
+
+    // Low memory: a preload is the first thing to go, then live upgrade shopping.
+    @Deprecated("Deprecated in Java")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            Warmup.cancel()
+            PlayerLifecycle.current?.trimMemory()
+        }
     }
 
     override fun onDestroy() {
-        web.destroy()
+        if (Warmup.host?.context === this) { Warmup.cancel(); Warmup.host = null }
         super.onDestroy()
     }
 }
