@@ -127,7 +127,8 @@ class StreamRace(
         // Nudge any that loaded but wait for a click, and crown the first
         // whose clock moves. "Best quality" (movies and shows) gives the
         // others 1.5s more and takes the sharpest playing.
-        val shopping = !request.isLive && mode == Mode.LIVE && QualityPreference.current == QualityPreference.BEST && candidates.size > 1
+        // Applies to preloads too: the title page's warm race is usually what Play hands over.
+        val shopping = !request.isLive && QualityPreference.current == QualityPreference.BEST && candidates.size > 1
         for (candidate in candidates.toList()) {
             if (winner != null) break
             val state = candidate.web.poll() ?: continue

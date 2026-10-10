@@ -199,6 +199,10 @@ private fun Shell() {
             }
         }
 
+        // Generic Back for pages on top. Registered before the pages themselves:
+        // the most recently registered handler wins, so a page's own Back (the
+        // player's menu, a sheet) is handled first.
+        if (top != null) BackHandler { Nav.pop() }
         // Pages on top of the tabs.
         Nav.stack.forEachIndexed { index, screen ->
             val active = index == Nav.stack.lastIndex
@@ -206,7 +210,6 @@ private fun Shell() {
                 if (active || screen !is Screen.Player) ScreenFor(screen, active)
             }
         }
-        if (top != null) BackHandler { Nav.pop() }
     }
     // Focus lands on the page as soon as it has something to focus (it loads after the shell).
     LaunchedEffect(selected) {

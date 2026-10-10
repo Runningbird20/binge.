@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.People
+import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +85,9 @@ fun MeScreen() {
             AppModel.session?.email?.let { Text("Signed in as $it", style = Type.callout, color = Palette.muted) }
             if (AppModel.profiles.size > 1) Pill("Switch profile", icon = Icons.Rounded.People) { AppModel.switchProfile() }
             if (AppModel.isSignedIn) Pill("Sign out", icon = Icons.AutoMirrored.Rounded.Logout) { scope.launch { AppModel.signOut() } }
+            // Leaves the app (back to the Fire TV home screen); you stay signed in.
+            val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+            Pill("Quit binge.", icon = Icons.Rounded.PowerSettingsNew) { activity?.finishAndRemoveTask() }
             Spacer(Modifier.weight(1f))
             Text("binge. for Fire TV ${BuildConfig.VERSION_NAME}", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(bottom = 24.dp))
         }

@@ -15,6 +15,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -102,7 +107,6 @@ fun PlayerScreen(request: PlayRequest) {
 
     BackHandler {
         when {
-            panelOpen -> panelOpen = false
             (model.upNextCountdown ?: -1) > 0 -> model.cancelUpNext()
             else -> { model.close(); Nav.pop() }
         }
@@ -182,11 +186,18 @@ fun PlayerScreen(request: PlayRequest) {
             resumeLabel = "Resume ${model.request.title.name}", resume = { model.togglePlay(); runCatching { surfaceFocus.requestFocus() } },
             dismiss = { model.leaveAmbient(); runCatching { surfaceFocus.requestFocus() } })
 
-        AnimatedVisibility(panelOpen, enter = slideInVertically { it / 3 } + fadeIn(), exit = slideOutVertically { it / 3 } + fadeOut()) {
-            PlayerPanel(model) { panelOpen = false }
+        AnimatedVisibility(panelOpen, enter = androidx.compose.animation.slideInHorizontally { it / 4 } + fadeIn(), exit = androidx.compose.animation.slideOutHorizontally { it / 4 } + fadeOut()) {
+            // Focus goes back to the video before the sidebar leaves (its removal would otherwise drop focus entirely).
+            PlayerPanel(model) { runCatching { surfaceFocus.requestFocus() }; panelOpen = false }
         }
     }
-    LaunchedEffect(panelOpen) { if (!panelOpen) { kotlinx.coroutines.delay(30); runCatching { surfaceFocus.requestFocus() } } }
+    LaunchedEffect(panelOpen) {
+        if (!panelOpen) {
+            // Again once the slide-out has finished, in case focus was lost on the way.
+            kotlinx.coroutines.delay(30); runCatching { surfaceFocus.requestFocus() }
+            kotlinx.coroutines.delay(450); runCatching { surfaceFocus.requestFocus() }
+        }
+    }
 }
 
 @Composable
@@ -263,7 +274,7 @@ private fun LoadingCard(model: PlayerModel, modifier: Modifier) {
         val gaveUp = model.notice?.startsWith("No server") == true
         if (!gaveUp) {
             Spinner(28.dp)
-            Text("Finding the fastest server…", style = Type.headline)
+            Text(if (!model.request.isLive && QualityPreference.current == QualityPreference.BEST) "Finding the best-quality server…" else "Finding the fastest server…", style = Type.headline)
             if (model.racingNames.isNotEmpty()) Text("Trying ${model.racingNames} at once", style = Type.callout, color = Palette.muted, textAlign = TextAlign.Center)
         }
         model.notice?.let { Text(it, style = if (gaveUp) Type.headline else Type.callout, color = if (gaveUp) Color.White else Palette.gold, textAlign = TextAlign.Center) }
@@ -271,89 +282,119 @@ private fun LoadingCard(model: PlayerModel, modifier: Modifier) {
     }
 }
 
-// ▼: switch server, audio and subtitles, picture, quality, sleep timer, episodes.
+// ▼ opens a sidebar on the right (like Prime Video's): a short menu, each
+// item opening its own list. The video keeps playing beside it. Back goes up
+// a level, then closes; focus can't wander out of the sidebar.
+private enum class Pane(val title: String) {
+    MENU("Options"), AUDIO("Audio"), SUBTITLES("Subtitles"), TIMING("Subtitle timing"), SERVER("Server"),
+    PICTURE("Picture"), QUALITY("Quality"), SLEEP("Sleep timer"), EPISODES("Episodes"),
+}
+
 @Composable
 private fun PlayerPanel(model: PlayerModel, close: () -> Unit) {
+    var pane by remember { mutableStateOf(Pane.MENU) }
+    var from by remember { mutableStateOf(Pane.MENU) }
     var episodes by remember { mutableStateOf<List<TmdbSeason.Episode>>(emptyList()) }
-    val first = remember { FocusRequester() }
+    val firstFocus = remember { FocusRequester() }
     LaunchedEffect(model.request.season) {
         val id = model.request.title.tmdbId
         if (model.isEpisode && id != null) episodes = runCatching { Tmdb.get<TmdbSeason>("tv/$id/season/${model.request.season ?: 1}") }.getOrNull()?.episodes.orEmpty()
     }
-    LaunchedEffect(Unit) { kotlinx.coroutines.delay(60); runCatching { first.requestFocus() } }
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black.copy(alpha = 0.88f), 1f to Color.Black))) {
-        PivotScroll(fraction = 0.35f) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 150.dp, bottom = 40.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                item { PanelRow(if (model.request.isLive) "Stream" else "Server") {
-                    items(model.servers, key = { it.id }) { server ->
-                        Pill(server.name, selected = server == model.server, icon = if (server == model.server) Icons.Rounded.Check else null,
-                            modifier = if (server == (model.server ?: model.servers.firstOrNull())) Modifier.focusRequester(first) else Modifier) { model.choose(server); close() }
-                    }
-                } }
-                item {
-                    val tracks = model.audioTracks
-                    PanelRow("Audio", if (tracks.size <= 1) (if (tracks.isEmpty()) "This server has one audio track. Try another server for a different language."
-                        else "Only ${PlayerModel.displayName(tracks[0])} on this server. Try another server for a different language.") else null) {
-                        if (tracks.size > 1) items(tracks, key = { it.index }) { track ->
-                            Pill(PlayerModel.displayName(track), selected = track.on) { model.selectAudio(track); close() }
+    // Focus the selected option (or the item we came back from) whenever the list changes.
+    LaunchedEffect(pane) { kotlinx.coroutines.delay(40); runCatching { firstFocus.requestFocus() } }
+    androidx.activity.compose.BackHandler { if (pane == Pane.MENU) close() else { from = pane; pane = Pane.MENU } }
+    fun open(next: Pane) { from = Pane.MENU; pane = next }
+
+    val audioLabel = model.audioTracks.firstOrNull { it.on }?.let(PlayerModel::displayName) ?: if (model.audioTracks.isEmpty()) "Default" else PlayerModel.displayName(model.audioTracks[0])
+    val subtitleLabel = when {
+        model.useExternal && model.subtitleLanguage != "off" -> PlaybackPrefs.languageName(model.subtitleLanguage) + if (model.external == null && !model.externalLoading) " (not found)" else ""
+        model.textTracks.any { it.on } -> PlayerModel.displayName(model.textTracks.first { it.on }) + " (server)"
+        else -> "Off"
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
+        Column(
+            Modifier.align(Alignment.CenterEnd).width(380.dp).fillMaxHeight().background(Palette.raised.copy(alpha = 0.97f))
+                .focusGroup().focusProperties { exit = { FocusRequester.Cancel } }
+                .padding(top = 28.dp, bottom = 18.dp),
+        ) {
+            Text(pane.title, style = Type.section.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(horizontal = 22.dp))
+            if (pane == Pane.MENU) Text(model.request.title.name + (model.episodeLabel?.let { " · $it" } ?: ""), style = Type.caption, color = Palette.muted,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 22.dp))
+            if (pane != Pane.MENU) Text("Back to return", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(horizontal = 22.dp))
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                when (pane) {
+                    Pane.MENU -> {
+                        val rows = buildList {
+                            add(Triple(Pane.AUDIO, "Audio", audioLabel))
+                            add(Triple(Pane.SUBTITLES, "Subtitles", subtitleLabel))
+                            if (model.usingExternalSubtitles) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "In sync" else "%+.1fs".format(model.subtitleOffset)))
+                            add(Triple(Pane.SERVER, if (model.request.isLive) "Stream" else "Server", model.server?.name ?: "Choosing…"))
+                            add(Triple(Pane.PICTURE, "Picture", if (model.fillScreen) "Fill screen" else "Server's layout"))
+                            if (!model.request.isLive) add(Triple(Pane.QUALITY, "Quality", QualityPreference.current.label))
+                            add(Triple(Pane.SLEEP, "Sleep timer", model.sleep.label))
+                            if (model.isEpisode && episodes.isNotEmpty()) add(Triple(Pane.EPISODES, "Episodes", "Season ${model.request.season ?: 1}"))
+                        }
+                        items(rows, key = { it.first.name }) { (target, label, value) ->
+                            SideItem(label, value, chevron = true, modifier = if (target == from || (from == Pane.MENU && target == rows.first().first)) Modifier.focusRequester(firstFocus) else Modifier) { open(target) }
                         }
                     }
-                }
-                item {
-                    val note = when {
-                        model.usingExternalSubtitles -> model.external?.release
-                        model.useExternal && model.externalLoading -> "Finding subtitles…"
-                        model.useExternal && model.subtitleLanguage != "off" && model.external == null -> "None found for this episode; the server's are below."
-                        else -> null
-                    }
-                    PanelRow("Subtitles", note) {
-                        items(PlaybackPrefs.subtitleChoices, key = { it.first }) { (code, label) ->
-                            val selected = if (code == "off") !model.useExternal && model.textTracks.none { it.on } else model.useExternal && model.subtitleLanguage == code
-                            Pill(label, selected = selected) { model.chooseSubtitleLanguage(code); close() }
-                        }
-                        if (model.usingExternalSubtitles) {
-                            item { Pill("Earlier", icon = Icons.Rounded.FastRewind) { model.nudgeSubtitles(-0.5) } }
-                            item { Pill("Later", icon = Icons.Rounded.FastForward) { model.nudgeSubtitles(0.5) } }
-                            if (model.subtitleOffset != 0.0) item { Text("%+.1fs".format(model.subtitleOffset), style = Type.callout, color = Palette.muted, modifier = Modifier.padding(top = 8.dp)) }
-                            if ((model.external?.versions ?: 0) > 1) item { Pill("Another version") { model.nextSubtitleVersion() } }
-                        }
-                    }
-                }
-                if (model.textTracks.isNotEmpty()) item { PanelRow("Server's subtitles") {
-                    items(model.textTracks.take(30), key = { it.index }) { track ->
-                        Pill(PlayerModel.displayName(track), selected = !model.useExternal && track.on) { model.selectSubtitles(track); close() }
-                    }
-                } }
-                item { PanelRow("Picture", "Switch if subtitles or the server's buttons go missing.") {
-                    item { Pill("Fill screen", selected = model.fillScreen) { model.setFill(true); close() } }
-                    item { Pill("Server's layout", selected = !model.fillScreen) { model.setFill(false); close() } }
-                } }
-                item { PanelRow("Quality", "Best quality checks several servers for a sharper stream for a moment after it starts.") {
-                    items(QualityPreference.entries.toList(), key = { it.raw }) { option ->
-                        Pill(option.label, selected = QualityPreference.current == option) { Prefs.set("quality", option.raw); close() }
-                    }
-                } }
-                item { PanelRow("Sleep timer") {
-                    items(SleepOption.entries.filter { it != SleepOption.EPISODE || model.isEpisode }, key = { it.name }) { option ->
-                        Pill(option.label, selected = model.sleep == option) { model.chooseSleep(option); close() }
-                    }
-                } }
-                if (model.isEpisode && episodes.isNotEmpty()) item {
-                    Column {
-                        Text("Season ${model.request.season ?: 1}", style = Type.headline, color = Palette.muted, modifier = Modifier.padding(start = Dimens.edge))
-                        PivotScroll(offset = Dimens.edge) {
-                            LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                items(episodes, key = { it.id }) { episode ->
-                                    FocusCard(onClick = { model.play(episode.seasonNumber, episode.episodeNumber); close() }, modifier = Modifier.width(160.dp).height(112.dp)) {
-                                        Column {
-                                            Art(Tmdb.image(episode.stillPath, Tmdb.WIDE), "Episode ${episode.episodeNumber}", Modifier.fillMaxWidth().height(84.dp))
-                                            Text("${episode.episodeNumber}. ${episode.name ?: ""}", style = Type.caption.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth().background(if (episode.episodeNumber == model.request.episode) Palette.gold.copy(alpha = 0.35f) else Palette.surface).padding(6.dp))
-                                        }
-                                    }
-                                }
+                    Pane.AUDIO -> {
+                        if (model.audioTracks.size <= 1) item { Note(if (model.audioTracks.isEmpty()) "This server has one audio track. Pick another server for a different language." else "Only ${PlayerModel.displayName(model.audioTracks[0])} on this server. Pick another server for a different language.") }
+                        val tracks = model.audioTracks
+                        items(tracks, key = { it.index }) { track ->
+                            SideItem(PlayerModel.displayName(track), selected = track.on, modifier = if (track.on || (tracks.none { it.on } && track == tracks.first())) Modifier.focusRequester(firstFocus) else Modifier) {
+                                model.selectAudio(track); close()
                             }
                         }
+                        if (model.audioTracks.size <= 1) item { SideItem("Pick another server", chevron = true, modifier = Modifier.focusRequester(firstFocus)) { open(Pane.SERVER) } }
+                    }
+                    Pane.SUBTITLES -> {
+                        item { Note(when {
+                            model.usingExternalSubtitles -> model.external?.release ?: "From OpenSubtitles"
+                            model.useExternal && model.externalLoading -> "Finding subtitles…"
+                            else -> "From OpenSubtitles, drawn the same on every server."
+                        }) }
+                        items(PlaybackPrefs.subtitleChoices, key = { "l:" + it.first }) { (code, label) ->
+                            val selected = if (code == "off") !model.useExternal && model.textTracks.none { it.on } else model.useExternal && model.subtitleLanguage == code
+                            SideItem(label, selected = selected, modifier = if (selected) Modifier.focusRequester(firstFocus) else Modifier) { model.chooseSubtitleLanguage(code); close() }
+                        }
+                        if (model.textTracks.isNotEmpty()) {
+                            item { Text("This server's own", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = 10.dp, top = 12.dp, bottom = 2.dp)) }
+                            items(model.textTracks.take(30), key = { "t:" + it.index }) { track ->
+                                SideItem(PlayerModel.displayName(track), selected = !model.useExternal && track.on) { model.selectSubtitles(track); close() }
+                            }
+                        }
+                    }
+                    Pane.TIMING -> {
+                        item { Note("If the words come early or late, shift them half a second at a time. Now: " + if (model.subtitleOffset == 0.0) "in sync" else "%+.1fs".format(model.subtitleOffset)) }
+                        item { SideItem("Show them earlier", modifier = Modifier.focusRequester(firstFocus)) { model.nudgeSubtitles(-0.5) } }
+                        item { SideItem("Show them later") { model.nudgeSubtitles(0.5) } }
+                        if (model.subtitleOffset != 0.0) item { SideItem("Reset") { model.nudgeSubtitles(-model.subtitleOffset) } }
+                        if ((model.external?.versions ?: 0) > 1) item { SideItem("Try another version", "${(model.external?.version ?: 0) + 1} of ${minOf(model.external?.versions ?: 1, 10)}") { model.nextSubtitleVersion() } }
+                    }
+                    Pane.SERVER -> items(model.servers, key = { it.id }) { server ->
+                        val current = server == (model.server ?: model.servers.firstOrNull())
+                        SideItem(server.name, selected = server == model.server, modifier = if (current) Modifier.focusRequester(firstFocus) else Modifier) { model.choose(server); close() }
+                    }
+                    Pane.PICTURE -> {
+                        item { SideItem("Fill screen", "The picture edge to edge", selected = model.fillScreen, modifier = if (model.fillScreen) Modifier.focusRequester(firstFocus) else Modifier) { model.setFill(true); close() } }
+                        item { SideItem("Server's layout", "If subtitles or the server's buttons go missing", selected = !model.fillScreen, modifier = if (!model.fillScreen) Modifier.focusRequester(firstFocus) else Modifier) { model.setFill(false); close() } }
+                    }
+                    Pane.QUALITY -> items(QualityPreference.entries.toList(), key = { it.raw }) { option ->
+                        SideItem(option.label, if (option == QualityPreference.BEST) "Compares servers for a moment and keeps the sharpest" else "Plays the first server that starts",
+                            selected = QualityPreference.current == option, modifier = if (QualityPreference.current == option) Modifier.focusRequester(firstFocus) else Modifier) {
+                            Prefs.set("quality", option.raw); close()
+                        }
+                    }
+                    Pane.SLEEP -> items(SleepOption.entries.filter { it != SleepOption.EPISODE || model.isEpisode }, key = { it.name }) { option ->
+                        SideItem(option.label, selected = model.sleep == option, modifier = if (model.sleep == option) Modifier.focusRequester(firstFocus) else Modifier) { model.chooseSleep(option); close() }
+                    }
+                    Pane.EPISODES -> items(episodes, key = { it.id }) { episode ->
+                        val current = episode.episodeNumber == model.request.episode
+                        EpisodeItem(episode, current, if (current) Modifier.focusRequester(firstFocus) else Modifier) { model.play(episode.seasonNumber, episode.episodeNumber); close() }
                     }
                 }
             }
@@ -362,14 +403,38 @@ private fun PlayerPanel(model: PlayerModel, close: () -> Unit) {
 }
 
 @Composable
-private fun PanelRow(heading: String, note: String? = null, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
-    Column {
-        Row(Modifier.padding(start = Dimens.edge, end = Dimens.edge), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(heading, style = Type.headline, color = Palette.muted)
-            note?.let { Text(it, style = Type.caption, color = Palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        }
-        PivotScroll(offset = Dimens.edge) {
-            LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), content = content)
-        }
-    }
+private fun Note(text: String) {
+    Text(text, style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 6.dp))
+}
+
+// One row in the sidebar: white when focused, a check for the current choice
+// (gold marks state), a chevron for rows that open another list.
+@Composable
+private fun SideItem(label: String, detail: String? = null, selected: Boolean = false, chevron: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    androidx.tv.material3.ListItem(
+        selected = false, onClick = onClick, modifier = modifier,
+        headlineContent = { Text(label, style = Type.headline.copy(fontSize = 15.sp), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        supportingContent = detail?.let { { Text(it, style = Type.caption, color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.65f), maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+        trailingContent = when {
+            selected -> { { Icon(Icons.Rounded.Check, "Selected", tint = Palette.gold, modifier = Modifier.size(18.dp)) } }
+            chevron -> { { Icon(Icons.Rounded.ChevronRight, null, modifier = Modifier.size(18.dp)) } }
+            else -> null
+        },
+        colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = Color.White, focusedContentColor = Color.Black),
+        shape = androidx.tv.material3.ListItemDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f),
+    )
+}
+
+@Composable
+private fun EpisodeItem(episode: TmdbSeason.Episode, current: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    androidx.tv.material3.ListItem(
+        selected = false, onClick = onClick, modifier = modifier,
+        leadingContent = { Art(Tmdb.image(episode.stillPath, Tmdb.WIDE), "${episode.episodeNumber}", Modifier.width(88.dp).height(50.dp).clip(RoundedCornerShape(4.dp))) },
+        headlineContent = { Text("${episode.episodeNumber}. ${episode.name ?: "Episode ${episode.episodeNumber}"}", style = Type.callout.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        supportingContent = { Text(if (current) "Playing now" else episode.runtime?.let { "${it}m" } ?: "", style = Type.caption, color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.65f)) },
+        colors = androidx.tv.material3.ListItemDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = Color.White, focusedContentColor = Color.Black),
+        shape = androidx.tv.material3.ListItemDefaults.shape(RoundedCornerShape(8.dp)),
+        scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f),
+    )
 }
