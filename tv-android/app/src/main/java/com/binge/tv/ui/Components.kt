@@ -265,6 +265,7 @@ fun TvTextField(
     // Read-only (no keyboard) until OK is pressed on it; Back or moving away ends typing.
     var typing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     androidx.compose.runtime.LaunchedEffect(typing) { if (typing) { kotlinx.coroutines.delay(60); keyboardController?.show() } }
     androidx.compose.foundation.text.BasicTextField(
         value = value, onValueChange = onChange, singleLine = true, readOnly = !typing,
@@ -274,6 +275,13 @@ fun TvTextField(
         modifier = modifier.fillMaxWidth()
             .onFocusChanged { focused = it.isFocused; if (!it.isFocused) typing = false }
             .onPreviewKeyEvent { event ->
+                // ▲ / ▼ always move between controls (a one-line box has no lines to move through).
+                val code = event.key.nativeKeyCode
+                if (code == android.view.KeyEvent.KEYCODE_DPAD_UP || code == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown)
+                        focusManager.moveFocus(if (code == android.view.KeyEvent.KEYCODE_DPAD_UP) androidx.compose.ui.focus.FocusDirection.Up else androidx.compose.ui.focus.FocusDirection.Down)
+                    return@onPreviewKeyEvent true
+                }
                 val ok = event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_ENTER
                 if (!ok || typing) return@onPreviewKeyEvent false
                 if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) typing = true

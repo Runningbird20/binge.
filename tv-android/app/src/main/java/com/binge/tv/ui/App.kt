@@ -131,6 +131,7 @@ private fun Shell() {
     var tabsFocused by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
     val contentFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // One per tab: going up to the tab bar always lands on the tab you're on.
     val tabRequesters = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
     val top = Nav.stack.lastOrNull()
@@ -142,6 +143,9 @@ private fun Shell() {
 
     Box(Modifier.fillMaxSize()) {
         // The tabs stay composed under pages pushed on top, so focus and scroll come back as they were.
+        // Keyed by tab: each tab gets fresh focus memory. (A memory pointing at the
+        // previous tab's elements made ▼ from the tab bar fail after switching.)
+        androidx.compose.runtime.key(selected) {
         Box(Modifier.fillMaxSize().focusRequester(contentFocus).focusRestorer().onFocusChanged { contentHasFocus = it.hasFocus }) {
             when (tabs.getOrNull(selected)?.id) {
                 "home" -> HomeScreen()
@@ -151,6 +155,7 @@ private fun Shell() {
                 "search" -> SearchScreen()
                 "me" -> MeScreen()
             }
+        }
         }
         val chrome by animateFloatAsState(if (tabsFocused || TabChrome.atTop) 1f else 0f, label = "tabs")
         Box(
@@ -165,7 +170,9 @@ private fun Shell() {
                     // ▼ from the tab bar into the page, back where focus last was there.
                     .onPreviewKeyEvent { event ->
                         if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
-                            runCatching { contentFocus.requestFocus() }; true
+                            val moved = runCatching { contentFocus.requestFocus() }.isSuccess && contentHasFocus
+                            if (!moved) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+                            true
                         } else false
                     },
                 separator = { Spacer(Modifier.width(6.dp)) },
