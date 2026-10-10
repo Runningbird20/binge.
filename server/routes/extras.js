@@ -153,10 +153,22 @@ async function osHeaders() {
 // rather than the original audio, so they go after the rest.
 const isForced = (a) => a.foreign_parts_only || /\bforced\b/i.test(a.release || '');
 const isDubScript = (a) => /\bdub(bed)?\b/i.test(a.release || '');
-function rankSubtitleFiles(data) {
+// Only files for this exact title: OpenSubtitles can answer a movie id with
+// an episode that shares the number (seen: a Brooklyn Nine-Nine episode for
+// a 2026 movie), so each result's own feature details must match.
+function matchesFeature(a, want) {
+  const f = a.feature_details || {};
+  if (want.type === 'tv') {
+    return f.feature_type === 'Episode' && String(f.parent_tmdb_id) === want.tmdb
+      && Number(f.season_number) === want.season && Number(f.episode_number) === want.episode;
+  }
+  return f.feature_type === 'Movie' && String(f.tmdb_id) === want.tmdb;
+}
+
+function rankSubtitleFiles(data, want) {
   return (data || [])
     .map((item) => item.attributes || {})
-    .filter((a) => a.files?.length && !a.ai_translated && !a.machine_translated && !isForced(a))
+    .filter((a) => a.files?.length && !a.ai_translated && !a.machine_translated && !isForced(a) && (!want || matchesFeature(a, want)))
     .sort((a, b) => Number(isDubScript(a)) - Number(isDubScript(b))
       || Number(Boolean(a.hearing_impaired)) - Number(Boolean(b.hearing_impaired))
       || Number(Boolean(b.from_trusted)) - Number(Boolean(a.from_trusted))
@@ -171,8 +183,8 @@ router.get('/subtitles', async (req, res) => {
   const lang = String(req.query.lang || 'en').toLowerCase().slice(0, 5).replace(/[^a-z-]/g, '');
   const version = Math.max(0, Math.min(9, Number(req.query.version) || 0));
   if (!validId(req.query.tmdb) || (type === 'tv' && !(season > 0 && episode > 0))) return res.status(400).json({ error: 'bad params' });
-  // r2: ranking revision (bump when rankSubtitleFiles changes which file a version means).
-  const key = `r2:${type}:${req.query.tmdb}:${season}:${episode}:${lang}:${version}`;
+  // r3: ranking revision (bump when rankSubtitleFiles changes which file a version means).
+  const key = `r3:${type}:${req.query.tmdb}:${season}:${episode}:${lang}:${version}`;
   const db = adminDb();
   try {
     if (db) {
@@ -182,7 +194,7 @@ router.get('/subtitles', async (req, res) => {
     if (!process.env.OPENSUBTITLES_API_KEY) return res.json({ unavailable: 'no-opensubtitles-key' });
     const result = await remember(`subs:${key}`, 6 * 3600000, async () => {
       const headers = await osHeaders();
-      const params = new URLSearchParams({ languages: lang, order_by: 'download_count' });
+      const params = new URLSearchParams({ languages: lang, order_by: 'download_count', type: type === 'tv' ? 'episode' : 'movie' });
       if (type === 'tv') {
         params.set('parent_tmdb_id', req.query.tmdb);
         params.set('season_number', String(season));
@@ -191,7 +203,7 @@ router.get('/subtitles', async (req, res) => {
         params.set('tmdb_id', req.query.tmdb);
       }
       const search = await getJson(`${OS_API}/subtitles?${params}`, { headers });
-      const files = rankSubtitleFiles(search.data);
+      const files = rankSubtitleFiles(search.data, { type, tmdb: String(req.query.tmdb), season, episode });
       const pick = files[version];
       if (!pick) return { vtt: null, versions: files.length };
       const dl = await fetch(`${OS_API}/download`, { method: 'POST', headers, body: JSON.stringify({ file_id: pick.fileId, sub_format: 'webvtt' }), signal: AbortSignal.timeout(10000) });
