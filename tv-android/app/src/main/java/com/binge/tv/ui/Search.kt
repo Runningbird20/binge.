@@ -29,7 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -68,7 +70,11 @@ fun SearchScreen() {
         try {
             val (summary, titles) = AskBinge.ask(q, AppModel.isKids)
             if (q == query.trim()) { ai = titles; aiSummary = summary; if (titles.isEmpty() && results.isEmpty()) aiError = "Nothing on binge. fits that yet. Try saying it another way." }
-        } catch (e: Exception) { aiError = e.message ?: "Ask binge. isn't answering right now." }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e
+        } catch (e: Exception) {
+            // Only messages written for people reach the screen.
+            aiError = (e as? com.binge.tv.data.BingeException)?.message ?: "Ask binge. isn't answering right now."
+        }
         aiLoading = false
     }
 
@@ -96,6 +102,26 @@ fun SearchScreen() {
 
     val aiIds = ai.map { it.first.id }.toSet()
     val showing = if (text.isEmpty()) trending else results.filter { it.id !in aiIds }
+    // When the keyboard closes, focus goes to the first result (or stays in
+    // the box if there are none yet), never up to the tab bar.
+    val firstId = ai.firstOrNull()?.first?.id ?: showing.firstOrNull()?.id
+    val firstResult = remember { androidx.compose.ui.focus.FocusRequester() }
+    val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    var fieldFocused by remember { mutableStateOf(false) }
+    fun afterTyping() {
+        scope.launch {
+            if (firstId == null) { kotlinx.coroutines.delay(250); runCatching { fieldFocus.requestFocus() }; return@launch }
+            // Fire TV hands focus back from its keyboard window a moment after
+            // it closes (and puts it on the box): ask again until it moves.
+            for (wait in listOf(250L, 400L, 600L, 900L)) {
+                kotlinx.coroutines.delay(wait)
+                runCatching { firstResult.requestFocus() }
+                kotlinx.coroutines.delay(60)
+                if (!fieldFocused) break
+            }
+            if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "search afterTyping first=$firstId onResults=${!fieldFocused}")
+        }
+    }
     PivotScroll(fraction = 0.3f) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(7), state = gridState, modifier = Modifier.fillMaxSize().focusRestorer(),
@@ -104,8 +130,8 @@ fun SearchScreen() {
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TvTextField(query, { query = it }, "Movies, series, actors, or a mood", Modifier.width(560.dp),
-                        KeyboardOptions(imeAction = ImeAction.Search), KeyboardActions(onSearch = { }), leading = Icons.Rounded.Search)
+                    TvTextField(query, { query = it }, "Movies, series, actors, or a mood", Modifier.width(560.dp).focusRequester(fieldFocus).onFocusChanged { fieldFocused = it.isFocused },
+                        KeyboardOptions(imeAction = ImeAction.Search), leading = Icons.Rounded.Search, onDone = ::afterTyping)
                     if (text.isEmpty()) Text("Press the microphone on the remote to say a title, an actor, or what you're in the mood for — like “a funny movie under two hours”.",
                         style = Type.callout, color = Palette.muted)
                 }
@@ -122,7 +148,7 @@ fun SearchScreen() {
             }
             items(ai, key = { "ai:" + it.first.id }) { (title, why) ->
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    PosterCard(title, Nav::open)
+                    PosterCard(title, Nav::open, if (title.id == firstId) Modifier.focusRequester(firstResult) else Modifier)
                     why?.takeIf { it.isNotEmpty() && it != "Title match" }?.let { Text(it, style = Type.caption, color = Palette.muted, maxLines = 2) }
                 }
             }
@@ -131,7 +157,7 @@ fun SearchScreen() {
                 Text("Nothing on binge. matches “$text”.", style = Type.headline, color = Palette.muted, modifier = Modifier.padding(top = 30.dp))
             }
             if (text.isEmpty() && trending.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Trending searches", style = Type.section) }
-            items(showing, key = { it.id }) { PosterCard(it, Nav::open) }
+            items(showing, key = { it.id }) { PosterCard(it, Nav::open, if (it.id == firstId) Modifier.focusRequester(firstResult) else Modifier) }
         }
     }
 }

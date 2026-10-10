@@ -260,27 +260,63 @@ fun TvTextField(
     actions: androidx.compose.foundation.text.KeyboardActions = androidx.compose.foundation.text.KeyboardActions.Default,
     visual: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
     leading: ImageVector? = null,
+    // Typing finished (keyboard closed by Back, or its Next / Search key):
+    // e.g. move focus to the results.
+    onDone: (() -> Unit)? = null,
 ) {
     var focused by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     // Read-only (no keyboard) until OK is pressed on it; Back or moving away ends typing.
     var typing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    androidx.compose.runtime.LaunchedEffect(typing) { if (typing) { kotlinx.coroutines.delay(60); keyboardController?.show() } }
-    // Fire TV's keyboard has no Enter key: Back is how you finish typing. It
-    // closes the keyboard and leaves you on the field (results are already
-    // there below it), instead of leaving the page.
-    androidx.activity.compose.BackHandler(enabled = typing) { typing = false; keyboardController?.hide() }
+    val view = androidx.compose.ui.platform.LocalView.current
+    fun finish() {
+        if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "field finish typing=$typing")
+        if (!typing) return
+        typing = false
+        keyboardController?.hide()
+        onDone?.invoke()
+    }
+    // Fire TV's keyboard has no Enter key, and it eats the first Back to close
+    // itself (the app never sees that press). So the keyboard closing is what
+    // ends typing: watched here, and then focus goes to the results (onDone)
+    // instead of jumping to the tab bar, where the next Back left the page.
+    androidx.compose.runtime.LaunchedEffect(typing) {
+        if (!typing) return@LaunchedEffect
+        kotlinx.coroutines.delay(60)
+        keyboardController?.show()
+        var seen = false
+        while (typing) {
+            kotlinx.coroutines.delay(150)
+            val visible = androidx.core.view.ViewCompat.getRootWindowInsets(view)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            if (com.binge.tv.BuildConfig.DEBUG && visible != seen) android.util.Log.i("binge", "keyboard visible=$visible focused=$focused")
+            if (visible) seen = true else if (seen) { finish(); break }
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = typing) { finish() }
+    val done = androidx.compose.foundation.text.KeyboardActions(
+        onDone = { finish() }, onGo = { finish() }, onNext = { finish() }, onSearch = { finish() }, onSend = { finish() })
     androidx.compose.foundation.text.BasicTextField(
         value = value, onValueChange = onChange, singleLine = true, readOnly = !typing,
         textStyle = Type.headline.copy(color = Color.White, fontWeight = FontWeight.Normal),
         cursorBrush = androidx.compose.ui.graphics.SolidColor(if (typing) Color.White else Color.Transparent),
-        keyboardOptions = keyboard, keyboardActions = actions, visualTransformation = visual,
+        keyboardOptions = keyboard, keyboardActions = if (actions == androidx.compose.foundation.text.KeyboardActions.Default) done else actions, visualTransformation = visual,
         modifier = modifier.fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused; if (!it.isFocused) typing = false }
+            .onFocusChanged {
+                if (com.binge.tv.BuildConfig.DEBUG && focused != it.isFocused) android.util.Log.i("binge", "field focused=${it.isFocused} typing=$typing")
+                focused = it.isFocused
+                // Lost focus while typing (Compose clears it on Back): typing is done,
+                // and onDone puts focus on the results instead of the tab bar.
+                if (!it.isFocused && typing) finish() }
             .onPreviewKeyEvent { event ->
                 // ▲ / ▼ always move between controls (a one-line box has no lines to move through).
                 val code = event.key.nativeKeyCode
+                // Back while typing ends typing here (the text field would otherwise clear focus).
+                if (com.binge.tv.BuildConfig.DEBUG && code == android.view.KeyEvent.KEYCODE_BACK) android.util.Log.i("binge", "field back ${event.type} typing=$typing")
+                if (code == android.view.KeyEvent.KEYCODE_BACK && typing) {
+                    if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyUp) finish()
+                    return@onPreviewKeyEvent true
+                }
                 if (code == android.view.KeyEvent.KEYCODE_DPAD_UP || code == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown)
                         focusManager.moveFocus(if (code == android.view.KeyEvent.KEYCODE_DPAD_UP) androidx.compose.ui.focus.FocusDirection.Up else androidx.compose.ui.focus.FocusDirection.Down)

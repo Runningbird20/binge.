@@ -70,7 +70,9 @@ object AskBinge {
         val request = Request.Builder().url("${Config.siteUrl}/api/extras/ai/picks")
             .post(toJson(mapOf("q" to query)).toString().toRequestBody("application/json".toMediaType())).build()
         val body = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { slowClient.newCall(request).execute().use { it.body?.string() ?: "" } }
-        val response = json.decodeFromString<Response>(body)
+        // The site's API answers in camelCase (tmdbId), not the snake_case the
+        // Supabase decoder expects; with that one every answer failed to read.
+        val response = runCatching { plainJson.decodeFromString<Response>(body) }.getOrElse { throw BingeException("Couldn't get picks just now.") }
         response.error?.let { throw BingeException(it) }
         val picks = response.picks.orEmpty()
         fun stub(p: Pick) = TmdbItem(id = p.tmdbId)

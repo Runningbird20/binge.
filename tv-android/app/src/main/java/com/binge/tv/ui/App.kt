@@ -168,6 +168,11 @@ private fun Shell() {
     val tabRequesters = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
     val top = Nav.stack.lastOrNull()
 
+    // Back on another tab's bar goes to Home first (only Home's bar leaves the app).
+    BackHandler(enabled = top == null && tabsFocused && selected != 0) {
+        selected = 0
+        runCatching { tabRequesters[0].requestFocus() }
+    }
     BackHandler(enabled = top == null && !tabsFocused) {
         // Back from anywhere in a tab goes up to the tab bar first (tvOS / Android TV convention).
         runCatching { tabRequesters[selected].requestFocus() }
