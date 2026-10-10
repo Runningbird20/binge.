@@ -78,7 +78,10 @@ fun PivotScroll(fraction: Float = 0f, offset: Dp = 0.dp, content: @Composable ()
     val spec = remember(fraction, offset) {
         object : BringIntoViewSpec {
             @Suppress("OVERRIDE_DEPRECATION")
-            override val scrollAnimationSpec = tween<Float>(durationMillis = 220)
+            // Steady and short: a constant-speed move (no ease-in/out glide), done
+            // before the next press lands, so a row never keeps drifting after
+            // focus has moved on.
+            override val scrollAnimationSpec = tween<Float>(durationMillis = 120, easing = androidx.compose.animation.core.LinearEasing)
             override fun calculateScrollDistance(offset0: Float, size: Float, containerSize: Float): Float {
                 val target = containerSize * fraction + with(density) { offset.toPx() }
                 if (fraction > 0f) {
