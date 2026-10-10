@@ -169,3 +169,105 @@ export async function fetchLeagueTeams(path) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+// ── Scoreboards for the whole schedule ────────────────────────────────
+// One ESPN scoreboard per league and (Eastern) day on the schedule gives
+// every card its score, clock, network and logos. Only leagues with their
+// own scoreboard are asked (no category-wide fan-out), so a busy Saturday is
+// ~15 small requests, refreshed every 30s only for leagues with a game on.
+
+const SCOREBOARD_PATHS = {
+  ...Object.fromEntries(Object.entries(LEAGUE_PATHS).map(([league, paths]) => [league, paths[0]])),
+  'College Basketball': 'basketball/mens-college-basketball',
+  Eredivisie: 'soccer/ned.1',
+  'EFL Championship': 'soccer/eng.2',
+  Allsvenskan: 'soccer/swe.1',
+  'Canadian Football': 'football/cfl',
+};
+
+const LIVE_TTL = 30_000;
+const IDLE_TTL = 5 * 60_000;
+
+function scoreboardUrl(path, day) {
+  const college = path.includes('college') ? `&groups=${path.includes('basketball') ? 50 : 80}&limit=300` : '';
+  return `${BASE}/${path}/scoreboard?dates=${day}${college}`;
+}
+
+// Late in the game and within one score: worth switching to.
+const CLOSE_RULES = {
+  football: { period: 4, margin: 8 },
+  basketball: { period: 4, margin: 6 },
+  hockey: { period: 3, margin: 1 },
+  soccer: { period: 2, margin: 1, minute: 70 },
+  baseball: { period: 7, margin: 2 },
+};
+
+function isClose(path, score) {
+  if (score.state !== 'in' || score.teams.length !== 2) return false;
+  const rule = CLOSE_RULES[path.split('/')[0]];
+  if (!rule) return false;
+  const [a, b] = score.teams.map((team) => Number(team.score));
+  if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > rule.margin) return false;
+  if (rule.minute) return (parseInt(score.clock, 10) || 0) >= rule.minute;
+  return (score.period || 0) >= rule.period;
+}
+
+function eventScore(event, path) {
+  const competition = event.competitions?.[0] || {};
+  const status = competition.status || event.status || {};
+  const type = status.type || {};
+  // Away first, the way scores are read ("MIZ 20 – 6 TA&M" at Missouri).
+  const competitors = [...(competition.competitors || [])].sort((a) => (a.homeAway === 'away' ? -1 : 1));
+  const score = {
+    path,
+    eventId: event.id,
+    state: type.state || 'pre', // pre | in | post
+    detail: type.shortDetail || type.detail || '',
+    period: status.period || 0,
+    clock: status.displayClock || '',
+    broadcast: competition.broadcasts?.[0]?.names?.[0] || competition.geoBroadcasts?.[0]?.media?.shortName || '',
+    teams: competitors.map((c) => ({
+      name: c.team?.displayName || c.team?.name || '',
+      short: c.team?.abbreviation || c.team?.shortDisplayName || '',
+      logo: c.team?.logo || c.team?.logos?.[0]?.href || null,
+      score: c.score ?? '',
+      homeAway: c.homeAway,
+      winner: Boolean(c.winner),
+      record: c.records?.[0]?.summary || '',
+    })),
+  };
+  score.close = isClose(path, score);
+  return score;
+}
+
+// Map of stream id → score, for every stream ESPN covers. `streams` are the
+// merged sports entries.
+export async function fetchScoreboards(streams) {
+  const nowSec = Date.now() / 1000;
+  const wanted = new Map(); // url -> { path, streams: [], live }
+  for (const stream of streams) {
+    if (stream.alwaysLive) continue;
+    const path = SCOREBOARD_PATHS[stream.league];
+    if (!path || !stream.startsAt) continue;
+    // Today's and the next day and a half of games; older ones are over.
+    if (stream.startsAt < nowSec - 12 * 3600 || stream.startsAt > nowSec + 36 * 3600) continue;
+    const url = scoreboardUrl(path, easternDay(stream.startsAt));
+    const entry = wanted.get(url) || { path, streams: [], live: false };
+    entry.streams.push(stream);
+    if (stream.startsAt <= nowSec && (stream.endsAt || 0) >= nowSec) entry.live = true;
+    wanted.set(url, entry);
+  }
+
+  const result = new Map();
+  await Promise.all([...wanted.entries()].map(async ([url, { path, streams: list, live }]) => {
+    const board = await getJson(url, live ? LIVE_TTL : IDLE_TTL);
+    const events = board?.events || [];
+    for (const stream of list) {
+      const teams = stream.teams || splitTeamsFromTitle(stream.name);
+      if (!teams) continue;
+      const event = events.find((candidate) => eventMatches(candidate, teams));
+      if (event) result.set(stream.id, eventScore(event, path));
+    }
+  }));
+  return result;
+}

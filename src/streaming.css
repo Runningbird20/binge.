@@ -540,7 +540,9 @@
 .st-sp-feature-meta { margin: 0; color: var(--exp-text-dim); }
 .st-sp-feature .st-hero-title { font-size: clamp(1.6rem, 3vw, 2.5rem); }
 
-.st-sports .genre-bar-outer { margin-bottom: 0.5rem; }
+/* Not sticky here: it has no backdrop of its own, and the rows scrolling
+   under it showed through. */
+.st-sports .genre-bar-outer { margin-bottom: 0.5rem; position: relative; top: auto; }
 
 .st-game {
   display: block;
@@ -590,7 +592,9 @@
   max-width: 96px;
   aspect-ratio: 1;
   object-fit: contain;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  /* A thin light edge keeps a logo readable on its own team color (Texas
+     A&M's maroon on the maroon half). */
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.75)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
 }
 .st-game-art-icon { font-size: 2.6rem; }
 
@@ -612,7 +616,108 @@
 .st-sp-feature-content .st-game-status,
 .st-sp-player-title .st-game-status { position: static; }
 .st-game-status--live { background: var(--st-live); }
-.st-game-status--replay { background: rgba(80, 86, 100, 0.9); }
+.st-game-status--replay,
+.st-game-status--final { background: rgba(80, 86, 100, 0.9); }
+
+/* Close late game: state, so it's allowed the accent. */
+.st-game-close {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.5rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: rgba(11, 13, 18, 0.85);
+  color: var(--st-soon);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.st-game-close--inline { position: static; }
+
+/* Broadcast-style score bug along the bottom of the art. Solid, not frosted. */
+.st-scorebug {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(8, 10, 14, 0.86);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  min-width: 0;
+}
+.st-scorebug-team { display: inline-flex; gap: 0.35rem; white-space: nowrap; color: rgba(255, 255, 255, 0.82); }
+.st-scorebug-team b { color: #fff; font-weight: 800; }
+.st-scorebug-team.won b { text-decoration: underline; text-underline-offset: 3px; }
+.st-scorebug-clock {
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.st-sp-feature-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
+}
+.st-sp-feature-score b { color: #fff; font-weight: 800; margin-left: 0.3rem; }
+.st-sp-feature-clock { font-size: 0.95rem; font-weight: 600; color: var(--exp-text-dim); }
+
+.st-sp-tools { position: relative; z-index: 2; display: flex; justify-content: flex-end; margin: 0.5rem 0 -2.6rem; pointer-events: none; }
+.st-sp-tools > * { pointer-events: auto; }
+.st-btn--small { padding: 0.35rem 0.75rem; font-size: 0.82rem; gap: 0.4rem; }
+
+/* Servers as a row of buttons (was a dropdown): every option visible, the
+   current one marked, dead ones dimmed. */
+.st-servers { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 1.25rem; }
+.st-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0.35rem 0.85rem 0.35rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--exp-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.st-server:hover { background: rgba(255, 255, 255, 0.09); }
+.st-server-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.st-server.active { border-color: var(--st-soon); box-shadow: inset 0 0 0 1px var(--st-soon); }
+.st-server.active .st-server-no { background: var(--st-soon); color: #0b0d12; }
+.st-server.down { color: var(--exp-text-faint); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.35); }
+.st-ls-reveal { margin: 0.75rem auto; display: flex; }
 
 .st-live-dot {
   width: 7px;
@@ -3514,8 +3619,14 @@ kbd {
 
 /* Phones: team logos sit above the spotlight's text, not behind it. */
 @media (max-width: 700px) {
-  .st-sp-feature-art .st-game-art { align-items: flex-start; padding-top: 10%; }
-  .st-sp-feature-art .st-game-art img { width: 22%; max-width: 110px; }
+  .st-sp-feature { padding-top: 124px; }
+  .st-sp-feature-art .st-game-art { align-items: flex-start; padding-top: 24px; }
+  .st-sp-feature-art .st-game-art img { width: 22%; max-width: 84px; }
+}
+/* Wider screens: logos on the right half, clear of the title and score. */
+@media (min-width: 701px) {
+  .st-sp-feature-art .st-game-art { justify-content: flex-end; padding-right: 7%; gap: 1.4rem; }
+  .st-sp-feature-art .st-game-art img { width: 15%; max-width: 150px; }
 }
 
 /* ── Wrapped: your year as movie tickets ────────────────────────────────

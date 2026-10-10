@@ -197,8 +197,26 @@ function nickname(name) {
   return { one: tokens[tokens.length - 1] || '', two };
 }
 
+// Feeds name the same league differently (StreamFree "NCAAF", PPV "College
+// Football"); one name per league keeps it to one row.
+const LEAGUE_ALIASES = {
+  ncaaf: 'College Football', 'ncaa football': 'College Football', 'college football': 'College Football',
+  ncaab: 'College Basketball', 'ncaa basketball': 'College Basketball', 'college basketball': 'College Basketball',
+  epl: 'Premier League', 'english premier league': 'Premier League', 'premier league': 'Premier League',
+  'la liga': 'LaLiga', laliga: 'LaLiga',
+  ucl: 'Champions League', 'uefa champions league': 'Champions League', 'champions league': 'Champions League',
+  f1: 'Formula 1', 'formula one': 'Formula 1', 'formula 1': 'Formula 1',
+  wwe: 'Wrestling', aew: 'Wrestling', wrestling: 'Wrestling',
+  ufc: 'UFC', mma: 'MMA',
+};
+
+export function canonicalLeague(name) {
+  if (!name) return name;
+  return LEAGUE_ALIASES[String(name).trim().toLowerCase()] || name;
+}
+
 function inferLeague(item) {
-  if (item.tag && !/24\/7/i.test(item.tag)) return item.tag;
+  if (item.tag && !/24\/7/i.test(item.tag)) return canonicalLeague(item.tag);
   if (item.alwaysLive) return '24/7 Channels';
   const teams = item.teams;
   if (teams) {
@@ -437,6 +455,13 @@ export function mergeNormalized(rawItems) {
       providers: [...providers].sort((a, b) => ['ppv', 'streamfree', 'streamed'].indexOf(a.id) - ['ppv', 'streamfree', 'streamed'].indexOf(b.id)),
     };
     entry.name = cleanName(entry, (members.find((member) => member.provider.id === 'ppv') || members[0]).name);
+    // Logos follow the name's order ("A vs B" → A's logo first), even when
+    // they came from a feed that lists the teams the other way round.
+    const named = splitTeamsFromTitle(entry.name);
+    if (entry.logos && withLogos?.teams && named
+      && teamsMatch(named.home, withLogos.teams.away) && !teamsMatch(named.home, withLogos.teams.home)) {
+      entry.logos = { home: entry.logos.away, away: entry.logos.home };
+    }
     entry.league = inferLeague(entry);
     entry.id = eventId(entry);
     entry.live = entry.alwaysLive || (entry.startsAt <= now && entry.endsAt >= now);
@@ -509,18 +534,23 @@ export async function fetchAllSportsStreams() {
   return mergeNormalized(await fetchRawSportsStreams());
 }
 
-// Unmerged feeds: server proxy first (one shared cache, and a server IP is
-// less likely to trip streamed.pk's ddos-guard), direct browser fetch as a
-// fallback.
+// Unmerged feeds: straight from the browser first (the feeds refuse
+// Vercel's servers, so the proxy has answered 502 since 2026-10-08 and only
+// added a wasted round trip), the server proxy as a fallback.
+async function fetchProxyFeeds() {
+  const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) throw new Error(`sports proxy ${res.status}`);
+  const data = await res.json();
+  if (data.error || !Array.isArray(data.raw) || data.raw.length === 0) throw new Error('sports proxy empty');
+  return data.raw;
+}
+
 export async function fetchSportsFeeds() {
   try {
-    const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(6000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.error && Array.isArray(data.raw) && data.raw.length > 0) return data.raw;
-    }
-  } catch { /* fall through */ }
-  return fetchRawSportsStreams();
+    return await fetchRawSportsStreams();
+  } catch {
+    return fetchProxyFeeds();
+  }
 }
 
 // Feeds an admin switched off are left out before merging, so a game only
@@ -528,6 +558,36 @@ export async function fetchSportsFeeds() {
 export async function fetchSportsStreams() {
   const [raw, disabled] = await Promise.all([fetchSportsFeeds(), fetchDisabledServers()]);
   return mergeNormalized(withoutDisabledFeeds(raw, disabled));
+}
+
+// Same result, delivered as each feed arrives: onUpdate(merged) runs after
+// every feed, so the page shows games without waiting for the slowest one
+// (StreamFree takes ~0.7s, the others ~0.3s). Resolves with the final list.
+export async function loadSportsStreams(onUpdate) {
+  const disabledPromise = fetchDisabledServers().catch(() => new Set());
+  const lists = [];
+  let settled = 0;
+  let lastError = null;
+  const feeds = [fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized];
+  await Promise.all(feeds.map((fetchFeed) => fetchFeed()
+    .then(async (items) => {
+      lists.push(items);
+      const disabled = await disabledPromise;
+      settled += 1;
+      // Show games once two feeds are in; the last one arrives with the
+      // final update below.
+      if (settled >= 2 && settled < feeds.length) onUpdate?.(mergeNormalized(withoutDisabledFeeds(lists.flat(), disabled)));
+    })
+    .catch((error) => { settled += 1; lastError = error; })));
+  if (lists.length === 0) {
+    const raw = await fetchProxyFeeds().catch(() => { throw lastError || new Error('All sports providers unavailable'); });
+    const merged = mergeNormalized(withoutDisabledFeeds(raw, await disabledPromise));
+    onUpdate?.(merged);
+    return merged;
+  }
+  const merged = mergeNormalized(withoutDisabledFeeds(lists.flat(), await disabledPromise));
+  onUpdate?.(merged);
+  return merged;
 }
 
 // Resolves one server entry into an embeddable iframe URL. PPV and
@@ -602,7 +662,22 @@ export function streamedStreamLabel(source, stream, count) {
 // Replaces each Streamed source with its streams (HD first, capped per
 // source). A source that can't be looked up stays as it was and is resolved
 // on demand, so expanding never loses a server.
-export async function expandStreamProviders(providers) {
+// Expansions are cached briefly, so warming a game on hover makes the click
+// that follows start at once.
+const EXPAND_TTL_MS = 90_000;
+const expandCache = new Map(); // key -> { at, promise }
+
+export function expandStreamProviders(providers) {
+  const key = providers.map((provider) => `${provider.id}|${provider.source || ''}|${provider.matchId || provider.embedUrl || ''}`).join(',');
+  const hit = expandCache.get(key);
+  if (hit && Date.now() - hit.at < EXPAND_TTL_MS) return hit.promise;
+  const promise = expandStreamProvidersNow(providers);
+  expandCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => expandCache.delete(key));
+  return promise;
+}
+
+async function expandStreamProvidersNow(providers) {
   const expanded = await Promise.all(providers.map(async (provider) => {
     if (provider.id !== 'streamed' || provider.embedUrl || !provider.source || !provider.matchId) return [provider];
     const streams = await fetchStreamedStreams(provider.source, provider.matchId);

@@ -39,6 +39,9 @@ data class MediaState(
     val ready: Int = 0,
     val video: Boolean = false,
     val height: Int = 0,
+    // Decoded and dropped video frames so far (-1: the browser doesn't say).
+    val frames: Int = -1,
+    val dropped: Int = -1,
     val audio: List<MediaTrack> = emptyList(),
     val text: List<MediaTrack> = emptyList(),
     val cue: String = "",
@@ -54,6 +57,8 @@ sealed class MediaCommand(val js: String) {
     object Fill : MediaCommand("fill")
     object Unfill : MediaCommand("unfill")
     object Trim : MediaCommand("trim")
+    // Live: back to the live edge (after a pause or a stall) and play.
+    object Edge : MediaCommand("edge")
     class SeekBy(s: Double) : MediaCommand("seekBy:$s")
     class SeekTo(s: Double) : MediaCommand("seekTo:$s")
     class AudioTrack(i: Int) : MediaCommand("audio:$i")
@@ -168,6 +173,8 @@ class WebEngine(context: Context, private var allowedHost: String?) {
             ready = o["ready"]?.jsonPrimitive?.intOrNull ?: 0,
             video = true,
             height = o["h"]?.jsonPrimitive?.intOrNull ?: 0,
+            frames = o["fr"]?.jsonPrimitive?.intOrNull ?: -1,
+            dropped = o["dr"]?.jsonPrimitive?.intOrNull ?: -1,
             audio = tracks(o["at"]),
             text = tracks(o["tt"]),
             cue = o["cue"]?.jsonPrimitive?.contentOrNull ?: "",

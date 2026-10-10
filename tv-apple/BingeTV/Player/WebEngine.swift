@@ -23,6 +23,9 @@ struct MediaState: Decodable, Equatable {
     var ready: Int = 0      // HTMLMediaElement.readyState
     var video = false
     var height: Int = 0     // videoHeight: what resolution is actually showing
+    // Decoded and dropped video frames so far (-1: the browser doesn't say).
+    var frames: Int = -1
+    var dropped: Int = -1
     var audio: [MediaTrack] = []
     var text: [MediaTrack] = []
     // The subtitle line on screen right now (drawn by the app, not WebKit).
@@ -39,6 +42,10 @@ enum MediaCommand {
     case audioTrack(Int), textTrack(Int)
     // Subtitle look: size in % and a CSS background colour.
     case captionStyle(size: Int, background: String)
+    // Unload frames that aren't on the video's path (ads, trackers) once it plays filled.
+    case trim
+    // Live: back to the live edge (after a pause or a stall) and play.
+    case edge
 
     var js: String {
         switch self {
@@ -55,6 +62,8 @@ enum MediaCommand {
         case .audioTrack(let i): return "audio:\(i)"
         case .textTrack(let i): return "text:\(i)"
         case .captionStyle(let size, let background): return "cue:\(size):\(background)"
+        case .trim: return "trim"
+        case .edge: return "edge"
         }
     }
 }
@@ -117,7 +126,7 @@ enum WebEngines {
           cues=hit; } if(!cues.length) return '';
         var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')); }
         return parts.join('\\n').trim(); }
-      function state(v){ var tr=tracks(v); return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, at:tr.a, tt:tr.x, cue:cueText(v)}; }
+      function state(v){ var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, at:tr.a, tt:tr.x, cue:cueText(v)}; }
       // Fill: pin this frame's video to the viewport, then ask each parent
       // frame to pin the iframe it lives in, all the way up, so the video
       // covers the whole screen instead of the server's page layout.
@@ -150,14 +159,19 @@ enum WebEngines {
         st.textContent='video::cue{font-size:'+size+'%!important;background-color:'+bg+'!important;color:#fff!important}'+
           'video::-webkit-media-text-track-display{font-size:'+size+'%!important}'+
           'video::-webkit-media-text-track-display-backdrop{background-color:'+bg+'!important}'; }
+      function trim(){ if(!document.documentElement.classList.contains('__bf')) return;
+        var fs=document.getElementsByTagName('iframe');
+        for (var i=fs.length-1;i>=0;i--){ var f=fs[i]; if(!f.classList.contains('__bf-el')){ try{ f.src='about:blank'; }catch(e){} if(f.parentNode) f.parentNode.removeChild(f); } } }
       function apply(cmd){
         if(cmd==='unfill'){ unpin(); return; }
+        if(cmd==='trim'){ trim(); return; }
         if(cmd.indexOf('cue:')===0){ cue(cmd); return; }
         var v=pick(); if(!v) return; var p;
         if(cmd==='fill'){ if(v.readyState>0 || v.duration>0) pin(v); return; }
         if(cmd.indexOf('audio:')===0){ var ai=parseInt(cmd.slice(6),10); if(v.audioTracks) for (var k=0;k<v.audioTracks.length;k++) v.audioTracks[k].enabled=(k===ai); return; }
         if(cmd.indexOf('text:')===0){ var ti=parseInt(cmd.slice(5),10); window.__bingeTextIdx=ti; if(v.textTracks) for (var j=0;j<v.textTracks.length;j++){ var t2=v.textTracks[j]; if(t2.kind==='subtitles'||t2.kind==='captions') t2.mode=(j===ti?'hidden':'disabled'); } return; }
-        if(cmd==='play'){ p=v.play(); } else if(cmd==='pause'){ v.pause(); }
+        if(cmd==='edge'){ try{ var sk=v.seekable; if(sk&&sk.length){ var end=sk.end(sk.length-1); if(isFinite(end)&&end-v.currentTime>6) v.currentTime=Math.max(0,end-3); } }catch(e){} p=v.play(); }
+        else if(cmd==='play'){ p=v.play(); } else if(cmd==='pause'){ v.pause(); }
         else if(cmd==='toggle'){ if(v.paused){p=v.play()} else {v.pause()} }
         else if(cmd==='mute'){ v.muted=true; } else if(cmd==='unmute'){ v.muted=false; }
         else if(cmd==='stop'){ v.pause(); v.muted=true; }
@@ -197,6 +211,8 @@ private final class BridgeProxy: NSObject {
             ready: (body["ready"] as? NSNumber)?.intValue ?? 0,
             video: true,
             height: (body["h"] as? NSNumber)?.intValue ?? 0,
+            frames: (body["fr"] as? NSNumber)?.intValue ?? -1,
+            dropped: (body["dr"] as? NSNumber)?.intValue ?? -1,
             audio: Self.tracks(body["at"]),
             text: Self.tracks(body["tt"]),
             cue: body["cue"] as? String ?? ""
@@ -420,7 +436,8 @@ extension LegacyWebView: WebEngine {
     func send(_ command: MediaCommand) {
         let body: String
         switch command {
-        case .play: body = "var p=v.play(); if(p&&p.catch)p.catch(function(){})"
+        case .play, .edge: body = "var p=v.play(); if(p&&p.catch)p.catch(function(){})" // no seeking here
+        case .trim: return
         case .pause, .stop: body = "v.pause()"
         case .toggle: body = "if(v.paused){var p=v.play(); if(p&&p.catch)p.catch(function(){})} else {v.pause()}"
         case .mute: body = "v.muted=true"
