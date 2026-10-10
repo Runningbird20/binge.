@@ -81,6 +81,8 @@
     "import:openlibrary:large": "node openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node tmdb_scraper.js --type both --pages 500",
+    "import:malayalam": "node scripts/sync-language-to-supabase.js",
+    "import:malayalam:preview": "node scripts/sync-language-to-supabase.js --dry-run",
     "clean:adult": "node clean_adult_content.js",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report e2e-report"

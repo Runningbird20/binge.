@@ -45,12 +45,9 @@ const API_DELAY       = 260; // ms between TMDB requests — keeps us under 4 re
 const POSTER_BASE     = 'https://image.tmdb.org/t/p/w500';
 const TMDB_BASE       = 'https://api.themoviedb.org/3';
 
-if (!TMDB_KEY || !TMDB_READ_TOKEN || !SUP_URL || !SUP_KEY) {
-  console.error('❌  Missing env vars: TMDB_API_KEY, TMDB_READ_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
-  process.exit(1);
-}
-
-const supabase = createClient(SUP_URL, SUP_KEY, { auth: { persistSession: false } });
+// Created in main() so scripts/sync-language-to-supabase.js can require the
+// record formatters without the bulk-export env vars.
+let supabase;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -295,6 +292,12 @@ async function syncMediaType(mediaType) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  if (!TMDB_KEY || !TMDB_READ_TOKEN || !SUP_URL || !SUP_KEY) {
+    console.error('❌  Missing env vars: TMDB_API_KEY, TMDB_READ_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+    process.exit(1);
+  }
+  supabase = createClient(SUP_URL, SUP_KEY, { auth: { persistSession: false } });
+
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('  binge.  TMDB → Supabase Catalog Sync');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -315,4 +318,6 @@ async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { movieRecord, tvRecord, tmdbFetch };

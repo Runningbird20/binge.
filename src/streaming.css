@@ -3165,15 +3165,17 @@ kbd {
   border: 1px solid rgba(180, 150, 255, 0.4); background: rgba(140, 100, 255, 0.1); color: #e4dcff; font: inherit; font-weight: 700; cursor: pointer;
 }
 .sr-ask:hover { background: rgba(140, 100, 255, 0.2); }
-.sr-ai { margin: 0 0 2rem; padding: 1.1rem 1.1rem 0.6rem; border-radius: 16px; border: 1px solid rgba(180, 150, 255, 0.28); background: linear-gradient(135deg, rgba(140, 100, 255, 0.12), rgba(255, 255, 255, 0.02)); }
-.sr-ai-head { display: flex; align-items: flex-start; gap: 0.6rem; color: #c8b6ff; }
+.sr-ai { margin: 0 0 2rem; padding: 1.1rem 1.1rem 0.6rem; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.04); }
+.sr-ai-head { display: flex; align-items: flex-start; gap: 0.6rem; color: #fff; }
 .sr-ai-head .st-row-title { color: #fff; }
 .sr-ai .st-row-header { display: none; }
 .sr-ai .st-row { margin-top: 0.4rem; }
 .sr-ai-error { margin: 0.75rem 0; color: rgba(255, 255, 255, 0.7); }
+.sr-ai-error-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 0.6rem; }
+.sr-ai-error-row .sr-ai-error { margin: 0; }
 .sr-ai-reasons { margin: 0.25rem 0 0.6rem; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.86rem; color: rgba(255, 255, 255, 0.75); }
 .sr-ai-reasons strong { color: #fff; }
-.gs-ask .global-search-dropdown-item-icon { color: #c8b6ff; }
+.gs-ask .global-search-dropdown-item-icon { color: #fff; }
 
 /* Horizontal scrollers with buttons (franchise strip, heatmap) */
 .hs { position: relative; }
@@ -3301,6 +3303,11 @@ kbd {
   outline-offset: 2px;
   box-shadow: 0 0 0 5px rgba(11, 13, 18, 0.9);
 }
+/* Search fields sit inside their own bordered box, which lights up while
+   typing (:focus-within); a second ring on the bare input showed as a white
+   rectangle inside it (phones treat every tapped text field as focus-visible). */
+.st-search-input:focus-visible { outline: none; box-shadow: none; }
+.sr-box form:focus-within { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35); }
 
 /* "Skip to content": first thing a keyboard / screen-reader user reaches. */
 .skip-link {

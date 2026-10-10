@@ -128,6 +128,12 @@ fun WrappedScreen() {
 
     Box(
         Modifier.fillMaxSize().background(Floor).focusRequester(focus).focusable().onKeyEvent { event ->
+            // Back closes the tickets (handled here: this page's own key handling
+            // otherwise kept Back from reaching the app).
+            if (event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                if (event.type == KeyEventType.KeyUp) Nav.pop()
+                return@onKeyEvent true
+            }
             if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
             lastInput = System.currentTimeMillis()
             when (event.key.nativeKeyCode) {

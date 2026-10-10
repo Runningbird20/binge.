@@ -267,3 +267,69 @@ struct PlaybackSettingsView: View {
         .focusSection()
     }
 }
+
+// MARK: - My List & Ratings
+
+struct LibraryView: View {
+    @EnvironmentObject private var app: AppModel
+    @State private var tab = 0
+    @State private var list: [Title]?
+    @State private var rated: [(Title, Double)]?
+
+    private let columns = Array(repeating: GridItem(.fixed(220), spacing: 48), count: 7)
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 30) {
+                Text("My List & Ratings").font(.system(size: 54, weight: .heavy))
+                Text("Saved to watch, and everything you rated. Same as the website and the other TV apps.")
+                    .font(.callout).foregroundStyle(Theme.muted)
+                HStack(spacing: 20) {
+                    Button("My List" + (list.map { " · \($0.count)" } ?? "")) { tab = 0 }.buttonStyle(PillButtonStyle(selected: tab == 0))
+                    Button("Ratings" + (rated.map { " · \($0.count)" } ?? "")) { tab = 1 }.buttonStyle(PillButtonStyle(selected: tab == 1))
+                }
+                .focusSection()
+                if tab == 0 {
+                    if let list {
+                        if list.isEmpty {
+                            Text("Nothing saved yet. Press My List on any title to keep it here.").foregroundStyle(Theme.muted)
+                        } else {
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
+                                ForEach(list) { PosterCard(title: $0) }
+                            }
+                        }
+                    } else { RowSkeleton() }
+                } else {
+                    if let rated {
+                        if rated.isEmpty {
+                            Text("No ratings yet. Press Rate on a title after you watch it.").foregroundStyle(Theme.muted)
+                        } else {
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
+                                ForEach(rated, id: \.0.id) { title, stars in
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        PosterCard(title: title)
+                                        HStack(spacing: 4) {
+                                            ForEach(0..<5, id: \.self) { i in
+                                                Image(systemName: i < Int(stars.rounded()) ? "star.fill" : "star")
+                                                    .foregroundStyle(i < Int(stars.rounded()) ? Theme.gold : Theme.muted)
+                                            }
+                                        }
+                                        .font(.caption)
+                                        .accessibilityLabel("Rated \(Int(stars.rounded())) of 5")
+                                    }
+                                }
+                            }
+                        }
+                    } else { RowSkeleton() }
+                }
+            }
+            .padding(.vertical, 30)
+        }
+        .scrollClipDisabled()
+        .titleDestinations()
+        .task {
+            list = (try? await app.myList()) ?? []
+            rated = await app.ratedTitles()
+        }
+    }
+}

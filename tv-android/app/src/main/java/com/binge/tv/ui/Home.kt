@@ -65,6 +65,9 @@ fun ReportTop(state: LazyListState) {
     LaunchedEffect(state) {
         snapshotFlow { state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset < 60 }.collect { TabChrome.atTop = it }
     }
+    LaunchedEffect(state) {
+        snapshotFlow { TabChrome.scrollToTop }.collect { if (it > 0) state.animateScrollToItem(0) }
+    }
 }
 
 // Remembered across tab switches within a session, so Home comes back instantly.
@@ -200,7 +203,7 @@ private object BrowseCache { val rows = HashMap<MediaKind, List<LoadedRow>>() }
 fun Hero(title: Title, listState: LazyListState? = null) {
     val scope = rememberCoroutineScope()
     // Focus on the spotlight's buttons brings the whole spotlight back into view.
-    Box(Modifier.fillMaxWidth().height(340.dp).onFocusChanged { if (it.hasFocus && listState != null) scope.launch { listState.animateScrollToItem(0) } }) {
+    Box(Modifier.fillMaxWidth().height(340.dp).onFocusChanged { if (it.hasFocus && listState != null) scope.launch { delay(60); listState.animateScrollToItem(0) } }) {
         Art(Tmdb.resized(title.backdrop, Tmdb.FULL_SCREEN), title.name, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Palette.background.copy(alpha = 0.95f), Palette.background.copy(alpha = 0.25f), Color.Transparent))))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Palette.background)))

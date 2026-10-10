@@ -85,8 +85,11 @@ fun PivotScroll(fraction: Float = 0f, offset: Dp = 0.dp, content: @Composable ()
             override fun calculateScrollDistance(offset0: Float, size: Float, containerSize: Float): Float {
                 val target = containerSize * fraction + with(density) { offset.toPx() }
                 if (fraction > 0f) {
-                    val margin = with(density) { 24.dp.toPx() }
-                    if (offset0 >= margin && offset0 + size <= containerSize - margin) return 0f
+                    // Room above for the row's title and below for a card's caption
+                    // (episode names sit under the card, outside its focus box).
+                    val top = with(density) { 24.dp.toPx() }
+                    val bottom = with(density) { 64.dp.toPx() }
+                    if (offset0 >= top && offset0 + size <= containerSize - bottom) return 0f
                 }
                 return offset0 - target
             }

@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -81,6 +82,7 @@ fun TitleScreen(title: Title, active: Boolean) {
     var listError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val playFocus = remember { FocusRequester() }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     val seasons = details?.seasons.orEmpty().filter { (it.episodeCount ?: 0) > 0 }.let { all -> all.filter { it.seasonNumber > 0 }.ifEmpty { all } }
     val resumeProgress = resume?.let { r -> if (r.positionSeconds != null && r.durationSeconds != null && r.durationSeconds > 0 && r.positionSeconds > 30) (r.positionSeconds / r.durationSeconds).toFloat() else null }
@@ -136,9 +138,11 @@ fun TitleScreen(title: Title, active: Boolean) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to Palette.background)))
 
         PivotScroll(fraction = 0.3f) {
-            LazyColumn(Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(bottom = 50.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(bottom = 50.dp)) {
                 item(key = "header") {
-                    Column(Modifier.fillMaxWidth().heightIn(min = 400.dp).padding(start = Dimens.edge, end = Dimens.edge, top = 40.dp),
+                    // Focus on the top buttons brings the whole header (logo, description) back into view.
+                    Column(Modifier.fillMaxWidth().heightIn(min = 400.dp).padding(start = Dimens.edge, end = Dimens.edge, top = 40.dp)
+                        .onFocusChanged { if (it.hasFocus) scope.launch { kotlinx.coroutines.delay(60); listState.animateScrollToItem(0) } },
                         verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom)) {
                         val logo = Tmdb.image(details?.logoPath, Tmdb.WIDE)
                         if (logo != null) AsyncImage(model = logo, contentDescription = title.name, contentScale = ContentScale.Fit,
@@ -276,10 +280,10 @@ private fun OutsideRatingsRow(r: OutsideRatings) {
 @Composable
 private fun FranchiseSection(order: Franchises.Order) {
     var story by remember { mutableStateOf(false) }
-    Column {
-        Row(Modifier.padding(horizontal = Dimens.edge), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("${order.name} in order", style = Type.section)
-            if (order.story != null) {
+    Column(Modifier.padding(top = 18.dp)) {
+        SectionTitle("${order.name} in order")
+        if (order.story != null) {
+            Row(Modifier.padding(start = Dimens.edge, end = Dimens.edge, top = 10.dp, bottom = 2.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Pill("Release order", selected = !story) { story = false }
                 Pill("Story order", selected = story) { story = true }
             }

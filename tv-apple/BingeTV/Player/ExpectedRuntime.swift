@@ -16,6 +16,17 @@ enum ExpectedRuntime {
         if request.title.kind == .tvShow, let season = request.season, let episode = request.episode {
             let data: TMDBSeason? = try? await TMDB.shared.get("tv/\(tmdbId)/season/\(season)")
             minutes = data?.episodes.first { $0.episodeNumber == episode }?.runtime
+            // No runtime for this one episode (common for anime): the season's
+            // typical episode, then the show's, so a different show under the
+            // same id is still caught (Vidy: 47 min for a 21-min Fighting Spirit episode).
+            if (minutes ?? 0) <= 0 {
+                let known = (data?.episodes ?? []).compactMap(\.runtime).filter { $0 > 0 }.sorted()
+                minutes = known.isEmpty ? nil : known[known.count / 2]
+            }
+            if (minutes ?? 0) <= 0 {
+                let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
+                minutes = details?.episodeRunTime?.first { $0 > 0 }
+            }
         } else if request.title.kind == .movie {
             let details: TMDBDetails? = try? await TMDB.shared.get("movie/\(tmdbId)")
             minutes = details?.runtime

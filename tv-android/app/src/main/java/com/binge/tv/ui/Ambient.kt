@@ -101,6 +101,10 @@ fun AmbientView(titles: List<Title>, resumeLabel: String?, resume: () -> Unit, d
     }
     val current = titles.getOrNull(if (titles.isEmpty()) 0 else index % titles.size)
     Box(Modifier.fillMaxSize().background(Color.Black).onPreviewKeyEvent { event ->
+        if (event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_BACK) {
+            if (event.type == KeyEventType.KeyUp) dismiss()
+            return@onPreviewKeyEvent true
+        }
         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
         when (event.key.nativeKeyCode) {
             android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT,

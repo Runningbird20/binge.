@@ -168,6 +168,7 @@ struct MeView: View {
             // A plain tvOS list, like Settings: no tile grid.
             List {
                 Section {
+                    row("My List & Ratings", "bookmark", "What you saved and what you rated") { LibraryView() }
                     row("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
                     row("Calendar", "calendar", "Upcoming episodes and releases") { CalendarView() }
                     Button { wrappedOpen = true } label: {

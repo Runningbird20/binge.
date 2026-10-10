@@ -286,8 +286,15 @@ object ExpectedRuntime {
         val tmdbId = request.title.tmdbId ?: return null
         cache[request.key]?.let { return it }
         val minutes = if (request.title.kind == MediaKind.TV && request.season != null && request.episode != null) {
-            runCatching { Tmdb.get<TmdbSeason>("tv/$tmdbId/season/${request.season}") }.getOrNull()
-                ?.episodes?.firstOrNull { it.episodeNumber == request.episode }?.runtime
+            // TMDB often has no runtime for one episode (common for anime): use
+            // the season's typical episode, then the show's, so a server playing
+            // a different show (Vidy served a 47-min video for a 21-min Fighting
+            // Spirit episode) is still caught.
+            val episodes = runCatching { Tmdb.get<TmdbSeason>("tv/$tmdbId/season/${request.season}") }
+                .onFailure { if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "season lookup failed: $it") }.getOrNull()?.episodes.orEmpty()
+            episodes.firstOrNull { it.episodeNumber == request.episode }?.runtime?.takeIf { it > 0 }
+                ?: episodes.mapNotNull { it.runtime?.takeIf { r -> r > 0 } }.sorted().let { if (it.isEmpty()) null else it[it.size / 2] }
+                ?: runCatching { Tmdb.get<TmdbDetails>("tv/$tmdbId") }.getOrNull()?.episodeRunTime?.firstOrNull { it > 0 }
         } else if (request.title.kind == MediaKind.MOVIE) {
             runCatching { Tmdb.get<TmdbDetails>("movie/$tmdbId") }.getOrNull()?.runtime
         } else null

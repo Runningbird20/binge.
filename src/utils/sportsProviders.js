@@ -158,6 +158,11 @@ export function teamsMatch(nameA, nameB) {
   // Nickname (last token) agreement is the strongest signal; otherwise any
   // distinctive shared token.
   if (tokensMatch(a[a.length - 1], b[b.length - 1])) return true;
+  // One name is the other's short form: "BYU" ⊂ "BYU Cougars", "Iowa State" ⊂
+  // "Iowa State Cyclones" (short school names fail the length rule below).
+  const within = (x, y) => x.every((tokenX) => y.some((tokenY) => tokensMatch(tokenX, tokenY)));
+  const sameQualifiers = qa.length === qb.length && qa.every((token) => qb.includes(token));
+  if (sameQualifiers && (within(a, b) || within(b, a))) return true;
   return a.some((tokenA) => tokenA.length >= 4 && b.some((tokenB) => tokensMatch(tokenA, tokenB)));
 }
 

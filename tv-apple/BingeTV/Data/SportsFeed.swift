@@ -265,6 +265,34 @@ enum SportsFeed {
         return nil
     }
 
+    // Each side of a matchup as a set of distinctive words ("iowa", "cyclones"),
+    // from the feed's team names or the title ("A vs B", "A at B", "A @ B").
+    private static let filler: Set<String> = ["state", "university", "univ", "college", "fc", "cf", "sc", "afc", "club", "the", "of", "de", "united", "city", "real", "st", "u"]
+    private static func words(_ text: String) -> Set<String> {
+        Set(text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { $0.count > 1 && !filler.contains($0) })
+    }
+
+    static func sides(teams: (home: String, away: String)?, name: String) -> [Set<String>]? {
+        if let teams {
+            let pair = [words(teams.home), words(teams.away)]
+            return pair.allSatisfy { !$0.isEmpty } ? pair : nil
+        }
+        let lower = " " + name.lowercased() + " "
+        for separator in [" vs. ", " vs ", " v ", " at ", " @ ", " - "] {
+            let parts = lower.components(separatedBy: separator)
+            guard parts.count == 2 else { continue }
+            let left = words(parts[0].components(separatedBy: ":").last ?? parts[0]), right = words(parts[1])
+            if !left.isEmpty && !right.isEmpty { return [left, right] }
+        }
+        return nil
+    }
+
+    // Same matchup when each side of one shares a word with a side of the
+    // other, in either order ("Iowa State Cyclones at BYU Cougars" = "BYU vs Iowa State").
+    static func sameMatchup(_ a: [Set<String>], _ b: [Set<String>]) -> Bool {
+        (!a[0].isDisjoint(with: b[0]) && !a[1].isDisjoint(with: b[1])) || (!a[0].isDisjoint(with: b[1]) && !a[1].isDisjoint(with: b[0]))
+    }
+
     private static func merge(_ entries: [SportGame]) -> [SportGame] {
         var games: [SportGame] = []
         for entry in entries {
@@ -275,7 +303,11 @@ enum SportsFeed {
                     guard let a = game.startsAt, let b = entry.startsAt else { return true }
                     return abs(a.timeIntervalSince(b)) <= 3 * 3600
                 }()
-                if let tokens, let other = game.teamTokens { return tokens == other && closeInTime }
+                guard closeInTime else { return false }
+                if let tokens, let other = game.teamTokens, tokens == other { return true }
+                if let sa = sides(teams: game.teams, name: game.title), let sb = sides(teams: entry.teams, name: entry.title) {
+                    return sameMatchup(sa, sb)
+                }
                 return game.title.lowercased().filter { $0.isLetter || $0.isNumber } == key && closeInTime
             }) {
                 var game = games[index]

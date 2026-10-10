@@ -105,7 +105,7 @@ fun FocusCard(
 ) {
     Card(
         onClick = onClick, onLongClick = onLongClick,
-        modifier = modifier.onFocusChanged { if (it.isFocused) onFocus?.invoke() },
+        modifier = modifier.rememberFocus().onFocusChanged { if (it.isFocused) onFocus?.invoke() },
         shape = CardDefaults.shape(shape),
         colors = CardDefaults.colors(containerColor = Palette.surface),
         scale = CardDefaults.scale(focusedScale = 1.08f),
@@ -126,7 +126,7 @@ fun PosterCard(title: Title, onOpen: (Title) -> Unit, modifier: Modifier = Modif
 @Composable
 fun TitleRow(row: LoadedRow, onOpen: (Title) -> Unit, modifier: Modifier = Modifier, onFocus: ((Title) -> Unit)? = null) {
     Column(modifier) {
-        SectionTitle(row.title)
+        if (row.title.isNotEmpty()) SectionTitle(row.title)
         PivotScroll(offset = Dimens.edge) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 14.dp),
@@ -177,7 +177,7 @@ fun Pill(
     onClick: () -> Unit,
 ) {
     Button(
-        onClick = onClick, onLongClick = onLongClick, enabled = enabled, modifier = modifier,
+        onClick = onClick, onLongClick = onLongClick, enabled = enabled, modifier = modifier.rememberFocus(),
         shape = ButtonDefaults.shape(CircleShape),
         scale = ButtonDefaults.scale(focusedScale = 1.06f),
         colors = ButtonDefaults.colors(
@@ -199,7 +199,7 @@ fun Pill(
 @Composable
 fun ActionButton(label: String, icon: ImageVector?, modifier: Modifier = Modifier, enabled: Boolean = true, primary: Boolean = false, centered: Boolean = false, onClick: () -> Unit) {
     Button(
-        onClick = onClick, enabled = enabled, modifier = modifier,
+        onClick = onClick, enabled = enabled, modifier = modifier.rememberFocus(),
         shape = ButtonDefaults.shape(RoundedCornerShape(8.dp)),
         scale = ButtonDefaults.scale(focusedScale = 1.06f),
         colors = ButtonDefaults.colors(
@@ -267,6 +267,10 @@ fun TvTextField(
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     androidx.compose.runtime.LaunchedEffect(typing) { if (typing) { kotlinx.coroutines.delay(60); keyboardController?.show() } }
+    // Fire TV's keyboard has no Enter key: Back is how you finish typing. It
+    // closes the keyboard and leaves you on the field (results are already
+    // there below it), instead of leaving the page.
+    androidx.activity.compose.BackHandler(enabled = typing) { typing = false; keyboardController?.hide() }
     androidx.compose.foundation.text.BasicTextField(
         value = value, onValueChange = onChange, singleLine = true, readOnly = !typing,
         textStyle = Type.headline.copy(color = Color.White, fontWeight = FontWeight.Normal),

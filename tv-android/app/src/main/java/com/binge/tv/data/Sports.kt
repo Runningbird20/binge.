@@ -267,6 +267,30 @@ object SportsFeed {
         return null
     }
 
+    // Each side of a matchup as a set of distinctive words ("iowa", "cyclones"),
+    // from the feed's team names or the title ("A vs B", "A at B", "A @ B").
+    private val filler = setOf("state", "university", "univ", "college", "fc", "cf", "sc", "afc", "club", "the", "of", "de", "united", "city", "real", "st", "u")
+    private fun words(text: String) = text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length > 1 && it !in filler }.toSet()
+
+    fun sides(teams: Pair<String, String>?, title: String): List<Set<String>>? {
+        if (teams != null) return listOf(words(teams.first), words(teams.second)).takeIf { it.all { side -> side.isNotEmpty() } }
+        val lower = " ${title.lowercase()} "
+        for (separator in listOf(" vs. ", " vs ", " v ", " at ", " @ ", " - ")) {
+            val parts = lower.split(separator)
+            if (parts.size != 2) continue
+            val left = words(parts[0].substringAfterLast(":")); val right = words(parts[1])
+            if (left.isNotEmpty() && right.isNotEmpty()) return listOf(left, right)
+        }
+        return null
+    }
+
+    // Same matchup when each side of one shares a word with a side of the
+    // other, in either order ("Iowa State Cyclones at BYU Cougars" = "BYU vs Iowa State").
+    fun sameMatchup(a: List<Set<String>>, b: List<Set<String>>): Boolean {
+        fun overlap(x: Set<String>, y: Set<String>) = x.any { it in y }
+        return (overlap(a[0], b[0]) && overlap(a[1], b[1])) || (overlap(a[0], b[1]) && overlap(a[1], b[0]))
+    }
+
     private fun merge(entries: List<SportGame>): List<SportGame> {
         val games = ArrayList<SportGame>()
         fun key(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
@@ -275,7 +299,13 @@ object SportsFeed {
             val index = games.indexOfFirst { game ->
                 val close = game.startsAt == null || entry.startsAt == null || Math.abs(game.startsAt - entry.startsAt) <= 3 * 3_600_000
                 val other = game.teamTokens
-                if (tokens != null && other != null) tokens == other && close else key(game.title) == key(entry.title) && close
+                val sa = sides(game.teams, game.title); val sb = sides(entry.teams, entry.title)
+                when {
+                    !close -> false
+                    tokens != null && other != null && tokens == other -> true
+                    sa != null && sb != null -> sameMatchup(sa, sb)
+                    else -> key(game.title) == key(entry.title)
+                }
             }
             if (index < 0) { games += entry; continue }
             val game = games[index]

@@ -46,7 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -283,9 +283,13 @@ fun SportArt(game: SportGame, modifier: Modifier = Modifier, large: Boolean = fa
                 AsyncImage(logos.first, null, Modifier.size(if (large) 100.dp else 46.dp))
             }
         } else if (game.poster != null) {
-            if (large) AsyncImage(game.poster, null, Modifier.fillMaxSize().blur(20.dp), contentScale = ContentScale.Crop, alpha = 0.6f)
-            AsyncImage(game.poster, null, if (large) Modifier.align(Alignment.CenterEnd).padding(end = Dimens.edge).widthIn(max = 450.dp).height(240.dp) else Modifier.fillMaxSize(),
-                contentScale = if (large) ContentScale.Fit else ContentScale.Crop)
+            // Provider pictures are small and often have logos near the edges:
+            // shown whole (never cropped) over the game's colours.
+            Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(split.first, split.second))))
+            AsyncImage(game.poster, null,
+                if (large) Modifier.align(Alignment.CenterEnd).padding(end = Dimens.edge).widthIn(max = 430.dp).height(240.dp).clip(RoundedCornerShape(10.dp))
+                else Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit)
         } else {
             Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(split.first, split.second))), contentAlignment = Alignment.Center) {
                 Icon(sportIcon(game.category), null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(if (large) 70.dp else 36.dp))

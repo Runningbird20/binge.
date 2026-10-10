@@ -39,6 +39,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.key
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -79,6 +81,7 @@ sealed class Screen {
     object Calendar : Screen()
     object Settings : Screen()
     object Wrapped : Screen()
+    object Library : Screen()
 }
 
 // A simple stack over the tabs: title pages, the player, Me's pages.
@@ -86,15 +89,38 @@ object Nav {
     val stack = mutableStateListOf<Screen>()
     // Bumped when something on top closes, so the tab under it can refresh (Continue Watching).
     var returns by mutableIntStateOf(0)
-    fun push(screen: Screen) { stack.add(screen) }
-    fun pop() { if (stack.isNotEmpty()) { stack.removeAt(stack.lastIndex); returns++ } }
+    // What had focus when each page was opened; Back puts focus back there.
+    private val opener = ArrayList<FocusRequester?>()
+    var restore by mutableStateOf<FocusRequester?>(null)
+    fun push(screen: Screen) { opener.add(FocusMemory.last); stack.add(screen); if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "nav push $screen -> ${stack.size}") }
+    fun pop() {
+        if (stack.isEmpty()) return
+        stack.removeAt(stack.lastIndex)
+        if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "nav pop -> ${stack.size}")
+        restore = opener.removeLastOrNull()
+        returns++
+    }
     fun open(title: Title) = push(Screen.Detail(title))
     fun play(request: PlayRequest) = push(Screen.Player(request))
 }
 
+// The card/button that last had focus (see Modifier.rememberFocus).
+object FocusMemory { var last: FocusRequester? = null }
+
+@Composable
+fun Modifier.rememberFocus(): Modifier {
+    val requester = remember { FocusRequester() }
+    return this.focusRequester(requester).onFocusChanged { if (it.isFocused) FocusMemory.last = requester }
+}
+
 // Tabs report whether they're scrolled to the top: the tab bar shows there
 // (and whenever it has focus), and gets out of the way further down.
-object TabChrome { var atTop by mutableStateOf(true) }
+object TabChrome {
+    var atTop by mutableStateOf(true)
+    // Bumped when focus reaches the tab bar: the page scrolls back to its top,
+    // so it's never left showing half of the spotlight under the tabs.
+    var scrollToTop by mutableIntStateOf(0)
+}
 
 @Composable
 fun BingeApp() {
@@ -166,7 +192,7 @@ private fun Shell() {
         ) {
             TabRow(
                 selectedTabIndex = selected,
-                modifier = Modifier.focusRestorer { tabRequesters.getOrElse(selected) { FocusRequester.Default } }.onFocusChanged { tabsFocused = it.hasFocus }
+                modifier = Modifier.focusRestorer { tabRequesters.getOrElse(selected) { FocusRequester.Default } }.onFocusChanged { if (it.hasFocus && !tabsFocused) TabChrome.scrollToTop++; tabsFocused = it.hasFocus }
                     // ▼ from the tab bar into the page, back where focus last was there.
                     .onPreviewKeyEvent { event ->
                         if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.key.nativeKeyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
@@ -206,7 +232,10 @@ private fun Shell() {
         // Pages on top of the tabs.
         Nav.stack.forEachIndexed { index, screen ->
             val active = index == Nav.stack.lastIndex
-            Box(Modifier.fillMaxSize().background(if (screen is Screen.Player || screen is Screen.Multiview) Color.Black else Palette.background)) {
+            // A page on top keeps focus inside itself: ▲ at its top must not land
+            // on the tab bar hidden underneath (which then switched tabs behind it).
+            Box(Modifier.fillMaxSize().background(if (screen is Screen.Player || screen is Screen.Multiview) Color.Black else Palette.background)
+                .then(if (active) Modifier.focusGroup().focusProperties { exit = { FocusRequester.Cancel } } else Modifier.focusProperties { canFocus = false })) {
                 if (active || screen !is Screen.Player) ScreenFor(screen, active)
             }
         }
@@ -220,7 +249,16 @@ private fun Shell() {
         }
     }
     // Coming back from a page restores focus to where it was in the tab.
-    LaunchedEffect(Nav.stack.size) { if (Nav.stack.isEmpty()) runCatching { contentFocus.requestFocus() } }
+    // Once the page on top is gone (a frame later), so the tab's own memory
+    // can put focus back on the card that was opened.
+    LaunchedEffect(Nav.returns) {
+        if (Nav.returns == 0) return@LaunchedEffect
+        kotlinx.coroutines.delay(80)
+        val back = Nav.restore
+        Nav.restore = null
+        val restored = back != null && runCatching { back.requestFocus(); true }.getOrDefault(false)
+        if (!restored && Nav.stack.isEmpty()) runCatching { contentFocus.requestFocus() }
+    }
 }
 
 
@@ -259,6 +297,7 @@ private fun ScreenFor(screen: Screen, active: Boolean) {
         Screen.Calendar -> CalendarScreen()
         Screen.Settings -> SettingsScreen()
         Screen.Wrapped -> WrappedScreen()
+        Screen.Library -> LibraryScreen()
     }
 }
 
