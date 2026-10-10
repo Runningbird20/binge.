@@ -4,6 +4,7 @@ import SwiftUI
 // without a remote:  -BingeDemo  -BingeTab sports  -BingeOpen tv_show:123
 // (add -BingeHandoff YES to open the phone handoff for that title, or
 // -BingePlay 2:3 to start the player at S2:E3 / -BingePlay 0 for a movie).
+// -BingeOpen page:library opens My List & Ratings (-BingeLibraryTab 1 = Ratings).
 enum DebugLaunch {
     static var tab: String? {
         #if DEBUG
@@ -16,7 +17,12 @@ enum DebugLaunch {
     #if DEBUG
     @ViewBuilder
     static func overlay() -> some View {
-        if let open = UserDefaults.standard.string(forKey: "BingeOpen") {
+        if UserDefaults.standard.string(forKey: "BingeOpen") == "page:library" {
+            ZStack {
+                Theme.background.ignoresSafeArea()
+                NavigationStack { LibraryView(tab: UserDefaults.standard.integer(forKey: "BingeLibraryTab")).titleDestinations() }
+            }
+        } else if let open = UserDefaults.standard.string(forKey: "BingeOpen") {
             DebugTitleLoader(key: open, handoff: UserDefaults.standard.bool(forKey: "BingeHandoff"),
                              play: UserDefaults.standard.string(forKey: "BingePlay"))
         }
