@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowsOut, Baseball, Basketball, BoxingGlove, CaretDown, Check, CornersOut, Cricket, FlagCheckered, Football,
+  ArrowLeft, ArrowsOut, Baseball, Basketball, BoxingGlove, Check, CornersOut, Cricket, Eye, EyeSlash, FlagCheckered, Football,
   Golf, GridFour, Hockey, Play, SkipForward, SoccerBall, SquaresFour, Target, TennisBall, Trophy, Volleyball, X,
 } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
@@ -9,7 +9,8 @@ import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import LiveScorePanel from '../components/LiveScorePanel';
 import useDeviceType from '../hooks/useDeviceType';
-import { expandStreamProviders, fetchSportsStreams, resolveProviderEmbedUrl, providerLabel, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { expandStreamProviders, loadSportsStreams, resolveProviderEmbedUrl, providerLabel, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { fetchScoreboards } from '../utils/liveScores';
 import { rankFeeds, recordFeedFailed, recordFeedWorked } from '../utils/sportsServerMemory';
 import { listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
 import { hostOf, isHostReachable, reachabilityMap } from '../utils/hostReachability';
@@ -25,6 +26,75 @@ const WORKED_AFTER_MS = 60_000;
 // Expanding Streamed sources waits at most this long before starting.
 const EXPAND_TIMEOUT_MS = 3_500;
 const MULTIVIEW_MAX = 4;
+// The last schedule, shown at once on the next visit while the feeds load.
+const SCHEDULE_CACHE_KEY = 'binge.sports.schedule.v1';
+const SCHEDULE_CACHE_MAX_AGE_MS = 20 * 60_000;
+const HIDE_SCORES_KEY = 'binge.sports.hideScores';
+// "Starting soon" row: games beginning within this many seconds.
+const SOON_SEC = 3 * 3600;
+const SCORES_POLL_MS = 30_000;
+
+// Spoiler-free mode (scores hidden everywhere on the page).
+const HideScores = createContext(false);
+
+function readScheduleCache() {
+  try {
+    const { at, streams } = JSON.parse(localStorage.getItem(SCHEDULE_CACHE_KEY) || 'null') || {};
+    if (!Array.isArray(streams) || Date.now() - at > SCHEDULE_CACHE_MAX_AGE_MS) return null;
+    const nowSec = Date.now() / 1000;
+    return streams.filter((stream) => stream.alwaysLive || stream.replay || (stream.endsAt || 0) > nowSec - 3600);
+  } catch {
+    return null;
+  }
+}
+
+function writeScheduleCache(streams) {
+  try { localStorage.setItem(SCHEDULE_CACHE_KEY, JSON.stringify({ at: Date.now(), streams })); } catch { /* full or blocked */ }
+}
+
+function readHideScores() {
+  try { return localStorage.getItem(HIDE_SCORES_KEY) === '1'; } catch { return false; }
+}
+
+// The ESPN teams in the order the game is named ("A vs B" → [A, B]).
+function teamsInNameOrder(stream, score) {
+  const named = stream.teams || splitTeamsFromTitle(stream.name);
+  const [first, second] = score.teams;
+  if (named && second && teamsMatch(named.home, second.name)) return [second, first];
+  return [first, second];
+}
+
+// Adds the ESPN score to a schedule entry, and its logos when the feeds
+// had none (most NFL/NBA/MLB/Premier League listings).
+function withScore(stream, score) {
+  if (!score) return stream;
+  const next = { ...stream, score };
+  if (!(stream.logos?.home && stream.logos?.away)) {
+    const [first, second] = teamsInNameOrder(stream, score);
+    if (first?.logo && second?.logo) next.logos = { home: first.logo, away: second.logo };
+  }
+  return next;
+}
+
+// Warms a game while the pointer rests on its card: expands its servers
+// (cached) and probes their hosts, so opening it starts the stream at once.
+const warmed = new Set();
+function warmGame(stream) {
+  if (warmed.has(stream.id)) return;
+  warmed.add(stream.id);
+  expandStreamProviders(stream.providers)
+    .then((list) => {
+      const hosts = [...new Set(list.map((provider) => hostOf(provider.embedUrl)).filter(Boolean))];
+      hosts.slice(0, 3).forEach((host) => {
+        const link = document.createElement('link');
+        link.rel = 'preconnect';
+        link.href = `https://${host}`;
+        document.head.appendChild(link);
+      });
+      return reachabilityMap(hosts);
+    })
+    .catch(() => warmed.delete(stream.id));
+}
 
 // League rows, in the order a US-centric sports home would show them; any
 // league not listed follows, biggest first.
@@ -73,6 +143,10 @@ function timeUntil(unix) {
 function getStatus(stream, nowMs) {
   const nowSec = Math.floor(nowMs / 1000);
   if (stream.alwaysLive) return 'live';
+  // ESPN knows when a game actually started and ended; the feeds only
+  // estimate a window from the start time.
+  if (stream.score?.state === 'post') return 'final';
+  if (stream.score?.state === 'in') return 'live';
   if (stream.startsAt <= nowSec && stream.endsAt >= nowSec) return 'live';
   if (stream.startsAt > nowSec) return 'upcoming';
   return 'replay';
@@ -82,6 +156,7 @@ function statusLabel(stream, nowMs) {
   const status = getStatus(stream, nowMs);
   if (status === 'live') return stream.alwaysLive ? '24/7' : 'LIVE';
   if (status === 'replay') return 'REPLAY';
+  if (status === 'final') return 'FINAL';
   return `${fmtDay(stream.startsAt)} · ${fmtTime(stream.startsAt)}`;
 }
 
@@ -122,16 +197,46 @@ function GameArt({ stream }) {
   );
 }
 
+// "TA&M 6  MIZ 20  3:30 - 4th" over the art, like a broadcast score bug.
+function Scorebug({ stream }) {
+  const hideScores = useContext(HideScores);
+  const score = stream.score;
+  if (!score || score.state === 'pre' || score.teams.length !== 2) return null;
+  return (
+    <span className="st-scorebug">
+      {!hideScores && teamsInNameOrder(stream, score).map((team) => (
+        <span key={team.short || team.name} className={`st-scorebug-team${score.state === 'post' && team.winner ? ' won' : ''}`}>
+          {team.short}<b>{team.score}</b>
+        </span>
+      ))}
+      <span className="st-scorebug-clock">{score.detail}</span>
+    </span>
+  );
+}
+
+function scoreWords(stream, hideScores) {
+  const score = stream.score;
+  if (!score || score.state === 'pre' || hideScores) return '';
+  return teamsInNameOrder(stream, score).map((team) => `${team.short || team.name} ${team.score}`).join(', ');
+}
+
 function GameCard({ stream, nowMs, onSelect, active = false, multi }) {
+  const hideScores = useContext(HideScores);
   const status = getStatus(stream, nowMs);
   const countdown = status === 'upcoming' ? timeUntil(stream.startsAt) : null;
   const picked = multi?.picks.includes(stream.id);
+  const warmTimer = useRef(null);
+  const broadcast = stream.score?.broadcast;
   const card = (
     <button
       type="button"
       className={`st-game${active ? ' active' : ''}`}
       onClick={() => onSelect(stream)}
-      aria-label={`${stream.name}, ${statusLabel(stream, nowMs)}, ${stream.providers.length} server${stream.providers.length === 1 ? '' : 's'}`}
+      onMouseEnter={() => { if (status === 'live') warmTimer.current = setTimeout(() => warmGame(stream), 200); }}
+      onMouseLeave={() => clearTimeout(warmTimer.current)}
+      onFocus={() => { if (status === 'live') warmGame(stream); }}
+      aria-label={[stream.name, statusLabel(stream, nowMs), scoreWords(stream, hideScores), stream.score?.state === 'in' ? stream.score.detail : '', stream.score?.close && status === 'live' ? 'close game' : '']
+        .filter(Boolean).join(', ')}
     >
       <div className="st-game-thumb">
         <GameArt stream={stream} />
@@ -140,13 +245,14 @@ function GameCard({ stream, nowMs, onSelect, active = false, multi }) {
           {statusLabel(stream, nowMs)}
         </span>
         {countdown && <span className="st-game-countdown">{countdown}</span>}
+        {!countdown && status === 'live' && stream.score?.close && <span className="st-game-close">Close game</span>}
+        <Scorebug stream={stream} />
         <span className="st-game-play" aria-hidden="true"><Play size={20} weight="fill" /></span>
       </div>
       <p className="st-game-title">{stream.name}</p>
       <p className="st-game-meta">
         <CatIcon category={stream.category} /> {stream.league}
-        <span aria-hidden="true"> · </span>
-        {stream.providers.length} server{stream.providers.length === 1 ? '' : 's'}
+        {broadcast && status !== 'final' && <><span aria-hidden="true"> · </span>{broadcast}</>}
       </p>
     </button>
   );
@@ -172,10 +278,18 @@ function GameCard({ stream, nowMs, onSelect, active = false, multi }) {
 }
 
 function sortForRow(streams, nowMs) {
-  const rank = { live: 0, upcoming: 1, replay: 2 };
+  const rank = { live: 0, upcoming: 1, final: 2, replay: 3 };
   return [...streams].sort((a, b) => {
     const statusDiff = rank[getStatus(a, nowMs)] - rank[getStatus(b, nowMs)];
     if (statusDiff) return statusDiff;
+    if (getStatus(a, nowMs) === 'live') {
+      // Close games first, then games ESPN confirms are on, then the
+      // best-served ones.
+      const close = Number(Boolean(b.score?.close)) - Number(Boolean(a.score?.close));
+      if (close) return close;
+      const on = Number(b.score?.state === 'in') - Number(a.score?.state === 'in');
+      if (on) return on;
+    }
     if (b.providers.length !== a.providers.length && getStatus(a, nowMs) === 'live') return b.providers.length - a.providers.length;
     return a.startsAt - b.startsAt;
   });
@@ -339,6 +453,7 @@ function useServerRotation(stream, status) {
 
 function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMultiview }) {
   const frameRef = useRef(null);
+  const hideScores = useContext(HideScores);
   const status = getStatus(stream, nowMs);
   const {
     servers, serverIndex, retryNonce, embedUrl, resolving, failed, blocked,
@@ -402,26 +517,10 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
         )}
       </div>
 
-      <LiveScorePanel stream={stream} />
+      <LiveScorePanel stream={stream} hideScores={hideScores} />
       </div>
 
       <div className="st-sp-controls">
-        <label className="st-select" htmlFor="st-server-select">
-          <span className="st-select-label">Server</span>
-          <select
-            id="st-server-select"
-            value={serverIndex}
-            onChange={(event) => chooseServer(Number(event.target.value))}
-            disabled={status === 'upcoming'}
-          >
-            {servers.map((provider, index) => (
-              <option key={`${provider.id}-${provider.source || ''}-${index}`} value={index}>
-                {`Server ${index + 1} — ${providerLabel(provider)}${blocked.has(index) ? ' (blocked on your network)' : failed.has(index) ? ' (not responding)' : ''}`}
-              </option>
-            ))}
-          </select>
-          <CaretDown size={16} weight="bold" className="st-select-caret" aria-hidden="true" />
-        </label>
         <button type="button" className="st-btn st-btn--ghost" onClick={nextServer} disabled={status === 'upcoming'}>
           <SkipForward size={18} weight="bold" /> {servers.length > 1 ? 'Not working? Next server' : 'Reload stream'}
         </button>
@@ -434,6 +533,28 @@ function GamePlayer({ stream, nowMs, onBack, otherStreams, onSelect, onAddToMult
           </button>
         )}
       </div>
+
+      {servers.length > 0 && status !== 'upcoming' && (
+        <div className="st-servers" role="group" aria-label="Servers">
+          {servers.map((provider, index) => {
+            const down = blocked.has(index) ? 'blocked on your network' : failed.has(index) ? 'not responding' : '';
+            return (
+              <button
+                key={`${provider.id}-${provider.source || ''}-${index}`}
+                type="button"
+                className={`st-server${index === serverIndex ? ' active' : ''}${down ? ' down' : ''}`}
+                aria-pressed={index === serverIndex}
+                onClick={() => chooseServer(index)}
+                title={down ? `${providerLabel(provider)}: ${down}` : providerLabel(provider)}
+              >
+                <span className="st-server-no">{index + 1}</span>
+                {providerLabel(provider)}
+                {down && <span className="sr-only">, {down}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {otherStreams.length > 0 && (
         <TitleRow
@@ -585,8 +706,11 @@ function Multiview({ games, nowMs, onBack, onRemove, onAdd, addable }) {
 
 export default function Sports() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [streams, setStreams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [cached] = useState(readScheduleCache);
+  const [schedule, setSchedule] = useState(() => cached || []);
+  const [loading, setLoading] = useState(!cached);
+  const [hideScores, setHideScores] = useState(readHideScores);
+  const lastLoad = useRef(0);
   const [error, setError] = useState('');
   const [category, setCategory] = useState('All');
   const [nowMs, setNowMs] = useState(Date.now());
@@ -599,9 +723,11 @@ export default function Sports() {
   const [picks, setPicks] = useState([]);
 
   const load = useCallback(async () => {
+    lastLoad.current = Date.now();
     try {
-      const next = await fetchSportsStreams();
-      setStreams(next);
+      // Games appear as soon as two feeds are in; the slowest merges after.
+      const next = await loadSportsStreams((partial) => { setSchedule(partial); setLoading(false); });
+      writeScheduleCache(next);
       setError('');
     } catch (e) {
       setError(`Could not load sports streams. ${e.message || ''}`);
@@ -613,9 +739,38 @@ export default function Sports() {
   useEffect(() => {
     load();
     const tick = setInterval(() => setNowMs(Date.now()), 30_000);
-    const poll = setInterval(load, POLL_MS);
-    return () => { clearInterval(tick); clearInterval(poll); };
+    // No polling in a background tab; catch up when it's shown again.
+    const poll = setInterval(() => { if (!document.hidden) load(); }, POLL_MS);
+    const onVisible = () => {
+      if (document.hidden) return;
+      setNowMs(Date.now());
+      if (Date.now() - lastLoad.current > POLL_MS) load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(tick); clearInterval(poll); document.removeEventListener('visibilitychange', onVisible); };
   }, [load]);
+
+  // ESPN scores, clocks and logos for every game ESPN covers.
+  const [scores, setScores] = useState(() => new Map());
+  useEffect(() => {
+    if (!schedule.length) return undefined;
+    let cancelled = false;
+    const run = () => {
+      if (document.hidden) return;
+      fetchScoreboards(schedule).then((next) => { if (!cancelled) setScores(next); }).catch(() => {});
+    };
+    run();
+    const timer = setInterval(run, SCORES_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [schedule]);
+  const streams = useMemo(() => schedule.map((stream) => withScore(stream, scores.get(stream.id))), [schedule, scores]);
+
+  const toggleHideScores = () => {
+    setHideScores((on) => {
+      try { localStorage.setItem(HIDE_SCORES_KEY, on ? '0' : '1'); } catch { /* blocked */ }
+      return !on;
+    });
+  };
 
   const selected = selectedId ? streams.find((stream) => stream.id === selectedId) || null : null;
 
@@ -667,12 +822,26 @@ export default function Sports() {
       return followedTeams.some((team) => teamsMatch(team.team_name, teams.home) || teamsMatch(team.team_name, teams.away));
     }), nowMs);
   }, [streams, followedTeams, nowMs]);
-  const featured = live[0] || leagueRows[0]?.items[0] || null;
+  const soon = useMemo(() => sortForRow(filtered.filter((stream) => getStatus(stream, nowMs) === 'upcoming'
+    && stream.startsAt - nowMs / 1000 <= SOON_SEC), nowMs), [filtered, nowMs]);
+  // Spotlight: your team on now, else a close game, else a game ESPN says is
+  // on, else the best-served live game.
+  // It stays on its game while that game is live, so scores updating
+  // (and close games changing) never swap it out under you.
+  const featuredId = useRef(null);
+  const keptFeature = live.find((stream) => stream.id === featuredId.current);
+  const featured = keptFeature
+    || yourGames.find((stream) => getStatus(stream, nowMs) === 'live')
+    || live.find((stream) => stream.score?.close)
+    || live.find((stream) => stream.score?.state === 'in')
+    || live[0] || soon[0] || leagueRows[0]?.items[0] || null;
+  featuredId.current = featured?.id || null;
 
   const multiGames = multiIds.map((id) => streams.find((stream) => stream.id === id)).filter(Boolean);
   if (multiviewAllowed && multiIds.length && multiGames.length) {
     const addable = sortForRow(streams.filter((stream) => !multiIds.includes(stream.id) && getStatus(stream, nowMs) === 'live'), nowMs).slice(0, 24);
     return (
+      <HideScores.Provider value={hideScores}>
       <div className="app-layout">
         <Navbar />
         <main className="page-content st-sports">
@@ -690,12 +859,14 @@ export default function Sports() {
           />
         </main>
       </div>
+      </HideScores.Provider>
     );
   }
 
   if (selected) {
     const others = sortForRow(streams.filter((stream) => stream.id !== selected.id && getStatus(stream, nowMs) !== 'replay'), nowMs).slice(0, 24);
     return (
+      <HideScores.Provider value={hideScores}>
       <div className="app-layout">
         <Navbar />
         <main className="page-content st-sports">
@@ -709,10 +880,12 @@ export default function Sports() {
           />
         </main>
       </div>
+      </HideScores.Provider>
     );
   }
 
   return (
+    <HideScores.Provider value={hideScores}>
     <div className="app-layout">
       <Navbar />
       <main className="page-content st-sports">
@@ -744,7 +917,20 @@ export default function Sports() {
                 {statusLabel(featured, nowMs)}
               </span>
               <h1 className="st-hero-title">{featured.name}</h1>
-              <p className="st-sp-feature-meta"><CatIcon category={featured.category} /> {featured.league} · {featured.providers.length} server{featured.providers.length === 1 ? '' : 's'}</p>
+              {featured.score && featured.score.state !== 'pre' && (
+                <p className="st-sp-feature-score">
+                  {!hideScores && teamsInNameOrder(featured, featured.score).map((team) => (
+                    <span key={team.short || team.name}>{team.short} <b>{team.score}</b></span>
+                  ))}
+                  <span className="st-sp-feature-clock">{featured.score.detail}</span>
+                  {featured.score.close && getStatus(featured, nowMs) === 'live' && <span className="st-game-close st-game-close--inline">Close game</span>}
+                </p>
+              )}
+              <p className="st-sp-feature-meta">
+                <CatIcon category={featured.category} /> {featured.league}
+                {featured.score?.broadcast && <> · {featured.score.broadcast}</>}
+                {getStatus(featured, nowMs) === 'upcoming' && featured.startsAt && <> · {fmtDay(featured.startsAt)} {fmtTime(featured.startsAt)}</>}
+              </p>
               <button type="button" className="st-btn st-btn--primary" onClick={() => select(featured)}>
                 <Play size={18} weight="fill" /> {getStatus(featured, nowMs) === 'live' ? 'Watch live' : 'View game'}
               </button>
@@ -765,6 +951,13 @@ export default function Sports() {
             </button>
           ))}
         </GenreScrollBar>
+
+        <div className="st-sp-tools">
+          <button type="button" className="st-btn st-btn--ghost st-btn--small" aria-pressed={hideScores} onClick={toggleHideScores}>
+            {hideScores ? <EyeSlash size={16} weight="bold" /> : <Eye size={16} weight="bold" />}
+            {hideScores ? 'Scores hidden' : 'Hide scores'}
+          </button>
+        </div>
 
         {loading && (
           <div className="st-rows">
@@ -802,6 +995,15 @@ export default function Sports() {
                 title={`Live Now · ${live.length}`}
                 items={live}
                 eager
+                renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} multi={multi} />}
+              />
+            )}
+            {soon.length > 0 && (
+              <TitleRow
+                className="st-row--wide"
+                title="Starting soon"
+                subtitle="In the next 3 hours"
+                items={soon}
                 renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} multi={multi} />}
               />
             )}
@@ -849,5 +1051,6 @@ export default function Sports() {
         )}
       </main>
     </div>
+    </HideScores.Provider>
   );
 }

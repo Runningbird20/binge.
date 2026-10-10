@@ -648,22 +648,26 @@ body {
    "boxy" falloff than a single straight gradient ramp. */
 .genre-bar-wrap {
   --genre-edge-fade: clamp(48px, 8vw, 96px);
+  /* Only the side that has more chips fades: at rest the first chip
+     ("All") sits fully visible instead of half dissolved. */
+  --fade-l: 0px;
+  --fade-r: 0px;
   -webkit-mask-image: linear-gradient(
     90deg,
     transparent 0,
-    rgba(0, 0, 0, 0.35) calc(var(--genre-edge-fade) * 0.4),
-    #000 var(--genre-edge-fade),
-    #000 calc(100% - var(--genre-edge-fade)),
-    rgba(0, 0, 0, 0.35) calc(100% - var(--genre-edge-fade) * 0.4),
+    rgba(0, 0, 0, 0.35) calc(var(--fade-l) * 0.4),
+    #000 var(--fade-l),
+    #000 calc(100% - var(--fade-r)),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--fade-r) * 0.4),
     transparent 100%
   );
   mask-image: linear-gradient(
     90deg,
     transparent 0,
-    rgba(0, 0, 0, 0.35) calc(var(--genre-edge-fade) * 0.4),
-    #000 var(--genre-edge-fade),
-    #000 calc(100% - var(--genre-edge-fade)),
-    rgba(0, 0, 0, 0.35) calc(100% - var(--genre-edge-fade) * 0.4),
+    rgba(0, 0, 0, 0.35) calc(var(--fade-l) * 0.4),
+    #000 var(--fade-l),
+    #000 calc(100% - var(--fade-r)),
+    rgba(0, 0, 0, 0.35) calc(100% - var(--fade-r) * 0.4),
     transparent 100%
   );
   -webkit-mask-repeat: no-repeat;
@@ -671,6 +675,9 @@ body {
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
 }
+
+.genre-bar-wrap.fade-left { --fade-l: var(--genre-edge-fade); }
+.genre-bar-wrap.fade-right { --fade-r: var(--genre-edge-fade); }
 
 .genre-bar {
   display: flex;

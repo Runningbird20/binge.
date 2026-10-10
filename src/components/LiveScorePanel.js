@@ -14,7 +14,10 @@ const TABS = [
 // "Second screen" next to a game's stream: live score, line score, team
 // stats, leaders and play-by-play (ESPN). Renders nothing for games ESPN
 // doesn't cover (most non-US sports, fights, channels).
-export default function LiveScorePanel({ stream }) {
+export default function LiveScorePanel({ stream, hideScores = false }) {
+  // Spoiler-free: scores stay hidden until asked for, per game.
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => { setRevealed(false); }, [stream.id]);
   const [event, setEvent] = useState(undefined); // undefined = looking, null = not found
   const [summary, setSummary] = useState(null);
   const [tab, setTab] = useState('score');
@@ -73,6 +76,7 @@ export default function LiveScorePanel({ stream }) {
   if (!summary) return null;
 
   const [away, home] = summary.teams;
+  const masked = hideScores && !revealed && summary.state !== 'pre';
   const periods = Array.from({ length: summary.periods }, (_, index) => index + 1);
   const available = TABS.filter((entry) => (entry.id === 'stats' ? summary.statRows.length || summary.leaders.length : entry.id === 'plays' ? summary.plays.length : true));
 
@@ -98,7 +102,7 @@ export default function LiveScorePanel({ stream }) {
                 </button>
               );
             })()}
-            <strong className="st-ls-team-score">{summary.state === 'pre' ? '' : team.score}</strong>
+            <strong className="st-ls-team-score">{summary.state === 'pre' || masked ? '' : team.score}</strong>
           </div>
         ))}
         <p className={`st-ls-status${summary.state === 'in' ? ' live' : ''}`}>
@@ -107,6 +111,11 @@ export default function LiveScorePanel({ stream }) {
         </p>
       </div>
 
+      {masked ? (
+        <div className="st-ls-body">
+          <button type="button" className="st-btn st-btn--ghost st-ls-reveal" onClick={() => setRevealed(true)}>Show score and stats</button>
+        </div>
+      ) : (<>
       {available.length > 1 && (
         <div className="st-ls-tabs" role="tablist" aria-label="Game details">
           {available.map((entry) => (
@@ -172,6 +181,7 @@ export default function LiveScorePanel({ stream }) {
           </ol>
         )}
       </div>
+      </>)}
       <p className="st-ls-source">Scores from ESPN · updates every 20s while live</p>
     </aside>
   );

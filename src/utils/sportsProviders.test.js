@@ -107,3 +107,28 @@ describe('expandStreamProviders', () => {
     expect(sportsSwitchKeys(out[2])).toEqual(['sports:streamed', 'sports:streamed:admin']);
   });
 });
+
+describe('canonicalLeague', () => {
+  const { canonicalLeague } = require('./sportsProviders');
+  it('gives each league one name across feeds', () => {
+    expect(canonicalLeague('NCAAF')).toBe('College Football');
+    expect(canonicalLeague('College Football')).toBe('College Football');
+    expect(canonicalLeague('La Liga')).toBe('LaLiga');
+    expect(canonicalLeague('F1')).toBe('Formula 1');
+    expect(canonicalLeague('Eredivisie')).toBe('Eredivisie');
+  });
+});
+
+describe('merged logos', () => {
+  it('follow the order of the game name', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const base = { category: 'American Football', startsAt: now - 600, endsAt: now + 3600 };
+    const merged = mergeNormalized([
+      { ...base, name: 'North Carolina Tar Heels vs Pittsburgh Panthers', provider: { id: 'ppv', embedUrl: 'https://a.example/1' } },
+      { ...base, name: 'Pittsburgh Panthers vs North Carolina Tar Heels', logos: { home: 'pitt.png', away: 'unc.png' }, provider: { id: 'streamfree', embedUrl: 'https://b.example/1' } },
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].name).toMatch(/^North Carolina/);
+    expect(merged[0].logos).toEqual({ home: 'unc.png', away: 'pitt.png' });
+  });
+});
