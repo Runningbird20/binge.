@@ -57,6 +57,8 @@ object PlaybackPrefs {
     val trailers get() = Prefs.bool("trailers", true)
     val largeText get() = Prefs.bool("largeText")
     val multiviewLayout get() = Prefs.string("multiviewLayout", "grid")!!
+    // "smooth": pause the games this TV can't decode smoothly; "all": keep every game playing.
+    val multiviewMode get() = Prefs.string("multiviewMode", "smooth")!!
 
     fun languageName(code: String): String =
         Locale(code).getDisplayLanguage(Locale.ENGLISH).takeIf { it.isNotEmpty() && it != code } ?: code

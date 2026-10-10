@@ -307,6 +307,8 @@ fun SettingsScreen() {
             item { OnOff("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.", PlaybackPrefs.skipIntroButton) { Prefs.set("skipIntroButton", it) } }
             item { SettingRow("Multiview layout", "With 2 or 3 games: equal tiles, or one big game with the others stacked beside it.",
                 listOf("grid" to "Equal tiles", "main" to "One big, others beside"), PlaybackPrefs.multiviewLayout) { Prefs.set("multiviewLayout", it) } }
+            item { SettingRow("Multiview playback", "A Fire TV decodes only so much video. Smooth pauses the games it can't keep up with (OK resumes one); All games keeps every game playing, even if the extra ones stutter.",
+                listOf("smooth" to "Smooth", "all" to "All games"), PlaybackPrefs.multiviewMode) { Prefs.set("multiviewMode", it) } }
             item { OnOff("Audio description", "Picks a described audio track automatically when a server has one.", PlaybackPrefs.audioDescription) { Prefs.set("audioDescription", it) } }
             item { OnOff("Larger text", "Bigger text across the whole app.", PlaybackPrefs.largeText) { Prefs.set("largeText", it) } }
             item { OnOff("Ambient mode", "Artwork from your rows after a few idle minutes, or a long pause.", PlaybackPrefs.ambient) { Prefs.set("ambient", it) } }
