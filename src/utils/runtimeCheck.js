@@ -13,7 +13,20 @@ export async function expectedRuntimeSeconds({ tmdbId, mediaType, season, episod
   if (!tmdbId) return null;
   if (mediaType === 'tv_show') {
     const data = await tmdbGet(`/tv/${tmdbId}/season/${season}`).catch(() => null);
-    const minutes = data?.episodes?.find((ep) => ep.episode_number === Number(episode))?.runtime;
+    const episodes = data?.episodes || [];
+    let minutes = episodes.find((ep) => ep.episode_number === Number(episode))?.runtime;
+    // TMDB often has no runtime for a single episode (common for anime): fall
+    // back to the season's typical episode, then the show's, so a server
+    // playing a different show is still caught (Vidy served a 47-min video
+    // for a 21-min Fighting Spirit episode).
+    if (!(minutes > 0)) {
+      const known = episodes.map((ep) => ep.runtime).filter((r) => r > 0).sort((a, b) => a - b);
+      minutes = known.length ? known[Math.floor(known.length / 2)] : null;
+    }
+    if (!(minutes > 0)) {
+      const show = await tmdbGet(`/tv/${tmdbId}`).catch(() => null);
+      minutes = (show?.episode_run_time || []).find((r) => r > 0);
+    }
     return minutes > 0 ? minutes * 60 : null;
   }
   const data = await tmdbGet(`/movie/${tmdbId}`).catch(() => null);

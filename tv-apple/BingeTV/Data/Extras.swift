@@ -154,6 +154,29 @@ extension AppModel {
         return values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
     }
 
+    // Everything this profile rated, newest first, with its stars (1–5).
+    func ratedTitles() async -> [(Title, Double)] {
+        guard isSignedIn else { return [] }
+        struct Rating: Decodable {
+            let mediaId: Int
+            let acting, writing, originality, pacing, cinematography, premise, resonance: Double?
+            var average: Double { let v = [acting, writing, originality, pacing, cinematography, premise, resonance].compactMap { $0 }; return v.isEmpty ? 0 : v.reduce(0, +) / Double(v.count) }
+        }
+        async let movieRows: [Rating]? = try? Supabase.shared.select("movie_ratings", [
+            URLQueryItem(name: "select", value: "media_id,acting,writing,originality,pacing,cinematography"),
+            URLQueryItem(name: "order", value: "created_at.desc"), URLQueryItem(name: "limit", value: "500"),
+        ] + ownerQuery)
+        async let showRows: [Rating]? = try? Supabase.shared.select("tv_show_ratings", [
+            URLQueryItem(name: "select", value: "media_id,premise,originality,acting,cinematography,writing,pacing,resonance"),
+            URLQueryItem(name: "order", value: "created_at.desc"), URLQueryItem(name: "limit", value: "500"),
+        ] + ownerQuery)
+        let (m, t) = await (movieRows ?? [], showRows ?? [])
+        let movies = (try? await Catalog.titles(.movie, ids: m.map(\.mediaId))) ?? [:]
+        let shows = (try? await Catalog.titles(.tvShow, ids: t.map(\.mediaId))) ?? [:]
+        let all = t.compactMap { r in shows[r.mediaId].map { ($0, r.average) } } + m.compactMap { r in movies[r.mediaId].map { ($0, r.average) } }
+        return all.filter { !isKids || KidsFilter.allows($0.0.ageRating) }
+    }
+
     // Saves the same row the website writes; a rated title counts as watched,
     // so it leaves My List (the site does the same).
     func rate(_ title: Title, stars: Int) async throws {

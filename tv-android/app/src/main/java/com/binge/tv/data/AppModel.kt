@@ -221,6 +221,24 @@ object AppModel {
         (lovedShows.mapNotNull { shows[it] } + lovedMovies.mapNotNull { movies[it] }).filter { !isKids || KidsFilter.allows(it.ageRating) }
     }
 
+    // Everything this profile rated, newest first, with its stars (1–5).
+    suspend fun ratedTitles(): List<Pair<Title, Double>> = coroutineScope {
+        if (!isSignedIn) return@coroutineScope emptyList()
+        val m = async { runCatching { Supabase.selectAs<List<JsonObject>>("movie_ratings", listOf(
+            "select" to "media_id,acting,writing,originality,pacing,cinematography", "order" to "created_at.desc", "limit" to "500") + ownerFilter) }.getOrDefault(emptyList()) }
+        val t = async { runCatching { Supabase.selectAs<List<JsonObject>>("tv_show_ratings", listOf(
+            "select" to "media_id,premise,originality,acting,cinematography,writing,pacing,resonance", "order" to "created_at.desc", "limit" to "500") + ownerFilter) }.getOrDefault(emptyList()) }
+        fun ids(rows: List<JsonObject>) = rows.mapNotNull { it["media_id"]?.jsonPrimitive?.content?.toLongOrNull() }
+        val movieRows = m.await(); val showRows = t.await()
+        val movies = runCatching { Catalog.titles(MediaKind.MOVIE, ids(movieRows)) }.getOrDefault(emptyMap())
+        val shows = runCatching { Catalog.titles(MediaKind.TV, ids(showRows)) }.getOrDefault(emptyMap())
+        fun pairs(rows: List<JsonObject>, map: Map<Long, Title>) = rows.mapNotNull { row ->
+            val id = row["media_id"]?.jsonPrimitive?.content?.toLongOrNull() ?: return@mapNotNull null
+            map[id]?.let { it to average(JsonObject(row - "media_id")) }
+        }
+        (pairs(showRows, shows) + pairs(movieRows, movies)).filter { !isKids || KidsFilter.allows(it.first.ageRating) }
+    }
+
     @Serializable private data class MediaIdRow(val mediaId: Long)
 
     suspend fun ratedIds(): Set<String> = coroutineScope {

@@ -60,25 +60,28 @@ fun SearchScreen() {
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
     LaunchedEffect(gridState) { snapshotFlow { gridState.firstVisibleItemIndex == 0 }.collect { TabChrome.atTop = it } }
+    LaunchedEffect(gridState) { snapshotFlow { TabChrome.scrollToTop }.collect { if (it > 0) gridState.animateScrollToItem(0) } }
     val text = query.trim()
 
     suspend fun ask(q: String) {
         aiLoading = true; aiError = null
         try {
             val (summary, titles) = AskBinge.ask(q, AppModel.isKids)
-            if (q == query.trim()) { ai = titles; aiSummary = summary; if (titles.isEmpty()) aiError = "Nothing on binge. fits that yet. Try saying it another way." }
+            if (q == query.trim()) { ai = titles; aiSummary = summary; if (titles.isEmpty() && results.isEmpty()) aiError = "Nothing on binge. fits that yet. Try saying it another way." }
         } catch (e: Exception) { aiError = e.message ?: "Ask binge. isn't answering right now." }
         aiLoading = false
     }
 
+    // Every search goes through Ask binge. (exact titles first, and requests
+    // like "new Malayalam movies"); plain title matches show while it thinks.
     LaunchedEffect(text) {
         if (text.isEmpty()) { results = emptyList(); ai = emptyList(); return@LaunchedEffect }
         searching = true
+        ai = emptyList(); aiSummary = null; aiError = null
         delay(350)
         results = runCatching { Catalog.search(text, AppModel.isKids) }.getOrDefault(emptyList())
         searching = false
-        ai = emptyList(); aiSummary = null; aiError = null
-        if (AskBinge.isConversational(text)) ask(text)
+        if (text.length >= 2) { delay(250); ask(text) }
     }
     LaunchedEffect(Unit) {
         if (trending.isNotEmpty()) return@LaunchedEffect
@@ -91,7 +94,8 @@ fun SearchScreen() {
         SearchCache.trending = trending
     }
 
-    val showing = if (text.isEmpty()) trending else results
+    val aiIds = ai.map { it.first.id }.toSet()
+    val showing = if (text.isEmpty()) trending else results.filter { it.id !in aiIds }
     PivotScroll(fraction = 0.3f) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(7), state = gridState, modifier = Modifier.fillMaxSize().focusRestorer(),
@@ -108,29 +112,22 @@ fun SearchScreen() {
             }
             if (text.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
                 when {
-                    aiLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Spinner(18.dp); Text("Asking binge.…", style = Type.headline) }
-                    ai.isNotEmpty() -> Column {
-                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Rounded.AutoAwesome, null)
-                            Text("Ask binge.", style = Type.section.copy(fontWeight = FontWeight.Bold))
-                            aiSummary?.let { Text(it, style = Type.callout, color = Palette.muted, maxLines = 1) }
-                        }
-                        LazyRow(contentPadding = PaddingValues(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap)) {
-                            items(ai, key = { it.first.id }) { (title, why) ->
-                                Column(Modifier.width(Dimens.posterW), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    PosterCard(title, Nav::open)
-                                    why?.let { Text(it, style = Type.caption, color = Palette.muted, maxLines = 3) }
-                                }
-                            }
-                        }
-                    }
-                    else -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Pill("Ask binge. for “$text”", selected = true, icon = Icons.Rounded.AutoAwesome) { scope.launch { ask(text) } }
-                        Text(aiError ?: "Describe a mood: “a cozy mystery under 2 hours”", style = Type.callout, color = if (aiError != null) Palette.error else Palette.muted)
+                    aiLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Spinner(18.dp); Text("Finding the best matches…", style = Type.callout, color = Palette.muted) }
+                    ai.isNotEmpty() -> Text(aiSummary ?: "Best matches", style = Type.section)
+                    aiError != null && results.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(aiError ?: "", style = Type.callout, color = Palette.muted)
+                        Pill("Try again") { scope.launch { ask(text) } }
                     }
                 }
             }
-            if (text.isNotEmpty() && !searching && results.isEmpty() && ai.isEmpty() && !aiLoading) item(span = { GridItemSpan(maxLineSpan) }) {
+            items(ai, key = { "ai:" + it.first.id }) { (title, why) ->
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    PosterCard(title, Nav::open)
+                    why?.takeIf { it.isNotEmpty() && it != "Title match" }?.let { Text(it, style = Type.caption, color = Palette.muted, maxLines = 2) }
+                }
+            }
+            if (ai.isNotEmpty() && showing.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("More titles", style = Type.section, modifier = Modifier.padding(top = 8.dp)) }
+            if (text.isNotEmpty() && !searching && results.isEmpty() && ai.isEmpty() && !aiLoading && aiError == null) item(span = { GridItemSpan(maxLineSpan) }) {
                 Text("Nothing on binge. matches “$text”.", style = Type.headline, color = Palette.muted, modifier = Modifier.padding(top = 30.dp))
             }
             if (text.isEmpty() && trending.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Trending searches", style = Type.section) }

@@ -91,6 +91,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     private val triedSubtitleTracks = HashSet<Int>()
     private var noSubsSince: Long? = null
     private var trimmed = false
+    private var subsNoticeShown = false
 
     private fun now() = System.currentTimeMillis()
 
@@ -166,6 +167,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
             if (req.key != request.key) return@launch
             expected = seconds
             next.expectedDuration = seconds
+            if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "expected runtime ${seconds}s for ${req.key}")
         }
         race?.let { it.stop(); surface.removeView(it.container) }
         race = next
@@ -395,7 +397,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     fun play(season: Int, episode: Int, automatic: Boolean = false) {
         saveProgress(force = true)
         autoAdvances = if (automatic) autoAdvances + 1 else 0
-        skippedIntro = false; markedWatched = false; showSkipIntro = false
+        skippedIntro = false; markedWatched = false; showSkipIntro = false; subsNoticeShown = false
         request = request.copy(season = season, episode = episode, startAt = null)
         upNextCountdown = null
         openedAt = now(); recoveries = 0; handPicked = false; raced.clear()
@@ -421,7 +423,13 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         if (!started || request.isLive || wanted == "off" || state.text.isNotEmpty() || usingExternalSubtitles || externalLoading ||
             original == null || original.startsWith(wanted)) { noSubsSince = null; return }
         val since = noSubsSince ?: run { noSubsSince = now(); return }
-        if (now() - since > 8000) { noSubsSince = null; recover("has no subtitles") }
+        // Never give up a working video for subtitles (the other servers may
+        // not have the episode at all): say so, and ▼ lets you try another.
+        if (now() - since > 8000 && !subsNoticeShown) {
+            subsNoticeShown = true
+            notice = "No ${PlaybackPrefs.languageName(wanted)} subtitles found for this episode. Press ▼ to try another server."
+            showHUD()
+        }
     }
 
     private fun resetStallClock() { lastClock = -1.0; clockMovedAt = now(); stateAt = now() }
@@ -441,6 +449,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     }
 
     private fun recover(reason: String) {
+        if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "recover: ${server?.name} $reason")
         val current = server ?: return
         resetStallClock()
         // A server you chose yourself is never swapped out behind your back.

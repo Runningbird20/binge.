@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
-import { askBinge, isConversational } from '../utils/aiSearch';
+import { askBinge } from '../utils/aiSearch';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import TitleRow from '../components/TitleRow';
@@ -51,7 +51,12 @@ function AiPicks({ query, auto }) {
           <p className="st-row-subtitle">{state === 'loading' ? 'Thinking about what fits…' : result?.summary || `For “${query}”`}</p>
         </div>
       </div>
-      {state === 'error' && <p className="sr-ai-error">{error}</p>}
+      {state === 'error' && (
+        <div className="sr-ai-error-row">
+          <p className="sr-ai-error">{error}</p>
+          <button type="button" className="sr-ask" onClick={() => setState('loading')}>Try again</button>
+        </div>
+      )}
       {state === 'done' && result.items.length === 0 && <p className="sr-ai-error">Nothing in the binge. catalog fit that — try wording it differently.</p>}
       {(state === 'loading' || result?.items?.length > 0) && (
         <TitleRow title="binge. picks" loading={state === 'loading'} items={state === 'done' ? result.items : undefined} />
@@ -309,7 +314,10 @@ export default function SearchResults() {
           </div>
         </header>
         <SearchBox query={query} />
-        {query && <AiPicks key={query} query={query} auto={isConversational(query) || searchParams.get('ai') === '1'} />}
+        {/* Every search goes through Ask binge. (it puts exact title matches first,
+            and understands requests like "new Malayalam movies"); the plain
+            title results below show instantly while it thinks. */}
+        {query.trim().length >= 2 && <AiPicks key={query} query={query} auto />}
 
         {primaryState === 'loading' && <GridSkeleton />}
 

@@ -507,6 +507,7 @@ final class PlayerModel: ObservableObject {
         saveProgress(force: true)
         autoAdvances = automatic ? autoAdvances + 1 : 0
         skippedIntro = false
+        subsNoticeShown = false
         markedWatched = false
         showSkipIntro = false
         request.season = season
@@ -547,6 +548,7 @@ final class PlayerModel: ObservableObject {
     // MARK: Subtitles needed but missing
 
     private var noSubsSince: Date?
+    private var subsNoticeShown = false
     #if DEBUG
     private var lastCue = "-"
     #endif
@@ -558,9 +560,12 @@ final class PlayerModel: ObservableObject {
         guard started, !request.isLive, wanted != "off", state.text.isEmpty, !usingExternalSubtitles, !externalLoading,
               let original = originalLanguage, !original.hasPrefix(wanted) else { noSubsSince = nil; return }
         if noSubsSince == nil { noSubsSince = Date() }
-        if let since = noSubsSince, Date().timeIntervalSince(since) > 8 {
-            noSubsSince = nil
-            recover(reason: "has no subtitles")
+        // Never give up a working video for subtitles (the other servers may
+        // not have the episode at all): say so; the panel can switch servers.
+        if let since = noSubsSince, Date().timeIntervalSince(since) > 8, !subsNoticeShown {
+            subsNoticeShown = true
+            notice = "No \(PlaybackPrefs.languageName(wanted)) subtitles found for this episode. Swipe down to try another server."
+            showHUD()
         }
     }
 

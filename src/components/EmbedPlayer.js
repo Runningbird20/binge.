@@ -1048,7 +1048,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
         if (cancelled) return;
 
         setLookupState('error');
-        if (err.message?.includes('Unable to reach the API')) {
+        if (err.message?.includes('Couldn’t reach binge.') || err.message?.includes('You’re offline')) {
           setLookupError('Unable to reach the API server. Make sure the backend is running.');
         } else {
           setLookupError(err.message || 'The stream lookup failed.');

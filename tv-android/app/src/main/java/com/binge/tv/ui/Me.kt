@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ClosedCaption
@@ -31,6 +32,8 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,20 +82,30 @@ import java.util.Locale
 fun MeScreen() {
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { TabChrome.atTop = true }
-    Row(Modifier.fillMaxSize().padding(start = Dimens.edge, end = Dimens.edge, top = 80.dp), horizontalArrangement = Arrangement.spacedBy(46.dp)) {
+    // Focus enters on the list (My List & Ratings), never on Sign out or Quit.
+    val listFirst = remember { FocusRequester() }
+    var confirmQuit by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { repeat(3) { kotlinx.coroutines.delay(120); runCatching { listFirst.requestFocus() } } }
+    Row(Modifier.fillMaxSize().padding(start = Dimens.edge, end = Dimens.edge, top = 80.dp).focusRestorer { listFirst }, horizontalArrangement = Arrangement.spacedBy(46.dp)) {
         Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AppModel.profile?.let { ProfileAvatar(it, 90.dp) }
             AppModel.session?.email?.let { Text("Signed in as $it", style = Type.callout, color = Palette.muted) }
             if (AppModel.profiles.size > 1) Pill("Switch profile", icon = Icons.Rounded.People) { AppModel.switchProfile() }
             if (AppModel.isSignedIn) Pill("Sign out", icon = Icons.AutoMirrored.Rounded.Logout) { scope.launch { AppModel.signOut() } }
+            Spacer(Modifier.weight(1f))
             // Leaves the app (back to the Fire TV home screen); you stay signed in.
             val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
-            Pill("Quit binge.", icon = Icons.Rounded.PowerSettingsNew) { activity?.finishAndRemoveTask() }
-            Spacer(Modifier.weight(1f))
-            Text("binge. for Fire TV ${BuildConfig.VERSION_NAME}", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(bottom = 24.dp))
+            Pill("Quit binge.", icon = Icons.Rounded.PowerSettingsNew) { confirmQuit = true }
+            if (confirmQuit) ActionSheet("Quit binge.?", onDismiss = { confirmQuit = false }) {
+                Text("You'll stay signed in.", style = Type.callout, color = Palette.muted)
+                Pill("Quit", icon = Icons.Rounded.PowerSettingsNew) { activity?.finishAndRemoveTask() }
+                Pill("Cancel") { confirmQuit = false }
+            }
+            Text("binge. for Fire TV ${BuildConfig.VERSION_NAME}", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 10.dp, bottom = 24.dp))
         }
         // A plain list, like Android TV settings: no tile grid.
         LazyColumn(Modifier.weight(1f).focusRestorer(), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
+            item { MeRow("My List & Ratings", "What you saved and what you rated", Icons.Rounded.Bookmarks, Modifier.focusRequester(listFirst)) { Nav.push(Screen.Library) } }
             item { MeRow("History", "Everything you've started", Icons.Rounded.History) { Nav.push(Screen.History) } }
             item { MeRow("Calendar", "Upcoming episodes and releases", Icons.Rounded.CalendarMonth) { Nav.push(Screen.Calendar) } }
             item { MeRow("Wrapped", "Your year on binge.", Icons.Rounded.AutoAwesome) { Nav.push(Screen.Wrapped) } }
@@ -104,9 +117,9 @@ fun MeScreen() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun MeRow(title: String, detail: String, icon: ImageVector, onClick: () -> Unit) {
+private fun MeRow(title: String, detail: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
     ListItem(
-        selected = false, onClick = onClick,
+        selected = false, onClick = onClick, modifier = modifier.rememberFocus(),
         headlineContent = { Text(title, style = Type.headline) },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -310,3 +323,57 @@ private fun SettingRow(title: String, note: String, choices: List<Pair<String, S
 @Composable
 private fun OnOff(title: String, note: String, value: Boolean, onChange: (Boolean) -> Unit) =
     SettingRow(title, note, listOf("on" to "On", "off" to "Off"), if (value) "on" else "off") { onChange(it == "on") }
+
+// MARK: My List & Ratings
+
+@Composable
+fun LibraryScreen() {
+    var tab by remember { mutableStateOf(0) }
+    var list by remember { mutableStateOf<List<Title>?>(null) }
+    var rated by remember { mutableStateOf<List<Pair<Title, Double>>?>(null) }
+    LaunchedEffect(Unit) {
+        list = runCatching { AppModel.myList() }.getOrDefault(emptyList())
+        rated = AppModel.ratedTitles()
+    }
+    // Coming back from a title page (where it may have been rated or removed).
+    LaunchedEffect(Nav.returns) {
+        if (list != null) { list = runCatching { AppModel.myList() }.getOrDefault(list.orEmpty()); rated = AppModel.ratedTitles() }
+    }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
+    LazyVerticalGrid(GridCells.Fixed(7), Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(start = Dimens.edge, end = Dimens.edge, bottom = 40.dp),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column {
+                PageHeader("My List & Ratings", "Saved to watch, and everything you rated. Same as the website and the other TV apps.")
+                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Pill("My List" + (list?.let { " · ${it.size}" } ?: ""), selected = tab == 0, modifier = Modifier.focusRequester(first)) { tab = 0 }
+                    Pill("Ratings" + (rated?.let { " · ${it.size}" } ?: ""), selected = tab == 1) { tab = 1 }
+                }
+            }
+        }
+        if (tab == 0) {
+            val items = list
+            if (items == null) item(span = { GridItemSpan(maxLineSpan) }) { RowSkeleton() }
+            else if (items.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                Text("Nothing saved yet. Press My List on any title to keep it here.", style = Type.body, color = Palette.muted)
+            }
+            else items(items, key = { "l:" + it.id }) { PosterCard(it, Nav::open) }
+        } else {
+            val items = rated
+            if (items == null) item(span = { GridItemSpan(maxLineSpan) }) { RowSkeleton() }
+            else if (items.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+                Text("No ratings yet. Press Rate on a title after you watch it.", style = Type.body, color = Palette.muted)
+            }
+            else items(items, key = { "r:" + it.first.id }) { (title, stars) ->
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    PosterCard(title, Nav::open)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val whole = Math.round(stars).toInt().coerceIn(0, 5)
+                        repeat(5) { i -> Icon(if (i < whole) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, tint = if (i < whole) Palette.gold else Palette.muted, modifier = Modifier.size(13.dp)) }
+                    }
+                }
+            }
+        }
+    }
+}

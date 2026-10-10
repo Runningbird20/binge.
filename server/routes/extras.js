@@ -222,12 +222,17 @@ router.get('/subtitles', async (req, res) => {
 // ── Conversational search (Groq) ───────────────────────────────────────
 
 const AI_MODEL = 'openai/gpt-oss-120b';
-const AI_SYSTEM = `You recommend movies and TV shows for a streaming site.
-Read the viewer's request and reply with JSON only:
+const aiSystem = () => `You are the search box of a streaming site (movies and TV). Today is ${new Date().toISOString().slice(0, 10)}.
+The viewer may type an exact title, a person, or a request in plain words. Reply with JSON only:
 {"media_type":"movie"|"tv"|"any","max_runtime":number|null,"summary":"one short sentence restating what they want",
+ "languages":["ISO 639-1 codes the request implies, e.g. Malayalam/Mollywood→ml, Hindi/Bollywood→hi, Tamil→ta, Telugu→te, Korean/K-drama→ko, Japanese/anime→ja; [] if none"],
+ "min_year":number|null,"max_year":number|null,
  "suggestions":[{"title":"","year":0,"media_type":"movie"|"tv","why":"max 14 words, specific to their request"}]}
-Give 14 suggestions of real, well-known-enough titles that genuinely fit (mood, pace, length, era, language).
-Never include a title they named as a reference. Respect runtime limits (minutes) for movies.`;
+Rules: If they typed a title (even partly or misspelled), the first suggestions are that title and its sequels/seasons, then close matches.
+"new", "latest", "recent" or "this year" means released in the last 12 months: set min_year to ${new Date().getFullYear() - 1} and only suggest titles from then on.
+A named era ("90s", "from 2015") sets min_year/max_year. Only set "languages" when the viewer names a language, country or film industry; then every suggestion must be in it.
+Give 14 suggestions of real titles that genuinely fit (mood, pace, length, era, language). Never include a title they named as a reference.
+Respect runtime limits (minutes) for movies.`;
 
 const aiHits = new Map(); // ip -> [timestamps]
 function aiRateLimited(ip) {
@@ -235,8 +240,10 @@ function aiRateLimited(ip) {
   const recent = (aiHits.get(ip) || []).filter((t) => now - t < 60000);
   recent.push(now);
   aiHits.set(ip, recent);
-  return recent.length > 8;
+  return recent.length > 20;
 }
+
+const yearOf = (item) => Number(String(item.release_date || item.first_air_date || '').slice(0, 4)) || null;
 
 async function verifyOnTmdb(suggestion, maxRuntime) {
   const kind = suggestion.media_type === 'tv' ? 'tv' : 'movie';
@@ -256,13 +263,52 @@ async function verifyOnTmdb(suggestion, maxRuntime) {
   return { tmdbId: hit.id, mediaType: kind === 'tv' ? 'tv_show' : 'movie', why: String(suggestion.why || '').slice(0, 160), raw: hit };
 }
 
+// Real, current titles straight from TMDB for requests with a language or a
+// time window ("new Malayalam movies"): the model's memory ends at its
+// training date, TMDB's release lists don't.
+async function discoverPicks({ kinds, language, minYear, maxYear }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const lists = await Promise.all(kinds.map(async (kind) => {
+    const dateField = kind === 'tv' ? 'first_air_date' : 'primary_release_date';
+    const params = new URLSearchParams({ api_key: tmdbKey(), include_adult: 'false', sort_by: 'popularity.desc', 'vote_count.gte': minYear ? '3' : '30' });
+    if (language) params.set('with_original_language', language);
+    if (minYear) params.set(`${dateField}.gte`, `${minYear}-01-01`);
+    params.set(`${dateField}.lte`, maxYear ? `${maxYear}-12-31` : today);
+    const data = await getJson(`${TMDB}/discover/${kind}?${params}`).catch(() => null);
+    return (data?.results || []).slice(0, 14).map((hit) => ({ tmdbId: hit.id, mediaType: kind === 'tv' ? 'tv_show' : 'movie', raw: hit, why: '' }));
+  }));
+  return lists.flat();
+}
+
+// Titles whose name matches what was typed ("fighting spirit" → the anime),
+// so a plain title search still finds the exact show first.
+const normalizeTitle = (text) => String(text || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+async function titleMatches(q) {
+  const params = new URLSearchParams({ api_key: tmdbKey(), query: q, include_adult: 'false' });
+  const data = await getJson(`${TMDB}/search/multi?${params}`).catch(() => null);
+  const wanted = normalizeTitle(q);
+  if (wanted.length < 2) return [];
+  return (data?.results || [])
+    .filter((hit) => hit.media_type === 'movie' || hit.media_type === 'tv')
+    .filter((hit) => {
+      const name = normalizeTitle(hit.title || hit.name);
+      const original = normalizeTitle(hit.original_title || hit.original_name);
+      return name === wanted || original === wanted || name.startsWith(`${wanted} `) || (wanted.length >= 4 && name.includes(wanted));
+    })
+    .slice(0, 6)
+    .map((hit) => ({ tmdbId: hit.id, mediaType: hit.media_type === 'tv' ? 'tv_show' : 'movie', raw: hit, why: 'Title match' }));
+}
+
+const LANGUAGE_NAMES = { ml: 'Malayalam', hi: 'Hindi', ta: 'Tamil', te: 'Telugu', ko: 'Korean', ja: 'Japanese', kn: 'Kannada', bn: 'Bengali', es: 'Spanish', fr: 'French' };
+
 router.post('/ai/picks', async (req, res) => {
   const q = String(req.body?.q || '').trim().slice(0, 240);
-  if (q.length < 4) return res.status(400).json({ error: 'Ask for something a little more specific.' });
+  if (q.length < 2) return res.status(400).json({ error: 'Type a little more.' });
   if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'AI search isn’t set up (GROQ_API_KEY).' });
-  if (aiRateLimited(req.ip)) return res.status(429).json({ error: 'Too many requests — try again in a minute.' });
+  if (aiRateLimited(req.ip)) return res.status(429).json({ error: 'Too many searches at once — try again in a minute.' });
   try {
-    const result = await remember(`ai:${q.toLowerCase()}`, 3600000, async () => {
+    const result = await remember(`ai2:${new Date().toISOString().slice(0, 10)}:${q.toLowerCase()}`, 3600000, async () => {
+      const exact = titleMatches(q); // in parallel with the model
       const completion = await getJson('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
@@ -270,27 +316,45 @@ router.post('/ai/picks', async (req, res) => {
           model: AI_MODEL,
           response_format: { type: 'json_object' },
           reasoning_effort: 'low',
-          temperature: 0.4,
-          messages: [{ role: 'system', content: AI_SYSTEM }, { role: 'user', content: q }],
+          temperature: 0.3,
+          messages: [{ role: 'system', content: aiSystem() }, { role: 'user', content: q }],
         }),
       });
       let parsed = {};
       try { parsed = JSON.parse(completion.choices?.[0]?.message?.content || '{}'); } catch { parsed = {}; }
       const maxRuntime = Number(parsed.max_runtime) || null;
+      const languages = (Array.isArray(parsed.languages) ? parsed.languages : []).map((l) => String(l).toLowerCase().slice(0, 2)).filter((l) => /^[a-z]{2}$/.test(l));
+      const minYear = Number(parsed.min_year) || null;
+      const maxYear = Number(parsed.max_year) || null;
+      const mediaType = parsed.media_type === 'tv' || parsed.media_type === 'movie' ? parsed.media_type : 'any';
       const suggestions = (Array.isArray(parsed.suggestions) ? parsed.suggestions : []).slice(0, 16);
-      // Verify every title on TMDB so nothing made-up gets through.
-      const verified = (await Promise.all(suggestions.map((s) => verifyOnTmdb(s, maxRuntime)))).filter(Boolean);
-      const seen = new Set();
-      return {
-        summary: String(parsed.summary || '').slice(0, 200),
-        maxRuntime,
-        picks: verified.filter((pick) => {
-          const key = `${pick.mediaType}:${pick.tmdbId}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        }),
+      // Verify every title on TMDB so nothing made-up gets through, and keep
+      // only those that fit the language and years the request asked for.
+      const fits = (pick) => {
+        const year = yearOf(pick.raw);
+        if (minYear && year && year < minYear) return false;
+        if (maxYear && year && year > maxYear) return false;
+        if (languages.length && pick.raw.original_language && !languages.includes(pick.raw.original_language)) return false;
+        return true;
       };
+      const verified = (await Promise.all(suggestions.map((s) => verifyOnTmdb(s, maxRuntime)))).filter(Boolean).filter(fits);
+      let extra = [];
+      if (languages.length || minYear) {
+        const kinds = mediaType === 'any' ? ['movie', 'tv'] : [mediaType];
+        extra = (await discoverPicks({ kinds, language: languages[0], minYear, maxYear })).filter(fits).map((pick) => ({
+          ...pick,
+          why: [minYear ? `${yearOf(pick.raw) || 'New'}` : null, languages[0] ? LANGUAGE_NAMES[languages[0]] || null : null,
+            pick.mediaType === 'tv_show' ? 'series' : 'release'].filter(Boolean).join(' '),
+        }));
+      }
+      const seen = new Set();
+      const picks = [...(await exact), ...verified, ...extra].filter((pick) => {
+        const key = `${pick.mediaType}:${pick.tmdbId}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 30);
+      return { summary: String(parsed.summary || '').slice(0, 200), maxRuntime, languages, minYear, picks };
     });
     res.json(result);
   } catch (error) {

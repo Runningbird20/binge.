@@ -187,6 +187,14 @@ fun MultiviewScreen(games: List<SportGame>) {
                     .onFocusChanged { if (it.isFocused) focused = tile.game.id }
                     .focusable(enabled = !hidden)
                     .onKeyEvent { event ->
+                        // Back: full screen → grid → leave (handled here; the tile's key
+                        // handling otherwise kept Back from reaching the app).
+                        if (event.key.nativeKeyCode == AndroidKeyEvent.KEYCODE_BACK) {
+                            if (event.type == KeyEventType.KeyUp) {
+                                if (expanded != null) expanded = null else { tiles.forEach { it.stop() }; Nav.pop() }
+                            }
+                            return@onKeyEvent true
+                        }
                         if (event.type != KeyEventType.KeyUp) return@onKeyEvent false
                         when (event.key.nativeKeyCode) {
                             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> {
