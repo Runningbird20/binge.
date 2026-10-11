@@ -41,7 +41,8 @@ object Bridge {
     // hidden: visibility inherits, and the pinned element turns itself back
     // on. (No :has(), which older Android WebViews don't support.)
     'html.__bf body{visibility:hidden!important}';
-  function pin(el){ if(!document.getElementById('__bf-style')){ var st=document.createElement('style'); st.id='__bf-style'; st.textContent=FILL_CSS; (document.head||document.documentElement).appendChild(st); }
+  function pin(el){ if(el.classList.contains('__bf-el') && document.documentElement.classList.contains('__bf')) return; // already pinned: no restyle
+    if(!document.getElementById('__bf-style')){ var st=document.createElement('style'); st.id='__bf-style'; st.textContent=FILL_CSS; (document.head||document.documentElement).appendChild(st); }
     document.documentElement.classList.add('__bf'); el.classList.add('__bf-el');
     try{ window.scrollTo(0,0); }catch(e){}
     var TRAPS=['transform','filter','contain','will-change','perspective','backdrop-filter','-webkit-backdrop-filter','container-type','clip-path','mask','-webkit-mask','content-visibility','zoom'];
@@ -54,7 +55,7 @@ object Bridge {
     var fs=document.getElementsByTagName('iframe'); for (var i=0;i<fs.length;i++){ if(fs[i].contentWindow===e.source){ pin(fs[i]); break; } } });
   function cue(cmd){ var parts=cmd.split(':'), size=parseInt(parts[1],10)||100, bg=parts.slice(2).join(':')||'transparent';
     var st=document.getElementById('__bcue'); if(!st){ st=document.createElement('style'); st.id='__bcue'; (document.head||document.documentElement).appendChild(st); }
-    st.textContent='video::cue{font-size:'+size+'%!important;background-color:'+bg+'!important;color:#fff!important}'; }
+    var css='video::cue{font-size:'+size+'%!important;background-color:'+bg+'!important;color:#fff!important}'; if(st.textContent!==css) st.textContent=css; }
   // Players that wait for a click on their own big Play button (JW Player,
   // Clappr, Video.js, Plyr…): the remote can't reach it, so press it for the
   // viewer. Only while the video hasn't loaded anything yet.

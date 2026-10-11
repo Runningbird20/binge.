@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, ArrowsOut, Baseball, Basketball, BoxingGlove, Check, CornersOut, Cricket, Eye, EyeSlash, FlagCheckered, Football,
+  ArrowLeft, ArrowsOut, Baseball, Basketball, BoxingGlove, CaretUp, Check, CornersOut, Cricket, Eye, EyeSlash, FlagCheckered, Football,
   Golf, GridFour, Hockey, Play, SkipForward, SoccerBall, SquaresFour, Target, TennisBall, Trophy, Volleyball, X,
 } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
@@ -583,6 +583,18 @@ function MultiviewTile({ stream, nowMs, focused, order, autoplay, onFocus, onRem
     ? 'autoplay *; fullscreen *; picture-in-picture *; encrypted-media *'
     : 'fullscreen *; picture-in-picture *; encrypted-media *');
   const tileRef = useRef(null);
+  // This game's servers, opened from the tile's Server button.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef(null);
+  useEffect(() => {
+    if (!pickerOpen) return undefined;
+    const close = (event) => {
+      if (event.type === 'keydown' ? event.key === 'Escape' : !pickerRef.current?.contains(event.target)) setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [pickerOpen]);
 
   return (
     <div className={`st-mv-tile${focused ? ' focused' : ''}`} style={{ order }} ref={tileRef}>
@@ -616,16 +628,41 @@ function MultiviewTile({ stream, nowMs, focused, order, autoplay, onFocus, onRem
           {status === 'live' && <span className="st-live-dot" aria-hidden="true" />}
           {stream.name}
         </p>
-        <label className="st-mv-server">
-          <span className="sr-only">Server for {stream.name}</span>
-          <select value={serverIndex} onChange={(event) => chooseServer(Number(event.target.value))}>
-            {servers.map((provider, index) => (
-              <option key={`${provider.id}-${provider.source || ''}-${index}`} value={index}>
-                {`S${index + 1} · ${providerLabel(provider)}${blocked.has(index) ? ' (blocked)' : failed.has(index) ? ' (down)' : ''}`}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="st-mv-server" ref={pickerRef}>
+          <button
+            type="button"
+            className="st-mv-server-btn"
+            aria-expanded={pickerOpen}
+            aria-label={`Server for ${stream.name}: ${servers[serverIndex] ? providerLabel(servers[serverIndex]) : 'none yet'}. Change server`}
+            onClick={() => setPickerOpen((open) => !open)}
+            disabled={!servers.length}
+          >
+            <span className="st-server-no">{servers.length ? serverIndex + 1 : '–'}</span>
+            Server
+            <CaretUp size={12} weight="bold" aria-hidden="true" />
+          </button>
+          {pickerOpen && (
+            <div className="st-mv-server-list" role="group" aria-label={`Servers for ${stream.name}`}>
+              {servers.map((provider, index) => {
+                const down = blocked.has(index) ? 'blocked on your network' : failed.has(index) ? 'not responding' : '';
+                return (
+                  <button
+                    key={`${provider.id}-${provider.source || ''}-${index}`}
+                    type="button"
+                    className={`st-server${index === serverIndex ? ' active' : ''}${down ? ' down' : ''}`}
+                    aria-pressed={index === serverIndex}
+                    onClick={() => { chooseServer(index); setPickerOpen(false); }}
+                    title={down ? `${providerLabel(provider)}: ${down}` : providerLabel(provider)}
+                  >
+                    <span className="st-server-no">{index + 1}</span>
+                    {providerLabel(provider)}
+                    {down && <span className="sr-only">, {down}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         {!focused && (
           <button type="button" className="st-mv-btn" onClick={onFocus} aria-label={`Make ${stream.name} the main game`} title="Make this the main game">
             <CornersOut size={16} weight="bold" />

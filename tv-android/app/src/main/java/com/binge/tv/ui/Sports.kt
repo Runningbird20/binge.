@@ -136,11 +136,17 @@ fun SportsScreen() {
         .sortedWith(compareBy({ -it.second.count { g -> g.isLive } }, { it.second.firstOrNull()?.startsAt ?: Long.MAX_VALUE }))
     val channels = filtered.filter { it.is247 }
 
-    fun tokens(event: Scoreboard.Event): Set<String>? {
-        val names = event.competitors.mapNotNull { it.team.displayName ?: it.team.shortDisplayName }
-        return if (names.size == 2) SportsFeed.tokens(names[0] to names[1], "") else null
+    // ESPN events by team words, built once per scoreboard refresh (was redone
+    // for every card on every frame, which froze the Sports page on a Fire TV).
+    val eventTokens = remember(boards) {
+        boards.flatMap { it.second }.mapNotNull { event ->
+            val names = event.competitors.mapNotNull { it.team.displayName ?: it.team.shortDisplayName }
+            if (names.size == 2) SportsFeed.tokens(names[0] to names[1], "")?.let { it to event } else null
+        }
     }
-    fun eventFor(game: SportGame): Scoreboard.Event? { val wanted = game.teamTokens ?: return null; return boards.flatMap { it.second }.firstOrNull { tokens(it) == wanted } }
+    val eventByTokens = remember(eventTokens) { eventTokens.associate { it.first to it.second } }
+    fun tokens(event: Scoreboard.Event): Set<String>? = eventTokens.firstOrNull { it.second === event }?.first
+    fun eventFor(game: SportGame): Scoreboard.Event? { val wanted = game.teamTokens ?: return null; return eventByTokens[wanted] }
     fun gameFor(event: Scoreboard.Event): SportGame? { val wanted = tokens(event) ?: return null; return playable.firstOrNull { it.teamTokens == wanted } }
     // Spotlight: a game that's really on (ESPN doesn't call it final), with good art.
     val onNow = liveGames.filter { eventFor(it)?.isFinal != true }
@@ -175,6 +181,9 @@ fun SportsScreen() {
 
     LaunchedEffect(Unit) {
         while (true) {
+            // Nothing to refresh while a game (or any page) is open on top: the
+            // refresh competes with the video for the TV's CPU.
+            if (Nav.stack.isNotEmpty()) { delay(5_000); continue }
             val feed = async { SportsFeed.load() }
             val scores = League.all.map { league -> async { league to Scoreboard.load(league) } }
             games = feed.await(); boards = scores.awaitAll().filter { it.second.isNotEmpty() }

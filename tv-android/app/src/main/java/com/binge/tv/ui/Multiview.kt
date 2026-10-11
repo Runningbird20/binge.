@@ -7,6 +7,10 @@ import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -104,13 +108,19 @@ class MultiviewTile(val game: SportGame, context: Context) {
     // Waiting to start until the viewer picks it (the TV was already at its limit).
     private var deferredStreams = 0
     private var failedBatches = 0
+    // The server playing (shown on the tile) and one the viewer picked by hand
+    // (hold OK): a picked server is never switched away from automatically.
+    var serverName by mutableStateOf<String?>(null); private set
+    private var picked: com.binge.tv.player.StreamServer? = null
+    val isPicked get() = picked != null
     private val ctx = context
     private val createdAt = System.currentTimeMillis()
 
     suspend fun start(streams: Int) {
         if (stopped) return
         perTile = streams
-        val servers = SportsFeed.servers(game, limit = streams + dropped.size).filter { it.name !in dropped }.take(streams)
+        val servers = picked?.let { listOf(it) }
+            ?: SportsFeed.servers(game, limit = streams + dropped.size).filter { it.name !in dropped }.take(streams)
         if (stopped) return
         if (servers.isEmpty()) { status = "No stream found"; gaveUp = true; return }
         val next = StreamRace(ctx, liveRequest(game, servers), servers, StreamRace.Mode.LIVE, keepMuted = true)
@@ -118,7 +128,9 @@ class MultiviewTile(val game: SportGame, context: Context) {
         next.onChange = {
             if (next.failed) {
                 // That batch failed: the next servers, a few times, before giving up.
-                if (failedBatches < 3) {
+                // A hand-picked server is left to the viewer.
+                if (picked != null) { status = "${picked?.name} didn't play. Hold OK to pick another."; gaveUp = true }
+                else if (failedBatches < 3) {
                     failedBatches++
                     servers.forEach { dropped += it.name }
                     status = "Trying another stream…"
@@ -152,6 +164,7 @@ class MultiviewTile(val game: SportGame, context: Context) {
         paused = state.paused
         if (!started && state.t > 0.4 && !state.paused) {
             started = true
+            serverName = race?.winner?.server?.name
             startedAt = System.currentTimeMillis()
             lastT = state.t
             if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "multiview tile started ${game.title} in ${System.currentTimeMillis() - createdAt}ms on ${race?.winner?.server?.name}")
@@ -170,7 +183,7 @@ class MultiviewTile(val game: SportGame, context: Context) {
         if (state.t != lastT) { lastT = state.t; lastMoveAt = now; nudged = false; return }
         val stuck = now - lastMoveAt
         if (stuck > 8_000 && !nudged) { nudged = true; web.send(MediaCommand.Edge) }
-        else if (stuck > 18_000 && restarts < 3) { race?.winner?.server?.name?.let { dropped += it }; restart() }
+        else if (stuck > 18_000 && restarts < 3 && picked == null) { race?.winner?.server?.name?.let { dropped += it }; restart() }
     }
 
     private var startedAt = 0L
@@ -211,9 +224,24 @@ class MultiviewTile(val game: SportGame, context: Context) {
         } else release()
     }
 
+    // Every server this game has, for the picker.
+    suspend fun serverOptions() = SportsFeed.servers(game, limit = 12)
+
+    // Picked by hand: this tile plays exactly that server from now on.
+    fun choose(server: com.binge.tv.player.StreamServer) {
+        picked = server
+        dropped.clear(); restarts = 0; failedBatches = 0; gaveUp = false
+        throttled = false; deferredStreams = 0; held = false
+        race?.stop(); race?.let { surface.removeView(it.container) }; race = null
+        started = false; trimmed = false; nudged = false; samples.clear(); lastFrames = -1; frozenMs = 0
+        serverName = server.name
+        status = "Switching to ${server.name}…"
+        AppModel.scope.launch { start(perTile) }
+    }
+
     // The picture froze and this is the only game playing: try another server.
     fun switchServer() {
-        if (restarts >= 3) return
+        if (restarts >= 3 || picked != null) return
         race?.winner?.server?.name?.let { dropped += it }
         restart()
     }
@@ -269,6 +297,9 @@ fun MultiviewScreen(games: List<SportGame>) {
     val mainId = main ?: tiles.firstOrNull()?.game?.id
     // Set once this TV has shown it can't decode every game smoothly.
     var overloaded by remember { mutableStateOf(false) }
+    // Server picker for one game (hold OK on its tile, or the ≡ button).
+    var pickerFor by remember { mutableStateOf<MultiviewTile?>(null) }
+    var longPress by remember { mutableStateOf(false) }
     var lastLoadAction by remember { mutableStateOf(0L) }
 
     DisposableEffect(tiles) { onDispose { tiles.forEach { it.stop() } } }
@@ -346,6 +377,7 @@ fun MultiviewScreen(games: List<SportGame>) {
         tiles.firstOrNull { it.game.id == focused }?.audible = true
     }
 
+    pickerFor?.let { ServerPicker(it) { pickerFor = null } }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val frames = layout(tiles.map { it.game.id }, maxWidth, maxHeight, expanded, if (mainLayout) mainId else null)
         tiles.forEach { tile ->
@@ -371,6 +403,14 @@ fun MultiviewScreen(games: List<SportGame>) {
                             }
                             return@onKeyEvent true
                         }
+                        val code = event.key.nativeKeyCode
+                        val isOk = code == AndroidKeyEvent.KEYCODE_DPAD_CENTER || code == AndroidKeyEvent.KEYCODE_ENTER
+                        // Hold OK (or ≡): this game's servers.
+                        if (isOk && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 1) {
+                            longPress = true; pickerFor = tile; return@onKeyEvent true
+                        }
+                        if (isOk && event.type == KeyEventType.KeyUp && longPress) { longPress = false; return@onKeyEvent true }
+                        if (code == AndroidKeyEvent.KEYCODE_MENU && event.type == KeyEventType.KeyUp) { pickerFor = tile; return@onKeyEvent true }
                         if (event.type != KeyEventType.KeyUp) return@onKeyEvent false
                         when (event.key.nativeKeyCode) {
                             AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> {
@@ -407,12 +447,34 @@ fun MultiviewScreen(games: List<SportGame>) {
                 ) {
                     Box(Modifier.size(6.dp).background(Palette.live, CircleShape))
                     Text(tile.game.title, style = Type.callout.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    // The server playing; on the focused tile, how to change it.
+                    tile.serverName?.let { Text(if (isFocused && expanded == null) "$it · hold OK to change" else it, style = Type.caption, color = Palette.muted, maxLines = 1) }
                     if (tile.paused && tile.started) Icon(Icons.Rounded.Pause, null, modifier = Modifier.size(14.dp))
                     Icon(if (tile.audible) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, null,
                         tint = if (tile.audible) Palette.gold else Palette.muted, modifier = Modifier.size(14.dp))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ServerPicker(tile: MultiviewTile, onDismiss: () -> Unit) {
+    var options by remember(tile) { mutableStateOf<List<com.binge.tv.player.StreamServer>?>(null) }
+    LaunchedEffect(tile) { options = runCatching { tile.serverOptions() }.getOrDefault(emptyList()) }
+    ActionSheet("Server for ${tile.game.title}", onDismiss) {
+        val list = options
+        when {
+            list == null -> Spinner(22.dp)
+            list.isEmpty() -> Text("No servers found for this game right now.", style = Type.callout, color = Palette.muted)
+            else -> Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                list.forEach { server ->
+                    val current = server.name == tile.serverName
+                    Pill(server.name, selected = current, icon = if (current) Icons.Rounded.Check else null) { tile.choose(server); onDismiss() }
+                }
+            }
+        }
+        Text("A picked server stays until you pick another.", style = Type.caption, color = Palette.muted)
     }
 }
 
