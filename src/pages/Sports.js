@@ -9,7 +9,7 @@ import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import LiveScorePanel from '../components/LiveScorePanel';
 import useDeviceType from '../hooks/useDeviceType';
-import { expandStreamProviders, loadSportsStreams, resolveProviderEmbedUrl, providerLabel, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { expandStreamProviders, loadSportsStreams, resolveProviderEmbedUrl, providerLabel, sameGame, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
 import { fetchScoreboards } from '../utils/liveScores';
 import { rankFeeds, recordFeedFailed, recordFeedWorked } from '../utils/sportsServerMemory';
 import { listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
@@ -809,7 +809,17 @@ export default function Sports() {
     });
   };
 
-  const selected = selectedId ? streams.find((stream) => stream.id === selectedId) || null : null;
+  // The game being watched survives schedule refreshes: if its id changed (a
+  // feed renamed a team) it's found again by matchup, keeping the id the
+  // player knows so the stream isn't reloaded. Only a fresh visit to a game
+  // that's really gone shows "not in the schedule".
+  const watching = useRef(null);
+  let selected = selectedId ? streams.find((stream) => stream.id === selectedId) || null : null;
+  if (selectedId && !selected && watching.current?.id === selectedId) {
+    const again = streams.find((stream) => sameGame(stream, watching.current));
+    selected = again ? { ...again, id: selectedId } : watching.current;
+  }
+  if (selectedId) watching.current = selected;
 
   const select = useCallback((stream) => {
     setSearchParams({ game: stream.id });
@@ -874,7 +884,18 @@ export default function Sports() {
     || live[0] || soon[0] || leagueRows[0]?.items[0] || null;
   featuredId.current = featured?.id || null;
 
-  const multiGames = multiIds.map((id) => streams.find((stream) => stream.id === id)).filter(Boolean);
+  // Same for Multiview tiles: a refresh never drops a game that's still on.
+  const multiSeen = useRef(new Map());
+  const multiGames = multiIds.map((id) => {
+    let game = streams.find((stream) => stream.id === id);
+    const before = multiSeen.current.get(id);
+    if (!game && before) {
+      const again = streams.find((stream) => sameGame(stream, before));
+      game = again ? { ...again, id } : before;
+    }
+    if (game) multiSeen.current.set(id, game);
+    return game;
+  }).filter(Boolean);
   if (multiviewAllowed && multiIds.length && multiGames.length) {
     const addable = sortForRow(streams.filter((stream) => !multiIds.includes(stream.id) && getStatus(stream, nowMs) === 'live'), nowMs).slice(0, 24);
     return (

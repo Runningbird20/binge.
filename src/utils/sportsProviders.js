@@ -565,29 +565,47 @@ export async function fetchSportsStreams() {
 // (StreamFree takes ~0.7s, the others ~0.3s). Resolves with the final list.
 export async function loadSportsStreams(onUpdate) {
   const disabledPromise = fetchDisabledServers().catch(() => new Set());
-  const lists = [];
+  // Kept in feed order (PPV, Streamed, StreamFree) whatever order they arrive
+  // in: the merge takes a game's name and id from its first listing, so an
+  // arrival-order merge gave the same game a different id from one refresh to
+  // the next (and the player lost the game it was showing).
+  const byFeed = [null, null, null];
+  const ordered = () => byFeed.filter(Boolean);
   let settled = 0;
   let lastError = null;
   const feeds = [fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized];
-  await Promise.all(feeds.map((fetchFeed) => fetchFeed()
+  await Promise.all(feeds.map((fetchFeed, index) => fetchFeed()
     .then(async (items) => {
-      lists.push(items);
+      byFeed[index] = items;
       const disabled = await disabledPromise;
       settled += 1;
       // Show games once two feeds are in; the last one arrives with the
       // final update below.
-      if (settled >= 2 && settled < feeds.length) onUpdate?.(mergeNormalized(withoutDisabledFeeds(lists.flat(), disabled)));
+      if (settled >= 2 && settled < feeds.length) onUpdate?.(mergeNormalized(withoutDisabledFeeds(ordered().flat(), disabled)));
     })
     .catch((error) => { settled += 1; lastError = error; })));
-  if (lists.length === 0) {
+  if (ordered().length === 0) {
     const raw = await fetchProxyFeeds().catch(() => { throw lastError || new Error('All sports providers unavailable'); });
     const merged = mergeNormalized(withoutDisabledFeeds(raw, await disabledPromise));
     onUpdate?.(merged);
     return merged;
   }
-  const merged = mergeNormalized(withoutDisabledFeeds(lists.flat(), await disabledPromise));
+  const merged = mergeNormalized(withoutDisabledFeeds(ordered().flat(), await disabledPromise));
   onUpdate?.(merged);
   return merged;
+}
+
+// The same real game in two schedule refreshes, even if its id changed
+// (a feed renamed a team): same category, both teams match, within 3h.
+export function sameGame(a, b) {
+  if (!a || !b || a.category !== b.category || Boolean(a.alwaysLive) !== Boolean(b.alwaysLive)) return false;
+  if (a.startsAt && b.startsAt && Math.abs(a.startsAt - b.startsAt) > 3 * 3600) return false;
+  const ta = a.teams || splitTeamsFromTitle(a.name);
+  const tb = b.teams || splitTeamsFromTitle(b.name);
+  if (ta && tb) {
+    return (teamsMatch(ta.home, tb.home) && teamsMatch(ta.away, tb.away)) || (teamsMatch(ta.home, tb.away) && teamsMatch(ta.away, tb.home));
+  }
+  return titleSlug(a.name) === titleSlug(b.name);
 }
 
 // Resolves one server entry into an embeddable iframe URL. PPV and
