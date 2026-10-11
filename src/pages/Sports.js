@@ -331,6 +331,14 @@ function useServerRotation(stream, status) {
   const loadedRef = useRef(false);
   const workedRef = useRef(false);
   const servers = useMemo(() => list || [], [list]);
+  // Once a game has been live, a schedule refresh that briefly calls it
+  // "upcoming" (a feed moved its start time) must not unload the stream:
+  // that reload is what threw viewers out of full screen and restarted the
+  // player muted (browsers mute players that start without a click).
+  const wasLive = useRef({ id: null, live: false });
+  if (wasLive.current.id !== stream.id) wasLive.current = { id: stream.id, live: false };
+  if (status !== 'upcoming') wasLive.current.live = true;
+  const upcoming = status === 'upcoming' && !wasLive.current.live;
 
   useEffect(() => {
     setServerIndex(0);
@@ -381,7 +389,7 @@ function useServerRotation(stream, status) {
 
   useEffect(() => {
     const provider = servers[serverIndex];
-    if (!provider || status === 'upcoming') { setEmbedUrl(null); setResolving(false); return undefined; }
+    if (!provider || upcoming) { setEmbedUrl(null); setResolving(false); return undefined; }
     let cancelled = false;
     setResolving(true);
     setEmbedUrl(null);
@@ -400,7 +408,7 @@ function useServerRotation(stream, status) {
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stream.id, list, serverIndex, retryNonce, status === 'upcoming']);
+  }, [stream.id, list, serverIndex, retryNonce, upcoming]);
 
   useEffect(() => {
     loadedRef.current = false;
