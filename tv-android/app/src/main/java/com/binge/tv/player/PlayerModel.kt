@@ -444,7 +444,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         stateAt = t
         if (state.paused || state.ended || Math.abs(state.t - lastClock) > 0.15) { lastClock = state.t; clockMovedAt = t }
         val stuck = if (started) t - clockMovedAt else 0
-        buffering = stuck > 1500
+        buffering = stuck > 1500 || state.cushion
         if (stuck > (if (request.isLive) 12_000 else 20_000)) recover("stopped playing")
     }
 
@@ -501,8 +501,12 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         // A handed-over warm race is paused on its first frame: keep asking it to play.
         if (!started && state.video && state.paused && !userPaused) { w.send(MediaCommand.Unmute); w.send(MediaCommand.Play) }
         // Servers that pause themselves (an overlay, a second player): only the remote pauses here.
-        if (started && state.paused && !state.ended && !userPaused && now() - lastResume > 2000) { lastResume = now(); w.send(MediaCommand.Play) }
-        if (!started && state.t > 0.4 && !state.paused) started = true
+        if (started && state.paused && !state.ended && !userPaused && !state.cushion && now() - lastResume > 2000) { lastResume = now(); w.send(MediaCommand.Play) }
+        if (!started && state.t > 0.4 && !state.paused) {
+            started = true
+            // Live: build a few seconds of buffer before settling in (a little behind live, far fewer stalls).
+            if (request.isLive) w.send(MediaCommand.CushionStart)
+        }
 
         if (hudVisible && now() > hudHideAt && !state.paused) hudVisible = false
         if (started && state.paused && userPaused) {

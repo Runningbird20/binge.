@@ -42,6 +42,8 @@ data class MediaState(
     // Decoded and dropped video frames so far (-1: the browser doesn't say).
     val frames: Int = -1,
     val dropped: Int = -1,
+    // The bridge is holding the video while it refills its buffer (live cushion).
+    val cushion: Boolean = false,
     val audio: List<MediaTrack> = emptyList(),
     val text: List<MediaTrack> = emptyList(),
     val cue: String = "",
@@ -59,6 +61,9 @@ sealed class MediaCommand(val js: String) {
     object Trim : MediaCommand("trim")
     // Live: back to the live edge (after a pause or a stall) and play.
     object Edge : MediaCommand("edge")
+    // Live: wait for a few seconds of buffer before playing (now, and whenever it runs dry).
+    object CushionStart : MediaCommand("cushion:start")
+    object CushionOn : MediaCommand("cushion:on")
     class SeekBy(s: Double) : MediaCommand("seekBy:$s")
     class SeekTo(s: Double) : MediaCommand("seekTo:$s")
     class AudioTrack(i: Int) : MediaCommand("audio:$i")
@@ -175,6 +180,7 @@ class WebEngine(context: Context, private var allowedHost: String?) {
             height = o["h"]?.jsonPrimitive?.intOrNull ?: 0,
             frames = o["fr"]?.jsonPrimitive?.intOrNull ?: -1,
             dropped = o["dr"]?.jsonPrimitive?.intOrNull ?: -1,
+            cushion = (o["cb"]?.jsonPrimitive?.intOrNull ?: 0) == 1,
             audio = tracks(o["at"]),
             text = tracks(o["tt"]),
             cue = o["cue"]?.jsonPrimitive?.contentOrNull ?: "",
