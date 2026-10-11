@@ -48,6 +48,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
     private var lastFramesAt = Date()
     // Waiting to start until picked (the Apple TV was already at its limit).
     private var deferredStreams = 0
+    // This game's servers (for the picker) and one picked by hand (hold
+    // select on the tile): a picked server is never switched away from.
+    @Published private(set) var options: [StreamServer] = []
+    private var picked: StreamServer?
     var audible = false {
         didSet { if oldValue != audible { applyAudio() } }
     }
@@ -62,8 +66,12 @@ final class MultiviewTile: ObservableObject, Identifiable {
     func start(streamsPerTile: Int) async {
         guard !stopped else { return }
         self.streamsPerTile = streamsPerTile
-        let servers = Array(await SportsFeed.servers(for: game, limit: streamsPerTile + dropped.count)
-            .filter { !dropped.contains($0.name) }.prefix(streamsPerTile))
+        if options.isEmpty { options = await SportsFeed.servers(for: game, limit: 12) }
+        let servers: [StreamServer]
+        if let picked { servers = [picked] } else {
+            servers = Array(await SportsFeed.servers(for: game, limit: streamsPerTile + dropped.count)
+                .filter { !dropped.contains($0.name) }.prefix(streamsPerTile))
+        }
         guard !stopped else { return }
         guard !servers.isEmpty else { status = "No stream found"; gaveUp = true; return }
         let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
@@ -75,7 +83,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
         race.onChange = { [weak self] in
             guard let self, let race = self.race else { return }
             if let winner = race.winner { self.streamName = winner.server.name; self.applyAudio() }
-            if race.failed { self.status = "No stream could play"; self.gaveUp = true }
+            if race.failed {
+                self.status = self.picked.map { "\($0.name) didn't play. Hold to pick another." } ?? "No stream could play"
+                self.gaveUp = true
+            }
         }
         self.race = race
         lastStateAt = Date()
@@ -125,7 +136,7 @@ final class MultiviewTile: ObservableObject, Identifiable {
             if state.t != self.lastT { self.lastT = state.t; self.lastMoveAt = now; self.nudged = false; return }
             let stuck = now.timeIntervalSince(self.lastMoveAt)
             if stuck > 8, !self.nudged { self.nudged = true; web.send(.edge) }
-            else if stuck > 18, self.restarts < 3 {
+            else if stuck > 18, self.restarts < 3, self.picked == nil {
                 if let name = self.race?.winner?.server.name { self.dropped.insert(name) }
                 self.restart()
             }
@@ -175,9 +186,22 @@ final class MultiviewTile: ObservableObject, Identifiable {
 
     // The picture froze and this is the only game playing: another server.
     func switchServer() {
-        guard restarts < 3 else { return }
+        guard restarts < 3, picked == nil else { return }
         if let name = race?.winner?.server.name { dropped.insert(name) }
         restart()
+    }
+
+    // Picked by hand: this tile plays exactly that server from now on.
+    func choose(_ server: StreamServer) {
+        picked = server
+        dropped.removeAll(); restarts = 0; gaveUp = false
+        throttled = false; deferredStreams = 0; held = false
+        timer?.invalidate(); timer = nil
+        race?.stop(); race?.container.removeFromSuperview(); race = nil
+        started = false; trimmed = false; nudged = false; samples.removeAll(); lastFrames = -1; frozenFor = 0
+        streamName = server.name
+        status = "Switching to \(server.name)…"
+        Task { await start(streamsPerTile: streamsPerTile) }
     }
 
     // Another game went full screen: stop decoding this one until it's back.
@@ -478,6 +502,11 @@ private struct TileButton: View {
                         Circle().fill(Color(hex: 0xFF5A50)).frame(width: 12, height: 12)
                         Text(tile.game.title).font(.callout.weight(.bold)).lineLimit(1)
                         Spacer(minLength: 8)
+                        // The server playing; on the focused tile, how to change it.
+                        if let name = tile.streamName {
+                            Text(focused && showFocus ? "\(name) · hold to change" : name)
+                                .font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                        }
                         if tile.paused && tile.started { Image(systemName: "pause.fill") }
                         Image(systemName: tile.audible ? "speaker.wave.2.fill" : "speaker.slash.fill")
                             .foregroundStyle(tile.audible ? Theme.gold : Theme.muted)
@@ -494,6 +523,18 @@ private struct TileButton: View {
             }
         }
         .buttonStyle(TileButtonStyle())
+        // Hold select: this game's servers.
+        .contextMenu {
+            if tile.options.isEmpty {
+                Text("Looking for servers…")
+            } else {
+                ForEach(tile.options) { server in
+                    Button { tile.choose(server) } label: {
+                        if server.name == tile.streamName { Label(server.name, systemImage: "checkmark") } else { Text(server.name) }
+                    }
+                }
+            }
+        }
     }
 }
 

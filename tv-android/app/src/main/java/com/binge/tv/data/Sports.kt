@@ -87,7 +87,11 @@ data class SportGame(
             val now = System.currentTimeMillis()
             return start <= now + 10 * 60_000 && now <= (endsAt ?: (start + 3 * 3_600_000))
         }
-    val teamTokens: Set<String>? get() = SportsFeed.tokens(teams, title)
+    // Worked out once per game: the merge and the Sports screen compare these
+    // thousands of times, and recomputing them froze the app on a Fire TV (ANRs).
+    val teamTokens: Set<String>? by lazy { SportsFeed.tokens(teams, title) }
+    val sides: List<Set<String>>? by lazy { SportsFeed.sides(teams, title) }
+    val titleKey: String by lazy { title.lowercase().filter { it.isLetterOrDigit() } }
     val is247 get() = alwaysLive || (tag?.contains("24/7") ?: false)
 
     // Same rules as the site's inferLeague (sportsProviders.js).
@@ -126,7 +130,9 @@ object SportsFeed {
     private val streamfreeCategories = mapOf("soccer" to "Soccer", "basketball" to "Basketball", "hockey" to "Hockey", "combat" to "Combat Sports",
         "baseball" to "Baseball", "football" to "American Football", "racing" to "Racing", "tennis" to "Tennis", "cricket" to "Cricket")
 
-    suspend fun load(): List<SportGame> = coroutineScope {
+    // All of it (parsing three feeds, merging) off the main thread: on a Fire TV
+    // this took seconds and froze the remote ("app not responding").
+    suspend fun load(): List<SportGame> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         val ppv = async { fetchPPV() }
         val streamed = async { fetchStreamed() }
         val streamfree = async { fetchStreamFree() }
@@ -135,7 +141,10 @@ object SportsFeed {
             if (disabled.isEmpty()) game else game.copy(streams = game.streams.filter { s -> s.switchKeys.none { it in disabled } })
                 .takeIf { it.streams.isNotEmpty() }
         }
-        merge(all).sortedWith(compareBy({ if (it.isLive) 0 else 1 }, { it.startsAt ?: Long.MAX_VALUE }))
+        // Off the main thread: ~300 listings, compared pairwise.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            merge(all).sortedWith(compareBy({ if (it.isLive) 0 else 1 }, { it.startsAt ?: Long.MAX_VALUE }))
+        }
     }
 
     private suspend fun fetch(url: String): JsonElement? {
@@ -246,14 +255,15 @@ object SportsFeed {
         return out
     }
 
+    private val quality = Regex("(2160|1080|720|480)p")
     // "…/football/redzone1080p" → "StreamFree 1080p" (same as the website).
     fun streamfreeLabel(url: String, index: Int, count: Int): String {
-        Regex("(2160|1080|720|480)p").find(url)?.value?.let { return "StreamFree " + if (it == "2160p") "4K" else it }
+        quality.find(url)?.value?.let { return "StreamFree " + if (it == "2160p") "4K" else it }
         return if (count > 1) "StreamFree ${index + 1}" else "StreamFree"
     }
 
     fun tokens(teams: Pair<String, String>?, name: String): Set<String>? {
-        fun nickname(team: String) = team.lowercase().split(Regex("[^a-z0-9]+")).lastOrNull { it.isNotEmpty() }
+        fun nickname(team: String) = team.lowercase().split(nonWord).lastOrNull { it.isNotEmpty() }
         if (teams != null) { val a = nickname(teams.first); val b = nickname(teams.second); if (a != null && b != null) return setOf(a, b) }
         val lower = " ${name.lowercase()} "
         for (separator in listOf(" vs. ", " vs ", " v ", " at ", " @ ", " - ")) {
@@ -270,7 +280,8 @@ object SportsFeed {
     // Each side of a matchup as a set of distinctive words ("iowa", "cyclones"),
     // from the feed's team names or the title ("A vs B", "A at B", "A @ B").
     private val filler = setOf("state", "university", "univ", "college", "fc", "cf", "sc", "afc", "club", "the", "of", "de", "united", "city", "real", "st", "u")
-    private fun words(text: String) = text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length > 1 && it !in filler }.toSet()
+    private val nonWord = Regex("[^a-z0-9]+")
+    private fun words(text: String) = text.lowercase().split(nonWord).filter { it.length > 1 && it !in filler }.toSet()
 
     fun sides(teams: Pair<String, String>?, title: String): List<Set<String>>? {
         if (teams != null) return listOf(words(teams.first), words(teams.second)).takeIf { it.all { side -> side.isNotEmpty() } }
@@ -293,18 +304,18 @@ object SportsFeed {
 
     private fun merge(entries: List<SportGame>): List<SportGame> {
         val games = ArrayList<SportGame>()
-        fun key(text: String) = text.lowercase().filter { it.isLetterOrDigit() }
         for (entry in entries) {
             val tokens = entry.teamTokens
+            val sb = entry.sides
             val index = games.indexOfFirst { game ->
-                val close = game.startsAt == null || entry.startsAt == null || Math.abs(game.startsAt - entry.startsAt) <= 3 * 3_600_000
+                // The cheap time check first; names only for games close in time.
+                if (game.startsAt != null && entry.startsAt != null && Math.abs(game.startsAt - entry.startsAt) > 3 * 3_600_000) return@indexOfFirst false
                 val other = game.teamTokens
-                val sa = sides(game.teams, game.title); val sb = sides(entry.teams, entry.title)
+                val sa = game.sides
                 when {
-                    !close -> false
                     tokens != null && other != null && tokens == other -> true
                     sa != null && sb != null -> sameMatchup(sa, sb)
-                    else -> key(game.title) == key(entry.title)
+                    else -> game.titleKey == entry.titleKey
                 }
             }
             if (index < 0) { games += entry; continue }

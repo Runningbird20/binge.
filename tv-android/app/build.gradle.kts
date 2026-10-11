@@ -27,7 +27,7 @@ val tmdbKey = setting("REACT_APP_TMDB_API_KEY")
 
 android {
     namespace = "com.binge.tv"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.binge.tv"
@@ -70,7 +70,7 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    val composeBom = platform("androidx.compose:compose-bom:2025.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
