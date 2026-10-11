@@ -132,3 +132,18 @@ describe('merged logos', () => {
     expect(merged[0].logos).toEqual({ home: 'unc.png', away: 'pitt.png' });
   });
 });
+
+describe('sameGame', () => {
+  const { sameGame } = require('./sportsProviders');
+  const now = Math.floor(Date.now() / 1000);
+  it('finds a game again after a feed renamed a team', () => {
+    const a = { category: 'American Football', name: 'Georgia Bulldogs vs Alabama Crimson Tide', startsAt: now };
+    const b = { category: 'American Football', name: 'Alabama vs Georgia', startsAt: now + 600 };
+    expect(sameGame(a, b)).toBe(true);
+  });
+  it('keeps different games apart', () => {
+    const a = { category: 'American Football', name: 'Georgia Bulldogs vs Alabama Crimson Tide', startsAt: now };
+    expect(sameGame(a, { category: 'American Football', name: 'LSU Tigers vs Kentucky Wildcats', startsAt: now })).toBe(false);
+    expect(sameGame(a, { ...a, startsAt: now + 6 * 3600 })).toBe(false);
+  });
+});
