@@ -185,7 +185,7 @@ final class StreamRace {
             self.times[winner.server.id] = state.t
             // Another page starting its video can pause this one (tvOS
             // gives one video the audio at a time); keep it going.
-            if state.paused, !state.ended, !self.userPaused { winner.web.send(.play) }
+            if state.paused, !state.ended, !self.userPaused, !state.cushion { winner.web.send(.play) }
         }
         for other in others {
             other.web.send(.mute)

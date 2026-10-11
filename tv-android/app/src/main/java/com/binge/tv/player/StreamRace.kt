@@ -166,7 +166,7 @@ class StreamRace(
         w.web.poll()?.let { state ->
             if (state.height > 0) heights[w.server.id] = state.height
             times[w.server.id] = state.t
-            if (state.paused && !state.ended && !userPaused) w.web.send(MediaCommand.Play)
+            if (state.paused && !state.ended && !userPaused && !state.cushion) w.web.send(MediaCommand.Play)
         }
         for (other in others) {
             val state = other.web.poll() ?: continue

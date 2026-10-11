@@ -594,7 +594,7 @@ final class PlayerModel: ObservableObject {
             clockMovedAt = now
         }
         let stuck = started ? now.timeIntervalSince(clockMovedAt) : 0
-        buffering = stuck > 1.5
+        buffering = stuck > 1.5 || state.cushion
         if stuck > (request.isLive ? 12 : 20) { recover(reason: "stopped playing") }
     }
 
@@ -733,7 +733,7 @@ final class PlayerModel: ObservableObject {
         // Some servers pause themselves a few seconds in (an overlay, a
         // second player on the page). Only the remote pauses here, so any
         // other pause is undone, at most every 2s.
-        if started, state.paused, !state.ended, !userPaused, Date().timeIntervalSince(lastResume) > 2 {
+        if started, state.paused, !state.ended, !userPaused, !state.cushion, Date().timeIntervalSince(lastResume) > 2 {
             lastResume = Date()
             web.send(.play)
             #if DEBUG
@@ -742,6 +742,8 @@ final class PlayerModel: ObservableObject {
         }
         if !started, state.t > 0.4, !state.paused {
             started = true
+            // Live: build a few seconds of buffer before settling in.
+            if request.isLive { web.send(.cushionStart) }
             #if DEBUG
             print("[player] playing \(String(format: "%.1f", Date().timeIntervalSince(openedAt)))s after Play")
             #endif

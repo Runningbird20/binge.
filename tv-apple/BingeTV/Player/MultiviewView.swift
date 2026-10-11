@@ -118,9 +118,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
                 self.started = true
                 self.startedAt = now
                 self.lastT = state.t
+                web.send(.cushionOn)
             }
             guard self.started, !self.held else { return }
-            if state.paused, !state.ended, !self.userPaused {
+            if state.paused, !state.ended, !self.userPaused, !state.cushion {
                 web.send(self.audible ? .unmute : .mute)
                 web.send(.play)
             }

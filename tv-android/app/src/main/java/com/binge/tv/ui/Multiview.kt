@@ -167,10 +167,12 @@ class MultiviewTile(val game: SportGame, context: Context) {
             serverName = race?.winner?.server?.name
             startedAt = System.currentTimeMillis()
             lastT = state.t
+            // Refill instead of stuttering when a tile's buffer runs dry.
+            race?.winner?.web?.send(MediaCommand.CushionOn)
             if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "multiview tile started ${game.title} in ${System.currentTimeMillis() - createdAt}ms on ${race?.winner?.server?.name}")
         }
         if (!started || held) return
-        if (state.paused && !state.ended && !userPaused) web.send(MediaCommand.Play)
+        if (state.paused && !state.ended && !userPaused && !state.cushion) web.send(MediaCommand.Play)
         // Ad and tracker frames go once the game plays (memory and CPU on a Fire TV).
         if (!trimmed && now - startedAt > 8_000) { trimmed = true; web.send(MediaCommand.Trim) }
         measure(state, now)
