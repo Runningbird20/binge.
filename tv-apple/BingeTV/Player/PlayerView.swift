@@ -118,13 +118,19 @@ struct PlayerView: View {
                     panelOpen = false
                     surfaceFocused = true
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(.move(edge: .trailing))
             }
         }
         .animation(.easeInOut(duration: 0.25), value: model.hudVisible)
         .animation(.easeInOut(duration: 0.25), value: model.showSkipIntro)
         .animation(.easeInOut(duration: 0.25), value: panelOpen)
-        .onAppear { surfaceFocused = true }
+        .onAppear {
+            surfaceFocused = true
+            #if DEBUG
+            // -BingePanel YES: open the options sidebar right away (screenshots).
+            if UserDefaults.standard.bool(forKey: "BingePanel") { panelOpen = true }
+            #endif
+        }
         .onDisappear { model.close() }
     }
 }
@@ -135,7 +141,7 @@ private extension PlayerPanel {
     var extrasRow: some View {
         let alert = teams.recent.flatMap { Date().timeIntervalSince($0.at) < 20 * 60 ? $0 : nil }
         if model.request.isLive || pip.tile != nil || alert != nil {
-            HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 12) {
                 if let alert {
                     Label(alert.headline, systemImage: "sportscourt.fill").font(.callout.weight(.semibold)).lineLimit(1)
                     Button("Watch now") { watchAlert(alert, inCorner: false) }.buttonStyle(PillButtonStyle(selected: true))
@@ -267,7 +273,7 @@ private struct HUD: View {
                             .foregroundStyle(Color(hex: 0xFF5A50))
                         Image(systemName: model.playback.paused ? "play.fill" : "pause.fill")
                     }
-                    Text("Click  Pause / play     \(Image(systemName: "chevron.down"))  Other streams     Back  Exit")
+                    Text("Click  Pause / play     \(Image(systemName: "chevron.down"))  Options     Back  Exit")
                         .font(.caption)
                         .foregroundStyle(Theme.muted)
                 } else {
@@ -286,7 +292,7 @@ private struct HUD: View {
                     Text("-" + clock(max(0, model.playback.d - model.playback.t))).monospacedDigit()
                 }
                 .font(.callout.weight(.semibold))
-                Text("\(Image(systemName: "chevron.left")) \(Image(systemName: "chevron.right"))  10 seconds     \(Image(systemName: "chevron.down"))  Servers & episodes     Back  Exit")
+                Text("\(Image(systemName: "chevron.left")) \(Image(systemName: "chevron.right"))  10 seconds     \(Image(systemName: "chevron.down"))  Options     Back  Exit")
                     .font(.caption)
                     .foregroundStyle(Theme.muted)
                 }
@@ -341,192 +347,243 @@ private struct UpNextCard: View {
     }
 }
 
-// Swipe down: switch server, jump to another episode, sleep timer, the
-// corner game and game alerts.
+// Swipe down: the options sidebar (as on Fire TV / Prime Video). A list of
+// settings with their current value; picking one opens its choices in the
+// same sidebar. Back goes up a level, then closes.
+private enum Pane: String {
+    case menu = "Options", audio = "Audio", subtitles = "Subtitles", timing = "Subtitle timing", server = "Server"
+    case picture = "Picture", quality = "Quality", sleep = "Sleep timer", episodes = "Episodes"
+}
+
 private struct PlayerPanel: View {
     @ObservedObject var model: PlayerModel
-    @ObservedObject private var pip = PiPController.shared
-    @ObservedObject private var teams = TeamCenter.shared
-    @Environment(\.dismiss) private var dismissPlayer
+    @ObservedObject var pip = PiPController.shared
+    @ObservedObject var teams = TeamCenter.shared
+    @Environment(\.dismiss) var dismissPlayer
     let close: () -> Void
-    @State private var alertBusy = false
+    @State var alertBusy = false
     @State private var episodes: [TMDBSeason.Episode] = []
-    @FocusState private var focusedServer: String?
+    @State private var pane: Pane = .menu
+    @State private var from: Pane = .menu
+    @FocusState private var focus: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 30) {
-            Spacer()
-            VStack(alignment: .leading, spacing: 26) {
-                extrasRow
-                Text(model.request.isLive ? "Stream" : "Server").font(.headline).foregroundStyle(Theme.muted)
-                HStack(spacing: 24) {
-                    ForEach(model.servers) { server in
-                        Button {
-                            model.choose(server)
-                            close()
-                        } label: {
-                            Label(server.name, systemImage: server == model.server ? "checkmark.circle.fill" : "play.circle")
-                        }
-                        .focused($focusedServer, equals: server.id)
-                    }
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(pane == .menu ? "Options" : (pane == .server && model.request.isLive ? "Stream" : pane.rawValue))
+                    .font(.system(size: 40, weight: .bold))
+                if pane == .menu {
+                    Text(model.request.title.name + (model.episodeLabel.map { " · \($0)" } ?? ""))
+                        .font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
+                } else {
+                    Text("Back to return").font(.caption).foregroundStyle(Theme.muted)
                 }
-                .focusSection()
-
-                // The video's own tracks, switched directly.
-                Text("Audio").font(.headline).foregroundStyle(Theme.muted)
-                ScrollView(.horizontal) {
-                    HStack(spacing: 20) {
-                        if model.audioTracks.count > 1 {
-                            ForEach(model.audioTracks) { track in
-                                Button(PlayerModel.displayName(track)) { model.selectAudio(track); close() }
-                                    .buttonStyle(PillButtonStyle(selected: track.on))
-                            }
-                        } else {
-                            Text(model.audioTracks.isEmpty ? "This server has one audio track. Try another server for a different language."
-                                                           : "Only \(PlayerModel.displayName(model.audioTracks[0])) on this server. Try another server for a different language.")
-                                .font(.callout).foregroundStyle(Theme.muted)
-                        }
-                    }
-                    .padding(.vertical, 10)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) { content }
+                        .padding(.vertical, 20)
                 }
                 .scrollClipDisabled()
-                .focusSection()
-
-                // binge.'s own subtitles (OpenSubtitles), the same on every server.
-                HStack(alignment: .firstTextBaseline, spacing: 16) {
-                    Text("Subtitles").font(.headline).foregroundStyle(Theme.muted)
-                    if model.usingExternalSubtitles, let release = model.external?.release, !release.isEmpty {
-                        Text(release).font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
-                    } else if model.useExternal && model.externalLoading {
-                        Text("Finding subtitles…").font(.caption).foregroundStyle(Theme.muted)
-                    } else if model.useExternal && model.subtitleLanguage != "off" && model.external == nil {
-                        Text("None found for this episode; the server's are below.").font(.caption).foregroundStyle(Theme.muted)
-                    }
-                }
-                ScrollView(.horizontal) {
-                    HStack(spacing: 20) {
-                        ForEach(PlaybackPrefs.subtitleChoices, id: \.0) { code, label in
-                            Button(label) { model.chooseSubtitleLanguage(code); close() }
-                                .buttonStyle(PillButtonStyle(selected: code == "off"
-                                    ? (!model.useExternal && !model.textTracks.contains(where: \.on))
-                                    : (model.useExternal && model.subtitleLanguage == code)))
-                        }
-                        if model.usingExternalSubtitles {
-                            Button { model.nudgeSubtitles(by: -0.5) } label: { Label("Earlier", systemImage: "backward") }
-                                .buttonStyle(PillButtonStyle())
-                            Button { model.nudgeSubtitles(by: 0.5) } label: { Label("Later", systemImage: "forward") }
-                                .buttonStyle(PillButtonStyle())
-                            if model.subtitleOffset != 0 {
-                                Text(String(format: "%+.1fs", model.subtitleOffset)).font(.callout.monospacedDigit()).foregroundStyle(Theme.muted)
-                            }
-                            if (model.external?.versions ?? 0) > 1 {
-                                Button("Another version") { model.nextSubtitleVersion() }
-                                    .buttonStyle(PillButtonStyle())
-                            }
-                        }
-                    }
-                    .padding(.vertical, 10)
-                }
-                .scrollClipDisabled()
-                .focusSection()
-
-                if !model.textTracks.isEmpty {
-                    Text("Server's subtitles").font(.headline).foregroundStyle(Theme.muted)
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 20) {
-                            ForEach(model.textTracks.prefix(30)) { track in
-                                Button(PlayerModel.displayName(track)) { model.selectSubtitles(track); close() }
-                                    .buttonStyle(PillButtonStyle(selected: !model.useExternal && track.on))
-                            }
-                        }
-                        .padding(.vertical, 10)
-                    }
-                    .scrollClipDisabled()
-                    .focusSection()
-                }
-
-                Text("Picture").font(.headline).foregroundStyle(Theme.muted)
-                HStack(spacing: 20) {
-                    Button("Fill screen") { model.fillScreen = true; close() }
-                        .buttonStyle(PillButtonStyle(selected: model.fillScreen))
-                    Button("Server's layout") { model.fillScreen = false; close() }
-                        .buttonStyle(PillButtonStyle(selected: !model.fillScreen))
-                    Text("Switch if subtitles or the server's buttons go missing.")
-                        .font(.caption).foregroundStyle(Theme.muted)
-                }
-                .focusSection()
-
-                Text("Quality").font(.headline).foregroundStyle(Theme.muted)
-                HStack(spacing: 20) {
-                    ForEach(QualityPreference.allCases) { option in
-                        Button(option.label) {
-                            UserDefaults.standard.set(option.rawValue, forKey: "binge.quality")
-                            close()
-                        }
-                        .buttonStyle(PillButtonStyle(selected: QualityPreference.current == option))
-                    }
-                    Text("Best quality checks every server for a sharper (up to 4K) stream for a few seconds after it starts.")
-                        .font(.caption).foregroundStyle(Theme.muted)
-                }
-                .focusSection()
-
-                Text("Sleep timer").font(.headline).foregroundStyle(Theme.muted)
-                HStack(spacing: 20) {
-                    ForEach(PlayerModel.SleepOption.allCases) { option in
-                        if option != .episode || model.isEpisode {
-                            Button(option.rawValue) {
-                                model.sleep = option
-                                close()
-                            }
-                            .buttonStyle(PillButtonStyle(selected: model.sleep == option))
-                        }
-                    }
-                }
-                .focusSection()
-
-                if model.isEpisode, !episodes.isEmpty {
-                    Text("Season \(model.request.season ?? 1)").font(.headline).foregroundStyle(Theme.muted)
-                    ScrollView(.horizontal) {
-                        LazyHStack(spacing: 30) {
-                            ForEach(episodes) { episode in
-                                Button {
-                                    model.play(season: episode.seasonNumber, episode: episode.episodeNumber)
-                                    close()
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 0) {
-                                        PosterImage(url: TMDB.image(episode.stillPath, TMDB.fullScreen), name: "Episode \(episode.episodeNumber)")
-                                            .frame(width: 300, height: 169)
-                                            .clipped()
-                                        Text("\(episode.episodeNumber). \(episode.name ?? "")")
-                                            .font(.caption.weight(.semibold))
-                                            .lineLimit(1)
-                                            .padding(12)
-                                            .frame(width: 300, alignment: .leading)
-                                            .background(episode.episodeNumber == model.request.episode ? Theme.gold.opacity(0.35) : Theme.surface)
-                                    }
-                                }
-                                .buttonStyle(.card)
-                            }
-                        }
-                        .padding(.vertical, 24)
-                    }
-                    .scrollClipDisabled()
-                    .focusSection()
-                }
             }
-            .padding(.horizontal, Theme.edge)
-            .padding(.vertical, 50)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LinearGradient(colors: [.clear, .black.opacity(0.92), .black], startPoint: .top, endPoint: .bottom))
+            .padding(.top, 70)
+            .padding(.horizontal, 36)
+            .frame(width: 760, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(Theme.surface.opacity(0.97))
+            .focusSection()
         }
         .ignoresSafeArea()
-        .onAppear { focusedServer = model.server?.id ?? model.servers.first?.id }
         .disabled(alertBusy)
-        .onExitCommand(perform: close)
+        .onExitCommand { if pane == .menu { close() } else { open(.menu) } }
+        .onAppear { focusFirst() }
+        .onChange(of: pane) { _, _ in focusFirst() }
         .task {
             guard model.isEpisode, let tmdbId = model.request.title.tmdbId else { return }
             let season: TMDBSeason? = try? await TMDB.shared.get("tv/\(tmdbId)/season/\(model.request.season ?? 1)")
             episodes = season?.episodes ?? []
         }
+    }
+
+    private func open(_ next: Pane) { from = pane; pane = next }
+
+    // Focus lands on what's chosen (or, back on the list, the setting you came from).
+    private func focusFirst() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(60))
+            focus = selectedId ?? rowIds.first
+        }
+    }
+
+    private var selectedId: String? {
+        switch pane {
+        case .menu: return from == .menu ? nil : from.rawValue
+        case .audio: return model.audioTracks.first(where: \.on).map { "a\($0.id)" }
+        case .subtitles: return model.useExternal ? "s\(model.subtitleLanguage)" : model.textTracks.first(where: \.on).map { "t\($0.id)" } ?? "soff"
+        case .server: return model.server.map { "v\($0.id)" }
+        case .picture: return model.fillScreen ? "fill" : "layout"
+        case .quality: return "q\(QualityPreference.current.rawValue)"
+        case .sleep: return "z\(model.sleep.rawValue)"
+        case .episodes: return "e\(model.request.episode ?? 1)"
+        case .timing: return "earlier"
+        }
+    }
+
+    private var rowIds: [String] {
+        switch pane {
+        case .menu: return menuRows.map(\.pane.rawValue)
+        case .audio: return model.audioTracks.count > 1 ? model.audioTracks.map { "a\($0.id)" } : ["pick-server"]
+        case .server: return model.servers.map { "v\($0.id)" }
+        default: return []
+        }
+    }
+
+    private var menuRows: [(pane: Pane, label: String, value: String)] {
+        var rows: [(pane: Pane, label: String, value: String)] = []
+        rows.append((.audio, "Audio", model.audioTracks.first(where: \.on).map(PlayerModel.displayName) ?? "Default"))
+        rows.append((.subtitles, "Subtitles", subtitleLabel))
+        if model.usingExternalSubtitles {
+            rows.append((.timing, "Subtitle timing", model.subtitleOffset == 0 ? "In sync" : String(format: "%+.1fs", model.subtitleOffset)))
+        }
+        rows.append((.server, model.request.isLive ? "Stream" : "Server", model.server?.name ?? "Choosing…"))
+        rows.append((.picture, "Picture", model.fillScreen ? "Fill screen" : "Server's layout"))
+        if !model.request.isLive { rows.append((.quality, "Quality", QualityPreference.current.label)) }
+        rows.append((.sleep, "Sleep timer", model.sleep.rawValue))
+        if model.isEpisode, !episodes.isEmpty { rows.append((.episodes, "Episodes", "Season \(model.request.season ?? 1)")) }
+        return rows
+    }
+
+    private var subtitleLabel: String {
+        if model.useExternal, model.subtitleLanguage != "off" {
+            return PlaybackPrefs.subtitleChoices.first { $0.0 == model.subtitleLanguage }?.1 ?? model.subtitleLanguage
+        }
+        if let track = model.textTracks.first(where: \.on) { return PlayerModel.displayName(track) }
+        return "Off"
+    }
+
+    @ViewBuilder private var content: some View {
+        switch pane {
+        case .menu:
+            extrasRow
+            ForEach(menuRows, id: \.pane) { row in
+                SideRow(label: row.label, value: row.value, chevron: true) { open(row.pane) }
+                    .focused($focus, equals: row.pane.rawValue)
+            }
+        case .audio:
+            if model.audioTracks.count > 1 {
+                ForEach(model.audioTracks) { track in
+                    SideRow(label: PlayerModel.displayName(track), selected: track.on) { model.selectAudio(track); close() }
+                        .focused($focus, equals: "a\(track.id)")
+                }
+            } else {
+                note(model.audioTracks.isEmpty ? "This server has one audio track."
+                                                : "Only \(PlayerModel.displayName(model.audioTracks[0])) on this server.")
+                SideRow(label: "Pick another server", chevron: true) { open(.server) }
+                    .focused($focus, equals: "pick-server")
+            }
+        case .subtitles:
+            if model.useExternal && model.externalLoading { note("Finding subtitles…") }
+            else if model.usingExternalSubtitles, let release = model.external?.release, !release.isEmpty { note(release) }
+            ForEach(PlaybackPrefs.subtitleChoices, id: \.0) { code, label in
+                let selected = code == "off" ? (!model.useExternal && !model.textTracks.contains(where: \.on))
+                                             : (model.useExternal && model.subtitleLanguage == code)
+                SideRow(label: label, selected: selected) { model.chooseSubtitleLanguage(code); close() }
+                    .focused($focus, equals: "s\(code)")
+            }
+            if !model.textTracks.isEmpty {
+                Text("From this server").font(.headline).foregroundStyle(Theme.muted).padding(.top, 14)
+                ForEach(model.textTracks.prefix(30)) { track in
+                    SideRow(label: PlayerModel.displayName(track), selected: !model.useExternal && track.on) { model.selectSubtitles(track); close() }
+                        .focused($focus, equals: "t\(track.id)")
+                }
+            }
+        case .timing:
+            note(model.subtitleOffset == 0 ? "In sync" : String(format: "Shifted %+.1f seconds", model.subtitleOffset))
+            SideRow(label: "Earlier (0.5s)") { model.nudgeSubtitles(by: -0.5) }.focused($focus, equals: "earlier")
+            SideRow(label: "Later (0.5s)") { model.nudgeSubtitles(by: 0.5) }.focused($focus, equals: "later")
+            if (model.external?.versions ?? 0) > 1 {
+                SideRow(label: "Another version") { model.nextSubtitleVersion() }.focused($focus, equals: "version")
+            }
+        case .server:
+            ForEach(model.servers) { server in
+                SideRow(label: server.name, selected: server == model.server) { model.choose(server); close() }
+                    .focused($focus, equals: "v\(server.id)")
+            }
+        case .picture:
+            SideRow(label: "Fill screen", selected: model.fillScreen) { model.fillScreen = true; close() }.focused($focus, equals: "fill")
+            SideRow(label: "Server's layout", selected: !model.fillScreen) { model.fillScreen = false; close() }.focused($focus, equals: "layout")
+            note("Switch if subtitles or the server's buttons go missing.")
+        case .quality:
+            ForEach(QualityPreference.allCases) { option in
+                SideRow(label: option.label, selected: QualityPreference.current == option) {
+                    UserDefaults.standard.set(option.rawValue, forKey: "binge.quality")
+                    close()
+                }
+                .focused($focus, equals: "q\(option.rawValue)")
+            }
+            note("Best quality checks every server for a sharper (up to 4K) stream for a few seconds after it starts.")
+        case .sleep:
+            ForEach(PlayerModel.SleepOption.allCases) { option in
+                if option != .episode || model.isEpisode {
+                    SideRow(label: option.rawValue, selected: model.sleep == option) { model.sleep = option; close() }
+                        .focused($focus, equals: "z\(option.rawValue)")
+                }
+            }
+        case .episodes:
+            ForEach(episodes) { episode in
+                SideRow(label: "\(episode.episodeNumber). \(episode.name ?? "Episode \(episode.episodeNumber)")",
+                        selected: episode.episodeNumber == model.request.episode) {
+                    model.play(season: episode.seasonNumber, episode: episode.episodeNumber)
+                    close()
+                }
+                .focused($focus, equals: "e\(episode.episodeNumber)")
+            }
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text).font(.callout).foregroundStyle(Theme.muted).padding(.vertical, 8)
+    }
+}
+
+// One row of the sidebar: label, current value or a check, and a chevron for
+// rows that open more choices. Focused rows turn white (Fire TV's look).
+private struct SideRow: View {
+    let label: String
+    var value: String? = nil
+    var selected = false
+    var chevron = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                if selected { Image(systemName: "checkmark").font(.callout.weight(.bold)) }
+                Text(label).font(.headline).lineLimit(1)
+                Spacer(minLength: 12)
+                if let value { Text(value).font(.callout).lineLimit(1).opacity(0.7) }
+                if chevron { Image(systemName: "chevron.right").font(.callout.weight(.semibold)).opacity(0.7) }
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 16)
+        }
+        .buttonStyle(SideRowStyle(selected: selected))
+    }
+}
+
+private struct SideRowStyle: ButtonStyle {
+    let selected: Bool
+    func makeBody(configuration: Configuration) -> some View { SideRowBody(configuration: configuration, selected: selected) }
+}
+
+private struct SideRowBody: View {
+    let configuration: ButtonStyle.Configuration
+    let selected: Bool
+    @Environment(\.isFocused) private var focused
+    var body: some View {
+        configuration.label
+            .foregroundStyle(focused ? Color.black : (selected ? Theme.gold : Color.white))
+            .background(focused ? Color.white : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: focused)
     }
 }
