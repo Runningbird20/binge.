@@ -181,6 +181,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("binge.audioDescription") private var audioDescription = false
     @AppStorage("binge.largeText") private var largeText = false
     @AppStorage(MultiviewLayout.key) private var multiviewLayout = MultiviewLayout.grid.rawValue
+    @AppStorage(MultiviewEngine.key) private var multiviewEngine = MultiviewEngine.page.rawValue
     @AppStorage(PlaybackPrefs.skipIntroKey) private var skipIntroButton = true
     @State private var audio = PlaybackPrefs.audio
     @State private var subtitle = PlaybackPrefs.subtitle
@@ -216,6 +217,12 @@ struct PlaybackSettingsView: View {
             group("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.") {
                 Button("On") { skipIntroButton = true }.buttonStyle(PillButtonStyle(selected: skipIntroButton))
                 Button("Off") { skipIntroButton = false }.buttonStyle(PillButtonStyle(selected: !skipIntroButton))
+            }
+            group("Multiview engine", "One page plays every game in a single web page (up to 4 games, much less memory). Separate pages is the older way, at most 2.") {
+                ForEach(MultiviewEngine.allCases) { option in
+                    Button(option.label) { multiviewEngine = option.rawValue }
+                        .buttonStyle(PillButtonStyle(selected: multiviewEngine == option.rawValue))
+                }
             }
             group("Multiview layout", "With 2 or 3 games: equal tiles, or one big game with the others stacked beside it.") {
                 ForEach(MultiviewLayout.allCases) { option in

@@ -59,7 +59,10 @@ final class StreamRace {
     // stream never "un-pauses" them.
     var userPaused = false
 
-    init(request: PlayRequest, servers: [StreamServer], mode: Mode, keepMuted: Bool = false) {
+    // makeEngine: where a server's page plays (default: its own web view; the
+    // shared Multiview page gives each game a slot in one page instead).
+    init(request: PlayRequest, servers: [StreamServer], mode: Mode, keepMuted: Bool = false,
+         makeEngine: ((URL) -> WebEngine?)? = nil) {
         self.request = request
         self.mode = mode
         self.keepMuted = keepMuted
@@ -69,7 +72,7 @@ final class StreamRace {
         // player keeps the rest as backups for recovery.
         for server in request.isLive ? Array(servers.prefix(Self.maxLiveContenders)) : servers {
             let url = server.build(tmdbId, request.title.kind, request.season ?? 1, request.episode ?? 1)
-            guard let web = WebEngines.make(allowedHost: url.host) else { continue }
+            guard let web = makeEngine?(url) ?? WebEngines.make(allowedHost: url.host) else { continue }
             web.view.frame = container.bounds
             web.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             web.view.alpha = 0
@@ -287,9 +290,15 @@ final class Warmup {
     }
 
     private var pendingKey: String?
+    // Multiview is open: no background preloads at all. The Sports page
+    // underneath kept preloading its spotlight game (4 servers at once)
+    // while Multiview ran, which is memory the Apple TV didn't have.
+    var suspended = false {
+        didSet { if suspended { cancel() } }
+    }
 
     func prepare(_ request: PlayRequest) {
-        guard WebEngines.isAvailable, request.title.tmdbId != nil || request.isLive else { return }
+        guard !suspended, WebEngines.isAvailable, request.title.tmdbId != nil || request.isLive else { return }
         // A preload is optional: skip it when several video pages are already
         // open (Multiview, a corner game), rather than risk running out of memory.
         if race == nil, WebEngines.liveCount >= 5 { return }
@@ -302,7 +311,7 @@ final class Warmup {
         Task {
             let servers = request.isLive ? request.liveStreams
                 : await ServerPlan.servers(for: request.title, originalLanguage: request.title.originalLanguage)
-            guard self.pendingKey == key else { return }
+            guard self.pendingKey == key, !self.suspended else { return }
             self.pendingKey = nil
             let fresh = StreamRace(request: request, servers: servers.isEmpty ? StreamServer.all : servers, mode: .warm)
             Task { fresh.expectedDuration = await ExpectedRuntime.seconds(for: request) }

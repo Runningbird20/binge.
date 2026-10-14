@@ -60,6 +60,13 @@ final class MultiviewTile: ObservableObject, Identifiable {
 
     nonisolated var id: String { game.id }
 
+    // Set when Multiview runs as one shared page: this game plays in a slot of it.
+    var page: MultiviewPage? {
+        didSet { surface.backgroundColor = page == nil ? .black : .clear }
+    }
+    // This game's slot in the shared page (for its position on screen).
+    var slotId: String? { ((race?.winner?.web ?? race?.candidates.first?.web) as? PageSlotEngine)?.id }
+
     init(game: SportGame) {
         self.game = game
         surface.backgroundColor = .black
@@ -77,8 +84,11 @@ final class MultiviewTile: ObservableObject, Identifiable {
         guard !stopped else { return }
         guard !servers.isEmpty else { status = "No stream found"; gaveUp = true; return }
         let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
+        let page = self.page
         let race = StreamRace(request: PlayRequest(title: title, liveStreams: servers), servers: servers,
-                              mode: .live, keepMuted: true)
+                              mode: .live, keepMuted: true,
+                              makeEngine: page.map { page in { _ in page.makeSlot() } })
+        if page != nil { race.container.backgroundColor = .clear }
         race.container.frame = surface.bounds
         race.container.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         surface.addSubview(race.container)
@@ -294,9 +304,18 @@ struct MultiviewView: View {
     // Most recently watched first: when a paused game is picked, the game
     // watched longest ago makes room for it.
     @State private var recent: [String] = []
+    // Bumped every second so a game that just got its slot is positioned.
+    @State private var slotTick = 0
+
+    // One shared page for every game (default), or a web view per game.
+    @State private var page: MultiviewPage?
 
     init(games: [SportGame]) {
-        _tiles = State(initialValue: games.prefix(4).map { MultiviewTile(game: $0) })
+        let tiles = games.prefix(4).map { MultiviewTile(game: $0) }
+        let page = MultiviewEngine.current == .page ? MultiviewPage() : nil
+        tiles.forEach { $0.page = page }
+        _tiles = State(initialValue: tiles)
+        _page = State(initialValue: page)
     }
 
     var body: some View {
@@ -304,6 +323,11 @@ struct MultiviewView: View {
             let frames = layout(in: proxy.size)
             ZStack(alignment: .topLeading) {
                 Color.black
+                if let page {
+                    MultiviewPageSurface(page: page)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .task(id: layoutKey(frames)) { syncPage(page, frames) }
+                }
                 ForEach(tiles) { tile in
                     let frame = frames[tile.id] ?? .zero
                     let hidden = expanded != nil && expanded != tile.id
@@ -362,7 +386,13 @@ struct MultiviewView: View {
         }
         .task {
             // Free memory for the games: no background preload while here.
-            Warmup.shared.cancel()
+            #if DEBUG
+            print("[mv] web views alive before cancel: \(WebEngines.liveCount)")
+            #endif
+            Warmup.shared.suspended = true
+            #if DEBUG
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { print("[mv] web views alive 8s later: \(WebEngines.liveCount)") }
+            #endif
             focused = tiles.first?.id
             tiles.first?.audible = true
             // Fewer contenders per tile when there are more tiles: an Apple
@@ -417,6 +447,23 @@ struct MultiviewView: View {
                 MultiviewCapacity.lower(to: playing.count - 1)
             }
         }
+        // New slots (a game starting or changing server) get positioned.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                if page != nil { slotTick &+= 1 }
+            }
+        }
+        // tvOS says memory is low: close the game watched longest ago now,
+        // before the system has to (which can take down the whole Apple TV).
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            let active = tiles.filter { $0.isActive && $0.id != focused }
+            guard let victim = active.max(by: { (recent.firstIndex(of: $0.id) ?? Int.max) < (recent.firstIndex(of: $1.id) ?? Int.max) }) else { return }
+            victim.throttle()
+            overloaded = true
+            lastLoadAction = Date()
+            MultiviewCapacity.lower(to: tiles.filter(\.isActive).count)
+        }
         // Keep the TV in one display mode: with Match Content on, tvOS
         // switches the TV's frame rate per video, and games at 50 and 60fps
         // made the TV re-sync its HDMI signal over and over.
@@ -437,7 +484,23 @@ struct MultiviewView: View {
                 if let id, tile.id != id { tile.hold() } else { tile.release() }
             }
         }
-        .onDisappear { tiles.forEach { $0.stop() } }
+        .onDisappear {
+            tiles.forEach { $0.stop() }
+            Warmup.shared.suspended = false
+        }
+    }
+
+    // The shared page's iframes follow the tiles (and a game's new slot after a server change).
+    private func layoutKey(_ frames: [String: CGRect]) -> String {
+        tiles.map { tile in "\(tile.slotId ?? "-")@\(frames[tile.id].map { "\(Int($0.minX)),\(Int($0.minY)),\(Int($0.width))" } ?? "")" }
+            .joined(separator: "|") + "|\(expanded ?? "")|\(slotTick)"
+    }
+
+    private func syncPage(_ page: MultiviewPage, _ frames: [String: CGRect]) {
+        page.layout(tiles.compactMap { tile in
+            guard let slot = tile.slotId, let rect = frames[tile.id] else { return nil }
+            return (slot, rect, expanded != nil && expanded != tile.id)
+        })
     }
 
     private var mainId: String? { main ?? tiles.first?.id }
@@ -617,14 +680,17 @@ enum MultiviewLayout: String, CaseIterable, Identifiable {
 // restart it, so two is the most, and the older Apple TV HD gets one. A
 // session that has to pause a game lowers it for next time.
 enum MultiviewCapacity {
-    private static let key = "binge.multiviewCapacity"
+    private static var key: String { MultiviewEngine.current == .page ? "binge.multiviewCapacity.page" : "binge.multiviewCapacity" }
 
     static var deviceLimit: Int {
         var info = utsname()
         uname(&info)
         let machine = withUnsafePointer(to: &info.machine) { $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) } }
-        // AppleTV5,3 is the Apple TV HD (A8, 2GB); the 4K models handle two.
-        return machine.hasPrefix("AppleTV5,") ? 1 : 2
+        // AppleTV5,3 is the Apple TV HD (A8, 2GB). Separate pages: 1 there,
+        // 2 on the 4K models. One shared page costs far less memory: 2 and 4.
+        let hd = machine.hasPrefix("AppleTV5,")
+        if MultiviewEngine.current == .page { return hd ? 2 : 4 }
+        return hd ? 1 : 2
     }
 
     static var games: Int {

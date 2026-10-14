@@ -159,6 +159,7 @@ enum WebEngines {
         if (window.parent !== window) { try{ window.parent.postMessage({__bingeFillUp:true},'*'); }catch(e){} } }
       function unpin(){ document.documentElement.classList.remove('__bf'); var els=document.querySelectorAll('.__bf-el'); for (var i=0;i<els.length;i++) els[i].classList.remove('__bf-el'); }
       window.addEventListener('message', function(e){ if(!(e.data && e.data.__bingeFillUp)) return;
+        if(window.__bingeMultiviewPage) return; // the shared Multiview page keeps each game in its tile
         var fs=document.getElementsByTagName('iframe'); for (var i=0;i<fs.length;i++){ if(fs[i].contentWindow===e.source){ pin(fs[i]); break; } } });
       function cue(cmd){ var parts=cmd.split(':'), size=parseInt(parts[1],10)||100, bg=parts.slice(2).join(':')||'transparent';
         var st=document.getElementById('__bcue'); if(!st){ st=document.createElement('style'); st.id='__bcue'; (document.head||document.documentElement).appendChild(st); }
@@ -198,8 +199,10 @@ enum WebEngines {
       function relay(cmd){ apply(cmd); for (var i=0;i<window.frames.length;i++){ try{ window.frames[i].postMessage({__binge:cmd},'*'); }catch(e){} } }
       window.__bingeRun = relay;
       window.addEventListener('message', function(e){ if(e.data && e.data.__binge) relay(e.data.__binge); });
-      setInterval(function(){ var v=pick(); if(!v) return;
-        try{ window.webkit.messageHandlers.binge.postMessage(state(v)); }catch(e){} }, 400);
+      setInterval(function(){ var v=pick(); if(!v) return; var s=state(v);
+        try{ window.webkit.messageHandlers.binge.postMessage(s); }catch(e){}
+        // Inside the shared Multiview page, the page works out which game this is.
+        try{ if(window.top!==window) window.top.postMessage({__bingeState:s}, '*'); }catch(e){} }, 400);
     })();
     """
 }
@@ -220,7 +223,12 @@ private final class BridgeProxy: NSObject {
     @objc(userContentController:didReceiveScriptMessage:)
     func userContentController(_ controller: NSObject, didReceive message: NSObject) {
         guard let body = message.value(forKey: "body") as? [String: Any] else { return }
-        let state = MediaState(
+        let state = Self.parse(body)
+        MainActor.assumeIsolated { target?.receive(state) }
+    }
+
+    static func parse(_ body: [String: Any]) -> MediaState {
+        MediaState(
             t: (body["t"] as? NSNumber)?.doubleValue ?? 0,
             d: (body["d"] as? NSNumber)?.doubleValue ?? 0,
             paused: (body["paused"] as? NSNumber)?.boolValue ?? true,
@@ -235,7 +243,18 @@ private final class BridgeProxy: NSObject {
             text: Self.tracks(body["tt"]),
             cue: body["cue"] as? String ?? ""
         )
-        MainActor.assumeIsolated { target?.receive(state) }
+    }
+}
+
+// The shared Multiview page's messages: one game's video state, tagged with its slot.
+private final class TileProxy: NSObject {
+    weak var target: ModernWebView?
+
+    @objc(userContentController:didReceiveScriptMessage:)
+    func userContentController(_ controller: NSObject, didReceive message: NSObject) {
+        guard let body = message.value(forKey: "body") as? [String: Any], let slot = body["tile"] as? String else { return }
+        let state = BridgeProxy.parse(body)
+        MainActor.assumeIsolated { target?.onTileState?(slot, state) }
     }
 }
 
@@ -245,6 +264,9 @@ final class ModernWebView: NSObject, WebEngine {
     let canSeek = true
     private var allowedHost: String?
     private let proxy = BridgeProxy()
+    private let tileProxy = TileProxy()
+    // Shared Multiview page only: each game's state, by slot.
+    var onTileState: ((String, MediaState) -> Void)?
     private var contentController: NSObject?
     // Several frames may have a <video> (ads, previews). The main one is the
     // one that has made the most progress recently.
@@ -258,7 +280,10 @@ final class ModernWebView: NSObject, WebEngine {
 
     private nonisolated static let loaded: Bool = {
         guard dlopen("/System/Library/Frameworks/WebKit.framework/WebKit", RTLD_NOW) != nil else { return false }
-        if let proto = objc_getProtocol("WKScriptMessageHandler") { class_addProtocol(BridgeProxy.self, proto) }
+        if let proto = objc_getProtocol("WKScriptMessageHandler") {
+            class_addProtocol(BridgeProxy.self, proto)
+            class_addProtocol(TileProxy.self, proto)
+        }
         return true
     }()
 
@@ -287,7 +312,7 @@ final class ModernWebView: NSObject, WebEngine {
         unsafeBitCast(method_getImplementation(method), to: MuteFn.self)(view, selector, muted ? 1 : 0)
     }
 
-    init?(allowedHost: String?) {
+    init?(allowedHost: String?, multiview: Bool = false) {
         guard Self.isAvailable,
               let webClass = Self.webClass,
               let configClass = NSClassFromString("WKWebViewConfiguration") as? NSObject.Type,
@@ -310,6 +335,9 @@ final class ModernWebView: NSObject, WebEngine {
             let script = make(allocated, scriptInit, WebEngines.bridgeScript as NSString, 1, false) // atDocumentEnd, all frames
             _ = controller.perform(NSSelectorFromString("addUserScript:"), with: script)
             _ = controller.perform(NSSelectorFromString("addScriptMessageHandler:name:"), with: proxy, with: "binge" as NSString)
+            if multiview {
+                _ = controller.perform(NSSelectorFromString("addScriptMessageHandler:name:"), with: tileProxy, with: "bingeMulti" as NSString)
+            }
         }
 
         // [[WKWebView alloc] initWithFrame:configuration:]
@@ -324,6 +352,7 @@ final class ModernWebView: NSObject, WebEngine {
         contentController = controller
         super.init()
         proxy.target = self
+        tileProxy.target = self
         view.backgroundColor = .black
         view.isOpaque = true
         view.setValue(self, forKey: "navigationDelegate")
@@ -348,6 +377,7 @@ final class ModernWebView: NSObject, WebEngine {
         Task { @MainActor in
             WebEngines.liveCount = max(0, WebEngines.liveCount - 1)
             _ = controller?.perform(NSSelectorFromString("removeScriptMessageHandlerForName:"), with: "binge" as NSString)
+            _ = controller?.perform(NSSelectorFromString("removeScriptMessageHandlerForName:"), with: "bingeMulti" as NSString)
             web.setValue(nil, forKey: "navigationDelegate")
             web.setValue(nil, forKey: "UIDelegate")
         }
@@ -364,6 +394,14 @@ final class ModernWebView: NSObject, WebEngine {
     }
 
     func setAllowedHost(_ host: String?) { allowedHost = host }
+
+    // The shared Multiview page: our own HTML, as if served from the site.
+    func loadHTML(_ html: String, baseURL: URL) {
+        _ = view.perform(NSSelectorFromString("loadHTMLString:baseURL:"), with: html as NSString, with: baseURL as NSURL)
+    }
+
+    // Whole-page sound (the shared Multiview page leaves it on; each game is muted on its own).
+    func setMuted(_ muted: Bool) { setPageMuted(muted) }
 
     func load(_ url: URL) {
         latest = nil
