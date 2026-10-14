@@ -22,6 +22,8 @@ struct PlayerView: View {
                 .disabled(panelOpen)
                 .onMoveCommand { direction in
                     switch direction {
+                    case .left where model.request.isLive: model.flipGame(by: -1)
+                    case .right where model.request.isLive: model.flipGame(by: 1)
                     case .left: model.seek(by: -10)
                     case .right: model.seek(by: 10)
                     case .down where model.showSkipIntro: model.dismissSkipIntro()
@@ -273,7 +275,7 @@ private struct HUD: View {
                             .foregroundStyle(Color(hex: 0xFF5A50))
                         Image(systemName: model.playback.paused ? "play.fill" : "pause.fill")
                     }
-                    Text("Click  Pause / play     \(Image(systemName: "chevron.down"))  Options     Back  Exit")
+                    Text("Click  Pause / play     \(Image(systemName: "chevron.left")) \(Image(systemName: "chevron.right"))  Other games     \(Image(systemName: "chevron.down"))  Options     Back  Exit")
                         .font(.caption)
                         .foregroundStyle(Theme.muted)
                 } else {
@@ -446,7 +448,7 @@ private struct PlayerPanel: View {
         }
         rows.append((.server, model.request.isLive ? "Stream" : "Server", model.server?.name ?? "Choosing…"))
         rows.append((.picture, "Picture", model.fillScreen ? "Fill screen" : "Server's layout"))
-        if !model.request.isLive { rows.append((.quality, "Quality", QualityPreference.current.label)) }
+        rows.append((.quality, "Quality", QualityPreference.current.label))
         rows.append((.sleep, "Sleep timer", model.sleep.rawValue))
         if model.isEpisode, !episodes.isEmpty { rows.append((.episodes, "Episodes", "Season \(model.request.season ?? 1)")) }
         return rows
@@ -520,7 +522,7 @@ private struct PlayerPanel: View {
                 }
                 .focused($focus, equals: "q\(option.rawValue)")
             }
-            note("Best quality checks every server for a sharper (up to 4K) stream for a few seconds after it starts.")
+            note("Best quality starts on the server that has looked sharpest on this Apple TV (it learns from what you watch), waiting a few seconds for it if needed. Fastest start plays whichever server is ready first.")
         case .sleep:
             ForEach(PlayerModel.SleepOption.allCases) { option in
                 if option != .episode || model.isEpisode {

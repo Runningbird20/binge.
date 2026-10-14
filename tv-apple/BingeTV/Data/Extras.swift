@@ -95,6 +95,8 @@ enum ServerPlan {
         let original: String?
         if let originalLanguage { original = originalLanguage } else { original = await OriginalLanguage.of(title) }
         let wanted = PlaybackPrefs.audio == "original" ? original : PlaybackPrefs.audio
+        // Best quality: the servers that have looked sharpest here go first.
+        if QualityPreference.current == .best { list = QualityMemory.sorted(list) }
         guard let wanted, !wanted.isEmpty else { return list }
         let reports: [Report] = (try? await Supabase.shared.rpc("stream_report_summary", [
             "p_media_type": title.kind.rawValue, "p_media_id": title.dbId,

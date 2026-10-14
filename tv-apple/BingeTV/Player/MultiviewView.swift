@@ -406,7 +406,9 @@ struct MultiviewView: View {
             // The next tile starts as soon as the one before it plays (its
             // page load is the heavy part), or after 3s.
             for (index, tile) in tiles.enumerated() {
-                if index > 0 {
+                // One shared page is light enough to start every game at once;
+                // separate pages start one after another.
+                if index > 0, page == nil {
                     let previous = tiles[index - 1]
                     let deadline = Date().addingTimeInterval(3)
                     while !previous.started, !previous.gaveUp, !previous.throttled, Date() < deadline {

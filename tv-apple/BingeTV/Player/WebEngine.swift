@@ -181,6 +181,8 @@ enum WebEngines {
       function apply(cmd){
         if(cmd==='unfill'){ unpin(); return; }
         if(cmd==='trim'){ trim(); return; }
+        // Debug only (-BingeStallAfter): the clock stops while "playing", like a network stall.
+        if(cmd==='debugfreeze'){ var fv=pick(); if(fv && !fv.__frozen){ fv.__frozen=1; var ft=fv.currentTime; Object.defineProperty(fv,'currentTime',{get:function(){return ft},set:function(){}}); Object.defineProperty(fv,'paused',{get:function(){return false}}); } return; }
         if(cmd==='cushion:on'){ cush.on=true; return; }
         if(cmd==='cushion:start'){ cush.on=true; var cv=pick(); if(cv && ahead(cv)<4) cushHold(cv, 4); return; }
         if(cmd.indexOf('cue:')===0){ cue(cmd); return; }

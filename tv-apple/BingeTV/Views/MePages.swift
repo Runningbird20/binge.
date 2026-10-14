@@ -208,7 +208,7 @@ struct PlaybackSettingsView: View {
                     .buttonStyle(PillButtonStyle(selected: subtitle == code))
                 }
             }
-            group("Quality", "Best quality looks for a sharper stream, up to 4K, for a few seconds after a video starts.") {
+            group("Quality", "Best quality starts on the server that has looked sharpest on this Apple TV (it learns from what you watch, movies and sports). Fastest start plays whichever server is ready first.") {
                 ForEach(QualityPreference.allCases) { option in
                     Button(option.label) { quality = option.rawValue }
                         .buttonStyle(PillButtonStyle(selected: quality == option.rawValue))

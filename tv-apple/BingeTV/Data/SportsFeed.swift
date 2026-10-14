@@ -368,7 +368,22 @@ enum SportsFeed {
                 urls.append(list[round])
             }
         }
-        return urls.prefix(limit).map { label, url in
+        // Feed families that played on this Apple TV go first (stable, so
+        // equal scores keep the interleaved order).
+        // Best quality: the sharpest feeds seen here (or labelled 1080p / 4K)
+        // come before the merely reliable ones, so they're among those raced.
+        let best = QualityPreference.current == .best
+        let quality = { (label: String) in
+            max(QualityMemory.nominal(label), UserDefaults.standard.integer(forKey: "binge.q." + label))
+        }
+        let ranked = urls.enumerated()
+            .sorted {
+                let a = (best ? quality($0.element.0) : 0, SportsMemory.score($0.element.0), -$0.offset)
+                let b = (best ? quality($1.element.0) : 0, SportsMemory.score($1.element.0), -$1.offset)
+                return a > b
+            }
+            .map(\.element)
+        return ranked.prefix(limit).map { label, url in
             StreamServer(id: url.absoluteString, name: label) { _, _, _, _ in url }
         }
     }
@@ -393,5 +408,29 @@ enum SportsFeed {
                 return ("\(stream.label)\(number)\(truthy(item["hd"]) ? " HD" : "")\(language)", url)
             }
         }
+    }
+}
+
+// Which sports feeds play on this Apple TV (as on Fire TV and the website):
+// a feed family that worked goes first next time, one that keeps failing
+// goes last. Families: "PPV", "StreamFree", "Streamed · admin"…
+enum SportsMemory {
+    static func family(_ label: String) -> String {
+        if label.hasPrefix("PPV") { return "PPV" }
+        if label.hasPrefix("StreamFree") { return "StreamFree" }
+        if label.hasPrefix("Streamed") {
+            let source = label.components(separatedBy: " · ").dropFirst().first?.components(separatedBy: " ").first ?? ""
+            return "Streamed · " + source
+        }
+        return label.components(separatedBy: " ·").first ?? label
+    }
+
+    private static func key(_ label: String) -> String { "binge.sportsFeed." + family(label) }
+
+    static func score(_ label: String) -> Int { UserDefaults.standard.integer(forKey: key(label)) }
+
+    static func record(_ label: String, worked: Bool) {
+        let next = min(30, max(-9, score(label) + (worked ? 3 : -1)))
+        UserDefaults.standard.set(next, forKey: key(label))
     }
 }

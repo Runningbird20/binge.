@@ -26,7 +26,12 @@ final class PlayerModel: ObservableObject {
     typealias Playback = MediaState
 
     @Published private(set) var request: PlayRequest
-    @Published private(set) var server: StreamServer?
+    @Published private(set) var server: StreamServer? {
+        didSet { if oldValue != server { serverSince = Date() } }
+    }
+    // When the current server started (its resolution counts after 30s).
+    private var serverSince = Date()
+    private var qualityRecordedAt = Date.distantPast
     @Published private(set) var playback = Playback()
     @Published private(set) var started = false
     @Published private(set) var racingNames = ""
@@ -144,6 +149,9 @@ final class PlayerModel: ObservableObject {
         return "S\(s):E\(e)"
     }
     private var web: WebEngine? { race?.winner?.web }
+    #if DEBUG
+    private var debugFroze = false
+    #endif
 
     // MARK: Races
 
@@ -480,6 +488,24 @@ final class PlayerModel: ObservableObject {
     }
 
     // Switch this player to a live game (from a game alert).
+    // Live: ◀ / ▶ change game like changing channels (the next or previous
+    // live game in the schedule's order), without going back to Sports.
+    private var flipping = false
+    func flipGame(by step: Int) {
+        guard request.isLive, !flipping else { return }
+        flipping = true
+        Task {
+            defer { flipping = false }
+            let games = await SportsFeed.load().filter { $0.isLive && !$0.streams.isEmpty }
+            guard games.count > 1 else { notice = "No other live games right now."; showHUD(); return }
+            let index = request.game.flatMap { current in games.firstIndex { $0.id == current.id } } ?? -1
+            let next = games[(index + step + games.count) % games.count]
+            notice = "Switching to \(next.title)…"
+            showHUD()
+            await switchToLive(next)
+        }
+    }
+
     func switchToLive(_ game: SportGame) async {
         let servers = await SportsFeed.servers(for: game)
         guard !servers.isEmpty else { notice = "Couldn't find a stream for \(game.title)."; return }
@@ -659,6 +685,12 @@ final class PlayerModel: ObservableObject {
 
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
+        // Learn what this server really delivers (Best quality ranks by it).
+        if started, let server, !state.paused, state.height > 0,
+           Date().timeIntervalSince(serverSince) > 30, Date().timeIntervalSince(qualityRecordedAt) > 20 {
+            qualityRecordedAt = Date()
+            QualityMemory.record(server, height: state.height)
+        }
         watchClock(state)
         // Playing, but the video's length says it's a different title.
         if started, let expected, ExpectedRuntime.isWrong(state.d, expected: expected) {
@@ -689,8 +721,9 @@ final class PlayerModel: ObservableObject {
         // but its clock stops (a network stall). -BingeKillAfter N: the page
         // goes away entirely.
         let stallAfter = UserDefaults.standard.double(forKey: "BingeStallAfter")
-        if stallAfter > 0, recoveries == 0, started, state.t > stallAfter, let modern = web as? ModernWebView {
-            modern.evaluate("var v=document.querySelector('video'); if(v&&!v.__frozen){v.__frozen=1; var t=v.currentTime; Object.defineProperty(v,'currentTime',{get:function(){return t},set:function(){}}); Object.defineProperty(v,'paused',{get:function(){return false}});}", nil)
+        if stallAfter > 0, !debugFroze, recoveries == 0, started, state.t > stallAfter, let modern = web as? ModernWebView {
+            debugFroze = true // once: the standby that takes over must not be frozen too
+            modern.evaluate("window.__bingeRun && window.__bingeRun('debugfreeze')", nil)
         }
         let killAfter = UserDefaults.standard.double(forKey: "BingeKillAfter")
         if killAfter > 0, recoveries == 0, started, state.t > killAfter {
