@@ -23,6 +23,16 @@ final class StreamRace {
     private(set) var mode: Mode
     private(set) var candidates: [Candidate] = []
     private(set) var winner: Candidate?
+    // Live games: a second server kept playing, muted and hidden, behind the
+    // one on screen. If the stream on screen stalls, the two swap at once, so
+    // a stall shows as nothing instead of a spinner.
+    private(set) var standby: Candidate?
+    private var winnerMovedAt = Date()
+    private var winnerT = -1.0
+    private var standbyMovedAt = Date.distantPast
+    private var standbyT = -1.0
+    private var lastSwap = Date.distantPast
+    private var playingAt: [String: Date] = [:]
     private(set) var startedAt = Date()
     private(set) var failed = false
     private var timer: Timer?
@@ -89,7 +99,10 @@ final class StreamRace {
         memoryObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { if self?.upgradeUntil != nil { self?.upgradeUntil = Date() } }
+            MainActor.assumeIsolated {
+                if self?.upgradeUntil != nil { self?.upgradeUntil = Date() }
+                self?.dropStandby()
+            }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -127,6 +140,7 @@ final class StreamRace {
             return
         }
         if let winner {
+            if mode == .live, standby != nil { standbyTick(winner: winner); return }
             // Warm: hold the winner on the start point, buffered and silent.
             if mode == .warm {
                 winner.web.send(.mute)
@@ -145,7 +159,10 @@ final class StreamRace {
         // Mute every contender, nudge any that loaded but wait for a click,
         // and crown the first whose clock moves. "Best quality" (movies and
         // shows) gives the others 1.5s more and takes the sharpest playing.
-        let shopping = !request.isLive && mode == .live && QualityPreference.current == .best && candidates.count > 1
+        // Best quality (preloads and live games too): wait a few seconds for
+        // the sharpest server this Apple TV has seen, then take the sharpest
+        // that's playing. Fastest start: the first to play.
+        let shopping = !keepMuted && QualityPreference.current == .best && candidates.count > 1
         for candidate in candidates {
             candidate.web.send(.mute)
             candidate.web.poll { [weak self] state in
@@ -158,16 +175,24 @@ final class StreamRace {
                 }
                 guard state.t > 0.4, !state.paused else { return }
                 guard shopping else { self.crown(candidate); return }
+                let now = Date()
                 self.playingHeights[candidate.server.id] = state.height
-                if self.firstPlayAt == nil { self.firstPlayAt = Date() }
-                if state.height >= 2000 || Date().timeIntervalSince(self.firstPlayAt!) > 1.5 {
-                    let best = self.candidates.max { (self.playingHeights[$0.server.id] ?? -1) < (self.playingHeights[$1.server.id] ?? -1) }
-                    self.crown(best ?? candidate)
-                }
+                self.playingAt[candidate.server.id] = now
+                if self.firstPlayAt == nil { self.firstPlayAt = now }
+                let waited = now.timeIntervalSince(self.firstPlayAt!)
+                let score = { (c: Candidate) in QualityMemory.quality(c.server) }
+                let top = self.candidates.map(score).max() ?? 0
+                let playing = self.candidates.filter { now.timeIntervalSince(self.playingAt[$0.server.id] ?? .distantPast) < 2 }
+                // The sharpest-known server is playing, or it's had long enough.
+                let sharpestPlaying = top > 0 && playing.contains { score($0) >= top }
+                guard sharpestPlaying || state.height >= 2000 || waited > (self.request.isLive ? 4 : 6) else { return }
+                let best = playing.max { (score($0), self.playingHeights[$0.server.id] ?? 0) < (score($1), self.playingHeights[$1.server.id] ?? 0) }
+                self.crown(best ?? candidate)
             }
         }
 
         if Date().timeIntervalSince(startedAt) > Self.giveUpSeconds {
+            if request.isLive { candidates.forEach { SportsMemory.record($0.server.name, worked: false) } }
             failed = true
             stop()
             onChange?()
@@ -177,9 +202,19 @@ final class StreamRace {
     private func upgradeTick(winner: Candidate, until: Date) {
         let others = candidates.filter { $0.server != winner.server }
         if Date() > until || others.isEmpty {
-            for other in others { Self.tearDown(other.web) }
-            candidates = [winner]
+            // Keep the sharpest runner-up that's really playing as the standby.
+            let keep = wantsStandby ? others
+                .filter { Date().timeIntervalSince(playingAt[$0.server.id] ?? .distantPast) < 2 }
+                .max { (heights[$0.server.id] ?? 0) < (heights[$1.server.id] ?? 0) } : nil
+            for other in others where other.server != keep?.server { Self.tearDown(other.web) }
+            candidates = [winner] + (keep.map { [$0] } ?? [])
+            standby = keep
+            standbyMovedAt = Date()
+            winnerMovedAt = Date()
             upgradeUntil = nil
+            #if DEBUG
+            if let keep { print("[race] standby \(keep.server.name) behind \(winner.server.name)") }
+            #endif
             return
         }
         winner.web.poll { [weak self] state in
@@ -196,8 +231,11 @@ final class StreamRace {
                 guard let self, let state, self.winner?.server == winner.server else { return }
                 if state.paused, state.ready >= 2 { other.web.send(.play) }
                 self.heights[other.server.id] = state.height
+                if !state.paused, state.t > 0.4 { self.playingAt[other.server.id] = Date() }
                 let current = self.heights[winner.server.id] ?? 0
-                guard current > 0, state.height >= Int(Double(current) * 1.3), !state.paused, state.t > 0.4 else { return }
+                let sharperKnown = QualityMemory.quality(other.server) > QualityMemory.quality(winner.server)
+                guard QualityPreference.current == .best || !self.request.isLive, !state.paused, state.t > 0.4,
+                      sharperKnown || (current > 0 && state.height >= Int(Double(current) * 1.3)) else { return }
                 // Promote the sharper stream.
                 #if DEBUG
                 print("[race] upgrade \(winner.server.name) \(current)p -> \(other.server.name) \(state.height)p")
@@ -215,6 +253,54 @@ final class StreamRace {
                 self.onChange?()
             }
         }
+    }
+
+    // The live player (not Multiview tiles, not warm preloads) keeps a standby.
+    private var wantsStandby: Bool { request.isLive && mode == .live && !keepMuted }
+
+    private func dropStandby() {
+        guard let standby else { return }
+        Self.tearDown(standby.web)
+        candidates.removeAll { $0.server == standby.server }
+        self.standby = nil
+    }
+
+    private func standbyTick(winner: Candidate) {
+        guard let standby else { return }
+        let now = Date()
+        winner.web.poll { [weak self] state in
+            guard let self, let state else { return }
+            // Moving, or paused on purpose: not a stall. (A cushion hold is a stall.)
+            if abs(state.t - self.winnerT) > 0.05 || (state.paused && !state.cushion && self.userPaused) { self.winnerMovedAt = now }
+            self.winnerT = state.t
+        }
+        standby.web.send(.mute)
+        standby.web.poll { [weak self] state in
+            guard let self, let state else { return }
+            if state.paused, !state.ended, !state.cushion { standby.web.send(.play) }
+            if abs(state.t - self.standbyT) > 0.05, !state.paused { self.standbyMovedAt = now }
+            self.standbyT = state.t
+        }
+        // The stream on screen has stalled for 2.5s and the standby is
+        // playing: swap them (picture and sound) right away.
+        guard !userPaused, now.timeIntervalSince(winnerMovedAt) > 2.5,
+              now.timeIntervalSince(standbyMovedAt) < 1.5, now.timeIntervalSince(lastSwap) > 10 else { return }
+        #if DEBUG
+        print("[race] stall on \(winner.server.name): switching to standby \(standby.server.name)")
+        #endif
+        lastSwap = now
+        standby.web.view.alpha = 1
+        winner.web.view.alpha = 0
+        winner.web.send(.mute)
+        standby.web.send(.unmute)
+        standby.web.send(.cushionOn)
+        self.winner = standby
+        self.standby = winner // it may recover; it's the backup now
+        winnerMovedAt = now
+        winnerT = -1
+        standbyMovedAt = .distantPast
+        standbyT = -1
+        onChange?()
     }
 
     private func reject(_ candidate: Candidate, length: Double) {
@@ -237,7 +323,7 @@ final class StreamRace {
         #if DEBUG
         print("[race] \(mode == .warm ? "warm" : "live") winner \(candidate.server.name) after \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s")
         #endif
-        if request.isLive, mode == .live, !keepMuted, candidates.count > 1, QualityPreference.current == .best {
+        if request.isLive, mode == .live, !keepMuted, candidates.count > 1 {
             upgradeUntil = Date().addingTimeInterval(6)
         } else {
             for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
@@ -245,6 +331,7 @@ final class StreamRace {
         }
         candidate.web.view.alpha = 1
         if !request.isLive { StreamServer.rememberWorking(candidate.server, for: request.title) }
+        else if mode == .live { SportsMemory.record(candidate.server.name, worked: true) }
         if mode == .live {
             let start = request.startAt ?? 0
             // Resume: the race started from 0, so jump to the saved second.
@@ -258,6 +345,44 @@ final class StreamRace {
 // "Best quality" (default) keeps shopping for a sharper stream for a few
 // seconds after the first one plays, movies and shows included; "Fastest
 // start" takes the first stream that plays and stops there.
+// The picture each server really delivers on this Apple TV, learned from
+// playback (the resolution after 30s, once the player has climbed to its
+// full quality; the first seconds are always low). A label's own "1080p"
+// or "HD" counts until something's been measured. Best quality ranks and
+// waits by this; nothing is hard-coded.
+enum QualityMemory {
+    private static func key(_ server: StreamServer) -> String {
+        // Movie/TV servers have stable ids ("vidrift"); a sports stream's id
+        // is its URL, so the label ("StreamFree 1080p", "PPV · ESPN") is used.
+        "binge.q." + (server.id.contains("://") ? server.name : server.id)
+    }
+
+    static func nominal(_ name: String) -> Int {
+        let lower = name.lowercased()
+        if lower.contains("4k") || lower.contains("2160") { return 2160 }
+        if lower.contains("1080") { return 1080 }
+        if lower.contains("720") || lower.contains(" hd") { return 720 }
+        if lower.contains("480") { return 480 }
+        return 0
+    }
+
+    static func learned(_ server: StreamServer) -> Int { UserDefaults.standard.integer(forKey: key(server)) }
+
+    static func quality(_ server: StreamServer) -> Int { max(learned(server), nominal(server.name)) }
+
+    // Highest wins at once; a lower reading eases it down slowly.
+    static func record(_ server: StreamServer, height: Int) {
+        guard height > 0 else { return }
+        let old = learned(server)
+        UserDefaults.standard.set(height >= old ? height : (old * 3 + height) / 4, forKey: key(server))
+    }
+
+    // Best quality first, otherwise the given order.
+    static func sorted(_ servers: [StreamServer]) -> [StreamServer] {
+        servers.enumerated().sorted { (quality($0.element), -$0.offset) > (quality($1.element), -$1.offset) }.map(\.element)
+    }
+}
+
 enum QualityPreference: String, CaseIterable, Identifiable {
     case best, fastest
     var id: String { rawValue }
