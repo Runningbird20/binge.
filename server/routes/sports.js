@@ -304,4 +304,112 @@ router.get('/espn', async (req, res) => {
   }
 });
 
+// ESPN Fantasy roster for the live score panel (utils/fantasy.js). ESPN has no
+// official API; this is the one its own site uses. Public leagues need only
+// the league id. Private leagues need the viewer's espn_s2 + SWID cookies,
+// which the browser can't attach to a cross-site request, so they come in
+// headers (never the URL, so they stay out of logs) and are never stored.
+const FANTASY_GAMES = new Set(['ffl', 'flb', 'fba', 'fhl']);
+const FANTASY_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games';
+const fantasyGameCache = new Map(); // game -> { at, season, period, proTeams }
+const fantasyCache = new Map(); // url + swid -> { at, data }
+
+async function fantasyFetch(url, cookie) {
+  const upstream = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Mozilla/5.0 (compatible; binge-fantasy/1.0)',
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  const body = await upstream.json().catch(() => null);
+  return { status: upstream.status, ok: upstream.ok, body };
+}
+
+async function fantasyGameInfo(game) {
+  const hit = fantasyGameCache.get(game);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return hit;
+  const meta = await fantasyFetch(`${FANTASY_BASE}/${game}`);
+  if (!meta.ok) throw new Error(`espn fantasy ${meta.status}`);
+  const season = meta.body?.currentSeasonId;
+  const teams = await fantasyFetch(`${FANTASY_BASE}/${game}/seasons/${season}?view=proTeamSchedules_wl`);
+  const info = {
+    at: Date.now(),
+    season,
+    period: meta.body?.currentSeason?.currentScoringPeriod?.id || null,
+    proTeams: Object.fromEntries((teams.body?.settings?.proTeams || []).map((t) => [t.id, t.abbrev])),
+  };
+  fantasyGameCache.set(game, info);
+  return info;
+}
+
+// statSourceId 0 = actual points, 1 = ESPN's projection.
+function statTotal(player, period, source) {
+  const line = (player?.stats || []).find((s) => s.scoringPeriodId === period && s.statSourceId === source);
+  return typeof line?.appliedTotal === 'number' ? Math.round(line.appliedTotal * 100) / 100 : null;
+}
+
+router.get('/fantasy/:game/:leagueId', async (req, res) => {
+  const { game, leagueId } = req.params;
+  if (!FANTASY_GAMES.has(game) || !/^[0-9]{1,12}$/.test(leagueId)) return res.status(400).json({ error: 'bad league' });
+  const s2 = String(req.get('x-espn-s2') || '').trim();
+  const swid = String(req.get('x-espn-swid') || '').trim();
+  if ((s2 && !/^[A-Za-z0-9%+/=_.-]{20,2000}$/.test(s2)) || (swid && !/^\{?[0-9A-Fa-f-]{36}\}?$/.test(swid))) {
+    return res.status(400).json({ error: 'Those cookies don’t look right. Copy espn_s2 and SWID again.' });
+  }
+  const swidBraced = swid ? `{${swid.replace(/[{}]/g, '').toUpperCase()}}` : '';
+  const cookie = s2 && swidBraced ? `espn_s2=${s2}; SWID=${swidBraced}` : '';
+
+  try {
+    const info = await fantasyGameInfo(game);
+    const params = new URLSearchParams();
+    ['mTeam', 'mRoster', 'mSettings'].forEach((view) => params.append('view', view));
+    if (info.period) params.set('scoringPeriodId', String(info.period));
+    const url = `${FANTASY_BASE}/${game}/seasons/${info.season}/segments/0/leagues/${leagueId}?${params}`;
+    const cacheKey = `${url}|${swidBraced}|${s2.slice(-12)}`;
+    let hit = fantasyCache.get(cacheKey);
+    if (!hit || Date.now() - hit.at > 20000) {
+      const upstream = await fantasyFetch(url, cookie);
+      if (upstream.status === 401 || upstream.status === 403) {
+        return res.status(401).json({ error: cookie ? 'ESPN refused these cookies. They may have expired.' : 'This league is private. Add your ESPN cookies to see it.' });
+      }
+      if (upstream.status === 404) return res.status(404).json({ error: 'No league with that id this season.' });
+      if (!upstream.ok) return res.status(502).json({ error: `ESPN Fantasy answered ${upstream.status}` });
+      hit = { at: Date.now(), data: upstream.body };
+      fantasyCache.set(cacheKey, hit);
+      if (fantasyCache.size > 100) fantasyCache.delete(fantasyCache.keys().next().value);
+    }
+
+    const data = hit.data || {};
+    const period = data.scoringPeriodId || info.period;
+    const members = new Map((data.members || []).map((m) => [m.id, m.displayName || [m.firstName, m.lastName].filter(Boolean).join(' ')]));
+    const teams = (data.teams || []).map((team) => ({
+      id: team.id,
+      name: team.name || [team.location, team.nickname].filter(Boolean).join(' ') || team.abbrev || `Team ${team.id}`,
+      abbrev: team.abbrev || '',
+      owner: members.get((team.owners || [])[0]) || '',
+      mine: Boolean(swidBraced && (team.owners || []).some((owner) => String(owner).toUpperCase() === swidBraced)),
+      roster: (team.roster?.entries || []).map((entry) => {
+        const player = entry.playerPoolEntry?.player || {};
+        const hurt = player.injuryStatus && player.injuryStatus !== 'ACTIVE' && player.injuryStatus !== 'NORMAL';
+        return {
+          id: entry.playerId,
+          name: player.fullName || '',
+          proTeamId: player.proTeamId ?? null,
+          proTeam: info.proTeams[player.proTeamId] || '',
+          positionId: player.defaultPositionId ?? null,
+          slotId: entry.lineupSlotId ?? null,
+          injury: hurt ? player.injuryStatus : null,
+          points: statTotal(player, period, 0),
+          projected: statTotal(player, period, 1),
+        };
+      }),
+    }));
+    res.set('Cache-Control', 'private, no-store').json({ game, season: info.season, period, leagueName: data.settings?.name || '', teams });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -3,6 +3,7 @@ import { Star } from '@phosphor-icons/react';
 import { followTeam, listFollowedTeams, TEAMS_EVENT, unfollowTeam } from '../utils/teams';
 import { haptic } from '../utils/haptics';
 import { findEspnEvent, fetchGameSummary } from '../utils/liveScores';
+import FantasyRoster from './FantasyRoster';
 
 const LIVE_POLL_MS = 20_000;
 const TABS = [
@@ -146,6 +147,9 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
         {tab === 'score' && !periods.length && <p className="st-ls-empty">{summary.state === 'pre' ? 'The line score appears once the game starts.' : 'No line score for this game.'}</p>}
         {tab === 'score' && summary.plays[0] && (
           <p className="st-ls-last"><span>Last play</span>{summary.plays[0].text}</p>
+        )}
+        {tab === 'score' && (
+          <FantasyRoster espnPath={event.path} gameTeams={[away, home].filter(Boolean)} live={summary.state === 'in'} />
         )}
 
         {tab === 'stats' && (
