@@ -1,4 +1,6 @@
+const crypto = require('crypto');
 const express = require('express');
+const { serviceClient, userFromRequest } = require('../middleware/supabaseAdmin');
 const router = express.Router();
 
 // Server-side proxy + cache for the three sports providers. Returns the
@@ -307,12 +309,124 @@ router.get('/espn', async (req, res) => {
 // ESPN Fantasy roster for the live score panel (utils/fantasy.js). ESPN has no
 // official API; this is the one its own site uses. Public leagues need only
 // the league id. Private leagues need the viewer's espn_s2 + SWID cookies,
-// which the browser can't attach to a cross-site request, so they come in
-// headers (never the URL, so they stay out of logs) and are never stored.
+// which the browser can't attach to a cross-site request. Signed-in viewers
+// save them once (PUT /fantasy/credentials): they're encrypted here and kept
+// in espn_credentials, which only the service role can read, and never sent
+// back to the browser. Signed-out viewers send them as headers (never the
+// URL, so they stay out of logs).
 const FANTASY_GAMES = new Set(['ffl', 'flb', 'fba', 'fhl']);
 const FANTASY_BASE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games';
 const fantasyGameCache = new Map(); // game -> { at, season, period, proTeams }
 const fantasyCache = new Map(); // url + swid -> { at, data }
+const S2_PATTERN = /^[A-Za-z0-9%+/=_.-]{20,2000}$/;
+const SWID_PATTERN = /^\{?[0-9A-Fa-f-]{36}\}?$/;
+
+// AES-256-GCM key: FANTASY_CREDENTIALS_KEY when set, else derived from the
+// service-role key (rotating that key just means people paste cookies again).
+function credentialsKey() {
+  const secret = process.env.FANTASY_CREDENTIALS_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) return null;
+  return Buffer.from(crypto.hkdfSync('sha256', secret, 'binge.', 'espn-credentials', 32));
+}
+
+function sealCredentials(value) {
+  const key = credentialsKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const data = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
+  return [iv, cipher.getAuthTag(), data].map((part) => part.toString('base64url')).join('.');
+}
+
+function openCredentials(sealed) {
+  try {
+    const [iv, tag, data] = String(sealed).split('.').map((part) => Buffer.from(part, 'base64url'));
+    const decipher = crypto.createDecipheriv('aes-256-gcm', credentialsKey(), iv);
+    decipher.setAuthTag(tag);
+    return JSON.parse(Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8'));
+  } catch {
+    return null; // key changed or row tampered with
+  }
+}
+
+function braceSwid(swid) {
+  return swid ? `{${String(swid).replace(/[{}]/g, '').toUpperCase()}}` : '';
+}
+
+// The signed-in user and the profile they're acting as (which must be one of
+// theirs). { error, status } when that fails.
+async function fantasyViewer(req, profileId) {
+  const db = serviceClient();
+  if (!db || !credentialsKey()) return { status: 503, error: 'Saving ESPN logins isn\u2019t set up on this server.' };
+  const user = await userFromRequest(req);
+  if (!user) return { status: 401, error: 'Sign in to save your ESPN login.' };
+  const profile = profileId && /^[0-9a-f-]{36}$/i.test(profileId) ? profileId : null;
+  if (profile) {
+    const { data } = await db.from('account_profiles').select('id').eq('id', profile).eq('account_id', user.id).maybeSingle();
+    if (!data) return { status: 403, error: 'That profile isn\u2019t on your account.' };
+  }
+  return { db, user, profileId: profile };
+}
+
+function credentialsRow(db, userId, profileId) {
+  const query = db.from('espn_credentials').select('id, secret, swid_hint, updated_at').eq('user_id', userId);
+  return (profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null)).maybeSingle();
+}
+
+// Whether this profile has a saved ESPN login (never the cookies themselves).
+router.get('/fantasy/credentials', async (req, res) => {
+  const viewer = await fantasyViewer(req, String(req.query.profileId || ''));
+  if (viewer.error) return res.status(viewer.status).json({ error: viewer.error });
+  const { data } = await credentialsRow(viewer.db, viewer.user.id, viewer.profileId);
+  res.set('Cache-Control', 'private, no-store').json({ saved: Boolean(data), swidHint: data?.swid_hint || null, updatedAt: data?.updated_at || null });
+});
+
+router.put('/fantasy/credentials', async (req, res) => {
+  const { profileId, s2, swid } = req.body || {};
+  const viewer = await fantasyViewer(req, String(profileId || ''));
+  if (viewer.error) return res.status(viewer.status).json({ error: viewer.error });
+  const cleanS2 = String(s2 || '').trim();
+  const cleanSwid = braceSwid(String(swid || '').trim());
+  if (!S2_PATTERN.test(cleanS2) || !SWID_PATTERN.test(cleanSwid)) {
+    return res.status(400).json({ error: 'Those cookies don\u2019t look right. Copy espn_s2 and SWID again.' });
+  }
+  const row = {
+    user_id: viewer.user.id,
+    profile_id: viewer.profileId,
+    secret: sealCredentials({ s2: cleanS2, swid: cleanSwid }),
+    swid_hint: cleanSwid.replace(/[{}]/g, '').slice(-4),
+    updated_at: new Date().toISOString(),
+  };
+  const { data: existing } = await credentialsRow(viewer.db, viewer.user.id, viewer.profileId);
+  const { error } = existing
+    ? await viewer.db.from('espn_credentials').update(row).eq('id', existing.id)
+    : await viewer.db.from('espn_credentials').insert(row);
+  if (error) return res.status(500).json({ error: 'Couldn\u2019t save your ESPN login.' });
+  res.json({ saved: true, swidHint: row.swid_hint });
+});
+
+router.delete('/fantasy/credentials', async (req, res) => {
+  const viewer = await fantasyViewer(req, String(req.query.profileId || ''));
+  if (viewer.error) return res.status(viewer.status).json({ error: viewer.error });
+  const query = viewer.db.from('espn_credentials').delete().eq('user_id', viewer.user.id);
+  await (viewer.profileId ? query.eq('profile_id', viewer.profileId) : query.is('profile_id', null));
+  res.json({ saved: false });
+});
+
+// Cookies for a roster request: headers if sent, else this profile's saved login.
+async function requestCredentials(req) {
+  const s2 = String(req.get('x-espn-s2') || '').trim();
+  const swid = String(req.get('x-espn-swid') || '').trim();
+  if (s2 || swid) {
+    if (!S2_PATTERN.test(s2) || !SWID_PATTERN.test(swid)) return { error: 'Those cookies don\u2019t look right. Copy espn_s2 and SWID again.' };
+    return { s2, swid: braceSwid(swid) };
+  }
+  if (!req.get('authorization')) return {};
+  const viewer = await fantasyViewer(req, String(req.query.profileId || ''));
+  if (viewer.error) return {};
+  const { data } = await credentialsRow(viewer.db, viewer.user.id, viewer.profileId);
+  const saved = data && openCredentials(data.secret);
+  return saved ? { s2: saved.s2, swid: saved.swid, saved: true } : {};
+}
 
 async function fantasyFetch(url, cookie) {
   const upstream = await fetch(url, {
@@ -353,13 +467,10 @@ function statTotal(player, period, source) {
 router.get('/fantasy/:game/:leagueId', async (req, res) => {
   const { game, leagueId } = req.params;
   if (!FANTASY_GAMES.has(game) || !/^[0-9]{1,12}$/.test(leagueId)) return res.status(400).json({ error: 'bad league' });
-  const s2 = String(req.get('x-espn-s2') || '').trim();
-  const swid = String(req.get('x-espn-swid') || '').trim();
-  if ((s2 && !/^[A-Za-z0-9%+/=_.-]{20,2000}$/.test(s2)) || (swid && !/^\{?[0-9A-Fa-f-]{36}\}?$/.test(swid))) {
-    return res.status(400).json({ error: 'Those cookies don’t look right. Copy espn_s2 and SWID again.' });
-  }
-  const swidBraced = swid ? `{${swid.replace(/[{}]/g, '').toUpperCase()}}` : '';
-  const cookie = s2 && swidBraced ? `espn_s2=${s2}; SWID=${swidBraced}` : '';
+  const credentials = await requestCredentials(req);
+  if (credentials.error) return res.status(400).json({ error: credentials.error });
+  const swidBraced = credentials.swid || '';
+  const cookie = credentials.s2 && swidBraced ? `espn_s2=${credentials.s2}; SWID=${swidBraced}` : '';
 
   try {
     const info = await fantasyGameInfo(game);
@@ -367,12 +478,15 @@ router.get('/fantasy/:game/:leagueId', async (req, res) => {
     ['mTeam', 'mRoster', 'mSettings'].forEach((view) => params.append('view', view));
     if (info.period) params.set('scoringPeriodId', String(info.period));
     const url = `${FANTASY_BASE}/${game}/seasons/${info.season}/segments/0/leagues/${leagueId}?${params}`;
-    const cacheKey = `${url}|${swidBraced}|${s2.slice(-12)}`;
+    const cacheKey = `${url}|${swidBraced}|${(credentials.s2 || '').slice(-12)}`;
     let hit = fantasyCache.get(cacheKey);
     if (!hit || Date.now() - hit.at > 20000) {
       const upstream = await fantasyFetch(url, cookie);
       if (upstream.status === 401 || upstream.status === 403) {
-        return res.status(401).json({ error: cookie ? 'ESPN refused these cookies. They may have expired.' : 'This league is private. Add your ESPN cookies to see it.' });
+        return res.status(401).json({
+          error: cookie ? 'ESPN refused your saved login. The cookies may have expired: paste them again.' : 'This league is private. Add your ESPN cookies to see it.',
+          needsCredentials: true,
+        });
       }
       if (upstream.status === 404) return res.status(404).json({ error: 'No league with that id this season.' });
       if (!upstream.ok) return res.status(502).json({ error: `ESPN Fantasy answered ${upstream.status}` });

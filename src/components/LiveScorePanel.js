@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Star } from '@phosphor-icons/react';
 import { followTeam, listFollowedTeams, TEAMS_EVENT, unfollowTeam } from '../utils/teams';
 import { haptic } from '../utils/haptics';
-import { findEspnEvent, fetchGameSummary } from '../utils/liveScores';
+import { findEspnEvent, fetchGameSummary, periodLabel } from '../utils/liveScores';
 import FantasyRoster from './FantasyRoster';
 import { fantasyGameFor } from '../utils/fantasy';
 
@@ -128,7 +128,7 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
         {periods.length > 0 && (
           <table className="st-ls-lines">
             <thead>
-              <tr><th scope="col"><span className="sr-only">Team</span></th>{periods.map((p) => <th key={p} scope="col">{p}</th>)}<th scope="col">T</th></tr>
+              <tr><th scope="col"><span className="sr-only">Team</span></th>{periods.map((p) => <th key={p} scope="col">{periodLabel(event.path, p, summary.seasonType)}</th>)}<th scope="col">T</th></tr>
             </thead>
             <tbody>
               {[away, home].filter(Boolean).map((team) => (
