@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ArrowRight } from '@phosphor-icons/react';
 import StarRating from './StarRating';
 import RatingInput from './RatingInput';
 import { RATING_CATEGORIES, computeStarRating, buildUniformCategories } from './RatingArtifact';
@@ -106,7 +107,7 @@ export default function RateReviewPanel({ mediaType, value, onSave, allowActions
           className="rate-review-detail-toggle"
           onClick={() => setDetailOpen((open) => !open)}
         >
-          {detailOpen ? 'Hide detailed rating' : 'Rate in detail →'}
+          {detailOpen ? 'Hide detailed rating' : <>Rate in detail <ArrowRight size={14} weight="bold" aria-hidden="true" /></>}
         </button>
       )}
 

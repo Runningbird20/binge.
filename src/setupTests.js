@@ -12,16 +12,12 @@ import '@testing-library/jest-dom';
 window.innerWidth = 1280;
 window.innerHeight = 800;
 
-// jsdom has no layout observer; components still receive their initial effect.
-global.ResizeObserver = class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
-
-beforeEach(() => {
-  try {
-    const { invalidateCachedPrefix } = require('./utils/sessionCache');
-    invalidateCachedPrefix('');
-  } catch {}
-});
+// jsdom has no layout engine, so no ResizeObserver; the row/chip scrollers
+// use it only to show or hide their ‹ › buttons. A no-op is enough here.
+if (typeof window.ResizeObserver === 'undefined') {
+  window.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

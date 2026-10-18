@@ -1,0 +1,21 @@
+// Shared build settings. Keys come from Secrets.xcconfig (gitignored,
+// generated from the repo's .env by scripts/make-secrets.sh). The build
+// still compiles without it; the app then explains what's missing.
+BINGE_SUPABASE_URL =
+BINGE_SUPABASE_KEY =
+BINGE_TMDB_KEY =
+BINGE_SITE_URL = https:/$()/binge-26.vercel.app
+// Signing. scripts/setup-signing.sh fills BINGE_TEAM and a unique
+// BINGE_BUNDLE_ID into Secrets.xcconfig after you add your Apple ID to Xcode.
+BINGE_BUNDLE_ID = com.binge.tv
+BINGE_TEAM =
+
+// App Groups need a paid Apple Developer account (free "Personal Team"
+// signing rejects them). Without them Top Shelf shows "Trending on binge.";
+// with them it also shows your Continue Watching. setup-signing.sh --paid
+// turns these on.
+BINGE_APP_ENTITLEMENTS =
+BINGE_SHELF_ENTITLEMENTS =
+
+#include? "Secrets.xcconfig"
+#include? "Signing.xcconfig"

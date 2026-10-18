@@ -1,0 +1,43 @@
+# Builds the Fire TV / Android TV app (tv-android/) and attaches the APK to
+# the run. Run it from the Actions tab ("Build TV app" → Run workflow), or it
+# runs on pushes that touch tv-android/.
+#
+# The native app needs the same public keys the website ships. Add them as
+# repo variables (Settings → Secrets and variables → Actions → Variables):
+#   REACT_APP_SUPABASE_URL, REACT_APP_SUPABASE_PUBLISHABLE_KEY (or _ANON_KEY),
+#   REACT_APP_TMDB_API_KEY, and optionally BINGE_URL (the site).
+# A CI-built APK is signed with CI's key, so it can't install over one built
+# on your Mac (uninstall first, or build locally — see tv-android/README.md).
+name: Build TV app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tv-android/**'
+      - '.github/workflows/tv-apk.yml'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      BINGE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
+      REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
+      REACT_APP_SUPABASE_PUBLISHABLE_KEY: ${{ vars.REACT_APP_SUPABASE_PUBLISHABLE_KEY }}
+      REACT_APP_SUPABASE_ANON_KEY: ${{ vars.REACT_APP_SUPABASE_ANON_KEY }}
+      REACT_APP_TMDB_API_KEY: ${{ vars.REACT_APP_TMDB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build release APK
+        run: gradle -p tv-android assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binge-tv-apk
+          path: tv-android/app/build/outputs/apk/release/app-release.apk

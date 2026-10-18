@@ -1,19 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { client } from '../utils/backendClient';
+import { isSupabaseConfigured, supabase } from '../utils/supabase';
 import { clearTokenCache, setTokenCache } from '../api';
 import {
-  getSessionProfile,
-  resolveProfile,
-  signIn as apiSignIn,
-  signOut as apiSignOut,
-  signUp as apiSignUp,
-  updatePassword as apiUpdatePassword,
-  updateProfile as apiUpdateProfile,
+  getSupabaseSessionProfile,
+  resolveSupabaseProfile,
+  signInWithSupabase,
+  signOutFromSupabase,
+  signUpWithSupabase,
+  updateSupabasePassword,
+  updateSupabaseProfile,
   fetchAccountProfiles,
   createAccountProfile,
-} from '../utils/userData';
+} from '../utils/supabaseData';
 import { normalizeUserType } from '../utils/userAccess';
-import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId } from '../utils/activeProfile';
+import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId, setActiveProfileOwnsLegacyRows } from '../utils/activeProfile';
+import { hydratePlaybackPrefs } from '../utils/streamPreferences';
+import { hydrateSettings } from '../utils/profileSettings';
 
 const AuthContext = createContext(null);
 // TEMP (UI preview only — do not commit): raw context export for the mock preview route
@@ -87,7 +89,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (!client) {
+    if (!isSupabaseConfigured || !supabase) {
       const storedUser = readStoredUser();
       if (storedUser) {
         commitUser(storedUser);
@@ -99,7 +101,7 @@ export function AuthProvider({ children }) {
       return null;
     }
 
-    const nextUser = await getSessionProfile();
+    const nextUser = await getSupabaseSessionProfile();
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
@@ -112,7 +114,7 @@ export function AuthProvider({ children }) {
       commitUser(storedUser);
       setAuthLoading(false);
 
-      if (client) {
+      if (isSupabaseConfigured && supabase) {
         void refreshUser().catch(() => {});
       }
 
@@ -125,7 +127,7 @@ export function AuthProvider({ children }) {
       try {
         const restoredUser = await refreshUser();
         if (active && !restoredUser) {
-          // getSessionProfile() resolved and confirmed there's no
+          // getSupabaseSessionProfile() resolved and confirmed there's no
           // active session — a trustworthy "logged out" signal, not a
           // failure, so the cache should be cleared too.
           writeStoredUser(null);
@@ -153,13 +155,13 @@ export function AuthProvider({ children }) {
 
     bootstrapAuth();
 
-    if (!client) {
+    if (!isSupabaseConfigured || !supabase) {
       return () => {
         active = false;
       };
     }
 
-    const { data: authListener } = client.auth.onAuthStateChange(async (_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!active) {
         return;
       }
@@ -187,7 +189,7 @@ export function AuthProvider({ children }) {
       if (session?.access_token) setTokenCache(session.access_token);
 
       try {
-        const nextUser = await resolveProfile(session.user);
+        const nextUser = await resolveSupabaseProfile(session.user);
         if (active) {
           commitUser(nextUser);
         }
@@ -204,7 +206,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       active = false;
-      authListener?.subscription?.unsubscribe?.();
+      authListener.subscription.unsubscribe();
     };
   }, [commitUser, refreshUser]);
 
@@ -226,6 +228,7 @@ export function AuthProvider({ children }) {
       const valid = list.find((p) => p.id === stored);
       const fallback = list.find((p) => p.is_default) || list[0] || null;
       const chosen = valid || fallback;
+      if (chosen) setActiveProfileOwnsLegacyRows(chosen.is_default || list.length <= 1);
       if (chosen && chosen.id !== stored) {
         setActiveProfileId(chosen.id);
       }
@@ -247,9 +250,11 @@ export function AuthProvider({ children }) {
   // profile automatically, instead of needing each of those components to
   // separately subscribe to profile changes and re-fetch.
   const switchProfile = useCallback((profileId) => {
+    const next = profiles.find((p) => p.id === profileId);
+    if (next) setActiveProfileOwnsLegacyRows(next.is_default || profiles.length <= 1);
     setActiveProfileId(profileId);
     window.location.assign('/home');
-  }, []);
+  }, [profiles]);
 
   const addProfile = useCallback(async ({ name, isKids, avatarUrl, avatarColor }) => {
     const created = await createAccountProfile({ name, isKids, avatarUrl, avatarColor });
@@ -262,14 +267,21 @@ export function AuthProvider({ children }) {
     [profiles, activeProfileIdState]
   );
 
+  // Languages and settings follow the profile across devices.
+  useEffect(() => {
+    if (!activeProfile) return;
+    hydratePlaybackPrefs(activeProfile);
+    hydrateSettings(activeProfile);
+  }, [activeProfile]);
+
   const signIn = useCallback(async (credentials) => {
-    const nextUser = await apiSignIn(credentials);
+    const nextUser = await signInWithSupabase(credentials);
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
 
   const signUp = useCallback(async (payload) => {
-    const result = await apiSignUp(payload);
+    const result = await signUpWithSupabase(payload);
     if (result.user) {
       commitUser(result.user);
     }
@@ -277,16 +289,21 @@ export function AuthProvider({ children }) {
   }, [commitUser]);
 
   const updateProfile = useCallback(async (payload) => {
-    const nextUser = await apiUpdateProfile(payload);
+    const nextUser = await updateSupabaseProfile(payload);
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
 
   const updatePassword = useCallback(async (newPassword) => {
-    await apiUpdatePassword(newPassword);
+    await updateSupabasePassword(newPassword);
   }, []);
 
   const logout = useCallback(async () => {
+    // Clear local state up front instead of waiting on the network
+    // round-trip to Supabase — the UI should leave the logged-in state
+    // immediately, not stall on server/network latency. The remote
+    // sign-out (revoking the session server-side) still happens, just
+    // in the background.
     clearTokenCache();
     clearActiveProfileId();
     setUser(null);
@@ -296,7 +313,7 @@ export function AuthProvider({ children }) {
       window.localStorage.removeItem('token');
       window.localStorage.removeItem('user');
     } catch {}
-    void apiSignOut().catch(() => {});
+    void signOutFromSupabase().catch(() => {});
   }, []);
 
   // Admin/dev privileges are account-level, but must not follow onto sub-

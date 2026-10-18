@@ -1,5 +1,5 @@
-import { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
@@ -9,6 +9,11 @@ import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
 import AdBlocker from './components/AdBlocker';
+import ErrorBoundary, { PageError } from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
+import AnnouncementBanner from './components/AnnouncementBanner';
+import KeyboardShortcuts from './components/KeyboardShortcuts';
+import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -18,8 +23,41 @@ import './theme-experiment.css';
 // mobile.css loads last: it adapts the theme-experiment design language to
 // small screens, so its overrides must win over both stylesheets above.
 import './mobile.css';
+// streaming.css (Netflix-style rows/hero/sports/player bar) builds on the
+// theme-experiment tokens, so it loads after everything else.
+import './streaming.css';
 
-const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+// Every page's code, fetched in the background once the first screen is up,
+// so moving between pages never waits on a download (no loading skeleton
+// between Home, Movies, Series, Sports, Books, Search, Profile…). Skipped
+// with data saver / Save-Data.
+const PAGE_LOADERS = [
+  () => import('./pages/Home'),
+  () => import('./pages/Movies'),
+  () => import('./pages/TVShows'),
+  () => import('./pages/Sports'),
+  () => import('./pages/Books'),
+  () => import('./pages/SearchResults'),
+  () => import('./components/MediaOverlay'),
+  () => import('./pages/Profile'),
+  () => import('./pages/History'),
+  () => import('./pages/Settings'),
+  () => import('./pages/ReleaseCalendar'),
+  () => import('./pages/Wrapped'),
+];
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    if (navigator.connection?.saveData) return;
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+    let index = 0;
+    const next = () => {
+      if (index >= PAGE_LOADERS.length) return;
+      PAGE_LOADERS[index++]().catch(() => {}).finally(() => idle(next));
+    };
+    idle(next);
+  }, { once: true });
+}
+
 const Home           = lazy(() => import('./pages/Home'));
 const Movies         = lazy(() => import('./pages/Movies'));
 const TVShows        = lazy(() => import('./pages/TVShows'));
@@ -28,9 +66,14 @@ const SearchResults  = lazy(() => import('./pages/SearchResults'));
 const ProfilePicker  = lazy(() => import('./pages/ProfilePicker'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
-const AdminUsers     = lazy(() => import('./pages/AdminUsers'));
 const Sports         = lazy(() => import('./pages/Sports'));
 const Profile        = lazy(() => import('./pages/Profile'));
+const History        = lazy(() => import('./pages/History'));
+const Wrapped        = lazy(() => import('./pages/Wrapped'));
+const Settings       = lazy(() => import('./pages/Settings'));
+const ShareTarget    = lazy(() => import('./pages/ShareTarget'));
+const ReleaseCalendar = lazy(() => import('./pages/ReleaseCalendar'));
+const ImportHistory  = lazy(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
@@ -44,10 +87,34 @@ function AppShell({ children }) {
   const location     = useLocation();
   const showBottomNav = isMobile && !!user && !NO_NAV_PATHS.includes(location.pathname);
 
+  // Search and profile move to the bottom nav on phones (thumb reach).
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-bottom-nav', showBottomNav);
+  }, [showBottomNav]);
+
   return (
     <>
-      {children}
+      <a
+        href="#main"
+        className="skip-link"
+        onClick={(event) => {
+          event.preventDefault();
+          const main = document.querySelector('main');
+          if (!main) return;
+          main.setAttribute('tabindex', '-1');
+          main.focus();
+        }}
+      >
+        Skip to content
+      </a>
+      <OfflineBanner />
+      {!NO_NAV_PATHS.includes(location.pathname) && <AnnouncementBanner />}
+      <ErrorBoundary resetKey={location.pathname} fallback={PageError}>
+        {children}
+      </ErrorBoundary>
       {showBottomNav && <BottomNav />}
+      <KeyboardShortcuts />
+      {user && <ReminderWatcher />}
     </>
   );
 }
@@ -74,7 +141,6 @@ function AppRoutes() {
     <>
       <Routes location={backgroundLocation || location}>
         <Route path="/"          element={<Landing />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/signup"    element={<Signup />} />
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
@@ -84,8 +150,15 @@ function AppRoutes() {
         <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
         <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
         <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/history"   element={<ProtectedRoute><History /></ProtectedRoute>} />
+        <Route path="/wrapped"   element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
+        <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
+        <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
+        <Route path="/import"    element={<ProtectedRoute><ImportHistory /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
-        <Route path="/admin/users"      element={<ProtectedRoute allowedUserTypes={['admin']}><AdminUsers /></ProtectedRoute>} />
+        {/* Old address for user management — now a tab in the admin panel. */}
+        <Route path="/admin/users"      element={<Navigate to="/admin?tab=users" replace />} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
         {/* TEMP (UI preview only — do not commit) */}
         <Route path="/ui-preview" element={<UIPreview />} />
@@ -112,17 +185,26 @@ function AppRoutes() {
   );
 }
 
+// Shaped like a browse page (billboard + rows) so the real page drops in
+// without everything shifting.
 function AppRouteFallback() {
   return (
     <div className="app-layout">
-      <div className="route-skeleton">
-        <div className="route-skeleton-bar skeleton-block" />
-        <div className="route-skeleton-bar route-skeleton-bar--short skeleton-block" />
-        <div className="route-skeleton-grid">
-          {Array.from({ length: 12 }, (_, i) => (
-            <div key={i} className="route-skeleton-card skeleton-block" />
-          ))}
-        </div>
+      <div className="page-content st-route-skel" aria-busy="true" aria-label="Loading">
+        <div className="st-route-skel-hero skeleton-block" />
+        {[0, 1].map((row) => (
+          <div key={row} className="st-route-skel-row">
+            <div className="st-route-skel-title skeleton-block" />
+            <div className="st-route-skel-cards">
+              {Array.from({ length: 7 }, (_, i) => (
+                <div key={i} className="st-skel">
+                  <div className="st-skel-art skeleton-block" />
+                  <div className="st-skel-line skeleton-block" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -132,8 +214,8 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <MiniPlayerProvider>
-          <BrowserRouter basename={process.env.PUBLIC_URL || '/'}>
+        <BrowserRouter>
+          <MiniPlayerProvider>
             <Suspense fallback={<AppRouteFallback />}>
               <AppShell>
                 <AdBlocker />
@@ -156,8 +238,8 @@ export default function App() {
                 },
               }}
             />
-          </BrowserRouter>
-        </MiniPlayerProvider>
+          </MiniPlayerProvider>
+        </BrowserRouter>
       </ToastProvider>
       <Analytics />
     </AuthProvider>

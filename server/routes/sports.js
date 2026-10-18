@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-// Server-side mirror of src/utils/sportsProviders.js's fetch+normalize+merge
-// logic. Kept as a separate copy (Node vs. CRA/webpack can't share a source
-// file across this repo's client/server boundary) rather than a shared
-// module — matches the existing precedent of this route already duplicating
-// the PPV.st parsing that also lives client-side as a fallback path.
+// Server-side proxy + cache for the three sports providers. Returns the
+// normalized but UNMERGED list ({ raw }); src/utils/sportsProviders.js's
+// mergeNormalized() turns it into one entry per game.
 
 const CACHE_TTL = 60 * 1000;
 let cache = null;
@@ -66,41 +64,10 @@ function isTruthy(val) {
   return val === 1 || val === true || val === '1';
 }
 
-function slugifyTeam(name) {
-  if (!name) return '';
-  const cleaned = String(name).toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  return tokens[tokens.length - 1] || cleaned;
-}
-
-function splitTeamsFromTitle(title) {
-  if (!title) return null;
-  const parts = title.split(/\s+(?:vs\.?|v\.?|@)\s+/i);
-  if (parts.length !== 2) return null;
-  return { home: parts[0].trim(), away: parts[1].trim() };
-}
-
-function dayBucket(startsAtSec) {
-  if (!startsAtSec) return 'unknown';
-  return new Date(startsAtSec * 1000).toISOString().slice(0, 10);
-}
-
-function buildMatchKey({ category, home, away, title, startsAtSec }) {
-  let teamA = home;
-  let teamB = away;
-  if (!teamA && !teamB) {
-    const split = splitTeamsFromTitle(title);
-    if (split) { teamA = split.home; teamB = split.away; }
-  }
-  const bucket = dayBucket(startsAtSec);
-  if (teamA && teamB) {
-    const pair = [slugifyTeam(teamA), slugifyTeam(teamB)].sort().join('_');
-    return `${category}|${pair}|${bucket}`;
-  }
-  const titleSlug = String(title || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
-  return `${category}|title:${titleSlug}|${bucket}`;
-}
-
+// Normalizers mirror src/utils/sportsProviders.js's fetch*Normalized
+// (Node can't import from src/). Only fetching + normalizing happens here;
+// the fuzzy one-entry-per-game merge runs client-side on this raw list, so
+// that matching logic exists in exactly one place.
 async function fetchPpvNormalized() {
   const res = await fetch('https://api.ppv.st/api/streams', {
     headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; sports-aggregator/1.0)' },
@@ -116,31 +83,30 @@ async function fetchPpvNormalized() {
     const catAlwaysLive = isTruthy(cat.always_live);
     for (const s of cat.streams || []) {
       const alwaysLive = catAlwaysLive || isTruthy(s.always_live);
-      const live     = alwaysLive || (s.starts_at <= now && s.ends_at >= now);
-      const upcoming = !alwaysLive && s.starts_at > now;
-      const ended    = !alwaysLive && s.ends_at < now;
+      const ended = !alwaysLive && s.ends_at < now;
       if (ended && !isTruthy(s.allowpaststreams)) continue;
       if (!s.iframe) continue;
-      const category = s.category_name || cat.category || 'Other';
-      // PPV.st bundles a non-sports "24/7 Streams" category (cartoon reruns,
-      // a live cow cam, etc.) alongside real events — filter the whole
-      // category out rather than naming individual shows, since it's a
-      // fixed bucket the source itself uses to mean "not a sport".
-      if (category === '24/7 Streams') continue;
-      out.push({
-        matchKey: buildMatchKey({ category, title: s.name, startsAtSec: s.starts_at }),
-        name: s.name,
-        category,
-        poster: s.poster || null,
-        tag: s.tag || null,
-        startsAt: s.starts_at,
-        endsAt: s.ends_at,
-        alwaysLive,
-        live,
-        upcoming,
-        replay: ended && isTruthy(s.allowpaststreams),
-        provider: { id: 'ppv', embedUrl: s.iframe },
-      });
+      const rawCategory = s.category_name || cat.category || 'Other';
+      // PPV.st's "24/7 Streams" bucket is non-sports (cartoon reruns etc.).
+      if (rawCategory === '24/7 Streams') continue;
+      // The main embed plus any mirrors ("substreams", each with its own tag).
+      const embeds = [{ iframe: s.iframe, tag: s.source_tag }, ...(Array.isArray(s.substreams) ? s.substreams : [])
+        .filter((sub) => sub && sub.iframe && sub.iframe !== s.iframe)
+        .map((sub) => ({ iframe: sub.iframe, tag: sub.source_tag }))];
+      for (const embed of embeds) {
+        out.push({
+          name: s.name,
+          category: rawCategory,
+          poster: s.poster || null,
+          tag: s.tag || null,
+          colors: Array.isArray(s.colors) ? s.colors : null,
+          startsAt: s.starts_at,
+          endsAt: s.ends_at,
+          alwaysLive,
+          replay: ended && isTruthy(s.allowpaststreams),
+          provider: { id: 'ppv', embedUrl: embed.iframe, label: embed.tag ? `PPV · ${embed.tag}` : 'PPV' },
+        });
+      }
     }
   }
   return out;
@@ -161,31 +127,37 @@ async function fetchStreamedNormalized() {
     if (!Array.isArray(m.sources) || m.sources.length === 0) continue;
     const category = STREAMED_CATEGORY_MAP[m.category] || 'Other';
     const startsAt = Math.floor((m.date || 0) / 1000);
-    const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
-    const endsAt = startsAt + duration;
+    const endsAt = startsAt + (DURATION_SEC[category] || DEFAULT_DURATION_SEC);
     if (startsAt && now > endsAt) continue;
-    const home = m.teams && m.teams.home ? m.teams.home.name : null;
-    const away = m.teams && m.teams.away ? m.teams.away.name : null;
-    const poster = m.poster ? `https://streamed.pk${m.poster}` : null;
-    const matchKey = buildMatchKey({ category, home, away, title: m.title, startsAtSec: startsAt });
+    const homeTeam = m.teams && m.teams.home;
+    const awayTeam = m.teams && m.teams.away;
+    const home = homeTeam ? homeTeam.name : null;
+    const away = awayTeam ? awayTeam.name : null;
+    const badge = (team) => (team && team.badge ? `https://streamed.pk/api/images/badge/${team.badge}.webp` : null);
     for (const src of m.sources) {
       out.push({
-        matchKey,
         name: m.title,
         category,
-        poster,
+        poster: m.poster ? `https://streamed.pk${m.poster}` : null,
         tag: null,
+        teams: home && away ? { home, away } : null,
+        logos: home && away ? { home: badge(homeTeam), away: badge(awayTeam) } : null,
         startsAt,
         endsAt,
-        alwaysLive: false,
-        live: now >= startsAt,
-        upcoming: now < startsAt,
+        alwaysLive: !startsAt,
         replay: false,
-        provider: { id: 'streamed', source: src.source, matchId: src.id, label: `Streamed.pk (${src.source})` },
+        provider: { id: 'streamed', source: src.source, matchId: src.id, label: `Streamed · ${src.source}` },
       });
     }
   }
   return out;
+}
+
+// "…/football/redzone1080p" → "StreamFree 1080p"; numbered when unclear.
+function streamfreeLabel(url, index, count) {
+  const quality = /(2160|1080|720|480)p/.exec(url);
+  if (quality) return `StreamFree ${quality[1] === '2160' ? '4K' : `${quality[1]}p`}`;
+  return count > 1 ? `StreamFree ${index + 1}` : 'StreamFree';
 }
 
 async function fetchStreamfreeNormalized() {
@@ -204,76 +176,35 @@ async function fetchStreamfreeNormalized() {
     const startsAt = s.match_timestamp || 0;
     const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
     const endsAt = startsAt ? startsAt + duration : now + duration;
-    if (startsAt && now > endsAt) continue;
-    if (!s.embed_url) continue;
-    out.push({
-      matchKey: buildMatchKey({
+    // Embeds appear in "sources" near game time (older API: embed_url).
+    const embeds = [...new Set([...(Array.isArray(s.sources) ? s.sources : []), s.embed_url].filter((url) => typeof url === 'string' && url.startsWith('http')))];
+    if (embeds.length === 0) continue;
+    // Channels (RedZone, Sky Sports F1, Willow) keep a timestamp from weeks
+    // ago; anything with embeds that "started" over 2 days back is one.
+    const channel = Boolean(startsAt) && now - startsAt > 2 * 86400;
+    if (startsAt && now > endsAt && !channel) continue;
+    const home = s.team1 ? s.team1.name : null;
+    const away = s.team2 ? s.team2.name : null;
+    for (const [index, embedUrl] of embeds.entries()) {
+      out.push({
+        name: s.name,
         category,
-        home: s.team1 ? s.team1.name : null,
-        away: s.team2 ? s.team2.name : null,
-        title: s.name,
-        startsAtSec: startsAt,
-      }),
-      name: s.name,
-      category,
-      poster: s.thumbnail_url || null,
-      tag: s.league || null,
-      startsAt,
-      endsAt,
-      alwaysLive: !startsAt,
-      live: !startsAt || now >= startsAt,
-      upcoming: !!startsAt && now < startsAt,
-      replay: false,
-      provider: { id: 'streamfree', embedUrl: s.embed_url },
-    });
+        poster: s.thumbnail_url || null,
+        tag: s.league || null,
+        teams: home && away ? { home, away } : null,
+        logos: home && away ? { home: (s.team1 && s.team1.logo) || null, away: (s.team2 && s.team2.logo) || null } : null,
+        startsAt: channel ? 0 : startsAt,
+        endsAt: channel ? now + duration : endsAt,
+        alwaysLive: !startsAt || channel,
+        replay: false,
+        provider: { id: 'streamfree', embedUrl, label: streamfreeLabel(embedUrl, index, embeds.length) },
+      });
+    }
   }
   return out;
 }
 
-function mergeNormalized(lists) {
-  const byKey = new Map();
-  for (const item of lists) {
-    const existing = byKey.get(item.matchKey);
-    if (!existing) {
-      byKey.set(item.matchKey, {
-        id: item.matchKey,
-        name: item.name,
-        category: item.category,
-        poster: item.poster,
-        tag: item.tag,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        alwaysLive: item.alwaysLive,
-        live: item.live,
-        upcoming: item.upcoming,
-        replay: item.replay,
-        providers: [item.provider],
-        _timingFromPpv: item.provider.id === 'ppv',
-      });
-    } else {
-      existing.providers.push(item.provider);
-      if (!existing.poster && item.poster) existing.poster = item.poster;
-      if (item.provider.id === 'ppv' && !existing._timingFromPpv) {
-        existing.startsAt = item.startsAt;
-        existing.endsAt = item.endsAt;
-        existing.alwaysLive = item.alwaysLive;
-        existing.live = item.live;
-        existing.upcoming = item.upcoming;
-        existing.replay = item.replay;
-        existing._timingFromPpv = true;
-      }
-    }
-  }
-  const merged = Array.from(byKey.values()).map(({ _timingFromPpv, ...rest }) => rest);
-  merged.sort((a, b) => {
-    if (a.live !== b.live) return a.live ? -1 : 1;
-    if (a.upcoming !== b.upcoming) return a.upcoming ? -1 : 1;
-    return a.startsAt - b.startsAt;
-  });
-  return merged;
-}
-
-async function fetchMergedStreams() {
+async function fetchRawStreams() {
   if (cache && Date.now() - cacheTime < CACHE_TTL) return cache;
 
   const [ppv, streamed, streamfree] = await Promise.allSettled([
@@ -295,7 +226,7 @@ async function fetchMergedStreams() {
     throw new Error('All sports providers unavailable');
   }
 
-  const result = { streams: mergeNormalized(lists) };
+  const result = { raw: lists };
   cache = result;
   cacheTime = Date.now();
   return result;
@@ -303,7 +234,7 @@ async function fetchMergedStreams() {
 
 router.get('/streams', async (req, res) => {
   try {
-    const result = await fetchMergedStreams();
+    const result = await fetchRawStreams();
     res.json(result);
   } catch (err) {
     console.error('[sports]', err.message);
@@ -313,10 +244,13 @@ router.get('/streams', async (req, res) => {
 
 router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
   const { source, matchId } = req.params;
+  // ?all=1: every stream of this source (numbered feeds, HD and SD,
+  // commentary languages), not just the best one.
+  const all = req.query.all === '1';
   const cacheKey = `${source}/${matchId}`;
   const cached = resolveCache.get(cacheKey);
   if (cached && Date.now() - cached.time < RESOLVE_CACHE_TTL) {
-    return res.json({ embedUrl: cached.embedUrl });
+    return res.json(all ? { embedUrl: cached.embedUrl, streams: cached.streams } : { embedUrl: cached.embedUrl });
   }
 
   try {
@@ -329,11 +263,44 @@ router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
     if (!Array.isArray(list) || list.length === 0) throw new Error('no streams for source');
     const best = list.find((s) => s.hd) || list[0];
     const embedUrl = best.embedUrl || null;
-    resolveCache.set(cacheKey, { embedUrl, time: Date.now() });
-    res.json({ embedUrl });
+    const streams = list
+      .filter((s) => typeof s.embedUrl === 'string')
+      .map((s) => ({ embedUrl: s.embedUrl, streamNo: s.streamNo, hd: Boolean(s.hd), language: s.language || '' }));
+    resolveCache.set(cacheKey, { embedUrl, streams, time: Date.now() });
+    res.json(all ? { embedUrl, streams } : { embedUrl });
   } catch (err) {
     console.error('[sports] resolve streamed', err.message);
     res.status(502).json({ error: 'Could not resolve stream', details: err.message });
+  }
+});
+
+// ESPN scores fallback for the live score panel (utils/liveScores.js calls
+// ESPN directly first). Only scoreboard/summary paths are allowed through.
+const ESPN_PATH = /^[a-z-]+\/[a-z0-9.-]+\/(scoreboard|summary|teams)$/;
+const espnCache = new Map(); // url -> { at, body }
+
+router.get('/espn', async (req, res) => {
+  const path = String(req.query.path || '');
+  if (!ESPN_PATH.test(path)) return res.status(400).json({ error: 'bad path' });
+  const params = new URLSearchParams();
+  ['dates', 'event', 'groups', 'limit'].forEach((key) => {
+    if (req.query[key] && /^[0-9]{1,12}$/.test(String(req.query[key]))) params.set(key, String(req.query[key]));
+  });
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${path}${params.toString() ? `?${params}` : ''}`;
+  const hit = espnCache.get(url);
+  if (hit && Date.now() - hit.at < 15000) return res.type('json').send(hit.body);
+  try {
+    const upstream = await fetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; binge-scores/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!upstream.ok) return res.status(upstream.status).json({ error: `espn ${upstream.status}` });
+    const body = await upstream.text();
+    espnCache.set(url, { at: Date.now(), body });
+    if (espnCache.size > 200) espnCache.delete(espnCache.keys().next().value);
+    res.set('Cache-Control', 'public, max-age=15').type('json').send(body);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
   }
 });
 

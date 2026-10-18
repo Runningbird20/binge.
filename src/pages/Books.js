@@ -1,29 +1,32 @@
-import { normalizeMediaId } from '../utils/mediaId';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { MagnifyingGlass, X } from '@phosphor-icons/react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { BookOpen, Check, DownloadSimple, FilmStrip, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import GridTitleTile from '../components/GridTitleTile';
+import BookBrowseView from '../components/BookBrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MangaTab from '../components/MangaTab';
 import RateReviewPanel from '../components/RateReviewPanel';
-import MobileBookDetail from '../components/MobileBookDetail';
+import useSwipeDismiss from '../hooks/useSwipeDismiss';
 import useDeviceType from '../hooks/useDeviceType';
+import { titleUrl } from '../components/TitleCard';
+import { findAdaptations } from '../utils/adaptations';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import PullToRefresh from '../components/PullToRefresh';
 import {
-  addWatchlistItem,
-  fetchRatingMap,
-  fetchWatchlistStatusMap,
-  updateWatchlistStatus,
-  saveRating,
-} from '../utils/userData';
-import WatchlistStatusControl from '../components/WatchlistStatusControl';
+  addSupabaseWatchlistItem,
+  fetchSupabaseRatingMap,
+  fetchSupabaseWatchlistStatusMap,
+  updateSupabaseWatchlistStatus,
+  saveSupabaseRating,
+} from '../utils/supabaseData';
 import {
-  fetchBookById,
-  fetchBooksPage,
-} from '../utils/catalog';
+  fetchSupabaseBookById,
+  fetchSupabaseBooksPage,
+  sampleSupabaseCatalogForRecommendations,
+} from '../utils/supabaseMovieCatalog';
 import {
   buildMediaGenreFacets,
   filterBooksCatalog,
@@ -32,8 +35,11 @@ import {
 import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
-import { findFreeEdition, checkFreeEditionCached } from '../utils/gutenbergApi';
+import BookReader from '../components/BookReader';
+import { findReadableEdition, findReadableEditionQueued, isFreeToRead } from '../utils/bookAccess';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
+import { backdropSrc, posterSrc } from '../utils/imageQuality';
+import { isSupabaseConfigured, supabase } from '../utils/supabase';
 
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
 // first visible row across common viewport widths so the browser starts
@@ -127,54 +133,61 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
 
   useEffect(() => {
     let cancelled = false;
-    checkFreeEditionCached(book).then((match) => {
-      if (!cancelled) setFreeEdition(Boolean(match));
+    findReadableEditionQueued(book).then((access) => {
+      if (!cancelled) setFreeEdition(isFreeToRead(access));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book.title, book.author]);
 
   return (
-    <div className="poster-tile-wrap">
-      <button
-        type="button"
-        className="poster-tile"
-        onClick={onClick}
-        title={book.title}
-        aria-label={`Open details for ${book.title}`}
-      >
-        <div className="poster-tile-frame">
-          <BookCoverImage
-            book={book}
-            imageClassName=""
-            placeholderClassName="poster-tile-placeholder"
-            priority={priority}
-          />
-          {freeEdition && (
-            <span
-              className="poster-tile-badge poster-tile-badge--free"
-              title="Free to read on Project Gutenberg or Internet Archive"
-            >
-              Free to Read
-            </span>
-          )}
-        </div>
-        <p className="poster-tile-title">{book.title}</p>
-        {book.author && <p className="poster-tile-year">{book.author}</p>}
-      </button>
+    <GridTitleTile
+      item={book}
+      mediaType="book"
+      onClick={onClick}
+      watchlistEntry={watchlistEntry}
+      addingWatchlist={addingWatchlist}
+      onAddWatchlist={onAddWatchlist}
+      onStatusChange={onStatusChange}
+      priority={priority}
+      subtitle={book.author || ''}
+      badge={freeEdition ? 'Free to read' : null}
+    />
+  );
+}
 
-      {onAddWatchlist && (
-        <div className="poster-tile-status" onClick={(event) => event.stopPropagation()}>
-          <WatchlistStatusControl
-            mediaType="book"
-            status={watchlistEntry?.status}
-            adding={addingWatchlist}
-            onAdd={() => onAddWatchlist(book)}
-            onChange={(nextStatus) => onStatusChange(book, watchlistEntry, nextStatus)}
-          />
-        </div>
-      )}
-    </div>
+// "Watch the adaptation" — movies/shows credited to this book's author.
+function Adaptations({ book }) {
+  const location = useLocation();
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    setItems(null);
+    let cancelled = false;
+    findAdaptations(book)
+      .then((result) => { if (!cancelled) setItems(result); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, [book]);
+
+  if (!items?.length) return null;
+  const background = location.state?.backgroundLocation || location;
+  return (
+    <section className="td-section" aria-label="Watch the adaptation">
+      <div className="td-section-head"><h3>Watch the adaptation</h3></div>
+      <div className="td-adapt-list td-adapt-list--screen">
+        {items.slice(0, 4).map((entry) => (
+          <Link key={`${entry.media_type}:${entry.id}`} to={titleUrl(entry)} state={{ backgroundLocation: background }} className="td-adapt td-adapt--screen">
+            <img src={backdropSrc(entry.backdrop_url, 'w780') || posterSrc(entry.poster_url)} alt="" loading="lazy" referrerPolicy="no-referrer" />
+            <span className="td-adapt-body">
+              <span className="td-adapt-title">{entry.title}</span>
+              <span className="td-muted">{[entry.media_type === 'tv_show' ? 'Series' : 'Movie', entry.year || String(entry.release_date || '').slice(0, 4)].filter(Boolean).join(' · ')}</span>
+              <span className="td-adapt-cta"><FilmStrip size={14} weight="bold" /> {entry._comingSoon ? 'Coming soon' : 'Watch now'}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -190,8 +203,11 @@ export function BookDetailsModal({
   allowActions = true,
   browseOnlyMessage = '',
 }) {
-  const { isMobile } = useDeviceType();
   const [showReader, setShowReader] = useState(false);
+  const bookOverlayRef = useRef(null);
+  const bookSheetRef = useRef(null);
+  const { isMobile: isPhone } = useDeviceType();
+  useSwipeDismiss({ enabled: isPhone && Boolean(book) && !showReader, scrollRef: bookOverlayRef, sheetRef: bookSheetRef, onDismiss: onClose });
   const [downloading, setDownloading] = useState(null);
   const [downloadError, setDownloadError] = useState('');
 
@@ -200,8 +216,14 @@ export function BookDetailsModal({
     : null;
   const isOlRecord = rawId?.startsWith('ol-') || rawId?.startsWith('ol/') || rawId?.startsWith('ol ');
   const archiveId = rawId && !isOlRecord ? rawId : null;
-  const itemUrl = book?.item_url || book?.itemUrl || null;
-  const canRead = Boolean(book?.title); // Reader searches Gutenberg if no direct source
+  // How (and whether) this book can be read, shown before anyone clicks.
+  const [access, setAccess] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setAccess(null);
+    if (book) findReadableEdition(book).then((result) => { if (!cancelled) setAccess(result); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [book]);
 
   useEffect(() => {
     if (!book) {
@@ -268,297 +290,187 @@ export function BookDetailsModal({
     await onRate(book, categories, review);
   }
 
-  // Mobile gets the dedicated native-feeling layout
-  if (isMobile) {
-    return (
-      <>
-        <MobileBookDetail
-          book={book}
-          onClose={onClose}
-          onAddToLibrary={onAddToLibrary}
-          isInLibrary={isInLibrary}
-          isAddingToLibrary={isAddingToLibrary}
-          onRate={onRate}
-          userRating={userRating}
-          detailMessage={detailMessage}
-          allowActions={allowActions}
-          browseOnlyMessage={browseOnlyMessage}
-          onReadNow={() => setShowReader(true)}
-        />
-        {showReader && (
-          <BookReader
-            book={book}
-            archiveId={archiveId}
-            itemUrl={itemUrl}
-            onClose={() => setShowReader(false)}
-          />
-        )}
-      </>
-    );
-  }
+  const cover = posterSrc(getCoverUrl(book));
+  const genres = String(book.genre || '').split(',').map((genre) => genre.trim()).filter(Boolean);
+  const synopsis = book.synopsis && book.synopsis !== 'No description available yet.' ? book.synopsis : '';
 
   return (
     <>
-      <div className="book-detail-overlay" onClick={onClose}>
+      <div className="td-overlay" onClick={onClose} ref={bookOverlayRef}>
         <div
-          className="book-detail-modal book-detail-modal-wide"
+          ref={bookSheetRef}
+          className="td-modal td-modal--book"
           role="dialog"
           aria-modal="true"
           aria-labelledby="book-detail-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            className="book-detail-close"
-            onClick={onClose}
-            aria-label="Close book details"
-          >
-            <X size={18} weight="bold" />
+          <button type="button" className="td-close" onClick={onClose} aria-label="Close book details">
+            <X size={20} weight="bold" />
           </button>
 
-          <div className="book-detail-cover-panel">
-            <div className="book-detail-cover-frame">
-              <BookCoverImage
-                book={book}
-                imageClassName="book-detail-cover-image"
-                placeholderClassName="book-detail-cover-placeholder"
-              />
+          <header className="td-book-hero">
+            {cover && <img className="td-book-hero-bg" src={cover} alt="" aria-hidden="true" referrerPolicy="no-referrer" />}
+            <div className="td-book-hero-scrim" aria-hidden="true" />
+            <div className="td-book-cover">
+              <BookCoverImage book={book} imageClassName="" placeholderClassName="st-card-placeholder" priority />
             </div>
-            {canRead && (
-              <button
-                type="button"
-                className="btn-watch book-detail-watch-now"
-                onClick={() => setShowReader(true)}
-              >
-                Read Now
-              </button>
-            )}
-          </div>
-
-          <div className="book-detail-content">
-            <p className="book-detail-kicker">Book Details</p>
-            <h2 id="book-detail-title">{book.title}</h2>
-            <p className="book-detail-author">by {book.author}</p>
-
-            <div className="book-detail-meta">
-              {book.genre && <span className="book-detail-meta-chip">{book.genre}</span>}
-              {book.year && <span className="book-detail-meta-chip">{book.year}</span>}
-            </div>
-
-            {book.synopsis && <p className="book-detail-description">{book.synopsis}</p>}
-
-            <div className="book-detail-summary">
-              <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Author</span>
-                <span>{book.author}</span>
+            <div className="td-book-head">
+              <h2 id="book-detail-title" className="td-title">{book.title}</h2>
+              {book.author && <p className="td-book-author">by {book.author}</p>}
+              {access && (
+                <p className={`td-availability td-availability--${isFreeToRead(access) ? 'free' : access.kind}`}>
+                  {isFreeToRead(access) ? `Free to read · ${access.label}`
+                    : access.kind === 'preview' ? 'Preview available · Google Books'
+                    : access.kind === 'borrow' ? 'Free to borrow · Internet Archive'
+                    : 'Not free to read online'}
+                </p>
+              )}
+              <div className="td-meta">
+                {book.year && <span>{book.year}</span>}
+                {genres.slice(0, 3).map((genre) => <span key={genre} className="td-cert">{genre}</span>)}
               </div>
-              <div className="book-detail-summary-row">
-                <span className="book-detail-summary-label">Genre</span>
-                <span>{book.genre || 'General Fiction'}</span>
-              </div>
-            </div>
-
-            <div className="rating-section">
-              <p className="rating-section-title">Your Rating</p>
-              <RateReviewPanel
-                mediaType="book"
-                value={userRating}
-                onSave={handleRatingSave}
-                allowActions={allowActions}
-                size="lg"
-                actions={allowActions && (
+              <div className="td-actions">
+                <button
+                  type="button"
+                  className={`st-btn ${access && !access.embedUrl && access.kind !== 'borrow' ? 'st-btn--secondary' : 'st-btn--primary'} td-play`}
+                  onClick={() => setShowReader(true)}
+                >
+                  <BookOpen size={20} weight="fill" />
+                  {!access ? 'Read'
+                    : access.kind === 'preview' ? (access.full ? 'Read free' : 'Read preview')
+                    : access.embedUrl ? 'Read free'
+                    : access.kind === 'borrow' ? 'Borrow free'
+                    : 'Find at your library'}
+                </button>
+                {allowActions && (
                   <button
                     type="button"
-                    className={`btn-primary book-detail-library-btn${isInLibrary ? ' is-saved' : ''}`}
+                    className={`st-btn ${isInLibrary ? 'st-btn--ghost' : 'st-btn--secondary'}`}
                     onClick={() => onAddToLibrary(book)}
                     disabled={isInLibrary || isAddingToLibrary}
                   >
+                    {isInLibrary ? <Check size={18} weight="bold" /> : <Plus size={18} weight="bold" />}
                     {isInLibrary ? 'In Your Library' : isAddingToLibrary ? 'Adding...' : 'Add to Library'}
                   </button>
                 )}
-              />
-              {!allowActions && browseOnlyMessage && (
-                <p className="book-detail-status">{browseOnlyMessage}</p>
-              )}
-              {detailMessage && <p className="book-detail-status">{detailMessage}</p>}
+              </div>
             </div>
+          </header>
 
-            {archiveId && (
-              <div className="book-detail-actions">
-                <div className="book-download-row">
-                  <span className="book-download-label">Download:</span>
+          <div className="td-body">
+            <div className="td-main">
+              {synopsis ? <p className="td-overview">{synopsis}</p> : <p className="td-muted">No synopsis yet.</p>}
+              {archiveId && (
+                <div className="td-downloads">
+                  <span className="td-muted">Download</span>
                   {['pdf', 'epub', 'txt'].map((fmt) => (
                     <button
                       key={fmt}
                       type="button"
-                      className="book-download-btn"
+                      className="st-btn st-btn--ghost"
                       onClick={() => handleDownload(fmt)}
                       disabled={downloading !== null}
                     >
-                      {downloading === fmt ? '...' : 'Download'} {fmt.toUpperCase()}
+                      <DownloadSimple size={16} weight="bold" /> {downloading === fmt ? '…' : fmt.toUpperCase()}
                     </button>
                   ))}
+                  {downloadError && <p className="book-download-error">{downloadError}</p>}
                 </div>
-                {downloadError && (
-                  <p className="book-download-error">{downloadError}</p>
-                )}
-              </div>
-            )}
+              )}
+            </div>
+            <dl className="td-facts">
+              {book.author && (<><dt>Author</dt><dd>{book.author}</dd></>)}
+              <dt>Genre</dt><dd>{genres.join(', ') || 'General Fiction'}</dd>
+              {book.year && (<><dt>Published</dt><dd>{book.year}</dd></>)}
+            </dl>
           </div>
+
+          {book.author && <BookShelfSection title={`More by ${book.author}`} load={() => fetchBooksByAuthor(book)} />}
+          <BookShelfSection title="Readers Also Enjoyed" load={() => fetchSimilarBooks(book)} />
+
+          <Adaptations book={book} />
+
+          <section className="td-section td-rate" aria-label="Your rating and review">
+            <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
+            <RateReviewPanel
+              mediaType="book"
+              value={userRating}
+              onSave={handleRatingSave}
+              allowActions={allowActions}
+              size="lg"
+            />
+            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
+            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+          </section>
         </div>
       </div>
 
-      {showReader && canRead && (
-        <BookReader
-          book={book}
-          archiveId={archiveId}
-          itemUrl={itemUrl}
-          onClose={() => setShowReader(false)}
-        />
-      )}
+      {showReader && <BookReader book={book} onClose={() => setShowReader(false)} />}
     </>
   );
 }
 
-function BookReader({ book, archiveId, itemUrl, onClose }) {
-  const iframeRef = useRef(null);
-  const modalRef  = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+async function fetchBooksByAuthor(book) {
+  if (!book.author || !isSupabaseConfigured || !supabase) return [];
+  const { data } = await supabase
+    .from('books')
+    .select('id, title, author, year, genre, cover_url')
+    .ilike('author', book.author)
+    .neq('id', book.id)
+    .not('cover_url', 'is', null)
+    .limit(12);
+  return data || [];
+}
 
-  // Resolved reading source
-  const [embedUrl,  setEmbedUrl]  = useState(archiveId ? `https://archive.org/embed/${archiveId}` : null);
-  const [source,    setSource]    = useState(archiveId ? 'archive' : null);
-  const [searching, setSearching] = useState(!archiveId);
-  const [notFound,  setNotFound]  = useState(false);
+async function fetchSimilarBooks(book) {
+  const genre = String(book.genre || '').split(',')[0].trim();
+  if (!genre) return [];
+  const rows = await sampleSupabaseCatalogForRecommendations('book', { genre, limit: 16 });
+  return rows.filter((row) => row.id !== book.id && row.cover_url).slice(0, 12);
+}
+
+// Small cover shelf inside the book modal; each cover opens that book.
+function BookShelfSection({ title, load }) {
+  const location = useLocation();
+  const [items, setItems] = useState(null);
 
   useEffect(() => {
-    if (archiveId) return; // Archive.org already resolved
-
-    // Try Gutenberg URL in itemUrl first (fast path — no search needed)
-    if (itemUrl) {
-      const gutMatch = itemUrl.match(/gutenberg\.org\/(?:ebooks\/|files\/)(\d+)/);
-      if (gutMatch) {
-        setEmbedUrl(`/api/books/gutenberg/read/${gutMatch[1]}`);
-        setSource('gutenberg');
-        setSearching(false);
-        return;
-      }
-    }
-
-    // Otherwise search both free providers for a confidently-matching
-    // public-domain edition (title + author, not just a title guess).
-    // StrictMode double-invokes this effect once in dev — use a local
-    // `cancelled` flag (reset naturally on every re-run) rather than an
-    // AbortController, so the throwaway first run's cancellation can't get
-    // misread as "no match found" and clobber the real run's result.
     let cancelled = false;
-    findFreeEdition(book)
-      .then((match) => {
-        if (cancelled) return;
-        if (match) {
-          setEmbedUrl(match.embedUrl);
-          setSource(match.source);
-          setNotFound(false);
-        } else {
-          setNotFound(true);
-        }
-      })
-      .catch(() => { if (!cancelled) setNotFound(true); })
-      .finally(() => { if (!cancelled) setSearching(false); });
-
+    load().then((rows) => { if (!cancelled) setItems(rows); }).catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title]);
 
-  useEffect(() => {
-    function onFsChange() { setIsFullscreen(Boolean(document.fullscreenElement)); }
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
-
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      (iframeRef.current || modalRef.current)?.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  }
-
-  const noteText = source === 'archive'
-    ? 'Powered by Internet Archive. Some books may require a free borrow.'
-    : source === 'gutenberg'
-    ? 'Powered by Project Gutenberg — free public domain reading.'
-    : '';
+  if (!items || items.length === 0) return null;
+  const background = location.state?.backgroundLocation || location;
 
   return (
-    <div className="player-overlay" onClick={onClose}>
-      <div className="player-modal" ref={modalRef} onClick={(event) => event.stopPropagation()}>
-        <div className="player-header">
-          <div className="player-title">
-            <span>Book</span>
-            <div>
-              <strong>{book.title}</strong>
-              {book.author && <span className="player-year">by {book.author}</span>}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.4rem' }}>
-            {embedUrl && (
-              <button className="player-close" onClick={toggleFullscreen}
-                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-                {isFullscreen ? '⊠' : '⊞'}
-              </button>
-            )}
-            <button className="player-close" onClick={onClose} title="Close"><X size={16} weight="bold" /></button>
-          </div>
-        </div>
-
-        <div className="player-frame-wrap">
-          {searching ? (
-            <div className="book-reader-state">
-              <div className="manga-reader-spinner" />
-              <p>Finding a readable version of <em>{book.title}</em>…</p>
-            </div>
-          ) : notFound ? (
-            <div className="book-reader-state">
-              <p style={{ fontSize: '2.5rem', margin: 0 }}>📚</p>
-              <p style={{ fontWeight: 600, marginTop: '0.75rem' }}>
-                No free online version found
-              </p>
-              <p style={{ color: '#888', fontSize: '0.87rem', maxWidth: '340px', textAlign: 'center' }}>
-                <strong>{book.title}</strong> may be under copyright or not yet
-                digitized by Project Gutenberg or the Internet Archive.
-              </p>
-              {itemUrl && (
-                <a href={itemUrl} target="_blank" rel="noopener noreferrer"
-                  className="btn-watch"
-                  style={{ display: 'inline-block', marginTop: '1.25rem' }}>
-                  View on Goodreads ↗
-                </a>
-              )}
-            </div>
-          ) : (
-            <iframe
-              ref={iframeRef}
-              src={embedUrl || ''}
-              className="player-frame"
-              allowFullScreen
-              allow="fullscreen"
-              title={`Read ${book.title}`}
-              style={{ minHeight: '600px' }}
-            />
-          )}
-        </div>
-
-        {noteText && !searching && !notFound && (
-          <p className="player-note">{noteText}</p>
-        )}
+    <section className="td-section" aria-label={title}>
+      <div className="td-section-head"><h3>{title}</h3></div>
+      <div className="td-shelf">
+        {items.map((entry) => (
+          <Link
+            key={entry.id}
+            to={`/book/${entry.id}`}
+            state={{ backgroundLocation: background }}
+            replace={Boolean(location.state?.backgroundLocation)}
+            className="td-shelf-item"
+            title={entry.title}
+          >
+            <img src={posterSrc(getCoverUrl(entry))} alt="" loading="lazy" referrerPolicy="no-referrer" />
+            <span>{entry.title}</span>
+          </Link>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
 
 export default function Books() {
   const [searchParams] = useSearchParams();
-  const openId = normalizeMediaId(searchParams.get('open'));
+  const openId = Number(searchParams.get('open'));
+  const showGrid = searchParams.get('view') === 'all';
   const [activeTab, setActiveTab] = useState('books');
 
   const [books, setBooks] = useState([]);
@@ -581,7 +493,7 @@ export default function Books() {
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const requestTokenRef = useRef(0);
-  const sourceRef = useRef({ mode: 'catalog', totalPages: 1, nextPage: 2 });
+  const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
   const loadMoreRef = useRef(null);
 
@@ -609,7 +521,7 @@ export default function Books() {
     };
   }, []);
 
-  const fetchCatalogWindows = useCallback(async ({ totalCount }) => {
+  const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const totalWindowPages = Math.max(1, Math.ceil(totalCount / windowSize));
     const pages = Array.from({ length: WINDOWS_PER_BATCH }, () => (
@@ -617,7 +529,7 @@ export default function Books() {
     ));
 
     const results = await Promise.all(pages.map((page) => (
-      fetchBooksPage({
+      fetchSupabaseBooksPage({
         page,
         pageSize: windowSize,
         search: searchTerm,
@@ -630,9 +542,9 @@ export default function Books() {
   }, [genreValues, searchTerm]);
 
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
-  const fetchCatalogSortedPage = useCallback(async (page) => {
+  const fetchSupabaseSortedPage = useCallback(async (page) => {
     const { sortOrder } = sortModeToQuery(sortMode);
-    const result = await fetchBooksPage({
+    const result = await fetchSupabaseBooksPage({
       page,
       pageSize: API_PAGE_SIZE,
       search: searchTerm,
@@ -654,7 +566,7 @@ export default function Books() {
     });
 
     // The legacy API only supports a single genre substring; this tier only
-    // runs when the catalog API is unreachable, so an approximate match is fine.
+    // runs when Supabase is unreachable, so an approximate match is fine.
     if (genreValues[0]) params.set('genre', genreValues[0]);
     if (searchTerm) params.set('search', searchTerm);
 
@@ -721,7 +633,7 @@ export default function Books() {
     async function loadCatalog() {
       if (sortMode !== 'featured') {
         try {
-          const page = await fetchCatalogSortedPage(1);
+          const page = await fetchSupabaseSortedPage(1);
           const totalCount = Number(page.total) || 0;
           if (totalCount === 0 && !fetchHadFilter) {
             throw new Error('Book catalog is empty');
@@ -730,7 +642,7 @@ export default function Books() {
           if (cancelled || requestTokenRef.current !== requestToken) return;
 
           adoptGenres(page.facets?.genres);
-          sourceRef.current = { mode: 'catalog-sorted', nextPage: 2 };
+          sourceRef.current = { mode: 'supabase-sorted', nextPage: 2 };
           setTotal(totalCount);
           setBooks(page.items);
           setLoading(false);
@@ -741,7 +653,7 @@ export default function Books() {
         }
       } else {
       try {
-        const probe = await fetchBooksPage({
+        const probe = await fetchSupabaseBooksPage({
           page: 1,
           pageSize: 1,
           search: searchTerm,
@@ -756,7 +668,7 @@ export default function Books() {
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         adoptGenres(probe?.facets?.genres);
-        sourceRef.current = { mode: 'catalog' };
+        sourceRef.current = { mode: 'supabase' };
         setTotal(totalCount);
 
         if (totalCount === 0) {
@@ -766,7 +678,7 @@ export default function Books() {
           return;
         }
 
-        const firstBatch = await fetchCatalogWindows({ totalCount });
+        const firstBatch = await fetchSupabaseWindows({ totalCount });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         const nextBooks = appendUniqueBooks([], firstBatch);
@@ -832,7 +744,7 @@ export default function Books() {
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, sortMode, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage, refreshKey]);
+  }, [genreValues, searchTerm, sortMode, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -840,8 +752,8 @@ export default function Books() {
     setLoadingMore(true);
 
     try {
-      if (source.mode === 'catalog') {
-        const batch = await fetchCatalogWindows({ totalCount: total });
+      if (source.mode === 'supabase') {
+        const batch = await fetchSupabaseWindows({ totalCount: total });
         if (requestTokenRef.current !== requestToken) return;
 
         setBooks((current) => {
@@ -854,8 +766,8 @@ export default function Books() {
         return;
       }
 
-      if (source.mode === 'catalog-sorted') {
-        const page = await fetchCatalogSortedPage(source.nextPage);
+      if (source.mode === 'supabase-sorted') {
+        const page = await fetchSupabaseSortedPage(source.nextPage);
         if (requestTokenRef.current !== requestToken) return;
 
         sourceRef.current = { ...source, nextPage: source.nextPage + 1 };
@@ -884,7 +796,7 @@ export default function Books() {
         setLoadingMore(false);
       }
     }
-  }, [total, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage]);
+  }, [total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
 
   const visibleBooks = books.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -937,7 +849,7 @@ export default function Books() {
 
     async function loadOpenBook() {
       try {
-        const book = await fetchBookById(openId);
+        const book = await fetchSupabaseBookById(openId);
         if (!cancelled && book?.id) {
           setSelectedBook(book);
           setSelectedBookBrowseOnly(false);
@@ -983,7 +895,7 @@ export default function Books() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchWatchlistStatusMap('book')
+    fetchSupabaseWatchlistStatusMap('book')
       .then((map) => { if (!cancelled) setWatchlistStatusMap(map); })
       .catch(() => {});
 
@@ -993,7 +905,7 @@ export default function Books() {
   }, []);
 
   useEffect(() => {
-    fetchRatingMap('book')
+    fetchSupabaseRatingMap('book')
       .then(setUserRatings)
       .catch(() => {});
   }, []);
@@ -1013,7 +925,7 @@ export default function Books() {
 
   async function handleRate(book, categories, review) {
     try {
-      await saveRating({ mediaType: 'book', mediaId: book.id, categories, media: book, review });
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book, review });
       setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
@@ -1026,7 +938,7 @@ export default function Books() {
     setAddingBookId(book.id);
 
     try {
-      const saved = await addWatchlistItem({
+      const saved = await addSupabaseWatchlistItem({
         mediaType: 'book',
         mediaId: book.id,
         status: 'plan_to_read',
@@ -1053,7 +965,7 @@ export default function Books() {
   function handleQuickStatusChange(book, entry, nextStatus) {
     setWatchlistStatusMap((current) => ({ ...current, [book.id]: { ...current[book.id], status: nextStatus } }));
     if (!entry?.id) return;
-    updateWatchlistStatus(entry.id, nextStatus).catch(() => {
+    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
       setWatchlistStatusMap((current) => ({ ...current, [book.id]: entry }));
     });
   }
@@ -1072,31 +984,39 @@ export default function Books() {
       <Navbar />
       <main className="page-content curated-page">
         <PullToRefresh onRefresh={activeTab === 'books' ? handleRefresh : (() => {})}>
-        <div className="catalog-header">
-          <h1 className="catalog-title">{activeTab === 'manga' ? 'Manga & Comics' : 'Books'}</h1>
-        </div>
-
-        <div className="books-tab-bar">
+        <div className="st-tabs st-reading-tabs" role="tablist" aria-label="Reading">
           <button
             type="button"
-            className={`books-tab ${activeTab === 'books' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'books'}
+            className={`st-tab${activeTab === 'books' ? ' active' : ''}`}
             onClick={() => setActiveTab('books')}
           >
-            📚 Books
+            Books
           </button>
           <button
             type="button"
-            className={`books-tab ${activeTab === 'manga' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'manga'}
+            className={`st-tab${activeTab === 'manga' ? ' active' : ''}`}
             onClick={() => setActiveTab('manga')}
           >
-            📖 Manga & Comics
+            Manga &amp; Comics
           </button>
         </div>
 
         {activeTab === 'manga' && <MangaTab />}
 
-        {activeTab === 'books' && (
+        {activeTab === 'books' && !showGrid && <BookBrowseView refreshKey={refreshKey} />}
+
+        {activeTab === 'books' && showGrid && (
           <div className="catalog-view">
+            <header className="st-page-head">
+              <div>
+                <h1 className="st-page-title">Books</h1>
+              </div>
+              <Link className="st-btn st-btn--ghost" to="/books">Back to highlights</Link>
+            </header>
             <div className="catalog-search-row">
               <div className="catalog-search-bar">
                 <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
@@ -1132,6 +1052,7 @@ export default function Books() {
               <button
                 type="button"
                 className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+                aria-pressed={activeLabel === ''}
                 onClick={() => setActiveLabel('')}
               >
                 Featured
@@ -1141,6 +1062,7 @@ export default function Books() {
                   key={group.label}
                   type="button"
                   className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+                  aria-pressed={activeLabel === group.label}
                   onClick={() => setActiveLabel(group.label)}
                 >
                   {group.label}
@@ -1158,7 +1080,7 @@ export default function Books() {
               </div>
             ) : (
               <>
-                <div className="poster-grid">
+                <div className="st-grid">
                   {visibleBooks.map((book, index) => (
                     <BookPosterTile
                       key={book.id}

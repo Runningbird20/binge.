@@ -1,0 +1,397 @@
+import Foundation
+
+// The same three feeds the website's Sports page uses (see
+// src/utils/sportsProviders.js), fetched directly (the site's
+// /api/sports/streams proxy is just a cache in front of them). Entries are
+// merged into one game each; each game's feeds become the servers raced by
+// the player, exactly like movie servers.
+struct SportStream: Hashable {
+    enum Source: Hashable {
+        case embed(URL)
+        case streamed(source: String, id: String)
+    }
+    let label: String
+    let source: Source
+
+    // Admin switches (server_config, same keys as the website's
+    // sportsSwitchKeys): sports:ppv, sports:streamfree, sports:streamed and
+    // sports:streamed:<source>.
+    var switchKeys: [String] {
+        switch source {
+        case .streamed(let source, _): return ["sports:streamed", "sports:streamed:\(source)"]
+        case .embed: return [label.hasPrefix("PPV") ? "sports:ppv" : "sports:streamfree"]
+        }
+    }
+}
+
+struct SportGame: Identifiable, Hashable {
+    let id: String
+    var title: String
+    var category: String
+    var startsAt: Date?
+    var endsAt: Date?
+    var alwaysLive: Bool
+    var teams: (home: String, away: String)?
+    var logos: (home: URL?, away: URL?)?
+    var poster: URL?
+    var streams: [SportStream]
+    var tag: String? = nil
+    var colors: [String]? = nil
+
+    static func == (lhs: SportGame, rhs: SportGame) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+    var isLive: Bool {
+        if alwaysLive { return true }
+        guard let startsAt else { return false }
+        let now = Date()
+        return startsAt <= now.addingTimeInterval(10 * 60) && now <= (endsAt ?? startsAt.addingTimeInterval(3 * 3600))
+    }
+
+    // Team nicknames ("celtics", "cavaliers"): what matching keys on.
+    var teamTokens: Set<String>? { SportsFeed.tokens(teams: teams, name: title) }
+
+    var is247: Bool { alwaysLive || (tag?.contains("24/7") ?? false) }
+
+    // Same rules as the site's inferLeague (sportsProviders.js).
+    var league: String {
+        if let tag, !tag.contains("24/7"), !tag.isEmpty { return tag }
+        if is247 { return "24/7 Channels" }
+        if let tokens = teamTokens {
+            let inSet = { (set: Set<String>) in tokens.allSatisfy { set.contains($0) } }
+            switch category {
+            case "American Football": return inSet(SportsFeed.nflTeams) ? "NFL" : "College Football"
+            case "Basketball" where inSet(SportsFeed.nbaTeams): return "NBA"
+            case "Hockey" where inSet(SportsFeed.nhlTeams): return "NHL"
+            case "Baseball": return "MLB"
+            default: break
+            }
+        }
+        return category
+    }
+
+    var icon: String { SportsFeed.icons[category] ?? "trophy.fill" }
+}
+
+enum SportsFeed {
+    // SF Symbols, one icon family for every sport.
+    static let icons: [String: String] = [
+        "American Football": "football.fill", "Australian Football": "figure.australian.football", "Basketball": "basketball.fill",
+        "Soccer": "soccerball", "Baseball": "baseball.fill", "Hockey": "hockey.puck.fill", "Combat Sports": "figure.boxing",
+        "Tennis": "tennisball.fill", "Golf": "figure.golf", "Racing": "flag.checkered", "Rugby": "figure.rugby",
+        "Cricket": "cricket.ball.fill", "Volleyball": "volleyball.fill", "Darts": "target",
+    ]
+    static let nflTeams: Set<String> = ["cardinals", "falcons", "ravens", "bills", "panthers", "bears", "bengals", "browns", "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars", "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots", "saints", "giants", "jets", "eagles", "steelers", "49ers", "seahawks", "buccaneers", "titans", "commanders"]
+    static let nbaTeams: Set<String> = ["hawks", "celtics", "nets", "hornets", "bulls", "cavaliers", "mavericks", "nuggets", "pistons", "warriors", "rockets", "pacers", "clippers", "lakers", "grizzlies", "heat", "bucks", "timberwolves", "pelicans", "knicks", "thunder", "magic", "76ers", "suns", "blazers", "kings", "spurs", "raptors", "jazz", "wizards"]
+    static let nhlTeams: Set<String> = ["ducks", "bruins", "sabres", "flames", "hurricanes", "blackhawks", "avalanche", "jackets", "stars", "wings", "oilers", "panthers", "kings", "wild", "canadiens", "predators", "devils", "islanders", "rangers", "senators", "flyers", "penguins", "sharks", "kraken", "blues", "lightning", "leafs", "canucks", "knights", "capitals", "jets", "mammoth"]
+    // PPV's own category names → the site's.
+    private static let ppvCategories: [String: String] = ["Ice Hockey": "Hockey", "Football": "Soccer", "MMA": "Combat Sports", "Boxing": "Combat Sports", "Wrestling": "Combat Sports", "Motorsport": "Racing", "Motorsports": "Racing"]
+
+    private static let durations: [String: Double] = [
+        "Basketball": 3, "Soccer": 2.25, "American Football": 3.5, "Baseball": 3.5, "Hockey": 3,
+        "Combat Sports": 5, "Tennis": 3, "Golf": 5, "Racing": 3, "Rugby": 2, "Cricket": 8,
+    ]
+    private static let streamedCategories: [String: String] = [
+        "basketball": "Basketball", "football": "Soccer", "american-football": "American Football",
+        "hockey": "Hockey", "baseball": "Baseball", "motor-sports": "Racing", "fight": "Combat Sports",
+        "tennis": "Tennis", "rugby": "Rugby", "golf": "Golf", "cricket": "Cricket",
+    ]
+    private static let streamfreeCategories: [String: String] = [
+        "soccer": "Soccer", "basketball": "Basketball", "hockey": "Hockey", "combat": "Combat Sports",
+        "baseball": "Baseball", "football": "American Football", "racing": "Racing", "tennis": "Tennis", "cricket": "Cricket",
+    ]
+
+    // MARK: Loading
+
+    static func load() async -> [SportGame] {
+        async let ppv = fetchPPV()
+        async let streamed = fetchStreamed()
+        async let streamfree = fetchStreamFree()
+        let disabled = await ServerSwitches.shared.disabledServers()
+        // Feeds an admin switched off go before merging; a game stays if
+        // another feed still carries it.
+        let all = await (ppv + streamed + streamfree).compactMap { game -> SportGame? in
+            guard !disabled.isEmpty else { return game }
+            var game = game
+            game.streams = game.streams.filter { !$0.switchKeys.contains(where: disabled.contains) }
+            return game.streams.isEmpty ? nil : game
+        }
+        return merge(all).sorted { ($0.isLive ? 0 : 1, $0.startsAt ?? .distantFuture) < ($1.isLive ? 0 : 1, $1.startsAt ?? .distantFuture) }
+    }
+
+    private static func json(_ url: String) async -> Any? {
+        var request = URLRequest(url: URL(string: url)!, timeoutInterval: 10)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (AppleTV) binge.", forHTTPHeaderField: "User-Agent")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func date(_ seconds: Any?) -> Date? {
+        guard let value = (seconds as? NSNumber)?.doubleValue, value > 0 else { return nil }
+        return Date(timeIntervalSince1970: value > 1e11 ? value / 1000 : value)
+    }
+
+    private static func truthy(_ value: Any?) -> Bool {
+        if let n = value as? NSNumber { return n.boolValue }
+        if let s = value as? String { return s == "1" || s == "true" }
+        return false
+    }
+
+    private static func fetchPPV() async -> [SportGame] {
+        guard let root = await json("https://api.ppv.st/api/streams") as? [String: Any],
+              let categories = root["streams"] as? [[String: Any]] else { return [] }
+        let now = Date()
+        var out: [SportGame] = []
+        for category in categories {
+            let catLive = truthy(category["always_live"])
+            for s in category["streams"] as? [[String: Any]] ?? [] {
+                guard let iframe = (s["iframe"] as? String).flatMap(URL.init(string:)) else { continue }
+                let rawName = s["category_name"] as? String ?? category["category"] as? String ?? "Other"
+                if rawName == "24/7 Streams" { continue }
+                let name = ppvCategories[rawName] ?? rawName
+                let alwaysLive = catLive || truthy(s["always_live"])
+                let ends = date(s["ends_at"])
+                if !alwaysLive, let ends, ends < now { continue }
+                let tag = s["source_tag"] as? String
+                // The main embed plus any mirrors ("substreams").
+                var streams = [SportStream(label: tag.map { "PPV · \($0)" } ?? "PPV", source: .embed(iframe))]
+                for sub in s["substreams"] as? [[String: Any]] ?? [] {
+                    guard let url = (sub["iframe"] as? String).flatMap(URL.init(string:)), url != iframe else { continue }
+                    let subTag = sub["source_tag"] as? String
+                    streams.append(SportStream(label: subTag.map { "PPV · \($0)" } ?? "PPV mirror", source: .embed(url)))
+                }
+                out.append(SportGame(
+                    id: "ppv:\(s["id"] ?? s["name"] ?? UUID().uuidString)", title: s["name"] as? String ?? "Live",
+                    category: name, startsAt: date(s["starts_at"]), endsAt: ends, alwaysLive: alwaysLive,
+                    teams: nil, logos: nil, poster: (s["poster"] as? String).flatMap(URL.init(string:)),
+                    streams: streams,
+                    tag: s["tag"] as? String, colors: s["colors"] as? [String]))
+            }
+        }
+        return out
+    }
+
+    private static func fetchStreamed() async -> [SportGame] {
+        guard let matches = await json("https://streamed.pk/api/matches/all") as? [[String: Any]] else { return [] }
+        let now = Date()
+        var out: [SportGame] = []
+        for m in matches {
+            guard let sources = m["sources"] as? [[String: Any]], !sources.isEmpty else { continue }
+            let category = streamedCategories[m["category"] as? String ?? ""] ?? "Other"
+            let starts = date(m["date"])
+            let ends = starts?.addingTimeInterval((durations[category] ?? 3) * 3600)
+            if let ends, now > ends { continue }
+            let teams = m["teams"] as? [String: Any]
+            let home = teams?["home"] as? [String: Any], away = teams?["away"] as? [String: Any]
+            let badge = { (team: [String: Any]?) -> URL? in
+                (team?["badge"] as? String).flatMap { URL(string: "https://streamed.pk/api/images/badge/\($0).webp") }
+            }
+            let names = (home?["name"] as? String).flatMap { h in (away?["name"] as? String).map { (home: h, away: $0) } }
+            out.append(SportGame(
+                id: "streamed:\(m["id"] ?? UUID().uuidString)", title: m["title"] as? String ?? "Live",
+                category: category, startsAt: starts, endsAt: ends, alwaysLive: starts == nil,
+                teams: names, logos: names == nil ? nil : (badge(home), badge(away)),
+                poster: (m["poster"] as? String).flatMap { URL(string: "https://streamed.pk\($0)") },
+                streams: sources.compactMap { src in
+                    guard let source = src["source"] as? String, let id = src["id"] as? String else { return nil }
+                    return SportStream(label: "Streamed · \(source)", source: .streamed(source: source, id: id))
+                }))
+        }
+        return out
+    }
+
+    private static func fetchStreamFree() async -> [SportGame] {
+        guard let root = await json("https://streamfree.top/api/v1/streams") as? [String: Any],
+              let streams = root["streams"] as? [[String: Any]] else { return [] }
+        let now = Date()
+        var out: [SportGame] = []
+        for s in streams {
+            // Embeds appear in "sources" near game time (older API: embed_url).
+            var seen = Set<String>()
+            let embeds = ((s["sources"] as? [String] ?? []) + [s["embed_url"] as? String].compactMap { $0 })
+                .filter { $0.hasPrefix("http") && seen.insert($0).inserted }
+                .compactMap(URL.init(string:))
+            guard !embeds.isEmpty else { continue }
+            let category = streamfreeCategories[s["category"] as? String ?? ""] ?? "Other"
+            var starts = date(s["match_timestamp"])
+            var ends = starts?.addingTimeInterval((durations[category] ?? 3) * 3600)
+            // Channels (RedZone, Sky Sports F1, Willow) keep a weeks-old
+            // timestamp; with embeds and 2+ days "in", it's a channel.
+            let channel = starts.map { now.timeIntervalSince($0) > 2 * 86400 } ?? false
+            if channel { starts = nil; ends = nil }
+            if let ends, now > ends { continue }
+            let t1 = s["team1"] as? [String: Any], t2 = s["team2"] as? [String: Any]
+            let names = (t1?["name"] as? String).flatMap { h in (t2?["name"] as? String).map { (home: h, away: $0) } }
+            out.append(SportGame(
+                id: "streamfree:\(s["id"] ?? s["name"] ?? UUID().uuidString)", title: s["name"] as? String ?? "Live",
+                category: category, startsAt: starts, endsAt: ends, alwaysLive: starts == nil,
+                teams: names,
+                logos: names == nil ? nil : ((t1?["logo"] as? String).flatMap(URL.init(string:)), (t2?["logo"] as? String).flatMap(URL.init(string:))),
+                poster: (s["thumbnail_url"] as? String).flatMap(URL.init(string:)),
+                streams: embeds.enumerated().map { index, url in
+                    SportStream(label: Self.streamfreeLabel(url, index: index, count: embeds.count), source: .embed(url))
+                },
+                tag: s["league"] as? String))
+        }
+        return out
+    }
+
+    // "…/football/redzone1080p" → "StreamFree 1080p" (same as the website).
+    static func streamfreeLabel(_ url: URL, index: Int, count: Int) -> String {
+        if let match = url.absoluteString.range(of: #"(2160|1080|720|480)p"#, options: .regularExpression) {
+            let quality = url.absoluteString[match]
+            return "StreamFree " + (quality == "2160p" ? "4K" : String(quality))
+        }
+        return count > 1 ? "StreamFree \(index + 1)" : "StreamFree"
+    }
+
+    // MARK: Merging (one entry per game)
+
+    static func tokens(teams: (home: String, away: String)?, name: String) -> Set<String>? {
+        func nickname(_ team: String) -> String? {
+            let words = team.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+            return words.last
+        }
+        if let teams, let a = nickname(teams.home), let b = nickname(teams.away) { return [a, b] }
+        let lower = " " + name.lowercased() + " "
+        for separator in [" vs. ", " vs ", " v ", " at ", " @ ", " - "] where lower.contains(separator) {
+            let parts = lower.components(separatedBy: separator)
+            guard parts.count == 2 else { continue }
+            let left = parts[0].components(separatedBy: ":").last ?? parts[0]
+            if let a = nickname(left), let b = nickname(parts[1]) { return [a, b] }
+        }
+        return nil
+    }
+
+    // Each side of a matchup as a set of distinctive words ("iowa", "cyclones"),
+    // from the feed's team names or the title ("A vs B", "A at B", "A @ B").
+    private static let filler: Set<String> = ["state", "university", "univ", "college", "fc", "cf", "sc", "afc", "club", "the", "of", "de", "united", "city", "real", "st", "u"]
+    private static func words(_ text: String) -> Set<String> {
+        Set(text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { $0.count > 1 && !filler.contains($0) })
+    }
+
+    static func sides(teams: (home: String, away: String)?, name: String) -> [Set<String>]? {
+        if let teams {
+            let pair = [words(teams.home), words(teams.away)]
+            return pair.allSatisfy { !$0.isEmpty } ? pair : nil
+        }
+        let lower = " " + name.lowercased() + " "
+        for separator in [" vs. ", " vs ", " v ", " at ", " @ ", " - "] {
+            let parts = lower.components(separatedBy: separator)
+            guard parts.count == 2 else { continue }
+            let left = words(parts[0].components(separatedBy: ":").last ?? parts[0]), right = words(parts[1])
+            if !left.isEmpty && !right.isEmpty { return [left, right] }
+        }
+        return nil
+    }
+
+    // Same matchup when each side of one shares a word with a side of the
+    // other, in either order ("Iowa State Cyclones at BYU Cougars" = "BYU vs Iowa State").
+    static func sameMatchup(_ a: [Set<String>], _ b: [Set<String>]) -> Bool {
+        (!a[0].isDisjoint(with: b[0]) && !a[1].isDisjoint(with: b[1])) || (!a[0].isDisjoint(with: b[1]) && !a[1].isDisjoint(with: b[0]))
+    }
+
+    private static func merge(_ entries: [SportGame]) -> [SportGame] {
+        var games: [SportGame] = []
+        for entry in entries {
+            let tokens = entry.teamTokens
+            let key = entry.title.lowercased().filter { $0.isLetter || $0.isNumber }
+            if let index = games.firstIndex(where: { game in
+                let closeInTime: Bool = {
+                    guard let a = game.startsAt, let b = entry.startsAt else { return true }
+                    return abs(a.timeIntervalSince(b)) <= 3 * 3600
+                }()
+                guard closeInTime else { return false }
+                if let tokens, let other = game.teamTokens, tokens == other { return true }
+                if let sa = sides(teams: game.teams, name: game.title), let sb = sides(teams: entry.teams, name: entry.title) {
+                    return sameMatchup(sa, sb)
+                }
+                return game.title.lowercased().filter { $0.isLetter || $0.isNumber } == key && closeInTime
+            }) {
+                var game = games[index]
+                for stream in entry.streams where !game.streams.contains(stream) { game.streams.append(stream) }
+                if game.teams == nil { game.teams = entry.teams }
+                if game.logos == nil { game.logos = entry.logos }
+                if game.poster == nil { game.poster = entry.poster }
+                if game.tag == nil { game.tag = entry.tag }
+                if game.colors == nil { game.colors = entry.colors }
+                if game.category == "Other" { game.category = entry.category }
+                game.alwaysLive = game.alwaysLive && entry.alwaysLive
+                games[index] = game
+            } else {
+                games.append(entry)
+            }
+        }
+        return games
+    }
+
+    // The live game an alert is about (matched by team nicknames).
+    static func game(for alert: GameAlert) async -> SportGame? {
+        await load().first { $0.isLive && $0.teamTokens == alert.teams && !$0.streams.isEmpty }
+    }
+
+    // MARK: Streams → player servers
+
+    // Streamed sources resolve to one or more embeds (HD first). Capped so a
+    // race never opens too many pages at once.
+    @MainActor private static var serverCache: [String: (at: Date, servers: [StreamServer])] = [:]
+
+    // Cached for 90s: focusing a card and then pressing Play shouldn't
+    // resolve the same streams twice.
+    @MainActor
+    static func servers(for game: SportGame, limit: Int = 10) async -> [StreamServer] {
+        let key = "\(game.id):\(limit)"
+        if let hit = serverCache[key], hit.at.timeIntervalSinceNow > -90 { return hit.servers }
+        let fresh = await resolveServers(for: game, limit: limit)
+        if !fresh.isEmpty { serverCache[key] = (Date(), fresh) }
+        return fresh
+    }
+
+    private static func resolveServers(for game: SportGame, limit: Int) async -> [StreamServer] {
+        // Each feed's streams, looked up in parallel, kept in feed order.
+        let perFeed: [[(String, URL)]] = await withTaskGroup(of: (Int, [(String, URL)]).self) { group in
+            for (position, stream) in game.streams.enumerated() {
+                group.addTask { (position, await streams(of: stream)) }
+            }
+            var found = Array(repeating: [(String, URL)](), count: game.streams.count)
+            for await (position, list) in group { found[position] = list }
+            return found
+        }
+        // Interleave (each feed's best, then each feed's second…) so the
+        // first few raced are from different feeds; the rest are backups.
+        var urls: [(String, URL)] = []
+        var seen = Set<URL>()
+        for round in 0..<(perFeed.map(\.count).max() ?? 0) {
+            for list in perFeed where round < list.count && seen.insert(list[round].1).inserted {
+                urls.append(list[round])
+            }
+        }
+        return urls.prefix(limit).map { label, url in
+            StreamServer(id: url.absoluteString, name: label) { _, _, _, _ in url }
+        }
+    }
+
+    // Streamed sources resolve to every stream of that source (numbered
+    // feeds, HD and SD, commentary languages), HD first, up to 4.
+    private static func streams(of stream: SportStream) async -> [(String, URL)] {
+        switch stream.source {
+        case .embed(let url):
+            return [(stream.label, url)]
+        case .streamed(let source, let id):
+            let path = "https://streamed.pk/api/stream/\(source)/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)"
+            let list = await json(path) as? [[String: Any]] ?? []
+            let sorted = list.sorted {
+                (truthy($0["hd"]) ? 0 : 1, ($0["streamNo"] as? NSNumber)?.intValue ?? 0)
+                    < (truthy($1["hd"]) ? 0 : 1, ($1["streamNo"] as? NSNumber)?.intValue ?? 0)
+            }
+            return sorted.prefix(4).compactMap { item in
+                guard let url = (item["embedUrl"] as? String).flatMap(URL.init(string:)) else { return nil }
+                let number = list.count > 1 ? " \((item["streamNo"] as? NSNumber)?.intValue ?? 1)" : ""
+                let language = (item["language"] as? String).flatMap { $0.isEmpty || $0.lowercased() == "main" ? nil : " · \($0)" } ?? ""
+                return ("\(stream.label)\(number)\(truthy(item["hd"]) ? " HD" : "")\(language)", url)
+            }
+        }
+    }
+}

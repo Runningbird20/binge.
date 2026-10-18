@@ -1,8 +1,9 @@
-import { normalizeMediaId } from '../utils/mediaId';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
+import GridTitleTile from '../components/GridTitleTile';
+import BrowseView from '../components/BrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { SkeletonGrid } from '../components/SkeletonCard';
@@ -10,17 +11,16 @@ import PullToRefresh from '../components/PullToRefresh';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
 import {
-  addWatchlistItem,
-  fetchRatingMap,
-  fetchWatchlistStatusMap,
-  updateWatchlistStatus,
-  saveRating,
-} from '../utils/userData';
-import WatchlistStatusControl from '../components/WatchlistStatusControl';
+  addSupabaseWatchlistItem,
+  fetchSupabaseRatingMap,
+  fetchSupabaseWatchlistStatusMap,
+  updateSupabaseWatchlistStatus,
+  saveSupabaseRating,
+} from '../utils/supabaseData';
 import {
-  fetchTvShowById,
-  fetchTvShowCatalogSegment,
-} from '../utils/catalog';
+  fetchSupabaseTvShowById,
+  fetchSupabaseTvShowCatalogSegment,
+} from '../utils/supabaseMovieCatalog';
 import {
   buildMediaGenreFacets,
   filterMediaItems,
@@ -31,9 +31,10 @@ import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
+import { identityKey } from '../utils/mediaIdentity';
+import { isBrowseable } from '../utils/releaseWindow';
 
 const PAGE_SIZE = 48;
-const NO_GENRES = [];
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
 // first visible row across common viewport widths so the browser starts
 // fetching what's actually on screen immediately instead of waiting on the
@@ -53,13 +54,19 @@ function normalizeMediaItems(data) {
   return [];
 }
 
+// Dedupes by id and by title identity (the Plex importer can create one
+// row per file for what's really one release), and drops titles releasing
+// more than 30 days out.
 function appendUniqueItems(currentItems, nextItems) {
   const seenIds = new Set(currentItems.map((item) => item.id));
+  const seenTitles = new Set(currentItems.map((item) => identityKey(item)));
   const deduped = [];
 
   for (const item of nextItems) {
-    if (seenIds.has(item.id)) continue;
+    const titleKey = identityKey(item);
+    if (seenIds.has(item.id) || seenTitles.has(titleKey) || !isBrowseable(item)) continue;
     seenIds.add(item.id);
+    seenTitles.add(titleKey);
     deduped.push(item);
   }
 
@@ -86,68 +93,8 @@ function orderBatch(items) {
   return [...shuffled.filter(hasPoster), ...shuffled.filter((item) => !hasPoster(item))];
 }
 
-function resolvePosterUrl(url) {
-  if (!url) return null;
-  try {
-    if (url.includes('plex.tv')) {
-      const inner = new URL(url).searchParams.get('url');
-      if (inner) {
-        try {
-          return decodeURIComponent(inner);
-        } catch {
-          return inner;
-        }
-      }
-    }
-  } catch {
-    return url;
-  }
-  return url;
-}
-
-function PosterTile({ item, onClick, watchlistEntry, addingWatchlist, onAddWatchlist, onStatusChange, priority }) {
-  const [imgError, setImgError] = useState(false);
-  const posterUrl = resolvePosterUrl(item.poster_url || item.cover_url || item.image_url);
-  const isNew = Number(item.year) >= new Date().getFullYear();
-
-  return (
-    <div className="poster-tile-wrap">
-      <button type="button" className="poster-tile" onClick={() => onClick(item)} title={item.title}>
-        <div className="poster-tile-frame">
-          {posterUrl && !imgError ? (
-            <img
-              src={posterUrl}
-              alt={item.title}
-              loading={priority ? 'eager' : 'lazy'}
-              fetchPriority={priority ? 'high' : 'auto'}
-              decoding="async"
-              referrerPolicy="no-referrer"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="poster-tile-placeholder">
-              <span>{item.title?.charAt(0)}</span>
-            </div>
-          )}
-          {isNew && <span className="poster-tile-badge">New</span>}
-        </div>
-        <p className="poster-tile-title">{item.title}</p>
-        {item.year && <p className="poster-tile-year">{item.year}</p>}
-      </button>
-
-      {onAddWatchlist && (
-        <div className="poster-tile-status" onClick={(event) => event.stopPropagation()}>
-          <WatchlistStatusControl
-            mediaType="tv_show"
-            status={watchlistEntry?.status}
-            adding={addingWatchlist}
-            onAdd={() => onAddWatchlist(item)}
-            onChange={(nextStatus) => onStatusChange(item, watchlistEntry, nextStatus)}
-          />
-        </div>
-      )}
-    </div>
-  );
+function PosterTile(props) {
+  return <GridTitleTile mediaType="tv_show" {...props} />;
 }
 
 function CatalogView({
@@ -169,11 +116,11 @@ function CatalogView({
   const [total, setTotal] = useState(0);
   const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
-  const [sortMode, setSortMode] = useState('featured');
+  const [sortMode, setSortMode] = useState('popular');
   const { activeProfile } = useAuth();
   const kidsSafe = Boolean(activeProfile?.is_kids);
   const requestTokenRef = useRef(0);
-  const sourceRef = useRef({ mode: 'catalog', totalPages: 1, nextPage: 2 });
+  const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
   const loadMoreRef = useRef(null);
   const pendingInitialGenreRef = useRef(initialGenre || '');
@@ -200,20 +147,20 @@ function CatalogView({
   }, [genreGroups]);
 
   const genreValues = useMemo(() => {
-    if (!activeLabel) return NO_GENRES;
+    if (!activeLabel) return [];
     const activeGroup = genreGroups.find((group) => group.label === activeLabel);
     return activeGroup ? activeGroup.values : [activeLabel];
   }, [genreGroups, activeLabel]);
 
-  const fetchCatalogWindows = useCallback(async ({ totalCount }) => {
+  const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const maxOffset = Math.max(0, totalCount - windowSize);
-    const offsets = [...new Set(Array.from({ length: WINDOWS_PER_BATCH }, () => (
+    const offsets = Array.from({ length: WINDOWS_PER_BATCH }, () => (
       maxOffset > 0 ? Math.floor(Math.random() * (maxOffset + 1)) : 0
-    )))];
+    ));
 
     const results = await Promise.all(offsets.map((offset) => (
-      fetchTvShowCatalogSegment({
+      fetchSupabaseTvShowCatalogSegment({
         offset,
         limit: windowSize,
         search: searchTerm,
@@ -230,9 +177,9 @@ function CatalogView({
   }, [genreValues, searchTerm, kidsSafe]);
 
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
-  const fetchCatalogSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
+  const fetchSupabaseSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
     const { sortOrder, includeUpcoming } = sortModeToQuery(sortMode);
-    const result = await fetchTvShowCatalogSegment({
+    const result = await fetchSupabaseTvShowCatalogSegment({
       offset,
       limit: PAGE_SIZE,
       search: searchTerm,
@@ -254,7 +201,7 @@ function CatalogView({
     });
 
     // The legacy API only supports a single genre substring; this tier only
-    // runs when the catalog API is unreachable, so an approximate match is fine.
+    // runs when Supabase is unreachable, so an approximate match is fine.
     if (genreValues[0]) params.set('genre', genreValues[0]);
     if (searchTerm) params.set('search', searchTerm);
 
@@ -321,7 +268,7 @@ function CatalogView({
     async function loadCatalog() {
       if (sortMode !== 'featured') {
         try {
-          const page = await fetchCatalogSortedPage(0, { includeCount: true, includeFacets: true });
+          const page = await fetchSupabaseSortedPage(0, { includeCount: true, includeFacets: true });
           const totalCount = Number(page.total) || 0;
           if (totalCount === 0 && !fetchHadFilter) {
             throw new Error('TV catalog is empty');
@@ -330,7 +277,7 @@ function CatalogView({
           if (cancelled || requestTokenRef.current !== requestToken) return;
 
           adoptGenres(page.facets?.genres);
-          sourceRef.current = { mode: 'catalog-sorted', nextOffset: PAGE_SIZE };
+          sourceRef.current = { mode: 'supabase-sorted', nextOffset: PAGE_SIZE };
           setTotal(totalCount);
           setItems(page.items);
           setLoading(false);
@@ -341,9 +288,9 @@ function CatalogView({
         }
       } else {
       try {
-        const probe = await fetchTvShowCatalogSegment({
+        const probe = await fetchSupabaseTvShowCatalogSegment({
           offset: 0,
-          limit: VISIBLE_BATCH_SIZE,
+          limit: 1,
           search: searchTerm,
           genre: genreValues,
           sortOrder: 'title-asc',
@@ -360,7 +307,7 @@ function CatalogView({
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
         adoptGenres(probe?.facets?.genres);
-        sourceRef.current = { mode: 'catalog' };
+        sourceRef.current = { mode: 'supabase' };
         setTotal(totalCount);
 
         if (totalCount === 0) {
@@ -370,20 +317,10 @@ function CatalogView({
           return;
         }
 
-        // Render the first usable response instead of blocking on random windows.
-        const initialItems = orderBatch(normalizeMediaItems(probe));
-        setItems(initialItems);
-        setLoading(false);
-        persistCache(initialItems, totalCount, probe?.facets?.genres, false);
-        if (initialItems.length >= totalCount) return;
-
-        // Keep visible cards in place while discovery results arrive.
-        setLoadingMore(true);
-        const firstBatch = await fetchCatalogWindows({ totalCount, existingCount: 0 });
+        const firstBatch = await fetchSupabaseWindows({ totalCount, existingCount: 0 });
         if (cancelled || requestTokenRef.current !== requestToken) return;
 
-        const nextItems = appendUniqueItems(initialItems, firstBatch);
-        setLoadingMore(false);
+        const nextItems = appendUniqueItems([], firstBatch);
         setItems(nextItems);
         setLoading(false);
         persistCache(nextItems, totalCount, probe?.facets?.genres, false);
@@ -444,7 +381,7 @@ function CatalogView({
     return () => {
       cancelled = true;
     };
-  }, [genreValues, searchTerm, sortMode, kidsSafe, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage, refreshKey]);
+  }, [genreValues, searchTerm, sortMode, kidsSafe, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage, refreshKey]);
 
   const loadMore = useCallback(async () => {
     const requestToken = requestTokenRef.current;
@@ -452,8 +389,8 @@ function CatalogView({
     setLoadingMore(true);
 
     try {
-      if (source.mode === 'catalog') {
-        const batch = await fetchCatalogWindows({ totalCount: total, existingCount: items.length });
+      if (source.mode === 'supabase') {
+        const batch = await fetchSupabaseWindows({ totalCount: total, existingCount: items.length });
         if (requestTokenRef.current !== requestToken) return;
 
         setItems((current) => {
@@ -466,8 +403,8 @@ function CatalogView({
         return;
       }
 
-      if (source.mode === 'catalog-sorted') {
-        const page = await fetchCatalogSortedPage(source.nextOffset);
+      if (source.mode === 'supabase-sorted') {
+        const page = await fetchSupabaseSortedPage(source.nextOffset);
         if (requestTokenRef.current !== requestToken) return;
 
         sourceRef.current = { ...source, nextOffset: source.nextOffset + PAGE_SIZE };
@@ -496,7 +433,7 @@ function CatalogView({
         setLoadingMore(false);
       }
     }
-  }, [items.length, total, fetchCatalogWindows, fetchCatalogSortedPage, fetchApiPage]);
+  }, [items.length, total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
 
   const visibleItems = items.slice(0, renderedCount);
   const canFetchMore = !usingFallbackCatalog
@@ -579,6 +516,7 @@ function CatalogView({
         <button
           type="button"
           className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
+          aria-pressed={activeLabel === ''}
           onClick={() => setActiveLabel('')}
         >
           Featured
@@ -588,6 +526,7 @@ function CatalogView({
             key={group.label}
             type="button"
             className={`genre-chip${activeLabel === group.label ? ' active' : ''}`}
+            aria-pressed={activeLabel === group.label}
             onClick={() => setActiveLabel(group.label)}
           >
             {group.label}
@@ -605,7 +544,7 @@ function CatalogView({
         </div>
       ) : (
         <>
-          <div className="poster-grid">
+          <div className="st-grid">
             {visibleItems.map((movie, index) => (
               <PosterTile
                 key={movie.id}
@@ -640,8 +579,11 @@ function CatalogView({
 
 export default function TVShows() {
   const [searchParams] = useSearchParams();
-  const openId = normalizeMediaId(searchParams.get('open'));
+  const openId = Number(searchParams.get('open'));
   const initialGenre = searchParams.get('genre') || '';
+  // Rows landing by default (Netflix-style); the filterable grid is one
+  // click away via "Browse all" (?view=all) or any ?genre= deep link.
+  const showGrid = searchParams.get('view') === 'all' || Boolean(initialGenre);
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
 
   const [selectedItem, setSelectedItem] = useState(null);
@@ -658,14 +600,14 @@ export default function TVShows() {
   }
 
   useEffect(() => {
-    fetchRatingMap('tv_show')
+    fetchSupabaseRatingMap('tv_show')
       .then(setUserRatings)
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetchWatchlistStatusMap('tv_show')
+    fetchSupabaseWatchlistStatusMap('tv_show')
       .then((map) => { if (!cancelled) setWatchlistStatusMap(map); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -675,7 +617,7 @@ export default function TVShows() {
     setAddingWatchlistIds((prev) => new Set(prev).add(item.id));
     setDetailMessage('');
     try {
-      const saved = await addWatchlistItem({ mediaType: 'tv_show', mediaId: item.id, media: item });
+      const saved = await addSupabaseWatchlistItem({ mediaType: 'tv_show', mediaId: item.id, media: item });
       setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: { id: saved.id, status: saved.status } }));
       setDetailMessage(`"${item.title}" added to your watchlist.`);
     } catch (error) {
@@ -692,7 +634,7 @@ export default function TVShows() {
   const handleQuickStatusChange = useCallback((item, entry, nextStatus) => {
     setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: { ...prev[item.id], status: nextStatus } }));
     if (!entry?.id) return;
-    updateWatchlistStatus(entry.id, nextStatus).catch(() => {
+    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
       setWatchlistStatusMap((prev) => ({ ...prev, [item.id]: entry }));
     });
   }, []);
@@ -704,7 +646,7 @@ export default function TVShows() {
 
     async function loadOpenItem() {
       try {
-        const item = await fetchTvShowById(openId);
+        const item = await fetchSupabaseTvShowById(openId);
         if (!cancelled && item?.id) {
           setSelectedItem(item);
           setSelectedItemBrowseOnly(false);
@@ -756,7 +698,7 @@ export default function TVShows() {
     }
 
     try {
-      const detailedItem = await fetchTvShowById(item.id);
+      const detailedItem = await fetchSupabaseTvShowById(item.id);
       if (detailedItem?.id) {
         setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
         return;
@@ -777,7 +719,7 @@ export default function TVShows() {
 
   async function handleRate(item, categories, review) {
     try {
-      await saveRating({
+      await saveSupabaseRating({
         mediaType: 'tv_show',
         mediaId: item.id,
         categories,
@@ -805,9 +747,16 @@ export default function TVShows() {
       <Navbar />
       <main className="page-content curated-page">
         <PullToRefresh onRefresh={handleRefresh}>
-          <div className="catalog-header">
-            <h1 className="catalog-title">Series</h1>
-          </div>
+          {!showGrid ? (
+            <BrowseView mediaType="tv_show" refreshKey={refreshKey} />
+          ) : (
+          <>
+          <header className="st-page-head">
+            <div>
+              <h1 className="st-page-title">Series</h1>
+            </div>
+            <Link className="st-btn st-btn--ghost" to="/tv-shows">Back to highlights</Link>
+          </header>
 
           <CatalogView
             onItemClick={openItemDetails}
@@ -818,6 +767,8 @@ export default function TVShows() {
             onQuickAdd={handleQuickAdd}
             onQuickStatusChange={handleQuickStatusChange}
           />
+          </>
+          )}
         </PullToRefresh>
       </main>
 

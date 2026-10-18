@@ -1,4 +1,3 @@
-import { standaloneMode } from '../utils/backendClient';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,7 +25,7 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-page" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` }}>
       <div className="auth-card">
         <Link to="/" className="auth-logo">binge.</Link>
         <h1>Welcome back</h1>
@@ -61,7 +60,6 @@ export default function Login() {
           </button>
         </form>
 
-        {standaloneMode && <p className="auth-switch"><Link to="/reset-password">Forgot password?</Link></p>}
         <p className="auth-switch">
           Don't have an account? <Link to="/signup">Sign up</Link>
         </p>

@@ -41,6 +41,8 @@ function normalizeManga(m) {
                      .slice(0, 5),
     latestChapter: attrs.lastChapter,
     contentRating: attrs.contentRating,
+    anilistId:     /^\d+$/.test(String(attrs.links?.al || '')) ? Number(attrs.links.al) : null,
+    officialUrl:   /^https:\/\//.test(String(attrs.links?.engtl || '')) ? attrs.links.engtl : null,
   };
 }
 

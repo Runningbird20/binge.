@@ -1,30 +1,31 @@
 import { act, render, screen } from '@testing-library/react';
 
 var mockOnAuthStateChange = jest.fn();
-var mockGetSessionProfile = jest.fn();
-var mockResolveProfile = jest.fn();
-var mockSignIn = jest.fn();
-var mockSignOut = jest.fn();
-var mockSignUp = jest.fn();
-var mockUpdatePassword = jest.fn();
-var mockUpdateProfile = jest.fn();
+var mockGetSupabaseSessionProfile = jest.fn();
+var mockResolveSupabaseProfile = jest.fn();
+var mockSignInWithSupabase = jest.fn();
+var mockSignOutFromSupabase = jest.fn();
+var mockSignUpWithSupabase = jest.fn();
+var mockUpdateSupabasePassword = jest.fn();
+var mockUpdateSupabaseProfile = jest.fn();
 
-jest.mock('../utils/backendClient', () => ({
-  client: {
+jest.mock('../utils/supabase', () => ({
+  isSupabaseConfigured: true,
+  supabase: {
     auth: {
       onAuthStateChange: (...args) => mockOnAuthStateChange(...args),
     },
   },
 }));
 
-jest.mock('../utils/userData', () => ({
-  getSessionProfile: (...args) => mockGetSessionProfile(...args),
-  resolveProfile: (...args) => mockResolveProfile(...args),
-  signIn: (...args) => mockSignIn(...args),
-  signOut: (...args) => mockSignOut(...args),
-  signUp: (...args) => mockSignUp(...args),
-  updatePassword: (...args) => mockUpdatePassword(...args),
-  updateProfile: (...args) => mockUpdateProfile(...args),
+jest.mock('../utils/supabaseData', () => ({
+  getSupabaseSessionProfile: (...args) => mockGetSupabaseSessionProfile(...args),
+  resolveSupabaseProfile: (...args) => mockResolveSupabaseProfile(...args),
+  signInWithSupabase: (...args) => mockSignInWithSupabase(...args),
+  signOutFromSupabase: (...args) => mockSignOutFromSupabase(...args),
+  signUpWithSupabase: (...args) => mockSignUpWithSupabase(...args),
+  updateSupabasePassword: (...args) => mockUpdateSupabasePassword(...args),
+  updateSupabaseProfile: (...args) => mockUpdateSupabaseProfile(...args),
 }));
 
 import { AuthProvider, useAuth } from './AuthContext';
@@ -47,8 +48,8 @@ describe('AuthProvider', () => {
   beforeEach(() => {
     authListenerCallback = null;
     mockOnAuthStateChange.mockReset();
-    mockGetSessionProfile.mockReset();
-    mockResolveProfile.mockReset();
+    mockGetSupabaseSessionProfile.mockReset();
+    mockResolveSupabaseProfile.mockReset();
 
     mockOnAuthStateChange.mockImplementation((callback) => {
       authListenerCallback = callback;
@@ -63,7 +64,7 @@ describe('AuthProvider', () => {
   });
 
   test('does not downgrade a dev session when a later auth refresh resolves as a plain user', async () => {
-    mockGetSessionProfile.mockResolvedValue({
+    mockGetSupabaseSessionProfile.mockResolvedValue({
       id: 'dev-user',
       username: 'devops',
       userType: 'dev',
@@ -71,7 +72,7 @@ describe('AuthProvider', () => {
       isAdmin: false,
     });
 
-    mockResolveProfile.mockResolvedValue({
+    mockResolveSupabaseProfile.mockResolvedValue({
       id: 'dev-user',
       username: 'devops',
       userType: 'user',

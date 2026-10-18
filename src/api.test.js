@@ -51,8 +51,10 @@ test('throws a readable error when the backend cannot be reached', async () => {
   global.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
   await expect(api.get('/watchlist')).rejects.toThrow(
-    /unable to reach the api/i
+    /couldn’t reach binge\. just now/i
   );
+  // A GET is retried once before giving up.
+  expect(global.fetch).toHaveBeenCalledTimes(2);
 });
 
 test('throws a readable error when a successful API request returns HTML', async () => {
