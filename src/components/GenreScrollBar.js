@@ -21,8 +21,8 @@ export default function GenreScrollBar({ ariaLabel, children }) {
       >
         <CaretLeft size={14} weight="bold" />
       </button>
-      <div className="genre-bar-wrap">
-        <div className="genre-bar" role="tablist" aria-label={ariaLabel} ref={ref}>
+      <div className={`genre-bar-wrap${canScrollLeft ? ' fade-left' : ''}${canScrollRight ? ' fade-right' : ''}`}>
+        <div className="genre-bar" role="group" aria-label={ariaLabel} ref={ref}>
           {children}
         </div>
       </div>

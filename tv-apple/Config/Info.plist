@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BingeSupabaseURL</key>
+	<string>$(BINGE_SUPABASE_URL)</string>
+	<key>BingeSupabaseKey</key>
+	<string>$(BINGE_SUPABASE_KEY)</string>
+	<key>BingeTMDBKey</key>
+	<string>$(BINGE_TMDB_KEY)</string>
+	<key>BingeAppGroup</key>
+	<string>group.$(BINGE_BUNDLE_ID)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(BINGE_BUNDLE_ID)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>binge</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>BarlowCondensed-ExtraBold.ttf</string>
+		<string>BarlowCondensed-SemiBold.ttf</string>
+		<string>IBMPlexMono-Regular.ttf</string>
+		<string>IBMPlexMono-SemiBold.ttf</string>
+	</array>
+	<key>BingeSiteURL</key>
+	<string>$(BINGE_SITE_URL)</string>
+</dict>
+</plist>

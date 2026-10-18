@@ -121,7 +121,7 @@ export default function Signup() {
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-page" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` }}>
       <div className="auth-card auth-card-wide">
         <Link to="/" className="auth-logo">binge.</Link>
         <h1>Create your account</h1>

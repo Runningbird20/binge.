@@ -47,4 +47,17 @@ Thumbs.db
 
 node_modules/
 
-/backups/
+# Android TV app build output
+tv-android/.gradle/
+tv-android/build/
+tv-android/app/build/
+tv-android/local.properties
+tv-android/.idea/
+
+# Playwright
+e2e/.auth/
+e2e-report/
+test-results/
+
+# Local PostgreSQL data from the old standalone server (may contain user data)
+backups/standalone-local/

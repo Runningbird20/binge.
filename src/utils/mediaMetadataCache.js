@@ -1,5 +1,7 @@
-import { normalizeMediaId } from './mediaId';
-const STORAGE_KEY = 'binge.mediaMetadata.v1';
+// v2 added source_key/original_language/director/creator — bumping the key
+// drops v1 entries that lack them so they're refetched instead of serving
+// records the recommender can't map to a TMDB id.
+const STORAGE_KEY = 'binge.mediaMetadata.v2';
 const memoryCache = new Map();
 
 function normalizeText(value) {
@@ -12,8 +14,8 @@ function normalizeYear(value) {
 }
 
 function toCacheKey(mediaType, mediaId) {
-  const normalizedId = normalizeMediaId(mediaId);
-  if (!mediaType || normalizedId == null) {
+  const normalizedId = Number(mediaId);
+  if (!mediaType || !Number.isFinite(normalizedId)) {
     return null;
   }
 
@@ -51,8 +53,8 @@ function writeStore(store) {
 }
 
 function normalizeMediaMetadata(mediaType, item) {
-  const id = normalizeMediaId(item?.media_id ?? item?.id);
-  if (!mediaType || id == null) {
+  const id = Number(item?.media_id ?? item?.id);
+  if (!mediaType || !Number.isFinite(id)) {
     return null;
   }
 
@@ -71,6 +73,10 @@ function normalizeMediaMetadata(mediaType, item) {
     year: normalizeYear(item?.year),
     genre: normalizeText(item?.genre) || null,
     image_url: imageUrl || null,
+    source_key: normalizeText(item?.source_key) || null,
+    original_language: normalizeText(item?.original_language) || null,
+    director: normalizeText(item?.director) || null,
+    creator: normalizeText(item?.creator) || null,
   };
 }
 

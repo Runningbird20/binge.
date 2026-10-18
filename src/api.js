@@ -1,10 +1,24 @@
-import { standaloneMode, getSession } from './utils/backendClient';
-import { getActiveProfileId } from './utils/activeProfile';
-import { executeLocalRoute } from './utils/localApi';
+import { executeSupabaseRoute } from './utils/supabaseApi';
+
+function isLegacyBackendEnabled() {
+  return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
+    .trim()
+    .toLowerCase() === 'true';
+}
 
 function resolveLegacyBaseUrl() {
-  const custom = (process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
-  return custom ? `${custom}/api` : '/api';
+  const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
+
+  if (!configuredApiUrl) {
+    return isLegacyBackendEnabled() ? '/api' : null;
+  }
+
+  const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
+  if (normalizedApiUrl.endsWith('/api')) {
+    return normalizedApiUrl;
+  }
+
+  return `${normalizedApiUrl}/api`;
 }
 
 const LEGACY_BASE = resolveLegacyBaseUrl();
@@ -12,10 +26,15 @@ const LEGACY_BASE = resolveLegacyBaseUrl();
 let cachedToken = null;
 let tokenFetchPromise = null;
 
-async function fetchAuthToken() {
+async function fetchSupabaseToken() {
   try {
+    const { isSupabaseConfigured, getSupabaseSession } = await import('./utils/supabase');
+    if (!isSupabaseConfigured) {
+      return null;
+    }
+
     const result = await Promise.race([
-      getSession(),
+      getSupabaseSession(),
       new Promise((resolve) => {
         window.setTimeout(() => resolve({ data: null }), 3000);
       }),
@@ -28,7 +47,7 @@ async function fetchAuthToken() {
 }
 
 async function getAuthToken() {
-  const legacyToken = standaloneMode ? null : window.localStorage.getItem('token');
+  const legacyToken = window.localStorage.getItem('token');
   if (legacyToken) {
     return legacyToken;
   }
@@ -41,7 +60,7 @@ async function getAuthToken() {
     return tokenFetchPromise;
   }
 
-  tokenFetchPromise = fetchAuthToken().then((token) => {
+  tokenFetchPromise = fetchSupabaseToken().then((token) => {
     cachedToken = token;
     tokenFetchPromise = null;
     return token;
@@ -80,7 +99,7 @@ async function parseResponseBody(response) {
 
 function buildLegacyErrorMessage(response, data) {
   if (data && typeof data === 'object') {
-    return data.error?.message || data.error || data.message || `Request failed with status ${response.status}`;
+    return data.error || data.message || `Request failed with status ${response.status}`;
   }
 
   if (typeof data === 'string') {
@@ -107,6 +126,9 @@ function isHtmlPayload(data) {
   return typeof data === 'string' && /^<!doctype|^<html/i.test(data.trim());
 }
 
+// POSTs that only read (safe to send twice).
+const RETRYABLE_POSTS = ['/extras/ai/picks'];
+
 async function requestLegacyApi(method, path, body) {
   if (!LEGACY_BASE) {
     throw new Error(
@@ -117,21 +139,30 @@ async function requestLegacyApi(method, path, body) {
   const token = await getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
-    ...(standaloneMode ? { 'X-Binge-Request': '1', ...(getActiveProfileId() ? { 'X-Binge-Profile': getActiveProfileId() } : {}) } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
+  // A dropped connection (common in an installed app on mobile data, or just
+  // after the phone wakes it) gets one retry for requests that are safe to
+  // repeat; the message shown is for people, not developers.
+  const send = () => fetch(`${LEGACY_BASE}${path}`, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
   let response;
   try {
-    response = await fetch(`${LEGACY_BASE}${path}`, {
-      method,
-      headers,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+    response = await send();
   } catch {
-    throw new Error(
-      'Unable to reach the API. If you still need the legacy backend, set REACT_APP_LEGACY_API_URL and make sure that server is running.'
-    );
+    if (method === 'GET' || RETRYABLE_POSTS.some((prefix) => path.startsWith(prefix))) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      try { response = await send(); } catch { /* reported below */ }
+    }
+    if (!response) {
+      throw new Error(navigator.onLine === false
+        ? 'You’re offline. Check your connection and try again.'
+        : 'Couldn’t reach binge. just now. Check your connection and try again.');
+    }
   }
 
   const data = await parseResponseBody(response);
@@ -147,7 +178,7 @@ async function requestLegacyApi(method, path, body) {
 }
 
 async function request(method, path, body) {
-  const directResult = await executeLocalRoute(method, path, body);
+  const directResult = await executeSupabaseRoute(method, path, body);
   if (directResult !== null) {
     return directResult;
   }

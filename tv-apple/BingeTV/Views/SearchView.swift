@@ -1,0 +1,222 @@
+import SwiftUI
+
+struct SearchView: View {
+    @EnvironmentObject private var app: AppModel
+    @State private var query = ""
+    @State private var results: [Title] = []
+    @State private var trending: [Title] = []
+    @State private var searching = false
+    @State private var ai: [(Title, String?)] = []
+    @State private var aiSummary: String?
+    @State private var aiLoading = false
+    @State private var aiError: String?
+
+    private let columns = [GridItem(.adaptive(minimum: 220, maximum: 220), spacing: 48, alignment: .top)]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                let showing = query.trimmingCharacters(in: .whitespaces).isEmpty ? trending : results
+                if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    askSection
+                }
+                if !query.isEmpty && !searching && results.isEmpty && ai.isEmpty && !aiLoading {
+                    Text("Nothing on binge. matches “\(query)”.")
+                        .font(.headline)
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                } else {
+                    if query.isEmpty {
+                        // tvOS dictates into the search field from the Siri
+                        // Remote's microphone button; sentences go to Ask binge.
+                        Label("Hold \(Image(systemName: "mic.fill")) on the Siri Remote and say a title, an actor, or what you're in the mood for — like “a funny movie under two hours”.",
+                              systemImage: "waveform")
+                            .labelStyle(.titleOnly)
+                            .font(.callout)
+                            .foregroundStyle(Theme.muted)
+                    }
+                    if query.isEmpty && !trending.isEmpty { SectionTitle(text: "Trending searches") }
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
+                        ForEach(showing) { PosterCard(title: $0) }
+                    }
+                }
+            }
+            .padding(.vertical, 30)
+        }
+        .scrollClipDisabled()
+        .searchable(text: $query, prompt: "Movies, series, actors")
+        .task(id: query) {
+            let text = query.trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { results = []; return }
+            searching = true
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            let found = (try? await Catalog.search(text, kids: app.isKids)) ?? []
+            guard !Task.isCancelled else { return }
+            results = found
+            searching = false
+            ai = []
+            aiSummary = nil
+            aiError = nil
+            if AskBinge.isConversational(text) { await ask(text) }
+        }
+        .task {
+            guard trending.isEmpty else { return }
+            async let movies = Catalog.load(RowSpec(id: "s-m", title: "", kind: .movie, path: "trending/movie/week"), kids: app.isKids)
+            async let shows = Catalog.load(RowSpec(id: "s-t", title: "", kind: .tvShow, path: "trending/tv/week"), kids: app.isKids)
+            let (m, s) = await (movies, shows)
+            // Interleave so the grid isn't all movies first.
+            let a = m?.items ?? [], b = s?.items ?? []
+            trending = (0..<max(a.count, b.count)).flatMap { i in [i < b.count ? b[i] : nil, i < a.count ? a[i] : nil].compactMap { $0 } }
+        }
+    }
+
+    // MARK: Ask binge.
+
+    @ViewBuilder
+    private var askSection: some View {
+        if aiLoading {
+            HStack(spacing: 20) {
+                ProgressView()
+                Text("Asking binge.…").font(.headline)
+            }
+        } else if !ai.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 18) {
+                    Label("Ask binge.", systemImage: "sparkles").font(.title3.weight(.bold))
+                    if let aiSummary { Text(aiSummary).font(.callout).foregroundStyle(Theme.muted).lineLimit(1) }
+                }
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 40) {
+                        ForEach(ai, id: \.0.id) { title, why in
+                            VStack(alignment: .leading, spacing: 10) {
+                                PosterCard(title: title)
+                                if let why {
+                                    Text(why).font(.caption2).foregroundStyle(Theme.muted).lineLimit(3)
+                                        .frame(width: 220, alignment: .leading)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 34)
+                }
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+            }
+            .focusSection()
+        } else {
+            HStack(spacing: 24) {
+                Button {
+                    Task { await ask(query.trimmingCharacters(in: .whitespaces)) }
+                } label: {
+                    Label("Ask binge. for “\(query)”", systemImage: "sparkles")
+                }
+                .buttonStyle(PillButtonStyle(selected: true))
+                if let aiError { Text(aiError).font(.callout).foregroundStyle(Color(hex: 0xFFB4A8)) }
+                else { Text("Describe a mood: “a cozy mystery under 2 hours”").font(.callout).foregroundStyle(Theme.muted) }
+            }
+            .focusSection()
+        }
+    }
+
+    private func ask(_ text: String) async {
+        aiLoading = true
+        aiError = nil
+        do {
+            let result = try await AskBinge.ask(text, kids: app.isKids)
+            guard text == query.trimmingCharacters(in: .whitespaces) else { aiLoading = false; return }
+            ai = result.titles
+            aiSummary = result.summary
+            if result.titles.isEmpty { aiError = "Nothing on binge. fits that yet. Try saying it another way." }
+        } catch {
+            aiError = error.localizedDescription
+        }
+        aiLoading = false
+    }
+}
+
+struct MeView: View {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject private var pip = PiPController.shared
+    @State private var wrappedOpen = UserDefaults.standard.bool(forKey: "BingeOpenWrapped")
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 90) {
+            VStack(alignment: .leading, spacing: 30) {
+                if let profile = app.profile {
+                    ProfileAvatar(profile: profile, size: 180)
+                }
+                if let email = app.session?.email {
+                    Text("Signed in as \(email)").font(.callout).foregroundStyle(Theme.muted)
+                } else if app.isDemo {
+                    Text("Demo mode (not signed in)").font(.callout).foregroundStyle(Theme.muted)
+                }
+                if app.profiles.count > 1 {
+                    Button { app.switchProfile() } label: { Label("Switch profile", systemImage: "person.2") }
+                }
+                if app.isSignedIn {
+                    Button { Task { await app.signOut() } } label: { Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right") }
+                }
+                Spacer()
+                Text("binge. for Apple TV \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+                    .font(.caption)
+                    .foregroundStyle(Theme.muted)
+            }
+            .focusSection()
+
+            // A plain tvOS list, like Settings: no tile grid.
+            List {
+                Section {
+                    row("My List & Ratings", "bookmark", "What you saved and what you rated") { LibraryView() }
+                    row("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
+                    row("Calendar", "calendar", "Upcoming episodes and releases") { CalendarView() }
+                    Button { wrappedOpen = true } label: {
+                        HStack(spacing: 24) {
+                            Label { Text("Wrapped") } icon: { Image(systemName: "sparkles").foregroundStyle(.white) }
+                            Spacer()
+                            Text("Your year on binge.").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Section {
+                    row("Playback & accessibility", "captions.bubble", "Quality, audio, subtitles, larger text") { PlaybackSettingsView() }
+                }
+                if let corner = pip.game {
+                    Section {
+                        Button { PiPController.shared.close() } label: {
+                            Label("Close the corner game (\(corner.title))", systemImage: "pip.remove")
+                        }
+                    }
+                }
+                Section {
+                } footer: {
+                    Text("Books, manga and account settings are on \(Config.siteHost).")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: 1100)
+            .focusSection()
+        }
+        .padding(.vertical, 40)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fullScreenCover(isPresented: $wrappedOpen) { WrappedView() }
+    }
+
+    private func row<Destination: View>(_ title: String, _ icon: String, _ detail: String,
+                                        @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 24) {
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(systemName: icon).foregroundStyle(.white) // decoration, not state: no accent
+                }
+                Spacer()
+                Text(detail).foregroundStyle(.secondary)
+            }
+        }
+    }
+}

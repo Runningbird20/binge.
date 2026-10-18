@@ -1,3 +1,5 @@
+import { getPositionEntry, positionKey } from './playbackPositions';
+
 // Shared helpers for surfacing watch/read progress (season/episode or
 // page/chapter) wherever a title can show it: Home's Continue Watching row,
 // the watchlist grid, and the media details modal.
@@ -10,12 +12,15 @@ export function detailsUrl(item) {
 }
 
 export function resumeUrl(item) {
-  if (item.media_type === 'movie') return `/movie/${item.media_id}?play=1`;
+  // `t` carries the synced position so the player starts at the exact second
+  // even on a device that has never played this title.
+  const position = Number(item.position_seconds) > 30 ? `&t=${Math.floor(item.position_seconds)}` : '';
+  if (item.media_type === 'movie') return `/movie/${item.media_id}?play=1${position}`;
   if (item.media_type === 'tv_show') {
     const params = new URLSearchParams({ play: '1' });
     if (item.current_season) params.set('season', item.current_season);
     if (item.current_episode) params.set('episode', item.current_episode);
-    return `/tv-show/${item.media_id}?${params.toString()}`;
+    return `/tv-show/${item.media_id}?${params.toString()}${position}`;
   }
   return detailsUrl(item);
 }
@@ -33,8 +38,35 @@ export function computeProgressBadge(item) {
   if (item.media_type === 'tv_show' && (s || e)) {
     return `S${s || 1} · E${e || 1}`;
   }
+  if (item.media_type === 'movie' && Number(item.position_seconds) > 60) {
+    const minutes = Math.floor(item.position_seconds / 60);
+    return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m in` : `${minutes}m in`;
+  }
   if (item.media_type === 'book' && (ch || pg)) {
     return ch ? `Ch ${ch}` : `Pg ${pg}`;
   }
   return null;
+}
+
+// Where the viewer is in the title's current episode/movie: the newer of
+// the synced position (continue_watching) and this device's own record.
+// Returns { fraction, secondsLeft } or null.
+export function computeResumeProgress(item) {
+  if (!item || item.media_type === 'book') return null;
+  const mediaId = item.media_id ?? item.id;
+  const key = positionKey(item.media_type, mediaId, item.current_season || 1, item.current_episode || 1);
+  const local = getPositionEntry(key);
+  const remoteAt = item.updated_at ? new Date(item.updated_at).getTime() : 0;
+  const useLocal = local && (local.at || 0) >= remoteAt;
+  const position = useLocal ? local.t : Number(item.position_seconds);
+  const duration = useLocal ? local.d : Number(item.duration_seconds);
+  if (!(position > 0) || !(duration > 0)) return null;
+  const fraction = Math.min(1, position / duration);
+  return { fraction, secondsLeft: Math.max(0, duration - position) };
+}
+
+export function formatTimeLeft(seconds) {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes}m left`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m left`;
 }

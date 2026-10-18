@@ -1,4 +1,3 @@
-import { normalizeMediaId } from '../utils/mediaId';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
@@ -6,23 +5,23 @@ import MediaDetailsModal from './MediaDetailsModal';
 import { BookDetailsModal } from '../pages/Books';
 import { loadFallbackBooks, loadFallbackMovies, loadFallbackTvShows } from '../catalogFallback';
 import {
-  addWatchlistItem,
-  fetchRatingMap,
-  fetchWatchlist,
-  fetchWatchlistStatusMap,
-  updateWatchlistStatus,
-  saveRating,
-} from '../utils/userData';
+  addSupabaseWatchlistItem,
+  fetchSupabaseRatingMap,
+  fetchSupabaseWatchlist,
+  fetchSupabaseWatchlistStatusMap,
+  updateSupabaseWatchlistStatus,
+  saveSupabaseRating,
+} from '../utils/supabaseData';
 import {
-  fetchBookById,
-  fetchMovieById,
-  fetchTvShowById,
-} from '../utils/catalog';
+  fetchSupabaseBookById,
+  fetchSupabaseMovieById,
+  fetchSupabaseTvShowById,
+} from '../utils/supabaseMovieCatalog';
 
 const CONFIG = {
-  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },
-  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', loadFallback: loadFallbackTvShows, homePath: '/tv-shows' },
-  book:     { fetchById: fetchBookById,   apiPath: 'books',    loadFallback: loadFallbackBooks,   homePath: '/books' },
+  movie:    { fetchById: fetchSupabaseMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },
+  tv_show:  { fetchById: fetchSupabaseTvShowById, apiPath: 'tv-shows', loadFallback: loadFallbackTvShows, homePath: '/tv-shows' },
+  book:     { fetchById: fetchSupabaseBookById,   apiPath: 'books',    loadFallback: loadFallbackBooks,   homePath: '/books' },
 };
 
 // Renders a movie/TV/book details modal as an overlay on top of whatever
@@ -38,7 +37,8 @@ export default function MediaOverlay({ mediaType }) {
   const playImmediately = searchParams.get('play') === '1' || searchParams.get('play') === 'true';
   const initialSeason = searchParams.get('season') || undefined;
   const initialEpisode = searchParams.get('episode') || undefined;
-  const numericId = normalizeMediaId(id);
+  const initialPosition = Number(searchParams.get('t')) || undefined;
+  const numericId = Number(id);
   const config = CONFIG[mediaType];
 
   const [item, setItem] = useState(null);
@@ -79,7 +79,7 @@ export default function MediaOverlay({ mediaType }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchRatingMap(mediaType)
+    fetchSupabaseRatingMap(mediaType)
       .then((map) => { if (!cancelled) setUserRating(map?.[numericId] || null); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -88,7 +88,7 @@ export default function MediaOverlay({ mediaType }) {
   useEffect(() => {
     if (mediaType !== 'book') return undefined;
     let cancelled = false;
-    fetchWatchlist({ mediaType: 'book' })
+    fetchSupabaseWatchlist({ mediaType: 'book' })
       .then((list) => {
         if (!cancelled) setIsInLibrary((list || []).some((entry) => entry.media_id === numericId));
       })
@@ -99,7 +99,7 @@ export default function MediaOverlay({ mediaType }) {
   useEffect(() => {
     if (mediaType === 'book') return undefined;
     let cancelled = false;
-    fetchWatchlistStatusMap(mediaType)
+    fetchSupabaseWatchlistStatusMap(mediaType)
       .then((map) => { if (!cancelled) setWatchlistEntry(map[numericId] || null); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -112,7 +112,7 @@ export default function MediaOverlay({ mediaType }) {
 
   async function handleRate(target, categories, review) {
     try {
-      await saveRating({ mediaType, mediaId: target.id, categories, media: target, review });
+      await saveSupabaseRating({ mediaType, mediaId: target.id, categories, media: target, review });
       setUserRating({ ...categories, media_id: target.id, review });
       setDetailMessage('Rating saved!');
     } catch (err) {
@@ -124,7 +124,7 @@ export default function MediaOverlay({ mediaType }) {
     setIsAddingWatchlist(true);
     setDetailMessage('');
     try {
-      const saved = await addWatchlistItem({ mediaType, mediaId: target.id, media: target });
+      const saved = await addSupabaseWatchlistItem({ mediaType, mediaId: target.id, media: target });
       setWatchlistEntry({ id: saved.id, status: saved.status });
       setDetailMessage(`"${target.title}" added to your watchlist.`);
     } catch (err) {
@@ -137,7 +137,7 @@ export default function MediaOverlay({ mediaType }) {
   function handleStatusChange(target, entry, nextStatus) {
     setWatchlistEntry((current) => ({ ...current, status: nextStatus }));
     if (!entry?.id) return;
-    updateWatchlistStatus(entry.id, nextStatus).catch(() => {
+    updateSupabaseWatchlistStatus(entry.id, nextStatus).catch(() => {
       setWatchlistEntry(entry);
     });
   }
@@ -146,7 +146,7 @@ export default function MediaOverlay({ mediaType }) {
     setDetailMessage('');
     setIsAddingWatchlist(true);
     try {
-      await addWatchlistItem({ mediaType: 'book', mediaId: book.id, status: 'plan_to_read', media: book });
+      await addSupabaseWatchlistItem({ mediaType: 'book', mediaId: book.id, status: 'plan_to_read', media: book });
       setIsInLibrary(true);
       setDetailMessage('Added to your Library.');
     } catch (err) {
@@ -197,6 +197,10 @@ export default function MediaOverlay({ mediaType }) {
       autoPlay={playImmediately}
       initialSeason={initialSeason}
       initialEpisode={initialEpisode}
+      initialPosition={initialPosition}
+      // Opened from a Play button somewhere (Continue Watching, previews):
+      // closing the player returns there instead of to a details page.
+      closeOnPlayerExit={playImmediately && Boolean(backgroundLocation)}
     />
   );
 }

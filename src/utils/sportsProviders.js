@@ -1,27 +1,30 @@
 // Multi-provider sports stream aggregation. Combines 3 independent, free
-// live-sports APIs (PPV.st, Streamed.pk, StreamFree) into one unified feed
-// and opportunistically groups entries that are almost certainly the same
-// real-world event (same two teams + same day + same sport) so the player
-// can silently fail over to another provider's feed if one goes down,
-// instead of forcing the user to hunt for an alternate stream themselves.
+// live-sports APIs (PPV.st, Streamed.pk, StreamFree) into one feed with
+// exactly ONE entry per real-world game; every provider feed for that game
+// becomes a selectable "server" on it.
 //
-// The three source APIs disagree on team-name formatting ("LA Clippers" vs.
-// "Los Angeles Clippers") and on what "football" means (soccer vs. American
-// football), so matching/labelling below is heuristic, not exact — a merge
-// miss just means the same game shows up as separate entries per provider,
-// which is harmless. Matching two different games together would be worse,
-// so buildMatchKey requires category + day + a team-nickname pair before
-// ever merging two entries.
+// The providers disagree on almost everything, so matching is fuzzy:
+//   - separators: "Ravens at Falcons" / "Ravens vs Falcons" / "Ravens - Falcons"
+//   - team names: "LA Clippers" / "Los Angeles Clippers", "Man United" /
+//     "Manchester United"
+//   - categories: PPV's "Football" is soccer, StreamFree's "football" is NFL
+//   - start times: providers round differently; ±3h counts as the same game
+// Two entries merge only when the category matches, both teams match
+// (either order) and the start times are within the window — a missed merge
+// shows a duplicate, a false merge would play the wrong game, so the rule
+// leans strict.
+//
+// The server route (/api/sports/streams) fetches + normalizes the same
+// three providers and returns the unmerged list; merging only happens here.
 
-const PROVIDER_LABELS = {
-  ppv: 'PPV.st',
-  streamed: 'Streamed.pk',
+import { fetchDisabledServers } from './streamPreferences';
+
+const PROVIDER_NAMES = {
+  ppv: 'PPV',
+  streamed: 'Streamed',
   streamfree: 'StreamFree',
 };
 
-// Rough event length per sport, used only to estimate an end time for the
-// two providers (Streamed.pk, StreamFree) that don't give one — PPV.st's
-// own starts_at/ends_at stay authoritative once a match is merged with it.
 const DURATION_SEC = {
   Basketball: 3 * 3600,
   Soccer: 2.25 * 3600,
@@ -39,6 +42,7 @@ const DURATION_SEC = {
   Darts: 3 * 3600,
 };
 const DEFAULT_DURATION_SEC = 3 * 3600;
+const MERGE_WINDOW_SEC = 3 * 3600;
 
 const STREAMED_CATEGORY_MAP = {
   basketball: 'Basketball',
@@ -70,50 +74,163 @@ const STREAMFREE_CATEGORY_MAP = {
   cricket: 'Cricket',
 };
 
+// PPV.st's own category names -> the canonical ones above.
+const CANONICAL_CATEGORY = {
+  football: 'Soccer',
+  soccer: 'Soccer',
+  'ice hockey': 'Hockey',
+  hockey: 'Hockey',
+  motorsports: 'Racing',
+  'motor sports': 'Racing',
+  wrestling: 'Combat Sports',
+  boxing: 'Combat Sports',
+  mma: 'Combat Sports',
+  fight: 'Combat Sports',
+};
+
+export function canonicalCategory(category) {
+  const key = String(category || '').trim().toLowerCase();
+  return CANONICAL_CATEGORY[key] || category || 'Other';
+}
+
 function truthy(v) { return v === 1 || v === true || v === '1'; }
 
-function slugifyTeam(name) {
-  if (!name) return '';
-  const cleaned = String(name).toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  // The last token is almost always the team's nickname ("Clippers",
-  // "Wizards") — providers disagree on whether they include the city
-  // ("Los Angeles Clippers" vs. "LA Clippers"), but the nickname is stable.
-  return tokens[tokens.length - 1] || cleaned;
-}
+// ── Team parsing / matching ────────────────────────────────────────────
 
-function splitTeamsFromTitle(title) {
+const SEPARATOR = /\s+(?:vs\.?|v\.?|versus|@|at|-|–|—)\s+/i;
+
+export function splitTeamsFromTitle(title) {
   if (!title) return null;
-  const parts = title.split(/\s+(?:vs\.?|v\.?|@)\s+/i);
+  // Drop a trailing " - League" / ": Week 6" style suffix only when it
+  // leaves a clean "A vs B" behind.
+  const parts = String(title).split(SEPARATOR);
   if (parts.length !== 2) return null;
-  return { home: parts[0].trim(), away: parts[1].trim() };
+  const [home, away] = parts.map((part) => part.trim());
+  if (!home || !away) return null;
+  return { home, away };
 }
 
-function dayBucket(startsAtSec) {
-  if (!startsAtSec) return 'unknown';
-  return new Date(startsAtSec * 1000).toISOString().slice(0, 10);
+// Words that appear in many different teams' names and so can't identify
+// one on their own ("United", "City", "State", "FC"...).
+const GENERIC_TOKENS = new Set([
+  'fc', 'cf', 'sc', 'afc', 'ac', 'as', 'cd', 'sv', 'fk', 'sk', 'if', 'bk', 'ss', 'us', 'club', 'the', 'de', 'del', 'la', 'le',
+  'united', 'city', 'state', 'st', 'saint', 'real', 'sporting', 'athletic', 'atletico', 'university', 'team',
+  'new', 'los', 'san', 'north', 'south', 'east', 'west', 'central', 'women', 'w', 'u21', 'u23', 'ii',
+]);
+
+function teamTokens(name) {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !GENERIC_TOKENS.has(token));
 }
 
-// Order-independent key so "A vs B" and "B vs A" (providers disagree on
-// home/away order) still merge into one entry.
-function buildMatchKey({ category, home, away, title, startsAtSec }) {
-  let teamA = home;
-  let teamB = away;
-  if (!teamA && !teamB) {
-    const split = splitTeamsFromTitle(title);
-    if (split) { teamA = split.home; teamB = split.away; }
-  }
-  const bucket = dayBucket(startsAtSec);
-  if (teamA && teamB) {
-    const pair = [slugifyTeam(teamA), slugifyTeam(teamB)].sort().join('_');
-    return `${category}|${pair}|${bucket}`;
-  }
-  // No parseable team pair (e.g. a golf tournament or fight-night card name)
-  // — fall back to the whole title, which won't merge across providers but
-  // still displays correctly as its own single-provider entry.
-  const titleSlug = String(title || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
-  return `${category}|title:${titleSlug}|${bucket}`;
+function tokensMatch(a, b) {
+  if (a === b) return true;
+  // Abbreviation vs full word: "man" ~ "manchester", "utd" isn't handled
+  // but is rare in these feeds.
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= 3 && long.startsWith(short) && long.length - short.length >= 2;
 }
+
+// Generic words that still tell two clubs from the same city apart
+// (Manchester City vs Manchester United, Michigan vs Michigan State).
+const QUALIFIERS = new Set(['united', 'city', 'state', 'athletic', 'sporting', 'real', 'county', 'rovers', 'wanderers', 'albion', 'women']);
+
+function qualifiers(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((token) => QUALIFIERS.has(token));
+}
+
+export function teamsMatch(nameA, nameB) {
+  const qa = qualifiers(nameA);
+  const qb = qualifiers(nameB);
+  if (qa.length && qb.length && !qa.some((token) => qb.includes(token))) return false;
+
+  const a = teamTokens(nameA);
+  const b = teamTokens(nameB);
+  if (!a.length || !b.length) {
+    return String(nameA || '').trim().toLowerCase() === String(nameB || '').trim().toLowerCase();
+  }
+  // Nickname (last token) agreement is the strongest signal; otherwise any
+  // distinctive shared token.
+  if (tokensMatch(a[a.length - 1], b[b.length - 1])) return true;
+  // One name is the other's short form: "BYU" ⊂ "BYU Cougars", "Iowa State" ⊂
+  // "Iowa State Cyclones" (short school names fail the length rule below).
+  const within = (x, y) => x.every((tokenX) => y.some((tokenY) => tokensMatch(tokenX, tokenY)));
+  const sameQualifiers = qa.length === qb.length && qa.every((token) => qb.includes(token));
+  if (sameQualifiers && (within(a, b) || within(b, a))) return true;
+  return a.some((tokenA) => tokenA.length >= 4 && b.some((tokenB) => tokensMatch(tokenA, tokenB)));
+}
+
+function titleSlug(title) {
+  return String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function sameEvent(a, b) {
+  if (a.category !== b.category) return false;
+
+  const timesKnown = a.startsAt && b.startsAt && !a.alwaysLive && !b.alwaysLive;
+  if (timesKnown && Math.abs(a.startsAt - b.startsAt) > MERGE_WINDOW_SEC) return false;
+  if (!timesKnown && a.alwaysLive !== b.alwaysLive && a.startsAt && b.startsAt) return false;
+
+  if (a.teams && b.teams) {
+    return (teamsMatch(a.teams.home, b.teams.home) && teamsMatch(a.teams.away, b.teams.away))
+      || (teamsMatch(a.teams.home, b.teams.away) && teamsMatch(a.teams.away, b.teams.home));
+  }
+  // Channels / tournaments / fight cards: identical normalized title.
+  return titleSlug(a.name) === titleSlug(b.name);
+}
+
+// ── League inference (for ESPN-style league rows) ──────────────────────
+
+const NFL_NICKNAMES = new Set(['cardinals', 'falcons', 'ravens', 'bills', 'panthers', 'bears', 'bengals', 'browns', 'cowboys', 'broncos', 'lions', 'packers', 'texans', 'colts', 'jaguars', 'chiefs', 'raiders', 'chargers', 'rams', 'dolphins', 'vikings', 'patriots', 'saints', 'giants', 'jets', 'eagles', 'steelers', '49ers', 'seahawks', 'buccaneers', 'titans', 'commanders']);
+const NBA_NICKNAMES = new Set(['hawks', 'celtics', 'nets', 'hornets', 'bulls', 'cavaliers', 'mavericks', 'nuggets', 'pistons', 'warriors', 'rockets', 'pacers', 'clippers', 'lakers', 'grizzlies', 'heat', 'bucks', 'timberwolves', 'pelicans', 'knicks', 'thunder', 'magic', '76ers', 'suns', 'blazers', 'kings', 'spurs', 'raptors', 'jazz', 'wizards']);
+const NHL_NICKNAMES = new Set(['ducks', 'bruins', 'sabres', 'flames', 'hurricanes', 'blackhawks', 'avalanche', 'blue jackets', 'stars', 'red wings', 'oilers', 'panthers', 'kings', 'wild', 'canadiens', 'predators', 'devils', 'islanders', 'rangers', 'senators', 'flyers', 'penguins', 'sharks', 'kraken', 'blues', 'lightning', 'maple leafs', 'canucks', 'golden knights', 'capitals', 'jets', 'mammoth']);
+
+function nickname(name) {
+  const tokens = String(name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+  const two = tokens.slice(-2).join(' ');
+  return { one: tokens[tokens.length - 1] || '', two };
+}
+
+// Feeds name the same league differently (StreamFree "NCAAF", PPV "College
+// Football"); one name per league keeps it to one row.
+const LEAGUE_ALIASES = {
+  ncaaf: 'College Football', 'ncaa football': 'College Football', 'college football': 'College Football',
+  ncaab: 'College Basketball', 'ncaa basketball': 'College Basketball', 'college basketball': 'College Basketball',
+  epl: 'Premier League', 'english premier league': 'Premier League', 'premier league': 'Premier League',
+  'la liga': 'LaLiga', laliga: 'LaLiga',
+  ucl: 'Champions League', 'uefa champions league': 'Champions League', 'champions league': 'Champions League',
+  f1: 'Formula 1', 'formula one': 'Formula 1', 'formula 1': 'Formula 1',
+  wwe: 'Wrestling', aew: 'Wrestling', wrestling: 'Wrestling',
+  ufc: 'UFC', mma: 'MMA',
+};
+
+export function canonicalLeague(name) {
+  if (!name) return name;
+  return LEAGUE_ALIASES[String(name).trim().toLowerCase()] || name;
+}
+
+function inferLeague(item) {
+  if (item.tag && !/24\/7/i.test(item.tag)) return canonicalLeague(item.tag);
+  if (item.alwaysLive) return '24/7 Channels';
+  const teams = item.teams;
+  if (teams) {
+    const [a, b] = [nickname(teams.home), nickname(teams.away)];
+    const inSet = (set) => (set.has(a.one) || set.has(a.two)) && (set.has(b.one) || set.has(b.two));
+    if (item.category === 'American Football') return inSet(NFL_NICKNAMES) ? 'NFL' : 'College Football';
+    if (item.category === 'Basketball' && inSet(NBA_NICKNAMES)) return 'NBA';
+    if (item.category === 'Hockey' && inSet(NHL_NICKNAMES)) return 'NHL';
+    if (item.category === 'Baseball') return 'MLB';
+  }
+  return item.category;
+}
+
+// ── Provider fetch + normalize ─────────────────────────────────────────
 
 async function fetchPpvNormalized() {
   const res = await fetch('https://api.ppv.st/api/streams', {
@@ -130,31 +247,30 @@ async function fetchPpvNormalized() {
     const catAlwaysLive = truthy(cat.always_live);
     for (const s of cat.streams || []) {
       const alwaysLive = catAlwaysLive || truthy(s.always_live);
-      const live     = alwaysLive || (s.starts_at <= now && s.ends_at >= now);
-      const upcoming = !alwaysLive && s.starts_at > now;
-      const ended    = !alwaysLive && s.ends_at < now;
+      const ended = !alwaysLive && s.ends_at < now;
       if (ended && !truthy(s.allowpaststreams)) continue;
       if (!s.iframe) continue;
-      const category = s.category_name || cat.category || 'Other';
-      // PPV.st bundles a non-sports "24/7 Streams" category (cartoon reruns,
-      // a live cow cam, etc.) alongside real events — filter the whole
-      // category out rather than naming individual shows, since it's a
-      // fixed bucket the source itself uses to mean "not a sport".
-      if (category === '24/7 Streams') continue;
-      out.push({
-        matchKey: buildMatchKey({ category, title: s.name, startsAtSec: s.starts_at }),
-        name: s.name,
-        category,
-        poster: s.poster || null,
-        tag: s.tag || null,
-        startsAt: s.starts_at,
-        endsAt: s.ends_at,
-        alwaysLive,
-        live,
-        upcoming,
-        replay: ended && truthy(s.allowpaststreams),
-        provider: { id: 'ppv', embedUrl: s.iframe },
-      });
+      const rawCategory = s.category_name || cat.category || 'Other';
+      // PPV.st's "24/7 Streams" bucket is non-sports (cartoon reruns etc.).
+      if (rawCategory === '24/7 Streams') continue;
+      // The main embed plus any mirrors ("substreams", each with its own tag).
+      const embeds = [{ iframe: s.iframe, tag: s.source_tag }, ...(Array.isArray(s.substreams) ? s.substreams : [])
+        .filter((sub) => sub && sub.iframe && sub.iframe !== s.iframe)
+        .map((sub) => ({ iframe: sub.iframe, tag: sub.source_tag }))];
+      for (const embed of embeds) {
+        out.push({
+          name: s.name,
+          category: rawCategory,
+          poster: s.poster || null,
+          tag: s.tag || null,
+          colors: Array.isArray(s.colors) ? s.colors : null,
+          startsAt: s.starts_at,
+          endsAt: s.ends_at,
+          alwaysLive,
+          replay: ended && truthy(s.allowpaststreams),
+          provider: { id: 'ppv', embedUrl: embed.iframe, label: embed.tag ? `PPV · ${embed.tag}` : 'PPV' },
+        });
+      }
     }
   }
   return out;
@@ -175,34 +291,35 @@ async function fetchStreamedNormalized() {
     if (!Array.isArray(m.sources) || m.sources.length === 0) continue;
     const category = STREAMED_CATEGORY_MAP[m.category] || 'Other';
     const startsAt = Math.floor((m.date || 0) / 1000);
-    const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
-    const endsAt = startsAt + duration;
-    if (startsAt && now > endsAt) continue; // stale — streamed.pk has no replay assets
+    const endsAt = startsAt + (DURATION_SEC[category] || DEFAULT_DURATION_SEC);
+    if (startsAt && now > endsAt) continue; // stale — streamed.pk has no replays
     const home = m.teams?.home?.name || null;
     const away = m.teams?.away?.name || null;
-    const poster = m.poster ? `https://streamed.pk${m.poster}` : null;
-    const matchKey = buildMatchKey({ category, home, away, title: m.title, startsAtSec: startsAt });
-    // Each match can itself have multiple independent backend sources
-    // (admin/delta/echo/...) — surface all of them as separate provider
-    // entries so failover has real alternates even within just this API.
+    const badge = (team) => (team?.badge ? `https://streamed.pk/api/images/badge/${team.badge}.webp` : null);
     for (const src of m.sources) {
       out.push({
-        matchKey,
         name: m.title,
         category,
-        poster,
+        poster: m.poster ? `https://streamed.pk${m.poster}` : null,
         tag: null,
+        teams: home && away ? { home, away } : null,
+        logos: home && away ? { home: badge(m.teams.home), away: badge(m.teams.away) } : null,
         startsAt,
         endsAt,
-        alwaysLive: false,
-        live: now >= startsAt,
-        upcoming: now < startsAt,
+        alwaysLive: !startsAt,
         replay: false,
-        provider: { id: 'streamed', source: src.source, matchId: src.id, label: `Streamed.pk (${src.source})` },
+        provider: { id: 'streamed', source: src.source, matchId: src.id, label: `Streamed · ${src.source}` },
       });
     }
   }
   return out;
+}
+
+// "…/football/redzone1080p" → "StreamFree 1080p"; numbered when unclear.
+function streamfreeLabel(url, index, count) {
+  const quality = /(2160|1080|720|480)p/.exec(url);
+  if (quality) return `StreamFree ${quality[1] === '2160' ? '4K' : `${quality[1]}p`}`;
+  return count > 1 ? `StreamFree ${index + 1}` : 'StreamFree';
 }
 
 async function fetchStreamfreeNormalized() {
@@ -221,64 +338,145 @@ async function fetchStreamfreeNormalized() {
     const startsAt = s.match_timestamp || 0;
     const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
     const endsAt = startsAt ? startsAt + duration : now + duration;
-    if (startsAt && now > endsAt) continue;
-    if (!s.embed_url) continue;
-    out.push({
-      matchKey: buildMatchKey({ category, home: s.team1?.name, away: s.team2?.name, title: s.name, startsAtSec: startsAt }),
-      name: s.name,
-      category,
-      poster: s.thumbnail_url || null,
-      tag: s.league || null,
-      startsAt,
-      endsAt,
-      alwaysLive: !startsAt,
-      live: !startsAt || now >= startsAt,
-      upcoming: !!startsAt && now < startsAt,
-      replay: false,
-      provider: { id: 'streamfree', embedUrl: s.embed_url },
-    });
+    // Embeds appear in "sources" near game time (older API: embed_url).
+    const embeds = [...new Set([...(Array.isArray(s.sources) ? s.sources : []), s.embed_url].filter((url) => typeof url === 'string' && url.startsWith('http')))];
+    if (embeds.length === 0) continue;
+    // Channels (RedZone, Sky Sports F1, Willow) keep a timestamp from weeks
+    // ago; anything with embeds that "started" over 2 days back is one.
+    const channel = Boolean(startsAt) && now - startsAt > 2 * 86400;
+    if (startsAt && now > endsAt && !channel) continue;
+    const home = s.team1?.name || null;
+    const away = s.team2?.name || null;
+    for (const [index, embedUrl] of embeds.entries()) {
+      out.push({
+        name: s.name,
+        category,
+        poster: s.thumbnail_url || null,
+        tag: s.league || null,
+        teams: home && away ? { home, away } : null,
+        logos: home && away ? { home: s.team1?.logo || null, away: s.team2?.logo || null } : null,
+        startsAt: channel ? 0 : startsAt,
+        endsAt: channel ? now + duration : endsAt,
+        alwaysLive: !startsAt || channel,
+        replay: false,
+        provider: { id: 'streamfree', embedUrl, label: streamfreeLabel(embedUrl, index, embeds.length) },
+      });
+    }
   }
   return out;
 }
 
-function mergeNormalized(lists) {
-  const byKey = new Map();
-  for (const item of lists) {
-    const existing = byKey.get(item.matchKey);
-    if (!existing) {
-      byKey.set(item.matchKey, {
-        id: item.matchKey,
-        name: item.name,
-        category: item.category,
-        poster: item.poster,
-        tag: item.tag,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        alwaysLive: item.alwaysLive,
-        live: item.live,
-        upcoming: item.upcoming,
-        replay: item.replay,
-        providers: [item.provider],
-        _timingFromPpv: item.provider.id === 'ppv',
-      });
-    } else {
-      existing.providers.push(item.provider);
-      if (!existing.poster && item.poster) existing.poster = item.poster;
-      if (item.provider.id === 'ppv' && !existing._timingFromPpv) {
-        // PPV.st has real end times / replay detection — prefer it as the
-        // timing "source of truth" once present, over the estimated
-        // durations used for the other two providers.
-        existing.startsAt = item.startsAt;
-        existing.endsAt = item.endsAt;
-        existing.alwaysLive = item.alwaysLive;
-        existing.live = item.live;
-        existing.upcoming = item.upcoming;
-        existing.replay = item.replay;
-        existing._timingFromPpv = true;
+// ── Merge ──────────────────────────────────────────────────────────────
+
+// "NFL vs RedZone" is a channel, not a matchup.
+const NOT_A_TEAM = /^(nfl|nba|nhl|mlb|mls|wnba|ncaa\w*|redzone|red zone|tbd|tba)$/i;
+
+// Only team sports have "A vs B" titles; racing/golf/fight-card titles use
+// " - " for "Event - Session" and must not be read as two teams.
+const TEAM_SPORTS = new Set(['Soccer', 'Basketball', 'American Football', 'Hockey', 'Baseball', 'Rugby', 'Cricket', 'Australian Football', 'Volleyball']);
+
+function prepare(item) {
+  const category = canonicalCategory(item.category);
+  let teams = TEAM_SPORTS.has(category) ? (item.teams || splitTeamsFromTitle(item.name)) : null;
+  if (teams && (NOT_A_TEAM.test(teams.home.trim()) || NOT_A_TEAM.test(teams.away.trim()))) teams = null;
+  return { ...item, category, teams };
+}
+
+// Listings that aren't watchable events at all.
+function isJunkListing(item) {
+  return /\bschedule\b/i.test(item.name || '');
+}
+
+function cleanName(entry, fallbackName) {
+  if (entry.teams) return `${entry.teams.home} vs ${entry.teams.away}`;
+  return fallbackName || '';
+}
+
+function eventId(entry) {
+  const base = entry.teams
+    ? [entry.teams.home, entry.teams.away].map((name) => teamTokens(name).join('-')).sort().join('_')
+    : titleSlug(entry.name).replace(/\s+/g, '-');
+  const day = entry.startsAt && !entry.alwaysLive ? new Date(entry.startsAt * 1000).toISOString().slice(0, 10) : 'live';
+  return `${entry.category}|${base}|${day}`.toLowerCase();
+}
+
+export function mergeNormalized(rawItems) {
+  const clusters = [];
+  const byCategory = new Map();
+
+  for (const raw of rawItems) {
+    if (isJunkListing(raw)) continue;
+    const item = prepare(raw);
+    const bucket = byCategory.get(item.category) || [];
+    const cluster = bucket.find((candidate) => candidate.members.some((member) => sameEvent(member, item)));
+
+    if (cluster) {
+      cluster.members.push(item);
+      // De-dupe identical servers (same provider + same source/url).
+      const providerKey = `${item.provider.id}|${item.provider.source || ''}|${item.provider.embedUrl || item.provider.matchId || ''}`;
+      if (!cluster.providerKeys.has(providerKey)) {
+        cluster.providerKeys.add(providerKey);
+        cluster.providers.push(item.provider);
       }
+    } else {
+      const created = {
+        members: [item],
+        providers: [item.provider],
+        providerKeys: new Set([`${item.provider.id}|${item.provider.source || ''}|${item.provider.embedUrl || item.provider.matchId || ''}`]),
+      };
+      bucket.push(created);
+      byCategory.set(item.category, bucket);
+      clusters.push(created);
     }
   }
-  const merged = Array.from(byKey.values()).map(({ _timingFromPpv, ...rest }) => rest);
+
+  const now = Math.floor(Date.now() / 1000);
+
+  const merged = clusters.map(({ members, providers }) => {
+    // PPV has real start/end times + replay detection; prefer it for timing.
+    const timing = members.find((member) => member.provider.id === 'ppv') || members[0];
+    const withTeams = members.find((member) => member.teams) || members[0];
+    const withLogos = members.find((member) => member.logos?.home && member.logos?.away);
+    const tagged = members.find((member) => member.tag && !/24\/7/i.test(member.tag));
+    const entry = {
+      category: timing.category,
+      teams: withTeams.teams || null,
+      name: '',
+      poster: (members.find((member) => member.provider.id === 'ppv' && member.poster) || members.find((member) => member.poster))?.poster || null,
+      logos: withLogos?.logos || null,
+      colors: members.find((member) => member.colors)?.colors || null,
+      tag: tagged?.tag || null,
+      startsAt: timing.startsAt,
+      endsAt: timing.endsAt,
+      alwaysLive: members.every((member) => member.alwaysLive),
+      replay: timing.replay,
+      // PPV first (most reliable in practice), then StreamFree, then
+      // Streamed's sub-sources.
+      providers: [...providers].sort((a, b) => ['ppv', 'streamfree', 'streamed'].indexOf(a.id) - ['ppv', 'streamfree', 'streamed'].indexOf(b.id)),
+    };
+    entry.name = cleanName(entry, (members.find((member) => member.provider.id === 'ppv') || members[0]).name);
+    // Logos follow the name's order ("A vs B" → A's logo first), even when
+    // they came from a feed that lists the teams the other way round.
+    const named = splitTeamsFromTitle(entry.name);
+    if (entry.logos && withLogos?.teams && named
+      && teamsMatch(named.home, withLogos.teams.away) && !teamsMatch(named.home, withLogos.teams.home)) {
+      entry.logos = { home: entry.logos.away, away: entry.logos.home };
+    }
+    entry.league = inferLeague(entry);
+    entry.id = eventId(entry);
+    entry.live = entry.alwaysLive || (entry.startsAt <= now && entry.endsAt >= now);
+    entry.upcoming = !entry.alwaysLive && entry.startsAt > now;
+    return entry;
+  });
+
+  // Same id can still collide (e.g. two legs of a doubleheader on one day).
+  const seenIds = new Map();
+  merged.forEach((entry) => {
+    const count = seenIds.get(entry.id) || 0;
+    seenIds.set(entry.id, count + 1);
+    if (count) entry.id = `${entry.id}#${count}`;
+  });
+
   merged.sort((a, b) => {
     if (a.live !== b.live) return a.live ? -1 : 1;
     if (a.upcoming !== b.upcoming) return a.upcoming ? -1 : 1;
@@ -287,51 +485,131 @@ function mergeNormalized(lists) {
   return merged;
 }
 
-// Fetches + merges all 3 providers directly from the browser (all three
-// send Access-Control-Allow-Origin: *). Used both as the client-side
-// fallback when the server proxy is unavailable, and reused verbatim by
-// fetchSportsStreams below.
-export async function fetchAllSportsStreams() {
-  const [ppv, streamed, streamfree] = await Promise.allSettled([
+// ── Admin switches ─────────────────────────────────────────────────────
+// Sports feeds share server_config with the movie servers, under a
+// "sports:" prefix: sports:ppv, sports:streamfree, sports:streamed (all of
+// Streamed) and sports:streamed:<source> (one Streamed source, e.g. alpha).
+
+export const SPORTS_PROVIDER_IDS = Object.keys(PROVIDER_NAMES);
+
+export function sportsSwitchKeys(provider) {
+  if (!provider?.id) return [];
+  const keys = [`sports:${provider.id}`];
+  if (provider.id === 'streamed' && provider.source) keys.push(`sports:streamed:${provider.source}`);
+  return keys;
+}
+
+export function withoutDisabledFeeds(rawItems, disabled) {
+  if (!disabled || disabled.size === 0) return rawItems;
+  return rawItems.filter((item) => !sportsSwitchKeys(item.provider).some((key) => disabled.has(key)));
+}
+
+// How many feeds each provider (and each Streamed source) has right now,
+// for the admin panel.
+export function countFeedsBySwitch(rawItems) {
+  const counts = {};
+  for (const item of rawItems) {
+    for (const key of sportsSwitchKeys(item.provider)) counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
+// ── Public API ─────────────────────────────────────────────────────────
+
+export async function fetchRawSportsStreams() {
+  const results = await Promise.allSettled([
     fetchPpvNormalized(),
     fetchStreamedNormalized(),
     fetchStreamfreeNormalized(),
   ]);
-
-  const lists = [];
-  if (ppv.status === 'fulfilled') lists.push(...ppv.value);
-  if (streamed.status === 'fulfilled') lists.push(...streamed.value);
-  if (streamfree.status === 'fulfilled') lists.push(...streamfree.value);
-
+  const lists = results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value);
   if (lists.length === 0) {
-    const firstError = [ppv, streamed, streamfree].find((r) => r.status === 'rejected');
+    const firstError = results.find((result) => result.status === 'rejected');
     throw new Error(firstError?.reason?.message || 'All sports providers unavailable');
   }
-  return mergeNormalized(lists);
+  return lists;
 }
 
-export async function fetchSportsStreams() {
-  // Server proxy first (one shared cache instead of every visitor hitting
-  // three separate free APIs, and a server IP is less likely to trip
-  // streamed.pk's ddos-guard challenge than a random browser) — direct
-  // multi-provider fetch as a fallback if the proxy route is unavailable.
+export async function fetchAllSportsStreams() {
+  return mergeNormalized(await fetchRawSportsStreams());
+}
+
+// Unmerged feeds: straight from the browser first (the feeds refuse
+// Vercel's servers, so the proxy has answered 502 since 2026-10-08 and only
+// added a wasted round trip), the server proxy as a fallback.
+async function fetchProxyFeeds() {
+  const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) throw new Error(`sports proxy ${res.status}`);
+  const data = await res.json();
+  if (data.error || !Array.isArray(data.raw) || data.raw.length === 0) throw new Error('sports proxy empty');
+  return data.raw;
+}
+
+export async function fetchSportsFeeds() {
   try {
-    const res = await fetch('/api/sports/streams', { signal: AbortSignal.timeout(6000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (!data.error && Array.isArray(data.streams) && data.streams.length > 0) {
-        return data.streams;
-      }
-    }
-  } catch { /* fall through */ }
-  return fetchAllSportsStreams();
+    return await fetchRawSportsStreams();
+  } catch {
+    return fetchProxyFeeds();
+  }
 }
 
-// Resolves one provider entry from a merged stream's `providers` array into
-// an actual embeddable iframe URL. PPV.st and StreamFree already give a
-// direct embed URL up front; Streamed.pk requires a second lookup per
-// (source, matchId) pair, done lazily here so we're not making hundreds of
-// extra requests for matches the user never opens.
+// Feeds an admin switched off are left out before merging, so a game only
+// shows if some enabled feed still carries it.
+export async function fetchSportsStreams() {
+  const [raw, disabled] = await Promise.all([fetchSportsFeeds(), fetchDisabledServers()]);
+  return mergeNormalized(withoutDisabledFeeds(raw, disabled));
+}
+
+// Same result, delivered as each feed arrives: onUpdate(merged) runs after
+// every feed, so the page shows games without waiting for the slowest one
+// (StreamFree takes ~0.7s, the others ~0.3s). Resolves with the final list.
+export async function loadSportsStreams(onUpdate) {
+  const disabledPromise = fetchDisabledServers().catch(() => new Set());
+  // Kept in feed order (PPV, Streamed, StreamFree) whatever order they arrive
+  // in: the merge takes a game's name and id from its first listing, so an
+  // arrival-order merge gave the same game a different id from one refresh to
+  // the next (and the player lost the game it was showing).
+  const byFeed = [null, null, null];
+  const ordered = () => byFeed.filter(Boolean);
+  let settled = 0;
+  let lastError = null;
+  const feeds = [fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized];
+  await Promise.all(feeds.map((fetchFeed, index) => fetchFeed()
+    .then(async (items) => {
+      byFeed[index] = items;
+      const disabled = await disabledPromise;
+      settled += 1;
+      // Show games once two feeds are in; the last one arrives with the
+      // final update below.
+      if (settled >= 2 && settled < feeds.length) onUpdate?.(mergeNormalized(withoutDisabledFeeds(ordered().flat(), disabled)));
+    })
+    .catch((error) => { settled += 1; lastError = error; })));
+  if (ordered().length === 0) {
+    const raw = await fetchProxyFeeds().catch(() => { throw lastError || new Error('All sports providers unavailable'); });
+    const merged = mergeNormalized(withoutDisabledFeeds(raw, await disabledPromise));
+    onUpdate?.(merged);
+    return merged;
+  }
+  const merged = mergeNormalized(withoutDisabledFeeds(ordered().flat(), await disabledPromise));
+  onUpdate?.(merged);
+  return merged;
+}
+
+// The same real game in two schedule refreshes, even if its id changed
+// (a feed renamed a team): same category, both teams match, within 3h.
+export function sameGame(a, b) {
+  if (!a || !b || a.category !== b.category || Boolean(a.alwaysLive) !== Boolean(b.alwaysLive)) return false;
+  if (a.startsAt && b.startsAt && Math.abs(a.startsAt - b.startsAt) > 3 * 3600) return false;
+  const ta = a.teams || splitTeamsFromTitle(a.name);
+  const tb = b.teams || splitTeamsFromTitle(b.name);
+  if (ta && tb) {
+    return (teamsMatch(ta.home, tb.home) && teamsMatch(ta.away, tb.away)) || (teamsMatch(ta.home, tb.away) && teamsMatch(ta.away, tb.home));
+  }
+  return titleSlug(a.name) === titleSlug(b.name);
+}
+
+// Resolves one server entry into an embeddable iframe URL. PPV and
+// StreamFree give one up front; Streamed.pk needs a lookup per source.
 export async function resolveProviderEmbedUrl(provider) {
   if (!provider) return null;
   if (provider.embedUrl) return provider.embedUrl;
@@ -364,7 +642,81 @@ export async function resolveProviderEmbedUrl(provider) {
   return null;
 }
 
+// "Server 2 · Streamed · admin" style label for the server dropdown.
+// ── Streamed: every stream of every source ─────────────────────────────
+// A Streamed source usually has several streams (numbered feeds, HD and SD,
+// different commentary). Feed lists only say which sources a game has, so
+// the player expands them when a game opens.
+
+const MAX_STREAMS_PER_SOURCE = 4;
+
+async function fetchStreamedStreams(source, matchId) {
+  const path = `${encodeURIComponent(source)}/${encodeURIComponent(matchId)}`;
+  try {
+    const res = await fetch(`/api/sports/resolve/streamed/${path}?all=1`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.streams) && data.streams.length) return data.streams;
+    }
+  } catch { /* fall through */ }
+  try {
+    const res = await fetch(`https://streamed.pk/api/stream/${path}`, {
+      headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) return null;
+    const list = await res.json();
+    return Array.isArray(list) ? list.filter((s) => typeof s.embedUrl === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+export function streamedStreamLabel(source, stream, count) {
+  const language = stream.language && !/^main$/i.test(stream.language) ? ` · ${stream.language}` : '';
+  const number = count > 1 ? ` ${stream.streamNo || ''}`.trimEnd() : '';
+  return `Streamed · ${source}${number}${stream.hd ? ' HD' : ''}${language}`;
+}
+
+// Replaces each Streamed source with its streams (HD first, capped per
+// source). A source that can't be looked up stays as it was and is resolved
+// on demand, so expanding never loses a server.
+// Expansions are cached briefly, so warming a game on hover makes the click
+// that follows start at once.
+const EXPAND_TTL_MS = 90_000;
+const expandCache = new Map(); // key -> { at, promise }
+
+export function expandStreamProviders(providers) {
+  const key = providers.map((provider) => `${provider.id}|${provider.source || ''}|${provider.matchId || provider.embedUrl || ''}`).join(',');
+  const hit = expandCache.get(key);
+  if (hit && Date.now() - hit.at < EXPAND_TTL_MS) return hit.promise;
+  const promise = expandStreamProvidersNow(providers);
+  expandCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => expandCache.delete(key));
+  return promise;
+}
+
+async function expandStreamProvidersNow(providers) {
+  const expanded = await Promise.all(providers.map(async (provider) => {
+    if (provider.id !== 'streamed' || provider.embedUrl || !provider.source || !provider.matchId) return [provider];
+    const streams = await fetchStreamedStreams(provider.source, provider.matchId);
+    if (!streams || streams.length === 0) return [provider];
+    const sorted = [...streams].sort((a, b) => Number(Boolean(b.hd)) - Number(Boolean(a.hd)) || (a.streamNo || 0) - (b.streamNo || 0));
+    return sorted.slice(0, MAX_STREAMS_PER_SOURCE).map((stream) => ({
+      ...provider,
+      embedUrl: stream.embedUrl,
+      label: streamedStreamLabel(provider.source, stream, streams.length),
+    }));
+  }));
+  const seen = new Set();
+  return expanded.flat().filter((provider) => {
+    const key = provider.embedUrl || `${provider.source}|${provider.matchId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function providerLabel(provider) {
   if (!provider) return '';
-  return provider.label || PROVIDER_LABELS[provider.id] || provider.id;
+  return provider.label || PROVIDER_NAMES[provider.id] || provider.id;
 }

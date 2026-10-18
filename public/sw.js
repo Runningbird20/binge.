@@ -1,7 +1,20 @@
-const CACHE_NAME = 'binge-shell-v2';
-const IMAGE_CACHE_NAME = 'binge-images-v1';
+// v5: TMDB title data cached network-first (binge-data) for flaky connections.
+const CACHE_NAME = 'binge-shell-v5';
+// v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
+const IMAGE_CACHE_NAME = 'binge-images-v2';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
-const VALID_CACHE_NAMES = [CACHE_NAME, IMAGE_CACHE_NAME];
+// Title details/seasons from TMDB's API: network-first, this copy is only
+// used when the network fails, so title and episode pages still open on a
+// bad connection. Stored without the api_key parameter.
+const DATA_CACHE_NAME = 'binge-data-v1';
+const DATA_CACHE_MAX_ENTRIES = 300;
+const VALID_CACHE_NAMES = [CACHE_NAME, IMAGE_CACHE_NAME, DATA_CACHE_NAME];
+
+function dataCacheKey(url) {
+  const copy = new URL(url.href);
+  copy.searchParams.delete('api_key');
+  return copy.href;
+}
 const SHELL_ASSETS = ['/', '/index.html', '/manifest.json'];
 const BLOCKED_AD_HOST_PARTS = [
   'doubleclick.net',
@@ -25,9 +38,14 @@ function isBlockedAdRequest(url) {
   );
 }
 
-// Poster/cover art comes from external hosts (TMDB, Open Library, MangaDex),
-// so it can't be caught by the same-origin static-asset rule below.
+// Poster/cover art comes from third-party hosts (TMDB, Plex, Open Library,
+// Supabase storage), so it can't be caught by the same-origin static-asset
+// rule below — it needs its own origin-agnostic check.
 function isImageRequest(request, url) {
+  // Hero/backdrop art at TMDB "original" size is 1-3 MB a file; caching up
+  // to IMAGE_CACHE_MAX_ENTRIES of those would eat device storage. Let the
+  // browser's HTTP cache handle them; posters/thumbnails still cache here.
+  if (url.hostname === 'image.tmdb.org' && url.pathname.includes('/original/')) return false;
   if (request.destination === 'image') return true;
   return /\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(url.pathname);
 }
@@ -96,7 +114,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Never intercept API or cross-origin requests
+  if (url.hostname === 'api.themoviedb.org') {
+    const key = dataCacheKey(url);
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(DATA_CACHE_NAME).then((cache) => {
+            cache.put(key, copy);
+            trimCache(DATA_CACHE_NAME, DATA_CACHE_MAX_ENTRIES);
+          });
+        }
+        return response;
+      }).catch(() => caches.match(key).then((cached) => cached || Response.error()))
+    );
+    return;
+  }
+
+  // Never intercept Supabase, API, or other cross-origin requests
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
@@ -123,4 +158,31 @@ self.addEventListener('fetch', (event) => {
       })
     );
   }
+});
+
+// ── New-episode alerts (sent by /api/cron/new-episodes) ─────────────
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'binge.', body: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'binge.', {
+    body: data.body || '',
+    icon: '/logo192.png',
+    badge: '/favicon-32.png',
+    tag: data.tag,
+    data: { url: data.url || '/home' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/home', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const existing = windows.find((client) => client.url.startsWith(self.location.origin));
+    if (existing) {
+      await existing.focus();
+      return existing.navigate(target);
+    }
+    return self.clients.openWindow(target);
+  })());
 });
