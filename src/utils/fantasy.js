@@ -2,10 +2,14 @@
 // the fantasy game (NFL → football, MLB → baseball, …), so a football and a
 // baseball league each show up only during their own sport.
 //
-// League ids and the private-league cookies (espn_s2 + SWID) stay on this
-// device, per profile: they act like an ESPN password, so they're never
-// written to Supabase. /api/sports/fantasy forwards them to ESPN per request.
+// Signed in, everything follows the account, per profile: leagues live in
+// fantasy_leagues, and the private-league cookies (espn_s2 + SWID, which act
+// like an ESPN password) are sent once to /api/sports/fantasy/credentials,
+// which encrypts them server-side; the browser never reads them back.
+// Signed out, both stay on this device and go to ESPN through the proxy as
+// headers; the first signed-in visit moves them to the account.
 import { getActiveProfileId } from './activeProfile';
+import { getSupabaseSession, isSupabaseConfigured, supabase } from './supabase';
 
 export const FANTASY_EVENT = 'binge:fantasy-changed';
 
@@ -39,28 +43,137 @@ function storageKey() {
   return `binge.fantasy.v1:${getActiveProfileId() || 'default'}`;
 }
 
-function readAll() {
+function readLocal() {
   try { return JSON.parse(window.localStorage.getItem(storageKey()) || '{}') || {}; } catch { return {}; }
 }
 
-function writeAll(all) {
-  try { window.localStorage.setItem(storageKey(), JSON.stringify(all)); } catch { /* private mode */ }
-  window.dispatchEvent(new Event(FANTASY_EVENT));
+function writeLocal(all) {
+  try {
+    if (Object.keys(all).length) window.localStorage.setItem(storageKey(), JSON.stringify(all));
+    else window.localStorage.removeItem(storageKey());
+  } catch { /* private mode */ }
 }
 
-// { leagueId, teamId, s2, swid } or null.
-export function getFantasyLeague(game) {
-  return readAll()[game] || null;
+let cache = null; // Promise<{ signedIn, leagues: { [game]: { leagueId, teamId } }, login }>
+
+function notify() {
+  cache = null;
+  try { window.dispatchEvent(new Event(FANTASY_EVENT)); } catch { /* old browsers */ }
 }
 
-export function saveFantasyLeague(game, league) {
-  writeAll({ ...readAll(), [game]: { ...getFantasyLeague(game), ...league } });
+async function session() {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    const { data } = await getSupabaseSession();
+    return data?.session || null;
+  } catch {
+    return null;
+  }
 }
 
-export function removeFantasyLeague(game) {
-  const all = readAll();
-  delete all[game];
-  writeAll(all);
+function scoped(query) {
+  const profileId = getActiveProfileId();
+  return profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
+}
+
+async function credentialsRequest(method, auth, body) {
+  const profileId = getActiveProfileId() || '';
+  const res = await fetch(`/api/sports/fantasy/credentials${method === 'PUT' ? '' : `?profileId=${encodeURIComponent(profileId)}`}`, {
+    method,
+    headers: { Authorization: `Bearer ${auth.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify({ ...body, profileId: profileId || null }) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || 'Couldn\u2019t reach the server.');
+  return json;
+}
+
+async function upsertLeague(userId, game, league) {
+  const { data: existing } = await scoped(supabase.from('fantasy_leagues').select('id').eq('user_id', userId).eq('game', game)).maybeSingle();
+  const row = { league_id: String(league.leagueId), team_id: league.teamId ?? null, updated_at: new Date().toISOString() };
+  const { error } = existing
+    ? await supabase.from('fantasy_leagues').update(row).eq('id', existing.id)
+    : await supabase.from('fantasy_leagues').insert({ ...row, user_id: userId, profile_id: getActiveProfileId(), game });
+  if (error) throw new Error('Couldn\u2019t save your league.');
+}
+
+// Leagues saved on this device before signing in move to the account once.
+async function moveLocalToAccount(auth) {
+  const local = readLocal();
+  const games = Object.keys(local);
+  if (!games.length) return;
+  for (const game of games) {
+    if (local[game]?.leagueId) await upsertLeague(auth.user.id, game, local[game]);
+  }
+  const withLogin = games.map((game) => local[game]).find((league) => league?.s2 && league?.swid);
+  if (withLogin) await credentialsRequest('PUT', auth, { s2: withLogin.s2, swid: withLogin.swid });
+  writeLocal({});
+}
+
+export function loadFantasy() {
+  if (!cache) {
+    cache = (async () => {
+      const auth = await session();
+      if (!auth) {
+        const local = readLocal();
+        const withLogin = Object.values(local).find((league) => league?.s2 && league?.swid);
+        return { signedIn: false, leagues: local, login: withLogin ? { saved: true, swidHint: withLogin.swid.replace(/[{}]/g, '').slice(-4) } : { saved: false } };
+      }
+      await moveLocalToAccount(auth).catch(() => { /* try again next load */ });
+      const { data } = await scoped(supabase.from('fantasy_leagues').select('game, league_id, team_id').eq('user_id', auth.user.id));
+      const leagues = Object.fromEntries((data || []).map((row) => [row.game, { leagueId: row.league_id, teamId: row.team_id ?? undefined }]));
+      const login = await credentialsRequest('GET', auth).catch(() => ({ saved: false }));
+      return { signedIn: true, leagues, login };
+    })().catch(() => ({ signedIn: false, leagues: {}, login: { saved: false } }));
+  }
+  return cache;
+}
+
+export async function saveFantasyLeague(game, league) {
+  const auth = await session();
+  const current = (await loadFantasy()).leagues[game];
+  const next = { ...current, ...league };
+  if (auth) await upsertLeague(auth.user.id, game, next);
+  else writeLocal({ ...readLocal(), [game]: { ...readLocal()[game], ...next } });
+  notify();
+}
+
+export async function removeFantasyLeague(game) {
+  const auth = await session();
+  if (auth) {
+    await scoped(supabase.from('fantasy_leagues').delete().eq('user_id', auth.user.id).eq('game', game));
+  } else {
+    const local = readLocal();
+    delete local[game];
+    writeLocal(local);
+  }
+  notify();
+}
+
+// The private-league login is one per profile (it's the ESPN account), so it
+// covers every sport's league at once.
+export async function saveEspnLogin(s2, swid) {
+  const auth = await session();
+  if (auth) {
+    await credentialsRequest('PUT', auth, { s2, swid });
+  } else {
+    const local = readLocal();
+    Object.keys(local).forEach((game) => { local[game] = { ...local[game], s2, swid }; });
+    writeLocal(local);
+  }
+  notify();
+}
+
+export async function forgetEspnLogin() {
+  const auth = await session();
+  if (auth) {
+    await credentialsRequest('DELETE', auth);
+  } else {
+    const local = readLocal();
+    Object.keys(local).forEach((game) => { const { s2, swid, ...rest } = local[game]; local[game] = rest; });
+    writeLocal(local);
+  }
+  notify();
 }
 
 // Pulls a league id out of a pasted ESPN URL ("…?leagueId=123&teamId=4")
@@ -77,25 +190,34 @@ export function parseLeagueInput(text) {
   return null;
 }
 
-const cache = new Map(); // key -> { at, promise }
+const rosterCache = new Map(); // key -> { at, promise }
 
 export async function fetchFantasyLeague(game, league, { fresh = false } = {}) {
-  const key = `${game}:${league.leagueId}:${league.swid || ''}:${(league.s2 || '').slice(-12)}`;
-  const hit = cache.get(key);
+  const auth = await session();
+  const local = auth ? null : readLocal()[game];
+  const profileId = getActiveProfileId() || '';
+  const key = `${game}:${league.leagueId}:${auth ? `${auth.user.id}:${profileId}` : (local?.swid || '')}`;
+  const hit = rosterCache.get(key);
   if (hit && !fresh && Date.now() - hit.at < 20_000) return hit.promise;
   const headers = {};
-  if (league.s2 && league.swid) {
-    headers['x-espn-s2'] = league.s2;
-    headers['x-espn-swid'] = league.swid;
+  if (auth) headers.Authorization = `Bearer ${auth.access_token}`;
+  else if (local?.s2 && local?.swid) {
+    headers['x-espn-s2'] = local.s2;
+    headers['x-espn-swid'] = local.swid;
   }
-  const promise = fetch(`/api/sports/fantasy/${game}/${league.leagueId}`, { headers, signal: AbortSignal.timeout(15000) })
+  const query = auth && profileId ? `?profileId=${encodeURIComponent(profileId)}` : '';
+  const promise = fetch(`/api/sports/fantasy/${game}/${league.leagueId}${query}`, { headers, signal: AbortSignal.timeout(15000) })
     .then(async (res) => {
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || 'ESPN Fantasy isn’t answering right now.');
+      if (!res.ok) {
+        const error = new Error(body.error || 'ESPN Fantasy isn\u2019t answering right now.');
+        error.needsCredentials = Boolean(body.needsCredentials);
+        throw error;
+      }
       return body;
     });
-  cache.set(key, { at: Date.now(), promise });
-  promise.catch(() => cache.delete(key));
+  rosterCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => rosterCache.delete(key));
   return promise;
 }
 
