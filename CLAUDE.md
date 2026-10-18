@@ -192,6 +192,8 @@ Book reading goes through `src/utils/bookAccess.js`: one Open Library search (~0
 - **Streamed:** when a game opens, `expandStreamProviders` (via `/api/sports/resolve/streamed/:source/:id?all=1`) turns each source into all its streams, HD first, at most 4 per source.
 - **Ranking:** the player orders servers with `rankFeeds` (`utils/sportsServerMemory.js`). The server that last worked for this game goes first, then feed families that worked lately. "Worked" means 60s on a server; leaving within the minute or a load failure counts against it.
 
+- **Fantasy roster** (`FantasyRoster` under the line score in `LiveScorePanel`, `utils/fantasy.js`): the game's ESPN path picks the ESPN Fantasy game (`football/nfl`→`ffl`, `baseball/mlb`→`flb`, `basketball/nba`→`fba`, `hockey/nhl`→`fhl`), so each league shows only during its sport. Players on either team in the game are listed first. League id + private-league cookies (`espn_s2`, `SWID`) are kept per profile in localStorage only, never Supabase, and sent as headers to `GET /api/sports/fantasy/:game/:leagueId` (`server/routes/sports.js`), which calls ESPN's unofficial `lm-api-reads.fantasy.espn.com` API. Fantasy `proTeamId` equals the ESPN scores team id.
+
 The TV does the same, interleaving feeds so its 4-page race (`StreamRace.maxLiveContenders`) spans different feeds; the rest are backups that recovery tries first. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
 
 ### Caching & load performance
