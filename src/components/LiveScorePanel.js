@@ -4,10 +4,11 @@ import { followTeam, listFollowedTeams, TEAMS_EVENT, unfollowTeam } from '../uti
 import { haptic } from '../utils/haptics';
 import { findEspnEvent, fetchGameSummary } from '../utils/liveScores';
 import FantasyRoster from './FantasyRoster';
+import { fantasyGameFor } from '../utils/fantasy';
 
 const LIVE_POLL_MS = 20_000;
 const TABS = [
-  { id: 'score', label: 'Score' },
+  { id: 'fantasy', label: 'Fantasy' },
   { id: 'stats', label: 'Stats' },
   { id: 'plays', label: 'Plays' },
 ];
@@ -21,7 +22,7 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
   useEffect(() => { setRevealed(false); }, [stream.id]);
   const [event, setEvent] = useState(undefined); // undefined = looking, null = not found
   const [summary, setSummary] = useState(null);
-  const [tab, setTab] = useState('score');
+  const [tab, setTab] = useState('fantasy');
   const [followed, setFollowed] = useState([]);
 
   useEffect(() => {
@@ -79,7 +80,13 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
   const [away, home] = summary.teams;
   const masked = hideScores && !revealed && summary.state !== 'pre';
   const periods = Array.from({ length: summary.periods }, (_, index) => index + 1);
-  const available = TABS.filter((entry) => (entry.id === 'stats' ? summary.statRows.length || summary.leaders.length : entry.id === 'plays' ? summary.plays.length : true));
+  const available = TABS.filter((entry) => (
+    entry.id === 'fantasy' ? Boolean(fantasyGameFor(event.path))
+      : entry.id === 'stats' ? summary.statRows.length || summary.leaders.length
+        : summary.plays.length
+  ));
+  // Soccer, college and the like have no fantasy tab: open on the next one.
+  const current = available.some((entry) => entry.id === tab) ? tab : available[0]?.id;
 
   return (
     <aside className="st-ls" aria-label="Live score and stats">
@@ -117,18 +124,8 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
           <button type="button" className="st-btn st-btn--ghost st-ls-reveal" onClick={() => setRevealed(true)}>Show score and stats</button>
         </div>
       ) : (<>
-      {available.length > 1 && (
-        <div className="st-ls-tabs" role="tablist" aria-label="Game details">
-          {available.map((entry) => (
-            <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={tab === entry.id ? 'active' : ''} onClick={() => setTab(entry.id)}>
-              {entry.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="st-ls-body" role="tabpanel">
-        {tab === 'score' && periods.length > 0 && (
+      <div className="st-ls-linescore">
+        {periods.length > 0 && (
           <table className="st-ls-lines">
             <thead>
               <tr><th scope="col"><span className="sr-only">Team</span></th>{periods.map((p) => <th key={p} scope="col">{p}</th>)}<th scope="col">T</th></tr>
@@ -144,15 +141,28 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
             </tbody>
           </table>
         )}
-        {tab === 'score' && !periods.length && <p className="st-ls-empty">{summary.state === 'pre' ? 'The line score appears once the game starts.' : 'No line score for this game.'}</p>}
-        {tab === 'score' && summary.plays[0] && (
+        {!periods.length && <p className="st-ls-empty">{summary.state === 'pre' ? 'The line score appears once the game starts.' : 'No line score for this game.'}</p>}
+        {summary.plays[0] && (
           <p className="st-ls-last"><span>Last play</span>{summary.plays[0].text}</p>
         )}
-        {tab === 'score' && (
+      </div>
+
+      {available.length > 1 && (
+        <div className="st-ls-tabs" role="tablist" aria-label="Game details">
+          {available.map((entry) => (
+            <button key={entry.id} type="button" role="tab" aria-selected={current === entry.id} className={current === entry.id ? 'active' : ''} onClick={() => setTab(entry.id)}>
+              {entry.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="st-ls-body" role="tabpanel">
+        {current === 'fantasy' && (
           <FantasyRoster espnPath={event.path} gameTeams={[away, home].filter(Boolean)} live={summary.state === 'in'} />
         )}
 
-        {tab === 'stats' && (
+        {current === 'stats' && (
           <>
             {summary.statRows.length > 0 && (
               <table className="st-ls-stats">
@@ -173,7 +183,7 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
           </>
         )}
 
-        {tab === 'plays' && (
+        {current === 'plays' && (
           <ol className="st-ls-plays">
             {summary.plays.map((play) => (
               <li key={play.id} className={play.scoring ? 'scoring' : ''}>
