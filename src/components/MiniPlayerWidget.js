@@ -9,9 +9,16 @@
 // Either way it keeps saving the position from the server's playback
 // messages, so Expand (or Continue Watching later) resumes at the right
 // second instead of where the video was minimized.
+//
+// Where the browser has Document Picture-in-Picture (Chrome/Edge), Pop out
+// moves the video into an always-on-top window that stays over other tabs
+// and apps. Moving an iframe between documents reloads it, so it restarts at
+// the last second the server reported (urlAt / vidrift:resume). Closing that
+// window brings the video back to the corner the same way.
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ArrowsOutSimple, CaretDown, X } from '@phosphor-icons/react';
+import { ArrowSquareIn, ArrowsOutSimple, CaretDown, PictureInPicture, X } from '@phosphor-icons/react';
 import useDeviceType from '../hooks/useDeviceType';
 import { readPlayback } from '../utils/playbackMessages';
 import { savePosition } from '../utils/playbackPositions';
@@ -23,10 +30,12 @@ function storedCorner() {
   try { return CORNERS.includes(window.localStorage.getItem(CORNER_KEY)) ? window.localStorage.getItem(CORNER_KEY) : 'br'; } catch { return 'br'; }
 }
 
-function useSavePositions(frameRef, nowPlaying) {
+// `host` is the window the iframe lives in (the page, or the floating
+// Picture-in-Picture window): the server posts its messages to that one.
+function useSavePositions(frameRef, nowPlaying, host = window, timeRef = null) {
   useEffect(() => {
     const key = nowPlaying?.positionKey;
-    if (!key) return undefined;
+    if (!key && !timeRef) return undefined;
     let lastSaved = 0;
     let duration = 0;
     function onMessage(event) {
@@ -34,15 +43,21 @@ function useSavePositions(frameRef, nowPlaying) {
       const reading = readPlayback(event.data);
       if (!reading) return;
       if (reading.duration > 0) duration = reading.duration;
-      if (reading.time > 0 && Date.now() - lastSaved > 5000) {
+      if (reading.time > 0 && timeRef) timeRef.current = reading.time;
+      if (key && reading.time > 0 && Date.now() - lastSaved > 5000) {
         lastSaved = Date.now();
         savePosition(key, reading.time, duration);
       }
     }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [frameRef, nowPlaying]);
+    host.addEventListener('message', onMessage);
+    return () => host.removeEventListener('message', onMessage);
+  }, [frameRef, nowPlaying, host, timeRef]);
 }
+
+const canPopOut = () => typeof window !== 'undefined' && 'documentPictureInPicture' in window;
+
+const PIP_STYLE = 'html,body{margin:0;height:100%;background:#000;overflow:hidden}'
+  + 'iframe{position:fixed;inset:0;width:100%;height:100%;border:0}';
 
 function sendVidriftResume(frame, seconds) {
   if (!seconds || !frame) return;
@@ -55,11 +70,67 @@ function DesktopMini({ nowPlaying, onClose }) {
   const boxRef = useRef(null);
   const [corner, setCorner] = useState(storedCorner);
   const [drag, setDrag] = useState(null); // { x, y } offset while dragging
-  useSavePositions(frameRef, nowPlaying);
+  const [pipWindow, setPipWindow] = useState(null);
+  // Reloading the iframe (popping out or back in) restarts it here.
+  const [reload, setReload] = useState(null); // { nowPlaying, src, resumeAt }
+  const timeRef = useRef(0);
+  const nowPlayingRef = useRef(nowPlaying);
+  nowPlayingRef.current = nowPlaying;
+  useSavePositions(frameRef, nowPlaying, pipWindow || window, timeRef);
+
+  useEffect(() => { timeRef.current = 0; }, [nowPlaying]);
+  // Closing the mini player (or opening the full one) closes the window too.
+  useEffect(() => () => pipWindow?.close(), [pipWindow]);
+
+  const current = reload?.nowPlaying === nowPlaying ? reload : null;
+  const src = current ? current.src : nowPlaying.embedUrl;
+  const resumeAt = current ? current.resumeAt : nowPlaying.vidriftResume;
+
+  function restartAtCurrentSecond() {
+    const playing = nowPlayingRef.current;
+    const at = timeRef.current;
+    setReload({
+      nowPlaying: playing,
+      src: at > 0 && playing.urlAt ? playing.urlAt(at) : playing.embedUrl,
+      resumeAt: playing.resumeByMessage ? (at > 0 ? Math.floor(at) : playing.vidriftResume) : null,
+    });
+  }
+
+  async function popOut() {
+    try {
+      const win = await window.documentPictureInPicture.requestWindow({ width: 640, height: 360 });
+      const style = win.document.createElement('style');
+      style.textContent = PIP_STYLE;
+      win.document.head.append(style);
+      win.document.title = nowPlaying.title;
+      win.addEventListener('pagehide', () => {
+        restartAtCurrentSecond();
+        setPipWindow(null);
+      });
+      restartAtCurrentSecond();
+      setPipWindow(win);
+    } catch {
+      // Refused or unsupported: the corner player just carries on.
+    }
+  }
 
   function expand() {
+    pipWindow?.close();
     if (nowPlaying.href) navigate(nowPlaying.href);
   }
+
+  const frame = src ? (
+    <iframe
+      key={pipWindow ? 'pip' : 'corner'}
+      ref={frameRef}
+      src={src}
+      allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
+      allowFullScreen
+      referrerPolicy="no-referrer-when-downgrade"
+      title={nowPlaying.title}
+      onLoad={() => sendVidriftResume(frameRef.current, resumeAt)}
+    />
+  ) : null;
 
   function onPointerDown(event) {
     if (event.button !== 0 || event.target.closest('button')) return;
@@ -84,7 +155,7 @@ function DesktopMini({ nowPlaying, onClose }) {
   return (
     <div
       ref={boxRef}
-      className={`mini-pip mini-pip--${corner}${drag ? ' dragging' : ''}`}
+      className={`mini-pip mini-pip--${corner}${drag ? ' dragging' : ''}${pipWindow ? ' mini-pip--popped' : ''}`}
       style={drag ? { left: drag.left, top: drag.top, right: 'auto', bottom: 'auto' } : undefined}
       role="region"
       aria-label={`Now playing: ${nowPlaying.title}`}
@@ -94,6 +165,15 @@ function DesktopMini({ nowPlaying, onClose }) {
           <strong>{nowPlaying.title}</strong>
           {nowPlaying.subtitle && <span>{nowPlaying.subtitle}</span>}
         </span>
+        {pipWindow ? (
+          <button type="button" className="mini-pip-btn" onClick={() => pipWindow.close()} aria-label="Bring the video back to this tab" title="Bring back">
+            <ArrowSquareIn size={16} weight="bold" />
+          </button>
+        ) : canPopOut() && (
+          <button type="button" className="mini-pip-btn" onClick={popOut} aria-label="Pop out over other tabs and apps" title="Pop out">
+            <PictureInPicture size={16} weight="bold" />
+          </button>
+        )}
         <button type="button" className="mini-pip-btn" onClick={expand} aria-label="Expand to full player" title="Expand">
           <ArrowsOutSimple size={16} weight="bold" />
         </button>
@@ -101,19 +181,14 @@ function DesktopMini({ nowPlaying, onClose }) {
           <X size={16} weight="bold" />
         </button>
       </div>
-      <div className="mini-pip-frame">
-        {nowPlaying.embedUrl && (
-          <iframe
-            ref={frameRef}
-            src={nowPlaying.embedUrl}
-            allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
-            allowFullScreen
-            referrerPolicy="no-referrer-when-downgrade"
-            title={nowPlaying.title}
-            onLoad={() => sendVidriftResume(frameRef.current, nowPlaying.vidriftResume)}
-          />
-        )}
-      </div>
+      {pipWindow ? (
+        <>
+          <p className="mini-pip-popped-note">Playing in a floating window</p>
+          {createPortal(frame, pipWindow.document.body)}
+        </>
+      ) : (
+        <div className="mini-pip-frame">{frame}</div>
+      )}
     </div>
   );
 }

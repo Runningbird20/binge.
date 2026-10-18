@@ -1318,6 +1318,12 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       href: base,
       positionKey: key,
       vidriftResume: provider === 'vidrift' && at > 0 ? at : null,
+      // Popping out to a floating window reloads the iframe, so it needs a
+      // URL for whatever second the corner player has reached by then.
+      urlAt: RESUMABLE.has(provider) && provider !== 'vidrift'
+        ? (seconds) => buildUrl(provider, externalId, mediaType, season, episode, subtitleLang, { startAt: Math.floor(seconds), lowBandwidth: prefersLowBandwidth() })
+        : null,
+      resumeByMessage: provider === 'vidrift',
     });
     onClose?.();
   }

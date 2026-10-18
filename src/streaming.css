@@ -2870,6 +2870,7 @@ button.bottom-nav-item { font: inherit; cursor: pointer; }
 .mini-pip-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
 .mini-pip-frame { position: relative; aspect-ratio: 16 / 9; }
 .mini-pip-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.mini-pip-popped-note { margin: 0; padding: 0.6rem 0.75rem 0.7rem; font-size: 0.78rem; color: rgba(255, 255, 255, 0.65); background: #161922; }
 
 /* ── Wide screens ─────────────────────────────────────────────── */
 /* Browse surfaces use the full width of big monitors (more titles per row)
