@@ -2947,6 +2947,8 @@ button.bottom-nav-item { font: inherit; cursor: pointer; }
 
 /* ESPN Fantasy roster under the live score (FantasyRoster.js) */
 .st-fr { margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.st-ls-body > .st-fr:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.st-ls-linescore { padding: 0.25rem 1rem 0.75rem; }
 .st-fr-head { display: flex; align-items: baseline; gap: 0.6rem; }
 .st-fr-head h4 { flex: 1; min-width: 0; margin: 0; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-fr-total { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
