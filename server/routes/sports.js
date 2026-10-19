@@ -475,7 +475,8 @@ router.get('/fantasy/:game/:leagueId', async (req, res) => {
   try {
     const info = await fantasyGameInfo(game);
     const params = new URLSearchParams();
-    ['mTeam', 'mRoster', 'mSettings'].forEach((view) => params.append('view', view));
+    // mMatchupScore: this week's head-to-head scores for the fantasy board.
+    ['mTeam', 'mRoster', 'mSettings', 'mMatchupScore'].forEach((view) => params.append('view', view));
     if (info.period) params.set('scoringPeriodId', String(info.period));
     const url = `${FANTASY_BASE}/${game}/seasons/${info.season}/segments/0/leagues/${leagueId}?${params}`;
     const cacheKey = `${url}|${swidBraced}|${(credentials.s2 || '').slice(-12)}`;
@@ -498,11 +499,24 @@ router.get('/fantasy/:game/:leagueId', async (req, res) => {
     const data = hit.data || {};
     const period = data.scoringPeriodId || info.period;
     const members = new Map((data.members || []).map((m) => [m.id, m.displayName || [m.firstName, m.lastName].filter(Boolean).join(' ')]));
+    // This week's matchup per team: its score and the opponent's (live points while games are on).
+    const week = data.status?.currentMatchupPeriod || null;
+    const side = (s) => (s ? { teamId: s.teamId, points: Math.round((s.totalPointsLive ?? s.totalPoints ?? 0) * 100) / 100, projected: s.totalProjectedPointsLive ?? null } : null);
+    const matchups = new Map();
+    (data.schedule || []).filter((m) => m.matchupPeriodId === week).forEach((m) => {
+      const home = side(m.home); const away = side(m.away);
+      if (home) matchups.set(home.teamId, { points: home.points, projected: home.projected, opponentId: away?.teamId ?? null, opponentPoints: away?.points ?? null });
+      if (away) matchups.set(away.teamId, { points: away.points, projected: away.projected, opponentId: home?.teamId ?? null, opponentPoints: home?.points ?? null });
+    });
     const teams = (data.teams || []).map((team) => ({
       id: team.id,
       name: team.name || [team.location, team.nickname].filter(Boolean).join(' ') || team.abbrev || `Team ${team.id}`,
       abbrev: team.abbrev || '',
       owner: members.get((team.owners || [])[0]) || '',
+      logo: /^https?:\/\//.test(team.logo || '') ? team.logo : null,
+      record: team.record?.overall ? { wins: team.record.overall.wins || 0, losses: team.record.overall.losses || 0, ties: team.record.overall.ties || 0 } : null,
+      seed: team.playoffSeed || team.rankCalculatedFinal || null,
+      matchup: matchups.get(team.id) || null,
       mine: Boolean(swidBraced && (team.owners || []).some((owner) => String(owner).toUpperCase() === swidBraced)),
       roster: (team.roster?.entries || []).map((entry) => {
         const player = entry.playerPoolEntry?.player || {};
@@ -520,7 +534,7 @@ router.get('/fantasy/:game/:leagueId', async (req, res) => {
         };
       }),
     }));
-    res.set('Cache-Control', 'private, no-store').json({ game, season: info.season, period, leagueName: data.settings?.name || '', teams });
+    res.set('Cache-Control', 'private, no-store').json({ game, season: info.season, period, week, leagueName: data.settings?.name || '', teams });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
