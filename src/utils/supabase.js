@@ -139,6 +139,10 @@ async function withLockStealRetry(operation, retries = 2) {
 }
 
 export async function getSupabaseSession() {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: { session: null }, error: null };
+  }
+
   const client = requireSupabaseClient();
   if (!sessionRequestPromise) {
     sessionRequestPromise = runSerializedAuthOperation(() =>
@@ -152,6 +156,10 @@ export async function getSupabaseSession() {
 }
 
 export async function getSupabaseUser() {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: { user: null }, error: null };
+  }
+
   const client = requireSupabaseClient();
   if (!userRequestPromise) {
     userRequestPromise = runSerializedAuthOperation(() =>
@@ -165,6 +173,10 @@ export async function getSupabaseUser() {
 }
 
 export async function refreshSupabaseSession() {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: { session: null, user: null }, error: null };
+  }
+
   const client = requireSupabaseClient();
   if (!refreshRequestPromise) {
     refreshRequestPromise = runSerializedAuthOperation(() =>

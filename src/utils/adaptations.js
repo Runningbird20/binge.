@@ -3,7 +3,7 @@
 // job "Novel" / "Book" / "Author". That gives us the author, which is far
 // more reliable than titles (Game of Thrones ← "A Game of Thrones", House of
 // the Dragon ← "Fire & Blood"); titles are then only used to rank.
-import { requireSupabaseClient } from './supabase';
+import { isSupabaseConfigured, requireSupabaseClient } from './supabase';
 import { searchTmdbMulti, tmdbGet, tmdbKind } from './tmdb';
 import { resolveTmdbItems } from './catalogLookup';
 
@@ -69,6 +69,10 @@ export async function findSourceBooks({ mediaType, tmdbId, title }) {
   if (!basedOnBook) return null;
   const author = (writers.find((person) => person.job === 'Novel' || person.job === 'Book') || writers[0])?.name;
   if (!author) return { author: null, books: [] };
+
+  if (!isSupabaseConfigured) {
+    return { author, exact: false, books: [] };
+  }
 
   const supabase = requireSupabaseClient();
   const { data: rows } = await supabase

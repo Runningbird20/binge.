@@ -5,6 +5,7 @@ import {
   getCachedMediaMetadata,
 } from './mediaMetadataCache';
 import { activeProfileOwnsLegacyRows, getActiveProfileId } from './activeProfile';
+import { api } from '../api';
 
 const PROFILE_TABLE = 'profiles';
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
@@ -197,6 +198,17 @@ async function getStoredSupabaseProfile(authUser, overrides = {}) {
 }
 
 async function getAuthenticatedUser() {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const raw = window.localStorage.getItem('user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u?.id) return u;
+      }
+    } catch {}
+    return { id: 'neon-user', email: 'user@example.com' };
+  }
+
   const { data, error } = await withTimeout(
     getSupabaseUser(),
     AUTH_REQUEST_TIMEOUT_MS,
@@ -221,6 +233,16 @@ async function getAuthenticatedUser() {
 // the same way every other per-user table is.
 
 export async function fetchAccountProfiles() {
+  if (!isSupabaseConfigured || !supabase) {
+    const rawStored = window.localStorage.getItem('neon_account_profiles');
+    if (rawStored) {
+      try { return JSON.parse(rawStored); } catch {}
+    }
+    return [
+      { id: 'neon-default-profile', name: 'Main', is_default: true, is_kids: false }
+    ];
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -240,6 +262,22 @@ export async function fetchAccountProfiles() {
 }
 
 export async function createAccountProfile({ name, isKids = false, avatarUrl = null, avatarColor = null }) {
+  if (!isSupabaseConfigured || !supabase) {
+    const newProfile = {
+      id: `profile-${Date.now()}`,
+      name: name?.trim() || 'New Profile',
+      is_kids: Boolean(isKids),
+      avatar_url: avatarUrl,
+      avatar_color: avatarColor,
+      is_default: false,
+      created_at: new Date().toISOString(),
+    };
+    const list = await fetchAccountProfiles();
+    const updated = [...list, newProfile];
+    window.localStorage.setItem('neon_account_profiles', JSON.stringify(updated));
+    return newProfile;
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -263,6 +301,22 @@ export async function createAccountProfile({ name, isKids = false, avatarUrl = n
 }
 
 export async function updateAccountProfile(profileId, { name, isKids, avatarUrl, avatarColor } = {}) {
+  if (!isSupabaseConfigured || !supabase) {
+    const list = await fetchAccountProfiles();
+    const updated = list.map((p) => {
+      if (p.id !== profileId) return p;
+      return {
+        ...p,
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(isKids !== undefined ? { is_kids: Boolean(isKids) } : {}),
+        ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
+        ...(avatarColor !== undefined ? { avatar_color: avatarColor } : {}),
+      };
+    });
+    window.localStorage.setItem('neon_account_profiles', JSON.stringify(updated));
+    return;
+  }
+
   const client = requireSupabase();
 
   const update = {};
@@ -282,6 +336,13 @@ export async function updateAccountProfile(profileId, { name, isKids, avatarUrl,
 }
 
 export async function deleteAccountProfile(profileId) {
+  if (!isSupabaseConfigured || !supabase) {
+    const list = await fetchAccountProfiles();
+    const updated = list.filter((p) => p.id !== profileId || p.is_default);
+    window.localStorage.setItem('neon_account_profiles', JSON.stringify(updated));
+    return;
+  }
+
   const client = requireSupabase();
   const { error } = await client
     .from('account_profiles')
@@ -325,6 +386,10 @@ async function saveProfileRow(userId, payload, hasExistingProfile) {
 }
 
 export async function ensureSupabaseProfile(authUser, overrides = {}) {
+  if (!isSupabaseConfigured || !supabase) {
+    return buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+  }
+
   const profileRow = await getProfileRow(authUser.id);
 
   const nextProfile = {
@@ -358,6 +423,10 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
 }
 
 export async function resolveSupabaseProfile(authUser, overrides = {}) {
+  if (!isSupabaseConfigured || !supabase) {
+    return buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
+  }
+
   const { profile: fallbackProfile, hasStoredProfile } = await getStoredSupabaseProfile(authUser, overrides);
 
   if (hasStoredProfile) {
@@ -378,6 +447,10 @@ export async function resolveSupabaseProfile(authUser, overrides = {}) {
 }
 
 export async function getSupabaseSessionProfile() {
+  if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
   const { data, error } = await withTimeout(
     getSupabaseSession(),
     AUTH_REQUEST_TIMEOUT_MS,
@@ -507,6 +580,10 @@ export async function createSupabaseUserAsAdmin({ username, email, password, bio
 }
 
 export async function signOutFromSupabase() {
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
   const client = requireSupabase();
   const { error } = await withTimeout(
     client.auth.signOut(),
@@ -520,6 +597,20 @@ export async function signOutFromSupabase() {
 }
 
 export async function updateSupabaseProfile({ username, email, bio, avatarUrl }) {
+  if (!isSupabaseConfigured || !supabase) {
+    const raw = window.localStorage.getItem('user');
+    const current = raw ? JSON.parse(raw) : {};
+    const updated = {
+      ...current,
+      ...(username ? { username } : {}),
+      ...(email ? { email } : {}),
+      ...(bio !== undefined ? { bio } : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    };
+    window.localStorage.setItem('user', JSON.stringify(updated));
+    return updated;
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -549,6 +640,15 @@ export async function updateSupabaseProfile({ username, email, bio, avatarUrl })
 }
 
 export async function uploadSupabaseAvatar(file) {
+  if (!isSupabaseConfigured || !supabase) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -576,6 +676,10 @@ export async function uploadSupabaseAvatar(file) {
 }
 
 export async function updateSupabasePassword(newPassword) {
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
   const client = requireSupabase();
   const { error } = await client.auth.updateUser({ password: newPassword });
 
@@ -585,6 +689,10 @@ export async function updateSupabasePassword(newPassword) {
 }
 
 export async function fetchSupabaseProfiles({ excludeUserId = null, filter = '', limit = null } = {}) {
+  if (!isSupabaseConfigured || !supabase) {
+    return [];
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   let query = client.from(PROFILE_TABLE).select('id,username,bio,avatar_url,created_at').order('created_at', { ascending: false });
@@ -674,6 +782,36 @@ function enrichMediaRecord(record, mediaType, metadata) {
 }
 
 async function fetchMediaMetadataMap(mediaType, mediaIds) {
+  if (mediaIds.length === 0) {
+    return new Map();
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const endpoint = mediaType === 'tv_show' ? '/media/tv-shows' : mediaType === 'book' ? '/media/books' : '/media/movies';
+      const items = await Promise.all(
+        mediaIds.slice(0, 40).map(async (id) => {
+          try {
+            return await api.get(`${endpoint}/${id}`);
+          } catch {
+            return null;
+          }
+        })
+      );
+      return new Map(
+        items
+          .filter(Boolean)
+          .map((item) => {
+            const metadata = cacheMediaMetadata(mediaType, item);
+            return metadata ? [metadata.id, metadata] : null;
+          })
+          .filter(Boolean)
+      );
+    } catch {
+      return new Map();
+    }
+  }
+
   const client = requireSupabase();
   const schema = MEDIA_METADATA_TABLES[mediaType];
   if (!schema || mediaIds.length === 0) {
@@ -753,6 +891,19 @@ export async function enrichMediaRecords(records = []) {
 }
 
 export async function fetchSupabaseWatchlist({ mediaType = '', status = '', userId = null } = {}) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const params = new URLSearchParams();
+      if (mediaType) params.append('media_type', mediaType);
+      if (status) params.append('status', status);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const items = await api.get(`/watchlist${query}`);
+      return Array.isArray(items) ? items : [];
+    } catch {
+      return [];
+    }
+  }
+
   const client = requireSupabase();
   const isOwnWatchlist = !userId;
   if (!userId) {
@@ -806,6 +957,22 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
 }
 
 export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'plan_to_watch', media = null }) {
+  if (!isSupabaseConfigured || !supabase) {
+    const created = await api.post('/watchlist', {
+      media_type: mediaType,
+      media_id: Number(mediaId),
+      status,
+    });
+    const metadata = media ? cacheMediaMetadata(mediaType, media) : getCachedMediaMetadata(mediaType, mediaId);
+    return enrichMediaRecord({
+      id: created?.id || Date.now(),
+      media_type: mediaType,
+      media_id: Number(mediaId),
+      status,
+      added_at: new Date().toISOString(),
+    }, mediaType, metadata);
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -850,6 +1017,25 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
 // each item's watchlist status inline (on the card itself) without a per-item
 // round trip or having to open the watchlist page.
 export async function fetchSupabaseWatchlistStatusMap(mediaType) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const items = await fetchSupabaseWatchlist({ mediaType });
+      return (items || []).reduce((accumulator, row) => {
+        accumulator[row.media_id] = {
+          id: row.id,
+          status: row.status,
+          current_season: row.current_season,
+          current_episode: row.current_episode,
+          current_page: row.current_page,
+          current_chapter: row.current_chapter,
+        };
+        return accumulator;
+      }, {});
+    } catch {
+      return {};
+    }
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -880,6 +1066,11 @@ export async function fetchSupabaseWatchlistStatusMap(mediaType) {
 }
 
 export async function updateSupabaseWatchlistStatus(id, status) {
+  if (!isSupabaseConfigured || !supabase) {
+    await api.patch(`/watchlist/${id}`, { status });
+    return;
+  }
+
   const client = requireSupabase();
   const { error } = await client
     .from('watchlist')
@@ -892,6 +1083,11 @@ export async function updateSupabaseWatchlistStatus(id, status) {
 }
 
 export async function removeSupabaseWatchlistItem(id) {
+  if (!isSupabaseConfigured || !supabase) {
+    await api.delete(`/watchlist/${id}`);
+    return;
+  }
+
   const client = requireSupabase();
   const { error } = await client
     .from('watchlist')
@@ -909,6 +1105,17 @@ export async function removeSupabaseWatchlistItem(id) {
 // lookups), so `!userId` alone can't distinguish "own" from "someone else's"
 // by the time it reaches this function.
 async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRatings = !userId) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const items = await api.get('/ratings/my');
+      return (items || [])
+        .filter((r) => !mediaType || r.media_type === mediaType)
+        .map((record) => ({ ...record, media_type: record.media_type || mediaType }));
+    } catch {
+      return [];
+    }
+  }
+
   const client = requireSupabase();
   const schema = RATING_TABLES[mediaType];
 
@@ -962,6 +1169,18 @@ export async function fetchSupabaseRatings({ mediaType = '', userId = null } = {
 }
 
 export async function fetchSupabaseRatingMap(mediaType) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const ratings = await fetchRawRatingsForMediaType(mediaType);
+      return ratings.reduce((accumulator, rating) => {
+        accumulator[rating.media_id] = rating;
+        return accumulator;
+      }, {});
+    } catch {
+      return {};
+    }
+  }
+
   const ratings = await fetchRawRatingsForMediaType(mediaType);
   return ratings.reduce((accumulator, rating) => {
     accumulator[rating.media_id] = rating;
@@ -970,6 +1189,24 @@ export async function fetchSupabaseRatingMap(mediaType) {
 }
 
 export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null, review }) {
+  if (!isSupabaseConfigured || !supabase) {
+    await api.post('/ratings', {
+      media_type: mediaType,
+      media_id: Number(mediaId),
+      categories,
+      review,
+    });
+
+    if (media) {
+      cacheMediaMetadata(mediaType, media);
+    }
+
+    window.dispatchEvent(new CustomEvent('binge:ratingSaved', {
+      detail: { mediaType, mediaId: Number(mediaId), categories },
+    }));
+    return;
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const schema = RATING_TABLES[mediaType];
@@ -1039,6 +1276,21 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
 }
 
 export async function fetchSupabaseDashboardCounts() {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const [watchlist, ratings] = await Promise.all([
+        api.get('/watchlist').catch(() => []),
+        api.get('/ratings/my').catch(() => []),
+      ]);
+      return {
+        watchlist: Array.isArray(watchlist) ? watchlist.length : 0,
+        ratings: Array.isArray(ratings) ? ratings.length : 0,
+      };
+    } catch {
+      return { watchlist: 0, ratings: 0 };
+    }
+  }
+
   const client = requireSupabase();
 
   const watchlistCountPromise = client
@@ -1071,11 +1323,20 @@ export async function fetchSupabaseDashboardCounts() {
 // ─── Episode Progress (watched tracking) ──────────────────────────────────────
 
 export async function fetchEpisodeProgress(mediaId) {
-  const supabase = requireSupabase();
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem(`ep_progress_${mediaId}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) return [];
   const profileId = getActiveProfileId();
-  let query = supabase
+  let query = client
     .from('episode_progress')
     .select('season, episode, watched_at')
     .eq('user_id', user.id)
@@ -1089,11 +1350,15 @@ export async function fetchEpisodeProgress(mediaId) {
 // media_id -> number of episodes watched, across every show — an engagement
 // signal for recommendations (binging 30 episodes says more than one).
 export async function fetchEpisodeProgressCounts() {
-  const supabase = requireSupabase();
+  if (!isSupabaseConfigured || !supabase) {
+    return new Map();
+  }
+
+  const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) return new Map();
   const profileId = getActiveProfileId();
-  let query = supabase
+  let query = client
     .from('episode_progress')
     .select('media_id')
     .eq('user_id', user.id)
@@ -1110,11 +1375,24 @@ export async function fetchEpisodeProgressCounts() {
 }
 
 export async function markEpisodeWatched({ mediaId, season, episode }) {
-  const supabase = requireSupabase();
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const key = `ep_progress_${mediaId}`;
+      const stored = window.localStorage.getItem(key);
+      const list = stored ? JSON.parse(stored) : [];
+      if (!list.some((e) => e.season === season && e.episode === episode)) {
+        list.push({ season, episode, watched_at: new Date().toISOString() });
+        window.localStorage.setItem(key, JSON.stringify(list));
+      }
+    } catch {}
+    return;
+  }
+
+  const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
   const profileId = getActiveProfileId();
-  const { error } = await supabase
+  const { error } = await client
     .from('episode_progress')
     .upsert({ user_id: user.id, profile_id: profileId, media_id: mediaId, season, episode, watched_at: new Date().toISOString() },
              { onConflict: 'user_id,media_id,season,episode,profile_id' });
@@ -1122,11 +1400,22 @@ export async function markEpisodeWatched({ mediaId, season, episode }) {
 }
 
 export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
-  const supabase = requireSupabase();
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const key = `ep_progress_${mediaId}`;
+      const stored = window.localStorage.getItem(key);
+      const list = stored ? JSON.parse(stored) : [];
+      const updated = list.filter((e) => !(e.season === season && e.episode === episode));
+      window.localStorage.setItem(key, JSON.stringify(updated));
+    } catch {}
+    return;
+  }
+
+  const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
   const profileId = getActiveProfileId();
-  let query = supabase
+  let query = client
     .from('episode_progress')
     .delete()
     .eq('user_id', user.id)
@@ -1141,7 +1430,23 @@ export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
 // ─── Watchlist Progress Update ─────────────────────────────────────────────────
 
 export async function updateWatchlistProgress({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, status, notes }) {
-  const supabase = requireSupabase();
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      await api.patch('/watchlist/progress', {
+        media_type: mediaType,
+        media_id: mediaId,
+        current_season: currentSeason,
+        current_episode: currentEpisode,
+        current_page: currentPage,
+        current_chapter: currentChapter,
+        status,
+        notes,
+      });
+    } catch {}
+    return;
+  }
+
+  const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
   const profileId = getActiveProfileId();
@@ -1149,7 +1454,7 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
   // Only updates an existing entry — titles are added to the library
   // exclusively through the explicit "Add to Watchlist"/"Add to Library"
   // actions, never as a side effect of watching/reading progress.
-  let existingQuery = supabase
+  let existingQuery = client
     .from('watchlist')
     .select('id')
     .eq('user_id', user.id)
@@ -1181,6 +1486,15 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 // action (addSupabaseWatchlistItem).
 
 export async function fetchSupabaseContinueWatching() {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem('continue_watching');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -1201,6 +1515,33 @@ export async function fetchSupabaseContinueWatching() {
 }
 
 export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, positionSeconds, durationSeconds }) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem('continue_watching');
+      const list = stored ? JSON.parse(stored) : [];
+      const idx = list.findIndex((x) => x.media_type === mediaType && Number(x.media_id) === Number(mediaId));
+      const row = {
+        id: idx >= 0 ? list[idx].id : Date.now(),
+        media_type: mediaType,
+        media_id: Number(mediaId),
+        updated_at: new Date().toISOString(),
+      };
+      if (currentSeason !== undefined)  row.current_season = currentSeason;
+      if (currentEpisode !== undefined) row.current_episode = currentEpisode;
+      if (currentPage !== undefined)    row.current_page = currentPage;
+      if (currentChapter !== undefined) row.current_chapter = currentChapter;
+      if (positionSeconds !== undefined) row.position_seconds = Math.max(0, Math.floor(positionSeconds));
+      if (durationSeconds !== undefined && durationSeconds > 0) row.duration_seconds = Math.floor(durationSeconds);
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...row };
+      } else {
+        list.unshift(row);
+      }
+      window.localStorage.setItem('continue_watching', JSON.stringify(list.slice(0, 50)));
+    } catch {}
+    return;
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -1256,6 +1597,17 @@ export async function fetchSupabaseResumePoint({ mediaType, mediaId }) {
 }
 
 export async function removeSupabaseContinueWatching(id) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem('continue_watching');
+      if (stored) {
+        const list = JSON.parse(stored).filter((x) => x.id !== id);
+        window.localStorage.setItem('continue_watching', JSON.stringify(list));
+      }
+    } catch {}
+    return;
+  }
+
   const client = requireSupabase();
   const { error } = await client
     .from('continue_watching')
@@ -1272,6 +1624,10 @@ export async function removeSupabaseContinueWatching(id) {
 
 // Recently watched episodes (episode_progress), newest first, with titles.
 export async function fetchEpisodeHistory(limit = 300) {
+  if (!isSupabaseConfigured || !supabase) {
+    return [];
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -1290,6 +1646,19 @@ export async function fetchEpisodeHistory(limit = 300) {
 // Remove a title from watch history: its Continue Watching row and, for
 // shows, its watched-episode records. Ratings and My List are untouched.
 export async function removeTitleFromHistory({ mediaType, mediaId }) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem('continue_watching');
+      if (stored) {
+        const list = JSON.parse(stored).filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
+        window.localStorage.setItem('continue_watching', JSON.stringify(list));
+      }
+      window.localStorage.removeItem(`ep_progress_${mediaId}`);
+      window.dispatchEvent(new CustomEvent('binge:historyChanged'));
+    } catch {}
+    return;
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -1318,6 +1687,23 @@ export async function fetchHiddenRecommendations() {
 }
 
 export async function setRecommendationHidden({ mediaType, mediaId, hidden }) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem('hidden_recs');
+      let list = stored ? JSON.parse(stored) : [];
+      if (hidden) {
+        if (!list.some((x) => x.media_type === mediaType && Number(x.media_id) === Number(mediaId))) {
+          list.push({ media_type: mediaType, media_id: Number(mediaId) });
+        }
+      } else {
+        list = list.filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
+      }
+      window.localStorage.setItem('hidden_recs', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('binge:historyChanged'));
+    } catch {}
+    return;
+  }
+
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
