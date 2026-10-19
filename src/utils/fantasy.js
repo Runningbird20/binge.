@@ -20,6 +20,9 @@ const PATH_TO_GAME = {
   'hockey/nhl': 'fhl',
 };
 
+// The ESPN scores path for each fantasy game (which games are "on now").
+export const GAME_PATHS = Object.fromEntries(Object.entries(PATH_TO_GAME).map(([path, game]) => [game, path]));
+
 export const GAME_LABELS = {
   ffl: 'Football',
   flb: 'Baseball',
@@ -39,22 +42,36 @@ export function fantasyGameFor(espnPath) {
   return PATH_TO_GAME[espnPath] || null;
 }
 
-function storageKey() {
-  return `binge.fantasy.v1:${getActiveProfileId() || 'default'}`;
+// Signed out, everything stays on this device:
+// { teams: [{ key, game, leagueId, teamId }], login?: { s2, swid } }.
+// (v1 kept one league per sport, with the login inside each; read once.)
+function storageKey(version = 2) {
+  return `binge.fantasy.v${version}:${getActiveProfileId() || 'default'}`;
 }
 
 function readLocal() {
-  try { return JSON.parse(window.localStorage.getItem(storageKey()) || '{}') || {}; } catch { return {}; }
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(storageKey()) || 'null');
+    if (saved && Array.isArray(saved.teams)) return saved;
+    const old = JSON.parse(window.localStorage.getItem(storageKey(1)) || '{}') || {};
+    const teams = Object.entries(old).filter(([, l]) => l?.leagueId)
+      .map(([game, l]) => ({ key: `${game}:${l.leagueId}:${l.teamId ?? ''}`, game, leagueId: String(l.leagueId), teamId: l.teamId }));
+    const withLogin = Object.values(old).find((l) => l?.s2 && l?.swid);
+    return { teams, login: withLogin ? { s2: withLogin.s2, swid: withLogin.swid } : undefined };
+  } catch {
+    return { teams: [] };
+  }
 }
 
 function writeLocal(all) {
   try {
-    if (Object.keys(all).length) window.localStorage.setItem(storageKey(), JSON.stringify(all));
+    window.localStorage.removeItem(storageKey(1));
+    if (all.teams.length || all.login) window.localStorage.setItem(storageKey(), JSON.stringify(all));
     else window.localStorage.removeItem(storageKey());
   } catch { /* private mode */ }
 }
 
-let cache = null; // Promise<{ signedIn, leagues: { [game]: { leagueId, teamId } }, login }>
+let cache = null; // Promise<{ signedIn, teams: [{ key, game, leagueId, teamId }], login }>
 
 function notify() {
   cache = null;
@@ -88,26 +105,25 @@ async function credentialsRequest(method, auth, body) {
   return json;
 }
 
-async function upsertLeague(userId, game, league) {
-  const { data: existing } = await scoped(supabase.from('fantasy_leagues').select('id').eq('user_id', userId).eq('game', game)).maybeSingle();
-  const row = { league_id: String(league.leagueId), team_id: league.teamId ?? null, updated_at: new Date().toISOString() };
-  const { error } = existing
-    ? await supabase.from('fantasy_leagues').update(row).eq('id', existing.id)
-    : await supabase.from('fantasy_leagues').insert({ ...row, user_id: userId, profile_id: getActiveProfileId(), game });
-  if (error) throw new Error('Couldn\u2019t save your league.');
+async function insertTeam(userId, team) {
+  const { error } = await supabase.from('fantasy_leagues').insert({
+    user_id: userId, profile_id: getActiveProfileId(), game: team.game,
+    league_id: String(team.leagueId), team_id: team.teamId ?? null, updated_at: new Date().toISOString(),
+  });
+  if (error?.code === '23505') {
+    // Already tracked, or the database still allows one league per sport.
+    throw new Error('That team is already on your list (or another team in this sport can\u2019t be added yet).');
+  }
+  if (error) throw new Error('Couldn\u2019t save your team.');
 }
 
-// Leagues saved on this device before signing in move to the account once.
+// Teams saved on this device before signing in move to the account once.
 async function moveLocalToAccount(auth) {
   const local = readLocal();
-  const games = Object.keys(local);
-  if (!games.length) return;
-  for (const game of games) {
-    if (local[game]?.leagueId) await upsertLeague(auth.user.id, game, local[game]);
-  }
-  const withLogin = games.map((game) => local[game]).find((league) => league?.s2 && league?.swid);
-  if (withLogin) await credentialsRequest('PUT', auth, { s2: withLogin.s2, swid: withLogin.swid });
-  writeLocal({});
+  if (!local.teams.length && !local.login) return;
+  for (const team of local.teams) await insertTeam(auth.user.id, team).catch(() => {});
+  if (local.login) await credentialsRequest('PUT', auth, local.login);
+  writeLocal({ teams: [] });
 }
 
 export function loadFantasy() {
@@ -116,51 +132,66 @@ export function loadFantasy() {
       const auth = await session();
       if (!auth) {
         const local = readLocal();
-        const withLogin = Object.values(local).find((league) => league?.s2 && league?.swid);
-        return { signedIn: false, leagues: local, login: withLogin ? { saved: true, swidHint: withLogin.swid.replace(/[{}]/g, '').slice(-4) } : { saved: false } };
+        return {
+          signedIn: false,
+          teams: local.teams,
+          login: local.login ? { saved: true, swidHint: local.login.swid.replace(/[{}]/g, '').slice(-4) } : { saved: false },
+        };
       }
       await moveLocalToAccount(auth).catch(() => { /* try again next load */ });
-      const { data } = await scoped(supabase.from('fantasy_leagues').select('game, league_id, team_id').eq('user_id', auth.user.id));
-      const leagues = Object.fromEntries((data || []).map((row) => [row.game, { leagueId: row.league_id, teamId: row.team_id ?? undefined }]));
+      const { data } = await scoped(supabase.from('fantasy_leagues').select('id, game, league_id, team_id').eq('user_id', auth.user.id).order('id'));
+      const teams = (data || []).map((row) => ({ key: String(row.id), rowId: row.id, game: row.game, leagueId: row.league_id, teamId: row.team_id ?? undefined }));
       const login = await credentialsRequest('GET', auth).catch(() => ({ saved: false }));
-      return { signedIn: true, leagues, login };
-    })().catch(() => ({ signedIn: false, leagues: {}, login: { saved: false } }));
+      return { signedIn: true, teams, login };
+    })().catch(() => ({ signedIn: false, teams: [], login: { saved: false } }));
   }
   return cache;
 }
 
-export async function saveFantasyLeague(game, league) {
+// Track another team (any sport, any number per sport).
+export async function addFantasyTeam(game, { leagueId, teamId }) {
   const auth = await session();
-  const current = (await loadFantasy()).leagues[game];
-  const next = { ...current, ...league };
-  if (auth) await upsertLeague(auth.user.id, game, next);
-  else writeLocal({ ...readLocal(), [game]: { ...readLocal()[game], ...next } });
+  const team = { key: `${game}:${leagueId}:${teamId ?? ''}`, game, leagueId: String(leagueId), teamId };
+  if (auth) {
+    await insertTeam(auth.user.id, team);
+  } else {
+    const local = readLocal();
+    if (local.teams.some((t) => t.key === team.key)) throw new Error('That team is already on your list.');
+    writeLocal({ ...local, teams: [...local.teams, team] });
+  }
   notify();
 }
 
-export async function removeFantasyLeague(game) {
+// Which team in the league is yours (picked after the league loads).
+export async function setFantasyTeam(entry, teamId) {
   const auth = await session();
-  if (auth) {
-    await scoped(supabase.from('fantasy_leagues').delete().eq('user_id', auth.user.id).eq('game', game));
+  if (auth && entry.rowId) {
+    const { error } = await supabase.from('fantasy_leagues').update({ team_id: teamId, updated_at: new Date().toISOString() }).eq('id', entry.rowId);
+    if (error) throw new Error('Couldn\u2019t save your team.');
   } else {
     const local = readLocal();
-    delete local[game];
-    writeLocal(local);
+    writeLocal({ ...local, teams: local.teams.map((t) => (t.key === entry.key ? { ...t, teamId, key: `${t.game}:${t.leagueId}:${teamId}` } : t)) });
+  }
+  notify();
+}
+
+export async function removeFantasyTeam(entry) {
+  const auth = await session();
+  if (auth && entry.rowId) {
+    await supabase.from('fantasy_leagues').delete().eq('id', entry.rowId);
+  } else {
+    const local = readLocal();
+    writeLocal({ ...local, teams: local.teams.filter((t) => t.key !== entry.key) });
   }
   notify();
 }
 
 // The private-league login is one per profile (it's the ESPN account), so it
-// covers every sport's league at once.
+// covers every league at once.
 export async function saveEspnLogin(s2, swid) {
   const auth = await session();
-  if (auth) {
-    await credentialsRequest('PUT', auth, { s2, swid });
-  } else {
-    const local = readLocal();
-    Object.keys(local).forEach((game) => { local[game] = { ...local[game], s2, swid }; });
-    writeLocal(local);
-  }
+  if (auth) await credentialsRequest('PUT', auth, { s2, swid });
+  else writeLocal({ ...readLocal(), login: { s2, swid } });
   notify();
 }
 
@@ -169,9 +200,8 @@ export async function forgetEspnLogin() {
   if (auth) {
     await credentialsRequest('DELETE', auth);
   } else {
-    const local = readLocal();
-    Object.keys(local).forEach((game) => { const { s2, swid, ...rest } = local[game]; local[game] = rest; });
-    writeLocal(local);
+    const { login, ...rest } = readLocal();
+    writeLocal(rest);
   }
   notify();
 }
@@ -194,7 +224,7 @@ const rosterCache = new Map(); // key -> { at, promise }
 
 export async function fetchFantasyLeague(game, league, { fresh = false } = {}) {
   const auth = await session();
-  const local = auth ? null : readLocal()[game];
+  const local = auth ? null : readLocal().login;
   const profileId = getActiveProfileId() || '';
   const key = `${game}:${league.leagueId}:${auth ? `${auth.user.id}:${profileId}` : (local?.swid || '')}`;
   const hit = rosterCache.get(key);
@@ -250,4 +280,26 @@ export function sortRoster(game, roster) {
 export function playingInGame(player, gameTeams) {
   return gameTeams.some((team) => String(team.id) === String(player.proTeamId)
     || (team.short && player.proTeam && team.short.toUpperCase() === player.proTeam.toUpperCase()));
+}
+
+// One tracked team at a glance: its team in the league data, this week's
+// opponent, and the starters (with their points so far).
+export function summarizeTeam(game, data, entry) {
+  const team = pickMyTeam(data, entry);
+  if (!team) return null;
+  const opponent = team.matchup?.opponentId != null ? (data.teams || []).find((t) => t.id === team.matchup.opponentId) || null : null;
+  const roster = sortRoster(game, team.roster || []);
+  const starters = roster.filter((player) => !isBenchSlot(game, player.slotId));
+  const starterPoints = Math.round(starters.reduce((sum, player) => sum + (player.points || 0), 0) * 10) / 10;
+  return { team, opponent, roster, starters, points: team.matchup?.points ?? starterPoints, opponentPoints: team.matchup?.opponentPoints ?? null };
+}
+
+// Starters whose pro team is in one of the games on right now.
+export function playingNow(players, liveTeams) {
+  return players.filter((player) => playingInGame(player, liveTeams));
+}
+
+export function formatPoints(value) {
+  if (value == null) return '';
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }

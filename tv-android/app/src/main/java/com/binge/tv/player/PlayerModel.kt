@@ -111,13 +111,29 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
             else -> null
         }
 
-    // The line to draw now: our file (shifted by the viewer's offset), else the server's own track.
-    val subtitleText: String
-        get() {
-            val file = external
-            if (useExternal && file != null) return file.text(playback.t + subtitleOffset)
-            return if (useExternal && externalLoading) "" else playback.cue
+    // The line to draw now: our file, else the server's own track. Refreshed
+    // 10 times a second from the video's clock estimated between the page's
+    // reports (every 0.25s), so lines appear on time; shifted by the viewer's
+    // offset (+ = later: the line shown is the one for time - offset).
+    var subtitleText by mutableStateOf(""); private set
+    private fun refreshSubtitle() {
+        val file = external
+        val line = when {
+            useExternal && file != null -> {
+                val moving = started && !playback.paused && !playback.cushion
+                val clock = playback.t + if (moving) minOf(1.0, (now() - stateAt) / 1000.0) else 0.0
+                file.text(clock - subtitleOffset)
+            }
+            useExternal && externalLoading -> ""
+            else -> playback.cue
         }
+        if (line != subtitleText) subtitleText = line
+    }
+    private val subtitleTicker = object : Runnable {
+        override fun run() { if (closed) return; refreshSubtitle(); handler.postDelayed(this, 100) }
+    }
+    // Any subtitles on screen (ours or the server's): timing can be adjusted.
+    val subtitlesShowing get() = usingExternalSubtitles || textTracks.any { it.on }
     val usingExternalSubtitles get() = useExternal && external != null
 
     init {
@@ -136,8 +152,10 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         }
     }
 
+    private var tickerStarted = false
     private fun loop() {
         if (closed) return
+        if (!tickerStarted) { tickerStarted = true; handler.post(subtitleTicker) }
         tick()
         handler.postDelayed(::loop, 250)
     }
@@ -250,7 +268,12 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         showHUD()
     }
 
-    fun nudgeSubtitles(by: Double) { subtitleOffset = (subtitleOffset + by).coerceIn(-30.0, 30.0); showHUD() }
+    fun nudgeSubtitles(by: Double) {
+        subtitleOffset = (subtitleOffset + by).coerceIn(-30.0, 30.0)
+        web?.send(MediaCommand.CueShift(subtitleOffset))
+        refreshSubtitle()
+        showHUD()
+    }
 
     fun nextSubtitleVersion() {
         val file = external ?: return
@@ -522,6 +545,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
             // Ad frames go once the video has played a while (fill marks which frames hold it).
             if (fillScreen && state.t > 8 && !trimmed) { trimmed = true; w.send(MediaCommand.Trim) }
             w.send(MediaCommand.CaptionStyle(PlaybackPrefs.captionSize, PlaybackPrefs.captionBackground))
+            // Kept on a new server too (the shift lives in its page).
+            w.send(MediaCommand.CueShift(subtitleOffset))
         }
 
         val intro = markers.intro

@@ -3913,3 +3913,102 @@ kbd {
   .wp-stubs { grid-template-columns: repeat(2, 1fr); }
   .wp-stamp-mark { width: 112px; height: 112px; }
 }
+
+/* ── Your fantasy teams (FantasyBoard.js, Sports page) ───────────────────
+   One card per tracked ESPN team: logo, name, league · record · seed, this
+   week's scoreline, and how many starters are playing right now. A card
+   opens its lineup below the cards. */
+.fb { margin: 0.5rem 0 2.25rem; }
+.fb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; }
+.fb-title { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.35rem; font-weight: 700; color: var(--exp-text); }
+.fb-sub { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--exp-text-faint); }
+
+.fb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.9rem; }
+.fb-card {
+  display: flex; flex-direction: column; gap: 0.75rem; min-height: 158px; padding: 1rem 1.05rem 0.9rem;
+  border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #151922; color: var(--exp-text);
+  font: inherit; text-align: left; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+@media (hover: hover) { .fb-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); background: #191e29; } }
+.fb-card:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.fb-card.open { border-color: var(--st-soon); box-shadow: inset 0 0 0 1px var(--st-soon); }
+.fb-card--skel { cursor: default; }
+.fb-card--problem { cursor: default; }
+.fb-card-top { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.fb-card-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fb-card-name { margin: 0; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-card-meta { margin: 0; font-size: 0.78rem; color: var(--exp-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-caret { flex: none; color: var(--exp-text-faint); transition: transform 0.2s ease; }
+.fb-card.open .fb-caret { transform: rotate(180deg); }
+.fb-logo { flex: none; border-radius: 50%; object-fit: cover; background: #232a38; }
+.fb-logo--blank { display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.02em; color: var(--exp-text-dim); text-transform: uppercase; }
+
+/* This week's matchup, read as a scoreline. */
+.fb-score { display: flex; align-items: baseline; gap: 0.6rem; font-size: 0.9rem; color: var(--exp-text-dim); font-variant-numeric: tabular-nums; }
+.fb-score b { font-size: 1.45rem; font-weight: 800; color: var(--exp-text); }
+.fb-score-side { display: inline-flex; align-items: baseline; gap: 0.4rem; min-width: 0; white-space: nowrap; }
+.fb-score-side--opp { margin-left: auto; }
+.fb-score-vs { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--exp-text-faint); }
+.fb-score.leading .fb-score-side:first-child b { color: var(--st-soon); }
+.fb-card-foot { display: flex; align-items: center; gap: 0.4rem; margin-top: auto; font-size: 0.8rem; color: var(--exp-text-faint); }
+.fb-card-actions { display: flex; gap: 0.9rem; }
+
+.fb-lineup { margin-top: 1rem; padding: 1rem 1.1rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #12161e; }
+.fb-lineup-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.fb-lineup-head h3 { margin: 0; font-size: 1.05rem; }
+.fb-players { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 1.5rem; }
+.fb-player { display: grid; grid-template-columns: 3.4rem 1fr auto; align-items: center; gap: 0.6rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.fb-slot { font-size: 0.72rem; font-weight: 800; color: var(--exp-text-faint); letter-spacing: 0.03em; }
+.fb-player-name { display: flex; flex-direction: column; min-width: 0; }
+.fb-player-name strong { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-player-name span { font-size: 0.75rem; color: var(--exp-text-faint); text-transform: capitalize; }
+.fb-player.on .fb-player-name span { color: var(--st-soon); }
+.fb-points { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fb-points .proj { font-weight: 500; font-size: 0.8rem; color: var(--exp-text-faint); }
+.fb-bench { margin-top: 0.6rem; }
+.fb-bench summary { cursor: pointer; font-size: 0.85rem; color: var(--exp-text-dim); padding: 0.35rem 0; }
+
+.fb-link { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0; border: 0; background: none; color: var(--exp-text-dim); font: inherit; font-size: 0.82rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.fb-link:hover { color: var(--exp-text); }
+
+.fb-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 640px; margin-bottom: 1rem; padding: 1rem 1.1rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #151922; }
+.fb-sports { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.fb-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--exp-text-dim); }
+.fb-field input, .fb-field select { min-height: 40px; padding: 0 0.75rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.16); background: #0e1117; color: var(--exp-text); font: inherit; font-size: 0.9rem; }
+.fb-field input:focus-visible, .fb-field select:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.fb-hint { margin: -0.35rem 0 0; font-size: 0.78rem; color: var(--exp-text-faint); }
+.fb-private summary { cursor: pointer; font-size: 0.85rem; color: var(--exp-text-dim); }
+.fb-private p { font-size: 0.8rem; color: var(--exp-text-faint); line-height: 1.5; }
+.fb-login { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.fb-login p { margin: 0; }
+.fb-error { margin: 0; font-size: 0.85rem; color: #ff8a80; }
+.fb-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+@media (max-width: 600px) {
+  .fb-head { flex-direction: column; }
+  .fb-cards { grid-template-columns: 1fr; }
+  .fb-players { grid-template-columns: 1fr; }
+}
+
+/* Several tracked teams in the live score panel. */
+.st-fr-team + .st-fr-team { margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.st-fr-logo { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; align-self: center; }
+.st-fr-opp { font-weight: 500; color: var(--exp-text-faint); }
+.st-fr-add { margin-top: 0.85rem; }
+/* When the board is the page's first row, the Hide scores toggle sits on its
+   heading line: keep the board's own button clear of it. */
+.st-rows > .fb:first-child .fb-head { padding-right: 10.5rem; }
+@media (max-width: 600px) {
+  .st-rows > .fb:first-child .fb-head { padding-right: 0; padding-top: 2.6rem; }
+  .fb-title { font-size: 1.15rem; }
+}
+/* Cards never grow past their column (long names/scores used to push them
+   off a phone screen). */
+.fb-cards { grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); }
+.fb-card { min-width: 0; }
+.fb-score { min-width: 0; }
+.fb-score-side { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) {
+  .fb-cards { grid-template-columns: minmax(0, 1fr); }
+  .fb-score b { font-size: 1.25rem; }
+}
