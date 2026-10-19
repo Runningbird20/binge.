@@ -100,6 +100,27 @@ function teamStats(boxTeam) {
 }
 
 // Normalized summary for the panel.
+// Regulation periods per sport: football 4 quarters, basketball 4 quarters
+// (men's college: 2 halves), hockey 3 periods.
+function regulationPeriods(path) {
+  const value = String(path || '');
+  if (value === 'basketball/mens-college-basketball') return 2;
+  if (value.startsWith('football/') || value.startsWith('basketball/')) return 4;
+  if (value.startsWith('hockey/')) return 3;
+  return null;
+}
+
+// Line-score column heading: after regulation, OT, 2OT, 3OT… instead of
+// 5, 6, 7. A regular-season NHL game that's still tied after its one OT goes
+// to a shootout (SO); playoff hockey keeps adding overtimes.
+export function periodLabel(path, period, seasonType = null) {
+  const regulation = regulationPeriods(path);
+  if (!regulation || period <= regulation) return String(period);
+  const overtime = period - regulation;
+  if (String(path).startsWith('hockey/') && seasonType !== 3 && overtime === 2) return 'SO';
+  return overtime === 1 ? 'OT' : `${overtime}OT`;
+}
+
 export async function fetchGameSummary({ path, eventId }, { fresh = false } = {}) {
   const data = await getJson(`${BASE}/${path}/summary?event=${eventId}`, fresh ? 15_000 : 60_000);
   if (!data) return null;
@@ -151,6 +172,7 @@ export async function fetchGameSummary({ path, eventId }, { fresh = false } = {}
     detail: status.shortDetail || status.detail || '',
     teams,
     periods: Math.max(0, ...teams.map((team) => team.lines.length)),
+    seasonType: data.header?.season?.type ?? null, // 2 regular season, 3 playoffs
     statRows,
     leaders,
     plays,
