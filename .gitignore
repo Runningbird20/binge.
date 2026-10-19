@@ -58,3 +58,6 @@ tv-android/.idea/
 e2e/.auth/
 e2e-report/
 test-results/
+
+# Local PostgreSQL data from the old standalone server (may contain user data)
+backups/standalone-local/

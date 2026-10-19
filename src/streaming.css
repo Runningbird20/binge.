@@ -2900,8 +2900,16 @@ button.bottom-nav-item { font: inherit; cursor: pointer; }
 /* ── Sports second screen (live score panel) ──────────────────── */
 .st-sp-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 @media (min-width: 1100px) {
-  .st-sp-stage:has(.st-ls) { grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 380px); align-items: start; }
-  .st-sp-stage .st-ls { max-height: min(78vh, calc((100vw - 2 * var(--st-gutter) - 380px) * 9 / 16)); }
+  .st-sp-stage:has(.st-ls) { grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 380px); align-items: stretch; }
+  /* The video sets the row's height; the panel fills exactly that (contain:
+     size keeps its content from stretching the row) and scrolls inside, so
+     both bottoms always line up. */
+  .st-sp-stage .st-ls { contain: size; overflow-y: auto; overscroll-behavior: contain; }
+  /* When the video is short, the whole panel scrolls rather than squeezing
+     the tab content to nothing. */
+  .st-sp-stage .st-ls > * { flex-shrink: 0; }
+  .st-sp-stage .st-ls-body { flex: 1 0 auto; overflow: visible; }
+  .st-sp-stage .st-sp-frame { align-self: start; }
 }
 .st-ls {
   display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
@@ -2944,6 +2952,46 @@ button.bottom-nav-item { font: inherit; cursor: pointer; }
 .st-ls-last span { display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.5); margin-bottom: 0.2rem; }
 .st-ls-empty { margin: 0.5rem 0; color: rgba(255, 255, 255, 0.6); font-size: 0.85rem; }
 .st-ls-source { margin: 0; padding: 0.5rem 1rem 0.7rem; font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); }
+
+/* ESPN Fantasy roster under the live score (FantasyRoster.js) */
+.st-fr { margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.st-ls-body > .st-fr:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.st-ls-linescore { padding: 0.25rem 1rem 0.75rem; }
+.st-fr-head { display: flex; align-items: baseline; gap: 0.6rem; }
+.st-fr-head h4 { flex: 1; min-width: 0; margin: 0; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-fr-total { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.st-fr-edit { border: 0; background: none; color: rgba(255, 255, 255, 0.6); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; padding: 0.25rem 0.4rem; border-radius: 6px; }
+.st-fr-edit:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.st-fr-edit:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.st-fr-league { margin: 0.15rem 0 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); }
+.st-fr-note, .st-fr-sub { margin: 0.6rem 0; font-size: 0.82rem; line-height: 1.4; color: rgba(255, 255, 255, 0.65); }
+.st-fr-list { list-style: none; margin: 0; padding: 0; }
+.st-fr-player { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; padding: 0.4rem 0.4rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 0.82rem; }
+.st-fr-player.in-game { box-shadow: inset 3px 0 0 #f5c451; background: rgba(245, 196, 81, 0.06); }
+.st-fr-player.bench { color: rgba(255, 255, 255, 0.55); }
+.st-fr-slot { font-size: 0.72rem; font-weight: 800; color: rgba(255, 255, 255, 0.5); }
+.st-fr-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.st-fr-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.st-fr-name span { font-size: 0.72rem; color: rgba(255, 255, 255, 0.5); text-transform: capitalize; }
+.st-fr-points { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.st-fr-points .proj { font-weight: 600; font-size: 0.75rem; color: rgba(255, 255, 255, 0.45); }
+.st-fr-rest { margin-top: 0.5rem; }
+.st-fr-rest summary, .st-fr-private summary { cursor: pointer; font-size: 0.8rem; font-weight: 700; color: rgba(255, 255, 255, 0.7); padding: 0.35rem 0; }
+.st-fr-skel { height: 120px; border-radius: 8px; margin-top: 0.6rem; }
+.st-fr-form { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; }
+.st-fr-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: rgba(255, 255, 255, 0.7); margin-top: 0.4rem; }
+.st-fr-field input, .st-fr-field select {
+  min-height: 38px; padding: 0 0.65rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0d1017; color: #fff; font: inherit; font-size: 0.85rem;
+}
+.st-fr-field input:focus-visible, .st-fr-field select:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.st-fr-private p { margin: 0.2rem 0 0.4rem; font-size: 0.75rem; line-height: 1.45; color: rgba(255, 255, 255, 0.55); }
+.st-fr-private code { font-size: 0.72rem; color: #fff; }
+.st-fr-error { margin: 0; font-size: 0.78rem; color: #ff8a80; }
+.st-fr-login { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; }
+.st-fr-login p { flex: 1 1 100%; }
+.st-fr-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.st-fr-remove { margin-left: auto; }
 
 /* ── Skeletons that match the real layout ─────────────────────── */
 .st-skel { display: flex; flex-direction: column; }
