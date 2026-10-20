@@ -1,0 +1,134 @@
+name: Neon Database CI & Branching
+
+# This GitHub Action manages Neon Postgres database workflows:
+# 1. Pull Requests: creates an isolated, instant preview database branch using
+#    neondatabase/create-branch-action@v6 off the 'production' branch, runs health
+#    checks and tests against it, then automatically deletes it when the PR closes.
+# 2. Main/Production Push & Manual: verifies Neon database connectivity & schema health.
+#
+# Required secrets in GitHub repository (Settings → Secrets and variables → Actions):
+#   - NEON_API_KEY      (from https://console.neon.tech/app/settings/api-keys)
+#   - DATABASE_URL      (connection string for main/production branch health checks)
+#
+# Optional repository variables (Settings → Secrets and variables → Actions → Variables):
+#   - NEON_PROJECT_ID   (default: jolly-haze-89978844)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+  push:
+    branches: [main, master, production]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'health-check'
+        type: choice
+        options:
+          - 'health-check'
+          - 'test-suite'
+
+concurrency:
+  group: neon-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  neon_branch_and_test:
+    name: Neon Database CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      # ── Delete preview branch when PR is closed or merged ──
+      - name: Delete Neon Preview Branch
+        if: github.event_name == 'pull_request' && github.event.action == 'closed'
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID || 'jolly-haze-89978844' }}
+          branch: pr-${{ github.event.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      # ── Create preview branch for active PRs ──
+      - name: Create Neon Preview Branch
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        id: create-neon-branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID || 'jolly-haze-89978844' }}
+          parent: production
+          branch_name: pr-${{ github.event.number }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      # ── Verify connection and schema health ──
+      - name: Verify Neon Postgres Connection & Schema
+        if: github.event.action != 'closed'
+        run: |
+          node -e "
+            const { Pool } = require('pg');
+            const connectionString = process.env.DATABASE_URL;
+            if (!connectionString) {
+              console.error('❌ Missing DATABASE_URL.');
+              process.exit(1);
+            }
+            const pool = new Pool({
+              connectionString,
+              ssl: { rejectUnauthorized: false },
+              connectionTimeoutMillis: 10000,
+            });
+
+            (async () => {
+              console.log('Testing connection to Neon Postgres...');
+              const start = Date.now();
+              const serverInfo = await pool.query('SELECT NOW() AS server_time, current_database() AS db_name, version()');
+              console.log('✅ Connected in ' + (Date.now() - start) + 'ms');
+              console.log('   Database: ' + serverInfo.rows[0].db_name);
+              console.log('   Server time: ' + serverInfo.rows[0].server_time);
+
+              const tables = await pool.query(\"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name\");
+              console.log('✅ Public schema tables (' + tables.rows.length + '):');
+              console.log('   ' + tables.rows.map(r => r.table_name).join(', '));
+
+              const movieCount = await pool.query('SELECT count(*) FROM movies').catch(() => ({ rows: [{ count: '0' }] }));
+              const tvCount = await pool.query('SELECT count(*) FROM tv_shows').catch(() => ({ rows: [{ count: '0' }] }));
+              const bookCount = await pool.query('SELECT count(*) FROM books').catch(() => ({ rows: [{ count: '0' }] }));
+              console.log('✅ Media counts: ' + movieCount.rows[0].count + ' movies, ' + tvCount.rows[0].count + ' tv shows, ' + bookCount.rows[0].count + ' books');
+
+              await pool.end();
+              process.exit(0);
+            })().catch(err => {
+              console.error('❌ Neon database check failed:', err.message);
+              process.exit(1);
+            });
+          "
+        env:
+          DATABASE_URL: ${{ steps.create-neon-branch.outputs.db_url || secrets.DATABASE_URL }}
+
+      # ── Run unit test suite ──
+      - name: Run Test Suite
+        if: github.event.action != 'closed'
+        run: npm test -- --watchAll=false
+        env:
+          DATABASE_URL: ${{ steps.create-neon-branch.outputs.db_url || secrets.DATABASE_URL }}
+          CI: true
+
+      # ── Verify production build ──
+      - name: Build Application
+        if: github.event.action != 'closed'
+        run: npm run build
+        env:
+          DATABASE_URL: ${{ steps.create-neon-branch.outputs.db_url || secrets.DATABASE_URL }}
+          CI: false
+
