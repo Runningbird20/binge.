@@ -5,6 +5,7 @@
   "description": "Minimal dependencies for the TMDB → Supabase catalog sync script",
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "pg": "^8.13.0"
   }
 }
