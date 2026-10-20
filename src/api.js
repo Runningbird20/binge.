@@ -1,4 +1,5 @@
 import { executeSupabaseRoute } from './utils/supabaseApi';
+import { isSupabaseConfigured } from './utils/supabase';
 
 function isLegacyBackendEnabled() {
   return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
@@ -10,7 +11,7 @@ function resolveLegacyBaseUrl() {
   const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
 
   if (!configuredApiUrl) {
-    return isLegacyBackendEnabled() ? '/api' : null;
+    return (!isSupabaseConfigured || isLegacyBackendEnabled()) ? '/api' : null;
   }
 
   const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
@@ -47,13 +48,17 @@ async function fetchSupabaseToken() {
 }
 
 async function getAuthToken() {
-  const legacyToken = window.localStorage.getItem('token');
-  if (legacyToken) {
-    return legacyToken;
+  const token = window.localStorage.getItem('token') || window.localStorage.getItem('neon_auth_token');
+  if (token) {
+    return token;
   }
 
   if (cachedToken) {
     return cachedToken;
+  }
+
+  if (!isSupabaseConfigured) {
+    return null;
   }
 
   if (tokenFetchPromise) {
@@ -83,11 +88,6 @@ async function parseResponseBody(response) {
   const text = await response.text();
   if (!text) {
     return null;
-  }
-
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    return JSON.parse(text);
   }
 
   try {

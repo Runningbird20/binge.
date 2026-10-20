@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const neonAuth = require('../neonAuth');
 
 // Lazy-load supabase to avoid crashing if the package is unavailable.
 let createClientCache = null;
@@ -190,14 +191,29 @@ function verifySupabaseAdminRequest(req, res, next, token) {
     .catch(() => res.status(401).json({ error: 'Auth error' }));
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const token = readBearerToken(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
+  // 1. Neon Auth session or JWT check
+  if (neonAuth.isConfigured()) {
+    try {
+      const neonUser = await neonAuth.validateNeonSessionToken(token);
+      if (neonUser) {
+        req.user = neonUser;
+        return next();
+      }
+    } catch (err) {
+      console.warn('[auth] Neon token check failed:', err.message);
+    }
+  }
+
+  // 2. Supabase check
   if (isSupabaseToken(token)) {
     return verifySupabaseRequest(req, res, next, token);
   }
 
+  // 3. Local legacy JWT check
   try {
     req.user = jwt.verify(token, JWT_SECRET);
     return next();
@@ -210,18 +226,31 @@ function requireAuth(req, res, next) {
   }
 }
 
-function optionalAuth(req, _res, next) {
+async function optionalAuth(req, _res, next) {
   const token = readBearerToken(req);
   if (!token) {
     req.user = null;
     return next();
   }
 
+  // 1. Neon Auth check
+  if (neonAuth.isConfigured()) {
+    try {
+      const neonUser = await neonAuth.validateNeonSessionToken(token);
+      if (neonUser) {
+        req.user = neonUser;
+        return next();
+      }
+    } catch {}
+  }
+
+  // 2. Supabase check
   if (isSupabaseToken(token)) {
     req.user = decodeSupabaseToken(token);
     return next();
   }
 
+  // 3. Local legacy JWT check
   try {
     req.user = jwt.verify(token, JWT_SECRET);
   } catch {
@@ -231,16 +260,33 @@ function optionalAuth(req, _res, next) {
   next();
 }
 
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   const token = readBearerToken(req);
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // 1. Neon Auth admin check
+  if (neonAuth.isConfigured()) {
+    try {
+      const neonUser = await neonAuth.validateNeonSessionToken(token);
+      if (neonUser) {
+        const isAdmin = neonUser.role === 'admin' || neonUser.isAdmin === true;
+        if (isAdmin) {
+          req.user = neonUser;
+          return next();
+        }
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } catch {}
+  }
+
+  // 2. Supabase admin check
   if (isSupabaseToken(token)) {
     return verifySupabaseAdminRequest(req, res, next, token);
   }
 
+  // 3. Local legacy JWT admin check
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const normalizedRole = String(payload.userType || payload.user_type || payload.role || '').toLowerCase();
@@ -262,3 +308,4 @@ function requireAdmin(req, res, next) {
 }
 
 module.exports = { requireAuth, optionalAuth, requireAdmin, JWT_SECRET };
+

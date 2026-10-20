@@ -101,12 +101,23 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/me', requireAuth, (req, res) => {
+  if (req.user?.fromNeon) {
+    return res.json({
+      id: req.user.id,
+      username: req.user.name || (req.user.email ? req.user.email.split('@')[0] : 'user'),
+      email: req.user.email,
+      role: req.user.role || 'user',
+      fromNeon: true,
+    });
+  }
+
   const user = db.prepare(
     'SELECT id, username, email, bio, avatar_url, created_at FROM users WHERE id = ?'
   ).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(serializeUser(user));
 });
+
 
 router.patch('/account', requireAuth, async (req, res) => {
   const username = req.body.username?.trim();
@@ -203,4 +214,68 @@ router.patch('/account', requireAuth, async (req, res) => {
   }
 });
 
+// ── Neon Auth Endpoints ──────────────────────────────────────────────
+const neonAuth = require('../neonAuth');
+
+router.get('/neon/status', async (_req, res) => {
+  const health = await neonAuth.healthCheck();
+  res.json({
+    configured: neonAuth.isConfigured(),
+    authBaseUrl: neonAuth.getAuthBaseUrl(),
+    jwksUrl: neonAuth.getJwksUrl(),
+    ...health,
+  });
+});
+
+router.post('/neon/signup', async (req, res) => {
+  const { email, password, name } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const origin = req.headers.origin || `${req.protocol}://${req.get('host')}` || 'http://localhost:3000';
+  try {
+    const result = await neonAuth.neonSignUp({ email, password, name, origin });
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('[Neon Auth Sign-up error]:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/neon/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const origin = req.headers.origin || `${req.protocol}://${req.get('host')}` || 'http://localhost:3000';
+  try {
+    const result = await neonAuth.neonSignIn({ email, password, origin });
+    res.json(result);
+  } catch (err) {
+    console.error('[Neon Auth Sign-in error]:', err.message);
+    res.status(401).json({ error: err.message });
+  }
+});
+
+router.get('/neon/session', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const user = await neonAuth.validateNeonSessionToken(token);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid or expired session' });
+    }
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+
