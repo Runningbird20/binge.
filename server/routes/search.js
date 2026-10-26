@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../db');
+const neonDb  = require('../neonDb');
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
@@ -36,9 +37,67 @@ router.get('/', async (req, res) => {
 
   const typeArr    = types.split(',');
   const results    = { movies: [], tv: [], books: [], people: [] };
-  const exactPat   = `%${q.trim()}%`;           // original (case-insensitive via SQLite)
+  const exactPat   = `%${q.trim()}%`;           // original (case-insensitive via SQLite / ILIKE)
   const fuzzyPat   = buildSqlitePattern(q);     // punctuation-stripped
   const limit      = 8;
+
+  if (neonDb.isConfigured()) {
+    try {
+      const tasks = [];
+      if (typeArr.includes('movies')) {
+        tasks.push(
+          neonDb.query(`
+            SELECT id, title, year, genre, poster_url, source_key
+            FROM movies
+            WHERE source_key IS NOT NULL AND (title ILIKE $1 OR genre ILIKE $1)
+            ORDER BY year DESC NULLS LAST LIMIT $2
+          `, [exactPat, limit]).then((r) => {
+            results.movies = r.rows.map((row) => ({ ...row, id: Number(row.id) }));
+          })
+        );
+      }
+      if (typeArr.includes('tv')) {
+        tasks.push(
+          neonDb.query(`
+            SELECT id, title, year, genre, poster_url, source_key
+            FROM tv_shows
+            WHERE source_key IS NOT NULL AND (title ILIKE $1 OR genre ILIKE $1)
+            ORDER BY year DESC NULLS LAST LIMIT $2
+          `, [exactPat, limit]).then((r) => {
+            results.tv = r.rows.map((row) => ({ ...row, id: Number(row.id) }));
+          })
+        );
+      }
+      if (typeArr.includes('books')) {
+        tasks.push(
+          neonDb.query(`
+            SELECT id, title, author, year, genre, cover_url, source_key
+            FROM books
+            WHERE source_key IS NOT NULL AND (title ILIKE $1 OR author ILIKE $1)
+            ORDER BY year DESC NULLS LAST LIMIT $2
+          `, [exactPat, limit]).then((r) => {
+            results.books = r.rows.map((row) => ({ ...row, id: Number(row.id) }));
+          })
+        );
+      }
+      if (typeArr.includes('people')) {
+        tasks.push(
+          neonDb.query(`
+            SELECT id, username, avatar_url, bio
+            FROM profiles
+            WHERE username ILIKE $1
+            LIMIT $2
+          `, [exactPat, limit]).then((r) => {
+            results.people = r.rows;
+          }).catch(() => { results.people = []; })
+        );
+      }
+      await Promise.all(tasks);
+      return res.json(results);
+    } catch (err) {
+      console.warn('Neon search error, falling back:', err.message);
+    }
+  }
 
   try {
     // SQLite: movies, tv, books

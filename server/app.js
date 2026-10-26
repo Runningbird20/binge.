@@ -85,9 +85,80 @@ app.use(express.json({ limit: '1mb' }));
 // Global rate limit: 200 requests / minute per IP (generous for normal use)
 app.use(rateLimit({ windowMs: 60_000, max: 200, message: 'Too many requests — slow down.' }));
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true });
+const neonDb = require('./neonDb');
+const neonAuth = require('./neonAuth');
+const neonFunctions = require('./neonFunctions');
+
+// Initialize Neon Postgres schema if configured
+if (neonDb.isConfigured()) {
+  neonDb.initAppTables().catch((err) => {
+    console.warn('[Neon Postgres] Auto-init error:', err.message);
+  });
+}
+
+app.get('/api/health', async (_req, res) => {
+  const neonPg = await neonDb.healthCheck().catch((err) => ({ ok: false, error: err.message }));
+  const neonAt = await neonAuth.healthCheck().catch((err) => ({ ok: false, error: err.message }));
+  const neonFn = await neonFunctions.healthCheck().catch((err) => ({ ok: false, error: err.message }));
+
+  res.json({
+    ok: true,
+    server: 'binge-standalone',
+    neon: {
+      branch: process.env.NEON_BRANCH || 'production',
+      postgres: { ok: neonPg.ok, configured: neonPg.configured },
+      auth: { ok: neonAt.ok, configured: neonAt.configured },
+      functions: { ok: neonFn.ok, configured: neonFn.configured },
+    },
+  });
 });
+
+// Comprehensive Neon diagnostics endpoint
+app.get('/api/neon/health', async (_req, res) => {
+  const [postgres, auth, functions] = await Promise.all([
+    neonDb.healthCheck(),
+    neonAuth.healthCheck(),
+    neonFunctions.healthCheck(),
+  ]);
+
+  const allHealthy = (!postgres.configured || postgres.ok) &&
+                     (!auth.configured || auth.ok) &&
+                     (!functions.configured || functions.ok);
+
+  res.status(allHealthy ? 200 : 503).json({
+    ok: allHealthy,
+    branch: process.env.NEON_BRANCH || 'production',
+    services: {
+      postgres,
+      auth,
+      functions,
+    },
+  });
+});
+
+// Neon Functions proxy
+app.get('/api/neon/functions/hello', async (_req, res) => {
+  try {
+    const result = await neonFunctions.callHelloFunction();
+    res.json(result);
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
+});
+
+// Neon Postgres test endpoint
+app.get('/api/neon/postgres/test', async (_req, res) => {
+  try {
+    const result = await neonDb.query('SELECT NOW() as current_time, current_database() as db_name, version()');
+    res.json({
+      ok: true,
+      row: result.rows[0],
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 
 // Auth endpoints get a strict limit: 10 attempts / 15 min per IP
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 10, message: 'Too many login attempts — try again later.' });
