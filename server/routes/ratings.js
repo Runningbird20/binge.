@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const neonDb = require('../neonDb');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -26,52 +27,95 @@ const SCHEMA = {
   },
 };
 
+const MEDIA_META = {
+  movie:   { table: 'movies',   imageCol: 'poster_url' },
+  tv_show: { table: 'tv_shows', imageCol: 'poster_url' },
+  book:    { table: 'books',    imageCol: 'cover_url'  },
+};
+
 // GET /api/ratings/my
-router.get('/my', (req, res) => {
+router.get('/my', async (req, res) => {
   const { media_type } = req.query;
   const types = media_type ? [media_type] : ['movie', 'tv_show', 'book'];
   const results = [];
 
-  const MEDIA_META = {
-    movie:   { table: 'movies',   imageCol: 'poster_url' },
-    tv_show: { table: 'tv_shows', imageCol: 'poster_url' },
-    book:    { table: 'books',    imageCol: 'cover_url'  },
-  };
+  if (neonDb.isConfigured()) {
+    try {
+      for (const type of types) {
+        const schema = SCHEMA[type];
+        if (!schema) continue;
+        const meta = MEDIA_META[type];
+        const rows = await neonDb.query(`
+          SELECT r.*, '${type}' AS media_type,
+                 m.title, m.year, m.genre,
+                 m.${meta.imageCol} AS image_url
+          FROM ${schema.table} r
+          LEFT JOIN ${meta.table} m ON r.media_id = m.id
+          WHERE r.user_id = $1
+          ORDER BY r.created_at DESC
+        `, [req.user.id]);
+        results.push(...rows.rows);
+      }
+      return res.json(results);
+    } catch (err) {
+      console.warn('Neon ratings /my error, falling back to SQLite:', err.message);
+    }
+  }
 
   for (const type of types) {
     const schema = SCHEMA[type];
     if (!schema) continue;
     const meta = MEDIA_META[type];
-    const rows = db.prepare(`
-      SELECT r.*, '${type}' AS media_type,
-             m.title, m.year, m.genre,
-             m.${meta.imageCol} AS image_url
-      FROM ${schema.table} r
-      LEFT JOIN ${meta.table} m ON r.media_id = m.id
-      WHERE r.user_id = ?
-      ORDER BY r.created_at DESC
-    `).all(req.user.id);
-    results.push(...rows);
+    try {
+      const rows = db.prepare(`
+        SELECT r.*, '${type}' AS media_type,
+               m.title, m.year, m.genre,
+               m.${meta.imageCol} AS image_url
+        FROM ${schema.table} r
+        LEFT JOIN ${meta.table} m ON r.media_id = m.id
+        WHERE r.user_id = ?
+        ORDER BY r.created_at DESC
+      `).all(req.user.id);
+      results.push(...rows);
+    } catch {
+      // ignore table query errors in fallback
+    }
   }
 
   res.json(results);
 });
 
 // GET /api/ratings/:media_type/:media_id
-router.get('/:media_type/:media_id', (req, res) => {
+router.get('/:media_type/:media_id', async (req, res) => {
   const { media_type, media_id } = req.params;
   const schema = SCHEMA[media_type];
   if (!schema) return res.status(400).json({ error: 'Invalid media_type' });
+  const parsedMediaId = Number(media_id) || 0;
 
-  const rating = db.prepare(
-    `SELECT * FROM ${schema.table} WHERE user_id = ? AND media_id = ?`
-  ).get(req.user.id, Number(media_id));
+  if (neonDb.isConfigured()) {
+    try {
+      const result = await neonDb.query(
+        `SELECT * FROM ${schema.table} WHERE user_id = $1 AND media_id = $2`,
+        [req.user.id, parsedMediaId]
+      );
+      return res.json(result.rows[0] || null);
+    } catch (err) {
+      console.warn('Neon ratings GET single error, falling back:', err.message);
+    }
+  }
 
-  res.json(rating || null);
+  try {
+    const rating = db.prepare(
+      `SELECT * FROM ${schema.table} WHERE user_id = ? AND media_id = ?`
+    ).get(req.user.id, parsedMediaId);
+    res.json(rating || null);
+  } catch {
+    res.json(null);
+  }
 });
 
 // POST /api/ratings
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { media_type, media_id, categories, review } = req.body;
   if (!media_type || !media_id || !categories) {
     return res.status(400).json({ error: 'media_type, media_id, and categories are required' });
@@ -87,6 +131,40 @@ router.post('/', (req, res) => {
     }
   }
 
+  const parsedMediaId = Number(media_id) || 0;
+
+  if (neonDb.isConfigured()) {
+    try {
+      const existing = await neonDb.query(
+        `SELECT id FROM ${schema.table} WHERE user_id = $1 AND media_id = $2`,
+        [req.user.id, parsedMediaId]
+      );
+
+      const cols = schema.columns;
+      const values = cols.map((c) => Number(categories[c]));
+
+      if (existing.rows.length > 0) {
+        const updateSets = cols.map((col, idx) => `${col} = $${idx + 3}`);
+        updateSets.push(`review = $${cols.length + 3}`);
+        await neonDb.query(
+          `UPDATE ${schema.table} SET ${updateSets.join(', ')} WHERE user_id = $1 AND media_id = $2`,
+          [req.user.id, parsedMediaId, ...values, review || null]
+        );
+      } else {
+        const colList = cols.join(', ');
+        const placeholders = cols.map((_, idx) => `$${idx + 3}`).join(', ');
+        await neonDb.query(
+          `INSERT INTO ${schema.table} (user_id, media_id, ${colList}, review)
+           VALUES ($1, $2, ${placeholders}, $${cols.length + 3})`,
+          [req.user.id, parsedMediaId, ...values, review || null]
+        );
+      }
+      return res.json({ success: true });
+    } catch (err) {
+      console.warn('Neon ratings POST error, falling back:', err.message);
+    }
+  }
+
   try {
     const cols = schema.columns;
     const colList = cols.join(', ');
@@ -99,7 +177,7 @@ router.post('/', (req, res) => {
       VALUES (?, ?, ${placeholders}, ?)
       ON CONFLICT(user_id, media_id)
       DO UPDATE SET ${updateSet}, review = excluded.review
-    `).run(req.user.id, Number(media_id), ...values, review || null);
+    `).run(req.user.id, parsedMediaId, ...values, review || null);
 
     res.json({ success: true });
   } catch (err) {
@@ -109,15 +187,32 @@ router.post('/', (req, res) => {
 });
 
 // DELETE /api/ratings/:media_type/:media_id
-router.delete('/:media_type/:media_id', (req, res) => {
+router.delete('/:media_type/:media_id', async (req, res) => {
   const { media_type, media_id } = req.params;
   const schema = SCHEMA[media_type];
   if (!schema) return res.status(400).json({ error: 'Invalid media_type' });
+  const parsedMediaId = Number(media_id) || 0;
 
-  db.prepare(
-    `DELETE FROM ${schema.table} WHERE user_id = ? AND media_id = ?`
-  ).run(req.user.id, Number(media_id));
-  res.json({ success: true });
+  if (neonDb.isConfigured()) {
+    try {
+      await neonDb.query(
+        `DELETE FROM ${schema.table} WHERE user_id = $1 AND media_id = $2`,
+        [req.user.id, parsedMediaId]
+      );
+      return res.json({ success: true });
+    } catch (err) {
+      console.warn('Neon ratings DELETE error, falling back:', err.message);
+    }
+  }
+
+  try {
+    db.prepare(
+      `DELETE FROM ${schema.table} WHERE user_id = ? AND media_id = ?`
+    ).run(req.user.id, parsedMediaId);
+    res.json({ success: true });
+  } catch {
+    res.json({ success: true });
+  }
 });
 
 module.exports = router;
