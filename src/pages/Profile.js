@@ -414,7 +414,7 @@ export default function Profile() {
   return (
     <div className="app-layout">
       <Navbar />
-      <main className="page-content">
+      <main className="page-content pf-page">
         <header className="pf-hero">
           {bannerUrl && <img className="pf-hero-bg" src={bannerUrl} alt="" aria-hidden="true" referrerPolicy="no-referrer" />}
           <div className="pf-hero-scrim" aria-hidden="true" />
