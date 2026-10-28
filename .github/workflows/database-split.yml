@@ -85,7 +85,7 @@ jobs:
         uses: neondatabase/create-branch-action@v6
         with:
           project_id: ${{ vars.NEON_PROJECT_ID || 'jolly-haze-89978844' }}
-          parent: ${{ vars.NEON_PARENT_BRANCH || 'production' }}
+          parent_branch: ${{ vars.NEON_PARENT_BRANCH || 'production' }}
           branch_name: before-database-split-${{ github.run_id }}
           api_key: ${{ secrets.NEON_API_KEY }}
 

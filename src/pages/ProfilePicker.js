@@ -1,6 +1,5 @@
 import LoadingBar from '../components/LoadingBar';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Plus, Baby, X } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
@@ -87,7 +86,6 @@ function ProfileTile({ profile, active, canDelete, onClick, onRequestDelete, onE
 
 export default function ProfilePicker() {
   const { user, profiles, activeProfile, switchProfile, addProfile, profilesLoading, refreshProfiles } = useAuth();
-  const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [securityTarget, setSecurityTarget] = useState(null);
@@ -144,9 +142,6 @@ export default function ProfilePicker() {
           </div>
         ) : null}
 
-        <button type="button" className="btn-secondary profile-picker-back btn-text-action" onClick={() => navigate(-1)}>
-          Back
-        </button>
       </div>
 
       {securityTarget && <ProfileSecurityDialog

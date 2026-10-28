@@ -1,5 +1,6 @@
 import { splitDatabaseClient } from './mediaDatabase';
 import { createNeonQueryClient } from './neonQuery';
+import { getApiBaseUrl } from './neon';
 import { trackedFetch } from './loadingProgress';
 import { createClient } from '@supabase/supabase-js';
 
@@ -58,7 +59,7 @@ const authClient = isSupabaseConfigured
 
 // Only catalog/media metadata queries go to Neon. User data and Auth stay Supabase.
 async function requestNeon(path, body) {
-  const base = (process.env.REACT_APP_API_URL || process.env.REACT_APP_LEGACY_API_URL || '').replace(/\/+$/, '');
+  const base = getApiBaseUrl();
   try {
     const response = await trackedFetch(`${base}/api/neon-data/${path}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
