@@ -55,7 +55,7 @@ export default function GridTitleTile({
           {comingSoon && <span className="st-badge st-badge--soon">Coming {formatReleaseDay(item) || 'Soon'}</span>}
           {!comingSoon && badge && <span className="st-badge st-badge--free">{badge}</span>}
           <div className="st-card-hover" aria-hidden="true">
-            {!comingSoon && mediaType !== 'book' && <span className="st-card-play"><Play size={18} weight="fill" /></span>}
+            {!comingSoon && mediaType !== 'book' && <span className="st-card-play"><Play size={22} weight="fill" /></span>}
             <div className="st-card-hover-meta">
               {score > 0 && <span className="td-score"><Star size={12} weight="fill" aria-hidden="true" /> {score.toFixed(1)}</span>}
               {year && <span>{year}</span>}
