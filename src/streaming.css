@@ -4259,3 +4259,22 @@ input:is([type="search"], .catalog-search-input, .st-search-input, .global-searc
 @media (prefers-reduced-motion: reduce) {
   .global-search-bar.expandable-search { transition: none; }
 }
+
+.profile-picker-content .profile-picker-error {
+  color: #f4f6f8;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(15, 18, 25, 0.85);
+}
+
+.btn-text-action.btn-text-action,
+.btn-text-action.btn-text-action:hover,
+.btn-text-action.btn-text-action:active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: #fff;
+}

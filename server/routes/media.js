@@ -2,8 +2,21 @@ const express = require('express');
 const db = require('../db');
 const neonDb = require('../neonDb');
 const { requireAuth } = require('../middleware/auth');
+const { serviceClient } = require('../middleware/supabaseAdmin');
 const { buildBookGenreFacets, matchesBookGenreFacet } = require('../bookGenres');
 const { calculateMovieRelevance } = require('../utils/movieRelevance');
+
+// Ratings are user data in Supabase; the title itself comes from Neon.
+// Same scale as the old SQL: average of (sum of categories / max) * 10.
+async function ratingStats(table, columns, max, mediaId) {
+  const sb = serviceClient();
+  if (!sb) return { rows: [{ avg_rating: null, rating_count: 0 }] };
+  const { data, error } = await sb.from(table).select(columns.join(',')).eq('media_id', mediaId);
+  if (error || !data?.length) return { rows: [{ avg_rating: null, rating_count: 0 }] };
+  const scores = data.map((row) => columns.reduce((sum, c) => sum + Number(row[c] || 0), 0) / max * 10);
+  const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10;
+  return { rows: [{ avg_rating: avg, rating_count: data.length }] };
+}
 
 const router = express.Router();
 
@@ -1391,12 +1404,7 @@ router.get('/movies/:id', async (req, res) => {
       }
 
       const movie = { ...movieRes.rows[0], id: Number(movieRes.rows[0].id) };
-      const statsRes = await neonDb.query(
-        `SELECT ROUND(AVG(CAST(acting+writing+originality+pacing+cinematography AS NUMERIC)/25*10), 1) AS avg_rating,
-                COUNT(*) AS rating_count
-         FROM movie_ratings WHERE media_id = $1`,
-        [req.params.id]
-      ).catch(() => ({ rows: [{ avg_rating: null, rating_count: 0 }] }));
+      const statsRes = await ratingStats('movie_ratings', ['acting', 'writing', 'originality', 'pacing', 'cinematography'], 25, req.params.id);
 
       const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
       return res.json({
@@ -1626,12 +1634,7 @@ router.get('/tv-shows/:id', async (req, res) => {
       }
 
       const show = { ...showRes.rows[0], id: Number(showRes.rows[0].id) };
-      const statsRes = await neonDb.query(
-        `SELECT ROUND(AVG(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS NUMERIC)/38*10), 1) AS avg_rating,
-                COUNT(*) AS rating_count
-         FROM tv_show_ratings WHERE media_id = $1`,
-        [req.params.id]
-      ).catch(() => ({ rows: [{ avg_rating: null, rating_count: 0 }] }));
+      const statsRes = await ratingStats('tv_show_ratings', ['premise', 'originality', 'acting', 'cinematography', 'writing', 'pacing', 'resonance'], 38, req.params.id);
 
       const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
       return res.json({
@@ -1831,12 +1834,7 @@ router.get('/books/:id', async (req, res) => {
       }
 
       const book = { ...bookRes.rows[0], id: Number(bookRes.rows[0].id) };
-      const statsRes = await neonDb.query(
-        `SELECT ROUND(AVG(CAST(prose+plot+characters+originality+pacing+resonance AS NUMERIC)/32*10), 1) AS avg_rating,
-                COUNT(*) AS rating_count
-         FROM book_ratings WHERE media_id = $1`,
-        [req.params.id]
-      ).catch(() => ({ rows: [{ avg_rating: null, rating_count: 0 }] }));
+      const statsRes = await ratingStats('book_ratings', ['prose', 'plot', 'characters', 'originality', 'pacing', 'resonance'], 32, req.params.id);
 
       const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
       return res.json({

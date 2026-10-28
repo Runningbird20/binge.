@@ -51,7 +51,7 @@ export default function Landing() {
             Movies, series, books and live sports — with picks made for you, not for everyone.
           </p>
           <div className="lp-actions">
-            <Link to="/signup" className="genre-chip st-pill-link lp-cta">Create Account</Link>
+            <Link to="/signup" className="genre-chip st-pill-link lp-cta btn-text-action">Create Account</Link>
           </div>
         </div>
       </section>
