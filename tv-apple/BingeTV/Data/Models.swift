@@ -148,6 +148,17 @@ struct WatchlistRow: Decodable {
     let mediaId: Int
 }
 
+// Same rule as the site's getResumePosition (playbackPositions.js): nothing
+// to resume when barely started, or when effectively finished (in the last
+// two minutes, i.e. the credits), so Resume doesn't open on the credits.
+enum ResumeRule {
+    static func start(position: Double?, duration: Double?) -> Double? {
+        guard let position, position > 30 else { return nil }
+        if let duration, duration > 0, position > duration - 120 { return nil }
+        return position
+    }
+}
+
 // Same rule as the site's releaseWindow.js: released → shown; out within
 // 30 days → shown as Coming Soon; later → hidden.
 enum ReleaseWindow {
@@ -180,6 +191,6 @@ enum KidsFilter {
     static let allowed: Set<String> = ["G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG"]
     static func allows(_ rating: String?) -> Bool {
         guard let rating else { return false }
-        return allowed.contains(rating.uppercased())
+        return allowed.contains(rating.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
     }
 }

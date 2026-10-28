@@ -97,6 +97,20 @@ struct EpisodeHeatmap: View {
     private var maxEpisodes: Int { seasons.map { $0.episodes.count }.max() ?? 0 }
     private var cell: CGFloat { max(30, min(58, 1600 / CGFloat(max(maxEpisodes, 1)) - 6)) }
 
+    // Long seasons (Bleach, One Piece, soaps) wrap onto more lines: one line
+    // of hundreds of cells made the whole title page wider than the screen,
+    // pushing its header and Play button off to the left.
+    private struct Line { let id: String; let season: Int; let first: Bool; let episodes: [TMDBSeason.Episode] }
+    private var lines: [Line] {
+        let perLine = max(1, Int((1680 - 76) / (cell + 6)))
+        return seasons.flatMap { row in
+            stride(from: 0, to: max(row.episodes.count, 1), by: perLine).map { start in
+                Line(id: "\(row.season)-\(start)", season: row.season, first: start == 0,
+                     episodes: Array(row.episodes[min(start, row.episodes.count)..<min(start + perLine, row.episodes.count)]))
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline, spacing: 20) {
@@ -104,15 +118,15 @@ struct EpisodeHeatmap: View {
                 legend
             }
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(seasons, id: \.season) { row in
+                ForEach(lines, id: \.id) { line in
                     HStack(spacing: 6) {
-                        Text("S\(row.season)")
+                        Text(line.first ? "S\(line.season)" : "")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(Theme.muted)
                             .frame(width: 70, alignment: .leading)
-                        ForEach(row.episodes) { episode in
+                        ForEach(line.episodes) { episode in
                             let rating = episode.voteAverage ?? 0
-                            let isCurrent = current.map { $0 == (row.season, episode.episodeNumber) } ?? false
+                            let isCurrent = current.map { $0 == (line.season, episode.episodeNumber) } ?? false
                             Text(rating > 0 ? String(format: "%.1f", rating) : "–")
                                 .font(.system(size: cell * 0.32, weight: .bold))
                                 .monospacedDigit()

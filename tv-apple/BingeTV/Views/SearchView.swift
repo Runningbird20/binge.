@@ -59,7 +59,7 @@ struct SearchView: View {
             ai = []
             aiSummary = nil
             aiError = nil
-            if AskBinge.isConversational(text) { await ask(text) }
+            if AskBinge.shouldAutoAsk(text, results: found) { await ask(text) }
         }
         .task {
             guard trending.isEmpty else { return }

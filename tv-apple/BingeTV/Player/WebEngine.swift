@@ -130,9 +130,10 @@ enum WebEngines {
         var cues=tr.activeCues; if(!cues||!cues.length){ var all=tr.cues, now=v.currentTime, hit=[];
           if(all) for (var q=0;q<all.length;q++){ if(all[q].startTime<=now && all[q].endTime>now) hit.push(all[q]); else if(all[q].startTime>now) break; }
           cues=hit; } if(!cues.length) return '';
-        var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')); }
+        var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')); }
         return parts.join('\\n').trim(); }
-      function state(v){ var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, cb:cush.hold?1:0, at:tr.a, tt:tr.x, cue:cueText(v)}; }
+      // The line first: it may adopt a track the server switched on, which the track list should then show.
+      function state(v){ var line=cueText(v); var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, cb:cush.hold?1:0, at:tr.a, tt:tr.x, cue:line}; }
       // Fill: pin this frame's video to the viewport, then ask each parent
       // frame to pin the iframe it lives in, all the way up, so the video
       // covers the whole screen instead of the server's page layout.
@@ -211,7 +212,7 @@ enum WebEngines {
 
 // Receives the bridge's messages without the content controller retaining
 // the web view's owner.
-private final class BridgeProxy: NSObject {
+final class BridgeProxy: NSObject {
     weak var target: ModernWebView?
 
     static func tracks(_ value: Any?) -> [MediaTrack] {

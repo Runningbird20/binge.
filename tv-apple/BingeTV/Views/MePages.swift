@@ -165,7 +165,10 @@ struct CalendarView: View {
             return out
         }
         let grouped = Dictionary(grouping: found, by: { Calendar.current.startOfDay(for: $0.0) })
-        days = grouped.keys.sorted().prefix(30).map { day in (day, grouped[day]!.map { ($0.1, $0.2) }) }
+        // Same order every visit (the lookups finish in any order).
+        days = grouped.keys.sorted().prefix(30).map { day in
+            (day, grouped[day]!.sorted { $0.1.name.localizedCaseInsensitiveCompare($1.1.name) == .orderedAscending }.map { ($0.1, $0.2) })
+        }
         loaded = true
     }
 }

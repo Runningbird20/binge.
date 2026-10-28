@@ -13,6 +13,8 @@ final class TrailerPlayer: ObservableObject {
     init() {
         surface.backgroundColor = .clear
         surface.isUserInteractionEnabled = false
+        // Decoration: VoiceOver mustn't land on YouTube's hidden player controls.
+        surface.accessibilityElementsHidden = true
     }
 
     func start(_ title: Title) async {

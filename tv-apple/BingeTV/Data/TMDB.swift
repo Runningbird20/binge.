@@ -13,6 +13,7 @@ struct TMDBItem: Decodable, Hashable {
     let mediaType: String?
     let genreIds: [Int]?
     let knownFor: [TMDBItem]?
+    var originalLanguage: String? = nil
 
     var date: String? { releaseDate ?? firstAirDate }
 }

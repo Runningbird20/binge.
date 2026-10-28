@@ -266,6 +266,7 @@ final class AppModel: ObservableObject {
             for await (index, details) in group {
                 guard let details else { continue }
                 if let backdrop = TMDB.image(details.backdropPath, TMDB.wide) { result[index].title.backdrop = backdrop }
+                if result[index].title.originalLanguage?.isEmpty ?? true { result[index].title.originalLanguage = details.originalLanguage }
                 if let aired = details.lastEpisodeToAir, let date = aired.airDate,
                    ReleaseWindow.isRecent(date, days: 14),
                    (aired.seasonNumber, aired.episodeNumber) > (result[index].season ?? 0, result[index].episode ?? 0) {

@@ -140,7 +140,41 @@ enum Personal {
         var newEpisodes: LoadedRow?
     }
 
+    struct Seed {
+        let title: Title
+        let verb: String
+        let weight: Double
+    }
+
     static func build(watched: [ContinueItem], loved: [Title], exclude: Set<String>, kids: Bool, name: String?) async -> Rows {
+        let seeds = seeds(watched: watched, loved: loved)
+        let recs: [String: [Title]] = await withTaskGroup(of: (String, [Title]).self) { group in
+            for seed in seeds {
+                guard let tmdbId = seed.title.tmdbId else { continue }
+                let spec = RowSpec(id: "rec-\(seed.title.id)", title: "", kind: seed.title.kind,
+                                   path: "\(seed.title.kind.tmdbPath)/\(tmdbId)/recommendations")
+                group.addTask { (seed.title.id, await Catalog.load(spec, kids: kids)?.items ?? []) }
+            }
+            var all: [String: [Title]] = [:]
+            for await (id, items) in group { all[id] = items }
+            return all
+        }
+        return assemble(watched: watched, loved: loved, recommendations: recs, exclude: exclude, name: name)
+    }
+
+    // Up to 4 recent watches and 3 favourites seed the picks.
+    static func seeds(watched: [ContinueItem], loved: [Title]) -> [Seed] {
+        var seeds: [Seed] = []
+        for (i, item) in watched.prefix(4).enumerated() { seeds.append(Seed(title: item.title, verb: "watched", weight: 1.0 - Double(i) * 0.12)) }
+        for title in loved where !seeds.contains(where: { $0.title.id == title.id }) && seeds.count < 7 {
+            seeds.append(Seed(title: title, verb: "liked", weight: 0.9))
+        }
+        return seeds
+    }
+
+    // The rows, from each seed's TMDB recommendations (keyed by the seed's id).
+    static func assemble(watched: [ContinueItem], loved: [Title], recommendations: [String: [Title]],
+                         exclude: Set<String>, name: String?) -> Rows {
         var rows = Rows()
 
         let fresh = watched.filter { $0.newEpisode != nil }.map { item -> Title in
@@ -150,50 +184,39 @@ enum Personal {
         }
         if !fresh.isEmpty { rows.newEpisodes = LoadedRow(id: "new-episodes", title: "New Episodes", items: fresh) }
 
-        // Up to 4 recent watches and 3 favourites seed the picks.
-        var seeds: [(title: Title, verb: String, weight: Double)] = []
-        for (i, item) in watched.prefix(4).enumerated() { seeds.append((item.title, "watched", 1.0 - Double(i) * 0.12)) }
-        for title in loved where !seeds.contains(where: { $0.title.id == title.id }) && seeds.count < 7 {
-            seeds.append((title, "liked", 0.9))
-        }
+        let seeds = seeds(watched: watched, loved: loved)
         guard !seeds.isEmpty else { return rows }
-
-        let recs: [(Int, [Title])] = await withTaskGroup(of: (Int, [Title]).self) { group in
-            for (index, seed) in seeds.enumerated() {
-                guard let tmdbId = seed.title.tmdbId else { continue }
-                let spec = RowSpec(id: "rec-\(seed.title.id)", title: "", kind: seed.title.kind,
-                                   path: "\(seed.title.kind.tmdbPath)/\(tmdbId)/recommendations")
-                group.addTask { (index, await Catalog.load(spec, kids: kids)?.items ?? []) }
-            }
-            var all: [(Int, [Title])] = []
-            for await entry in group { all.append(entry) }
-            return all.sorted { $0.0 < $1.0 }
-        }
+        let seedIds = Set(seeds.map(\.title.id))
 
         var scores: [String: (title: Title, score: Double)] = [:]
         var usedInBecause = Set<String>()
         var usedFlavours = Set<String>()
-        for (index, items) in recs {
-            let seed = seeds[index]
-            let candidates = items.filter { !exclude.contains($0.id) && $0.id != seed.title.id }
+        for seed in seeds {
+            var seen = Set<String>()
+            let candidates = (recommendations[seed.title.id] ?? []).filter {
+                !exclude.contains($0.id) && !seedIds.contains($0.id) && seen.insert($0.id).inserted
+            }
             for (position, title) in candidates.enumerated() {
                 let add = seed.weight * (1 - Double(position) / 25)
                 scores[title.id] = (title, (scores[title.id]?.score ?? 0) + add)
             }
             // Seeds that look alike (same language and main genre) share one
-        // "Because you…" row, so two recent K-dramas don't fill the page.
-        let flavour = "\(seed.title.originalLanguage ?? "")|\(seed.title.genre?.split(separator: ",").first.map(String.init) ?? "")"
-        if rows.because.count < 4, candidates.count >= 5, usedFlavours.insert(flavour).inserted {
+            // "Because you…" row, so two recent K-dramas don't fill the page.
+            let flavour = "\(seed.title.originalLanguage ?? "")|\(seed.title.genre?.split(separator: ",").first.map(String.init) ?? "")"
+            if rows.because.count < 4, candidates.count >= 5, usedFlavours.insert(flavour).inserted {
+                // Titles leading an earlier row move to the back, so two rows
+                // don't open with the same posters.
+                let ordered = candidates.filter { !usedInBecause.contains($0.id) } + candidates.filter { usedInBecause.contains($0.id) }
                 rows.because.append(LoadedRow(id: "because-\(seed.title.id)",
                                               title: "Because you \(seed.verb) \(seed.title.name)",
-                                              items: candidates))
-                candidates.prefix(3).forEach { usedInBecause.insert($0.id) }
+                                              items: ordered))
+                ordered.prefix(3).forEach { usedInBecause.insert($0.id) }
             }
         }
         // After 4 titles in one non-English language, further ones are
         // nudged down so Top Picks stays a mix.
         var languageCount: [String: Int] = [:]
-        let picks = scores.values.sorted { $0.score > $1.score }
+        let picks = scores.values.sorted { ($0.score, $1.title.id) > ($1.score, $0.title.id) }
             .map { entry -> (Title, Double) in
                 let language = entry.title.originalLanguage ?? "en"
                 let seen = languageCount[language, default: 0]
@@ -389,6 +412,7 @@ struct ContinueCard: View {
 extension ContinueItem {
     var playRequest: PlayRequest {
         PlayRequest(title: title, season: title.kind == .tvShow ? (season ?? 1) : nil,
-                    episode: title.kind == .tvShow ? (episode ?? 1) : nil, startAt: position)
+                    episode: title.kind == .tvShow ? (episode ?? 1) : nil,
+                    startAt: ResumeRule.start(position: position, duration: duration))
     }
 }

@@ -191,7 +191,7 @@ actor Supabase {
         return data
     }
 
-    private static func message(from data: Data, status: Int) -> String {
+    static func message(from data: Data, status: Int) -> String {
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let code = json?["error_code"] as? String ?? json?["error"] as? String
         if code == "invalid_credentials" || code == "invalid_grant" {

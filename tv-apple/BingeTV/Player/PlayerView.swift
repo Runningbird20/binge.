@@ -317,7 +317,8 @@ private struct LoadingCard: View {
             ProgressView()
             Text("Finding the fastest server…").font(.headline)
             if !model.racingNames.isEmpty {
-                Text("Trying \(model.racingNames) at once").font(.callout).foregroundStyle(Theme.muted)
+                Text(model.racingNames.contains(",") ? "Trying \(model.racingNames) at once" : "Starting \(model.racingNames)…")
+                    .font(.callout).foregroundStyle(Theme.muted)
             }
             if let notice = model.notice {
                 Text(notice).font(.callout).foregroundStyle(Theme.gold).multilineTextAlignment(.center)
@@ -441,7 +442,7 @@ private struct PlayerPanel: View {
 
     private var menuRows: [(pane: Pane, label: String, value: String)] {
         var rows: [(pane: Pane, label: String, value: String)] = []
-        rows.append((.audio, "Audio", model.audioTracks.first(where: \.on).map(PlayerModel.displayName) ?? "Default"))
+        rows.append((.audio, "Audio", model.audioTracks.first(where: \.on).flatMap(PlayerModel.spokenName) ?? "Default"))
         rows.append((.subtitles, "Subtitles", subtitleLabel))
         if model.usingExternalSubtitles {
             rows.append((.timing, "Subtitle timing", model.subtitleOffset == 0 ? "In sync" : String(format: "%+.1fs", model.subtitleOffset)))
@@ -477,8 +478,8 @@ private struct PlayerPanel: View {
                         .focused($focus, equals: "a\(track.id)")
                 }
             } else {
-                note(model.audioTracks.isEmpty ? "This server has one audio track."
-                                                : "Only \(PlayerModel.displayName(model.audioTracks[0])) on this server.")
+                note(model.audioTracks.first.flatMap(PlayerModel.spokenName).map { "Only \($0) on this server." }
+                     ?? "This server has one audio track.")
                 SideRow(label: "Pick another server", chevron: true) { open(.server) }
                     .focused($focus, equals: "pick-server")
             }

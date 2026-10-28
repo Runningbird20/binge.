@@ -64,6 +64,7 @@ final class StreamRace {
     // stream whose length is clearly different is the wrong video.
     var expectedDuration: Double?
     private(set) var rejected = Set<String>()
+    private var rejectedLengths: [Double] = []
 
     // Set by the player when the viewer pauses, so shopping for a sharper
     // stream never "un-pauses" them.
@@ -170,8 +171,17 @@ final class StreamRace {
                       self.candidates.contains(where: { $0.server == candidate.server }) else { return }
                 if state.paused, state.ready >= 2 { candidate.web.send(.play) }
                 if let expected = self.expectedDuration, ExpectedRuntime.isWrong(state.d, expected: expected) {
-                    self.reject(candidate, length: state.d)
-                    return
+                    // Two servers with the same "wrong" length: TMDB lists another
+                    // cut (Money Heist's 90-min broadcast episodes vs Netflix's 47).
+                    if ExpectedRuntime.agree(state.d, self.rejectedLengths) {
+                        #if DEBUG
+                        print("[race] servers agree on \(Int(state.d / 60)) min; trusting them over TMDB's \(Int(expected / 60))")
+                        #endif
+                        self.expectedDuration = nil
+                    } else {
+                        self.reject(candidate, length: state.d)
+                        return
+                    }
                 }
                 guard state.t > 0.4, !state.paused else { return }
                 guard shopping else { self.crown(candidate); return }
@@ -308,6 +318,7 @@ final class StreamRace {
         print("[race] \(candidate.server.name) is the wrong video (\(Int(length / 60)) min, expected \(Int((expectedDuration ?? 0) / 60)))")
         #endif
         rejected.insert(candidate.server.id)
+        rejectedLengths.append(length)
         Self.tearDown(candidate.web)
         candidates.removeAll { $0.server == candidate.server }
         playingHeights[candidate.server.id] = nil
@@ -404,6 +415,7 @@ final class Warmup {
     private init() {
         host.alpha = 0.01
         host.isUserInteractionEnabled = false
+        host.accessibilityElementsHidden = true
         host.clipsToBounds = true
         // A preload is the first thing to give up when memory runs low or
         // the app leaves the screen.

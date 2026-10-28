@@ -56,8 +56,28 @@ enum PlaybackPrefs {
     nonisolated(unsafe) static var audio = "original"
 
     static func languageName(_ code: String) -> String {
-        Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
+        Locale(identifier: "en").localizedString(forLanguageCode: baseLanguage(code)) ?? code
     }
+
+    // A track's language as a 2-letter code: "kor", "ko-KR" and "KO" are all
+    // "ko". Servers use ISO 639-1, both ISO 639-2 spellings ("fre"/"fra"),
+    // or a region. Unknown codes come back as they are.
+    static func baseLanguage(_ code: String) -> String {
+        let lower = code.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? ""
+        return lower.count == 3 ? (iso639_2[lower] ?? lower) : lower
+    }
+
+    private static let iso639_2: [String: String] = [
+        "eng": "en", "kor": "ko", "jpn": "ja", "spa": "es", "fra": "fr", "fre": "fr", "deu": "de", "ger": "de",
+        "por": "pt", "hin": "hi", "ara": "ar", "zho": "zh", "chi": "zh", "ita": "it", "rus": "ru", "tur": "tr",
+        "tha": "th", "vie": "vi", "ind": "id", "msa": "ms", "may": "ms", "tgl": "tl", "nld": "nl", "dut": "nl",
+        "swe": "sv", "nor": "no", "nob": "nb", "dan": "da", "fin": "fi", "pol": "pl", "ces": "cs", "cze": "cs",
+        "ell": "el", "gre": "el", "heb": "he", "ukr": "uk", "ron": "ro", "rum": "ro", "hun": "hu", "tam": "ta",
+        "tel": "te", "mal": "ml", "ben": "bn", "mar": "mr", "urd": "ur", "pan": "pa", "kan": "kn", "guj": "gu",
+        "fas": "fa", "per": "fa", "hrv": "hr", "srp": "sr", "bul": "bg", "slk": "sk", "slo": "sk", "slv": "sl",
+        "cat": "ca", "eus": "eu", "baq": "eu", "glg": "gl", "lit": "lt", "lav": "lv", "est": "et", "isl": "is",
+        "ice": "is",
+    ]
 }
 
 // The title's own language: the catalog's, or TMDB's when the catalog row
@@ -262,6 +282,23 @@ enum AskBinge {
         let spoken = ["show me", "find me", "i want", "i'm in the mood", "im in the mood", "recommend", "what should i", "give me", "play something"]
         if spoken.contains(where: { lower.hasPrefix($0) }) { return true }
         return words.count >= 4 || cues.contains { lower.contains($0) } && words.count >= 3
+    }
+
+    // Search runs Ask binge. by itself for sentences, but not when what was
+    // typed is a title the search already found ("Lord of the Rings"). With
+    // nothing found it runs too: it reads "Breking Bad" as Breaking Bad, and
+    // TMDB's title search doesn't forgive typos.
+    static func shouldAutoAsk(_ query: String, results: [Title]) -> Bool {
+        if results.isEmpty { return query.filter(\.isLetter).count >= 3 }
+        guard isConversational(query) else { return false }
+        let wanted = comparable(query)
+        return !results.contains { comparable($0.name) == wanted }
+    }
+
+    private static func comparable(_ text: String) -> String {
+        var words = text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        if words.first == "the" { words.removeFirst() }
+        return words.joined()
     }
 
     static func ask(_ query: String, kids: Bool) async throws -> (summary: String?, titles: [(Title, String?)]) {
