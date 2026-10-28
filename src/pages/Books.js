@@ -1,3 +1,4 @@
+import SlidingTabs from '../components/SlidingTabs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { BookOpen, Check, DownloadSimple, FilmStrip, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
@@ -984,7 +985,7 @@ export default function Books() {
       <Navbar />
       <main className="page-content curated-page">
         <PullToRefresh onRefresh={activeTab === 'books' ? handleRefresh : (() => {})}>
-        <div className="st-tabs st-reading-tabs" role="tablist" aria-label="Reading">
+        <SlidingTabs className="st-tabs st-reading-tabs" role="tablist" aria-label="Reading">
           <button
             type="button"
             role="tab"
@@ -1003,7 +1004,7 @@ export default function Books() {
           >
             Manga &amp; Comics
           </button>
-        </div>
+        </SlidingTabs>
 
         {activeTab === 'manga' && <MangaTab />}
 

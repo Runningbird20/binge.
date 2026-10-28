@@ -1,3 +1,4 @@
+import SlidingTabs from './SlidingTabs';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ArrowLeft, ArrowSquareOut, BookOpen, MagnifyingGlass, Play, Star, WarningCircle, X } from '@phosphor-icons/react';
 import { DEFAULT_PROVIDER, PROVIDER_LIST, getProvider, providerFor } from '../utils/mangaProviders';
@@ -751,7 +752,7 @@ export default function MangaTab() {
         />
       )}
 
-      <div className="st-tabs st-tabs--sm manga-providers" role="group" aria-label="Source">
+      <SlidingTabs className="st-tabs st-tabs--sm manga-providers" role="group" aria-label="Source">
         {PROVIDER_LIST.map((entry) => (
           <button
             key={entry.key}
@@ -763,7 +764,7 @@ export default function MangaTab() {
             {entry.label}
           </button>
         ))}
-      </div>
+      </SlidingTabs>
       <p className="manga-provider-note">{provider.tagline}</p>
 
       <div className="catalog-search-row st-manga-search">

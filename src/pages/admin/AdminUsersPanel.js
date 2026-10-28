@@ -1,3 +1,4 @@
+import SlidingTabs from '../../components/SlidingTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { MagnifyingGlass, Plus, ShieldCheck, Trash, X } from '@phosphor-icons/react';
 import { api } from '../../api';
@@ -158,13 +159,13 @@ export default function AdminUsersPanel() {
           <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by username or email" aria-label="Search users" />
         </label>
-        <div className="st-tabs st-tabs--sm" role="group" aria-label="Filter users">
+        <SlidingTabs className="st-tabs st-tabs--sm" role="group" aria-label="Filter users">
           {FILTERS.map((entry) => (
             <button key={entry.id} type="button" className={`st-tab${filter === entry.id ? ' active' : ''}`} aria-pressed={filter === entry.id} onClick={() => setFilter(entry.id)}>
               {entry.label}
             </button>
           ))}
-        </div>
+        </SlidingTabs>
       </div>
 
       {message && <p className="adm-note" role="status">{message}</p>}

@@ -13,7 +13,9 @@ const NEON_FUNCTION_HELLO_BASE_URL =
   process.env.NEON_FUNCTION_HELLO_BASE_URL ||
   '';
 
-export const isNeonAuthConfigured = Boolean(NEON_AUTH_BASE_URL);
+// Authentication can remain on Supabase while application data uses Neon.
+export const isNeonAuthConfigured = Boolean(NEON_AUTH_BASE_URL)
+  && process.env.REACT_APP_AUTH_PROVIDER !== 'supabase';
 export const isNeonFunctionsConfigured = Boolean(NEON_FUNCTION_HELLO_BASE_URL);
 
 export function getApiBaseUrl() {
