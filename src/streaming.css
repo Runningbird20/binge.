@@ -1990,7 +1990,6 @@
 .profile-picker-tile-btn:focus-visible { outline: none; }
 .profile-picker-name.profile-picker-name { font-size: 1.05rem; color: var(--exp-text-dim); margin-top: 0.8rem; }
 .profile-picker-tile-btn:hover .profile-picker-name { color: #fff; }
-.profile-picker-back.profile-picker-back { margin-top: 2.5rem; }
 
 /* Player chrome */
 .player-header-btns { display: flex; gap: 0.4rem; }
