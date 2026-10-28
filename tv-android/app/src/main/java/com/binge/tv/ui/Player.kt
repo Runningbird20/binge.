@@ -91,7 +91,11 @@ import com.binge.tv.player.PlayerModel
 import com.binge.tv.player.SleepOption
 
 // The activity tells the open player when the app leaves the screen.
-object PlayerLifecycle { var current: PlayerModel? = null }
+object PlayerLifecycle {
+    var current: PlayerModel? = null
+    // Leaves the video from anywhere (the activity's double-Back escape hatch).
+    var exit: (() -> Unit)? = null
+}
 
 @Composable
 fun PlayerScreen(request: PlayRequest) {
@@ -100,9 +104,14 @@ fun PlayerScreen(request: PlayRequest) {
     var panelOpen by remember { mutableStateOf(false) }
     val surfaceFocus = remember { FocusRequester() }
 
+    val exitPlayer = remember(model) { { model.close(); if (Nav.stack.lastOrNull() is Screen.Player) Nav.pop() } }
     DisposableEffect(model) {
         PlayerLifecycle.current = model
-        onDispose { model.close(); if (PlayerLifecycle.current === model) PlayerLifecycle.current = null }
+        PlayerLifecycle.exit = exitPlayer
+        onDispose {
+            model.close()
+            if (PlayerLifecycle.current === model) { PlayerLifecycle.current = null; PlayerLifecycle.exit = null }
+        }
     }
 
     BackHandler {
@@ -188,7 +197,7 @@ fun PlayerScreen(request: PlayRequest) {
 
         AnimatedVisibility(panelOpen, enter = androidx.compose.animation.slideInHorizontally { it / 4 } + fadeIn(), exit = androidx.compose.animation.slideOutHorizontally { it / 4 } + fadeOut()) {
             // Focus goes back to the video before the sidebar leaves (its removal would otherwise drop focus entirely).
-            PlayerPanel(model) { runCatching { surfaceFocus.requestFocus() }; panelOpen = false }
+            PlayerPanel(model, exit = exitPlayer) { runCatching { surfaceFocus.requestFocus() }; panelOpen = false }
         }
     }
     LaunchedEffect(panelOpen) {
@@ -291,7 +300,7 @@ private enum class Pane(val title: String) {
 }
 
 @Composable
-private fun PlayerPanel(model: PlayerModel, close: () -> Unit) {
+private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit) {
     var pane by remember { mutableStateOf(Pane.MENU) }
     var from by remember { mutableStateOf(Pane.MENU) }
     var episodes by remember { mutableStateOf<List<TmdbSeason.Episode>>(emptyList()) }
@@ -330,7 +339,7 @@ private fun PlayerPanel(model: PlayerModel, close: () -> Unit) {
                         val rows = buildList {
                             add(Triple(Pane.AUDIO, "Audio", audioLabel))
                             add(Triple(Pane.SUBTITLES, "Subtitles", subtitleLabel))
-                            if (model.usingExternalSubtitles) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "In sync" else "%+.1fs".format(model.subtitleOffset)))
+                            if (model.subtitlesShowing) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "In sync" else "%+.1fs".format(model.subtitleOffset)))
                             add(Triple(Pane.SERVER, if (model.request.isLive) "Stream" else "Server", model.server?.name ?: "Choosing…"))
                             add(Triple(Pane.PICTURE, "Picture", if (model.fillScreen) "Fill screen" else "Server's layout"))
                             if (!model.request.isLive) add(Triple(Pane.QUALITY, "Quality", QualityPreference.current.label))
@@ -340,6 +349,9 @@ private fun PlayerPanel(model: PlayerModel, close: () -> Unit) {
                         items(rows, key = { it.first.name }) { (target, label, value) ->
                             SideItem(label, value, chevron = true, modifier = if (target == from || (from == Pane.MENU && target == rows.first().first)) Modifier.focusRequester(firstFocus) else Modifier) { open(target) }
                         }
+                        item { Spacer(Modifier.height(10.dp)) }
+                        item { SideItem("Close options", "Back to the video") { close() } }
+                        item { SideItem("Exit video", if (model.request.isLive) "Back to Sports" else "Back to the title") { exit() } }
                     }
                     Pane.AUDIO -> {
                         if (model.audioTracks.size <= 1) item { Note(if (model.audioTracks.isEmpty()) "This server has one audio track. Pick another server for a different language." else "Only ${PlayerModel.displayName(model.audioTracks[0])} on this server. Pick another server for a different language.") }
@@ -370,8 +382,10 @@ private fun PlayerPanel(model: PlayerModel, close: () -> Unit) {
                     }
                     Pane.TIMING -> {
                         item { Note("If the words come early or late, shift them half a second at a time. Now: " + if (model.subtitleOffset == 0.0) "in sync" else "%+.1fs".format(model.subtitleOffset)) }
-                        item { SideItem("Show them earlier", modifier = Modifier.focusRequester(firstFocus)) { model.nudgeSubtitles(-0.5) } }
-                        item { SideItem("Show them later") { model.nudgeSubtitles(0.5) } }
+                        item { SideItem("Earlier", "0.5 seconds", modifier = Modifier.focusRequester(firstFocus)) { model.nudgeSubtitles(-0.5) } }
+                        item { SideItem("Later", "0.5 seconds") { model.nudgeSubtitles(0.5) } }
+                        item { SideItem("Much earlier", "2 seconds") { model.nudgeSubtitles(-2.0) } }
+                        item { SideItem("Much later", "2 seconds") { model.nudgeSubtitles(2.0) } }
                         if (model.subtitleOffset != 0.0) item { SideItem("Reset") { model.nudgeSubtitles(-model.subtitleOffset) } }
                         if ((model.external?.versions ?: 0) > 1) item { SideItem("Try another version", "${(model.external?.version ?: 0) + 1} of ${minOf(model.external?.versions ?: 1, 10)}") { model.nextSubtitleVersion() } }
                     }

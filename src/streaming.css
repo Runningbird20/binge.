@@ -1026,18 +1026,7 @@
   top: 14px;
   right: 14px;
   z-index: 6;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(12, 14, 20, 0.82);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
 }
-.td-close:hover { background: #fff; color: #0b0d12; }
 .td-close:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
 /* Hero */
@@ -1423,6 +1412,8 @@
 .genre-scroll-btn {
   width: 36px;
   height: 36px;
+  padding: 0;
+  box-sizing: border-box;
   border-radius: 50%;
   border: 1px solid var(--exp-border-strong);
   background: rgba(14, 17, 24, 0.92);
@@ -1430,6 +1421,7 @@
   opacity: 1;
 }
 .genre-scroll-btn:disabled { opacity: 0; pointer-events: none; }
+.genre-scroll-btn svg { display: block; flex-shrink: 0; }
 
 /* Grid */
 .st-grid {
@@ -1606,6 +1598,20 @@
 .st-tab.active { background: #fff; color: #0b0d12; }
 .st-tab:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
+/* The selected background travels between options without moving labels. */
+.sliding-tabs { position: relative; isolation: isolate; }
+.sliding-tabs .st-tab { position: relative; z-index: 1; }
+.sliding-tabs .st-tab.active { background: transparent; }
+.sliding-tabs-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background: #fff;
+  pointer-events: none;
+}
+
 @media (max-width: 768px) {
   .td-book-hero { grid-template-columns: minmax(0, 1fr); justify-items: start; }
   .td-book-cover { width: 140px; }
@@ -1618,14 +1624,24 @@
    PROFILE (pf-*)
 ═══════════════════════════════════════════════════════════════ */
 
+.page-content.pf-page {
+  max-width: none;
+  padding: 0 0 5rem;
+  background: var(--exp-bg-0);
+  --pf-content-gutter: max(3vw, calc((100% - 1440px) / 2 + 3vw));
+}
+
+.pf-page > .pf-section {
+  padding-left: var(--pf-content-gutter);
+  padding-right: var(--pf-content-gutter);
+}
+
 .pf-hero {
   position: relative;
-  margin: -1.75rem calc(-1 * var(--st-gutter)) 0;
-  padding: clamp(3rem, 8vw, 5.5rem) var(--st-gutter) 1.75rem;
+  margin: 0;
+  padding: clamp(3rem, 8vw, 5.5rem) var(--pf-content-gutter) 1.75rem;
   overflow: hidden;
   isolation: isolate;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: radial-gradient(80% 140% at 80% 0%, rgba(80, 98, 140, 0.35), rgba(11, 13, 18, 0) 60%), #0d1017;
 }
 .pf-hero-bg {
   position: absolute;
@@ -1636,6 +1652,8 @@
   object-position: center 25%;
   opacity: 0.38;
   z-index: -2;
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, rgba(0, 0, 0, 0.4) 65%, transparent 90%);
+  mask-image: linear-gradient(to bottom, #000 35%, rgba(0, 0, 0, 0.4) 65%, transparent 90%);
 }
 .pf-hero-scrim {
   position: absolute;
@@ -1644,6 +1662,8 @@
   background:
     linear-gradient(0deg, var(--exp-bg-0) 0%, rgba(11, 13, 18, 0.55) 55%, rgba(11, 13, 18, 0.3) 100%),
     linear-gradient(90deg, rgba(11, 13, 18, 0.85) 0%, rgba(11, 13, 18, 0) 70%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 90%);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 90%);
 }
 .pf-hero-main { display: flex; align-items: flex-end; gap: 1.5rem; flex-wrap: wrap; }
 .pf-avatar {
@@ -1664,6 +1684,8 @@
 }
 .pf-bio { margin: 0; color: var(--exp-text-dim); max-width: 60ch; }
 .pf-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.st-pill-link,
+.pf-action-link { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; text-decoration: none; box-sizing: border-box; }
 
 /* Facts as one readable line ("48 titles · 112 hours watched"), not a row
    of big-number tiles. */
@@ -1697,21 +1719,8 @@
 .pf-card { display: flex; flex-direction: column; }
 .pf-card-controls { display: flex; gap: 0.4rem; margin-top: 0.5rem; align-items: center; }
 .pf-status-select { flex: 1; min-width: 0; }
-.pf-icon-btn {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 8px;
-  border: 1px solid var(--exp-border);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--exp-text-dim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.pf-icon-btn:hover { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.5); }
-.pf-icon-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.pf-card-poster-wrap { position: relative; }
+.pf-card-controls .pf-status-select { width: 100%; }
 
 .pf-stars {
   position: absolute;
@@ -1727,17 +1736,7 @@
   font-size: 0.8rem;
   font-weight: 800;
 }
-.pf-review {
-  margin: 0.45rem 0 0;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  font-style: italic;
-  color: var(--exp-text-dim);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+
 .pf-link-btn {
   align-self: flex-start;
   margin-top: 0.35rem;
@@ -1767,7 +1766,10 @@
 .profile-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.25rem 0; color: var(--exp-text-dim); }
 
 @media (max-width: 768px) {
-  .pf-hero { margin-top: -1rem; }
+  .page-content.pf-page {
+    --pf-content-gutter: 1rem;
+    padding-bottom: 2rem;
+  }
   .pf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pf-stats > div:first-child { grid-column: 1 / -1; }
 }
@@ -2726,7 +2728,6 @@
 .st-preview-video, .st-hero-trailer iframe { pointer-events: none; }
 
 /* ── Continue Watching: visible play + details ───────────────── */
-.st-card-play,
 .st-card-playnow {
   position: absolute;
   left: 50%;
@@ -2747,9 +2748,7 @@
   transition: transform 0.15s, background 0.15s;
   pointer-events: none;
 }
-.st-card:hover .st-card-play, .st-card:focus-visible .st-card-play,
 .st-card:hover .st-card-playnow, .st-card:focus-visible .st-card-playnow { background: #fff; color: #0b0d12; transform: translate(-50%, -50%) scale(1.06); }
-.st-cw-cell .st-card-hover .st-card-play { display: none; }
 .st-cw-info {
   position: absolute;
   top: 0.95rem;
@@ -3964,7 +3963,8 @@ kbd {
   .st-hero-actions .st-hero-info { transition: none; }
 }
 
-/* Match the detail playback action to the saved-status pill. */
+/* Shared pill styling for playback and profile actions. */
+.st-btn.st-btn--pill,
 .st-btn.td-resume-control {
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.55);
@@ -3973,6 +3973,7 @@ kbd {
   font-size: 0.95rem;
   font-weight: 700;
 }
+.st-btn.st-btn--pill:hover,
 .st-btn.td-resume-control:hover {
   border-color: #fff;
   background: rgba(255, 255, 255, 0.12);
@@ -3983,4 +3984,278 @@ kbd {
   width: auto;
   flex: 0 0 auto;
   padding-inline: 1rem;
+}
+
+/* ── Your fantasy teams (FantasyBoard.js, Sports page) ───────────────────
+   One card per tracked ESPN team: logo, name, league · record · seed, this
+   week's scoreline, and how many starters are playing right now. A card
+   opens its lineup below the cards. */
+.fb { margin: 0.5rem 0 2.25rem; }
+.fb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; }
+.fb-title { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.35rem; font-weight: 700; color: var(--exp-text); }
+.fb-sub { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--exp-text-faint); }
+
+.fb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.9rem; }
+.fb-card {
+  display: flex; flex-direction: column; gap: 0.75rem; min-height: 158px; padding: 1rem 1.05rem 0.9rem;
+  border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #151922; color: var(--exp-text);
+  font: inherit; text-align: left; cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+@media (hover: hover) { .fb-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); background: #191e29; } }
+.fb-card:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.fb-card.open { border-color: var(--st-soon); box-shadow: inset 0 0 0 1px var(--st-soon); }
+.fb-card--skel { cursor: default; }
+.fb-card--problem { cursor: default; }
+.fb-card-top { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+.fb-card-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fb-card-name { margin: 0; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-card-meta { margin: 0; font-size: 0.78rem; color: var(--exp-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-caret { flex: none; color: var(--exp-text-faint); transition: transform 0.2s ease; }
+.fb-card.open .fb-caret { transform: rotate(180deg); }
+.fb-logo { flex: none; border-radius: 50%; object-fit: cover; background: #232a38; }
+.fb-logo--blank { display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.02em; color: var(--exp-text-dim); text-transform: uppercase; }
+
+/* This week's matchup, read as a scoreline. */
+.fb-score { display: flex; align-items: baseline; gap: 0.6rem; font-size: 0.9rem; color: var(--exp-text-dim); font-variant-numeric: tabular-nums; }
+.fb-score b { font-size: 1.45rem; font-weight: 800; color: var(--exp-text); }
+.fb-score-side { display: inline-flex; align-items: baseline; gap: 0.4rem; min-width: 0; white-space: nowrap; }
+.fb-score-side--opp { margin-left: auto; }
+.fb-score-vs { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--exp-text-faint); }
+.fb-score.leading .fb-score-side:first-child b { color: var(--st-soon); }
+.fb-card-foot { display: flex; align-items: center; gap: 0.4rem; margin-top: auto; font-size: 0.8rem; color: var(--exp-text-faint); }
+.fb-card-actions { display: flex; gap: 0.9rem; }
+
+.fb-lineup { margin-top: 1rem; padding: 1rem 1.1rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #12161e; }
+.fb-lineup-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.fb-lineup-head h3 { margin: 0; font-size: 1.05rem; }
+.fb-players { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 1.5rem; }
+.fb-player { display: grid; grid-template-columns: 3.4rem 1fr auto; align-items: center; gap: 0.6rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.fb-slot { font-size: 0.72rem; font-weight: 800; color: var(--exp-text-faint); letter-spacing: 0.03em; }
+.fb-player-name { display: flex; flex-direction: column; min-width: 0; }
+.fb-player-name strong { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-player-name span { font-size: 0.75rem; color: var(--exp-text-faint); text-transform: capitalize; }
+.fb-player.on .fb-player-name span { color: var(--st-soon); }
+.fb-points { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fb-points .proj { font-weight: 500; font-size: 0.8rem; color: var(--exp-text-faint); }
+.fb-bench { margin-top: 0.6rem; }
+.fb-bench summary { cursor: pointer; font-size: 0.85rem; color: var(--exp-text-dim); padding: 0.35rem 0; }
+
+.fb-link { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0; border: 0; background: none; color: var(--exp-text-dim); font: inherit; font-size: 0.82rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.fb-link:hover { color: var(--exp-text); }
+
+.fb-form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 640px; margin-bottom: 1rem; padding: 1rem 1.1rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #151922; }
+.fb-sports { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.fb-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--exp-text-dim); }
+.fb-field input, .fb-field select { min-height: 40px; padding: 0 0.75rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.16); background: #0e1117; color: var(--exp-text); font: inherit; font-size: 0.9rem; }
+.fb-field input:focus-visible, .fb-field select:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.fb-hint { margin: -0.35rem 0 0; font-size: 0.78rem; color: var(--exp-text-faint); }
+.fb-private summary { cursor: pointer; font-size: 0.85rem; color: var(--exp-text-dim); }
+.fb-private p { font-size: 0.8rem; color: var(--exp-text-faint); line-height: 1.5; }
+.fb-login { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.fb-login p { margin: 0; }
+.fb-error { margin: 0; font-size: 0.85rem; color: #ff8a80; }
+.fb-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+@media (max-width: 600px) {
+  .fb-head { flex-direction: column; }
+  .fb-cards { grid-template-columns: 1fr; }
+  .fb-players { grid-template-columns: 1fr; }
+}
+
+/* Several tracked teams in the live score panel. */
+.st-fr-team + .st-fr-team { margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.st-fr-logo { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; align-self: center; }
+.st-fr-opp { font-weight: 500; color: var(--exp-text-faint); }
+.st-fr-add { margin-top: 0.85rem; }
+/* When the board is the page's first row, the Hide scores toggle sits on its
+   heading line: keep the board's own button clear of it. */
+.st-rows > .fb:first-child .fb-head { padding-right: 10.5rem; }
+@media (max-width: 600px) {
+  .st-rows > .fb:first-child .fb-head { padding-right: 0; padding-top: 2.6rem; }
+  .fb-title { font-size: 1.15rem; }
+}
+/* Cards never grow past their column (long names/scores used to push them
+   off a phone screen). */
+.fb-cards { grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); }
+.fb-card { min-width: 0; }
+.fb-score { min-width: 0; }
+.fb-score-side { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) {
+  .fb-cards { grid-template-columns: minmax(0, 1fr); }
+  .fb-score b { font-size: 1.25rem; }
+}
+
+/* Season selection shares the saved-status dropdown's pill styling. */
+.themed-select .themed-select-control {
+  min-height: 44px;
+  padding: 0 2.5rem 0 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.themed-select .themed-select-control:hover:not(:disabled),
+.themed-select.themed-select--open .themed-select-control {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.themed-select .themed-select-chevron { color: rgba(255, 255, 255, 0.8); }
+
+/* Expanded detail dropdowns follow the same dark pill controls. */
+.themed-select-menu--pill {
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  background: rgba(24, 27, 35, 0.97);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.themed-select-menu--pill .themed-select-option {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  color: #ddd;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.themed-select-menu--pill .themed-select-option:hover,
+.themed-select-menu--pill .themed-select-option.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+  color: #fff;
+}
+.themed-select-menu--pill .themed-select-option.selected {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.themed-select-menu--pill .themed-select-option.selected::after {
+  content: '✓';
+  margin-left: auto;
+  color: var(--st-match);
+}
+.themed-select-menu--pill .themed-select-option:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
+/* Converted native selectors keep their layout without the old outer box. */
+.themed-select.set-select {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  width: 240px;
+}
+.fb-field > .themed-select,
+.st-fr-field > .themed-select,
+.adm-field > .themed-select,
+.profile-security-card label > .themed-select { width: 100%; min-width: 0; }
+.st-pb-report > .themed-select { width: 180px; max-width: 100%; }
+
+/* Dark glass keeps genre labels readable as posters scroll beneath them. */
+.genre-bar .genre-chip:not(.active) {
+  background: rgba(15, 18, 25, 0.76);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #f4f6f8;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.16);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.genre-bar .genre-chip:not(.active):hover {
+  background: rgba(30, 34, 43, 0.88);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+.page-content .catalog-search-row {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.expandable-search {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  max-width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--exp-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--exp-text-dim);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: width 280ms ease, border-color 160ms ease;
+}
+.expandable-search.is-open { width: min(420px, calc(100vw - 3rem)); }
+.expandable-search:focus-within { border-color: rgba(255, 255, 255, 0.55); }
+.expandable-search-toggle,
+.expandable-search-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.expandable-search button:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.expandable-search button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.expandable-search input {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+}
+.expandable-search input::placeholder { color: #a8adb8; }
+.expandable-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+@media (max-width: 600px) {
+  .expandable-search.is-open { width: min(300px, calc(100vw - 3rem)); }
+}
+@media (prefers-reduced-motion: reduce) { .expandable-search { transition: none; } }
+
+/* Search wrappers provide the focus treatment; avoid a rectangular ring inside. */
+input:is([type="search"], .catalog-search-input, .st-search-input, .global-search-input):is(:focus, :focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Header search follows the same click-to-expand control as catalog search. */
+.global-search-bar.expandable-search,
+.global-search-bar.expandable-search:hover {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--exp-border);
+  box-shadow: none;
+}
+.global-search-bar.expandable-search.is-open {
+  width: min(360px, calc(100vw - 180px));
+}
+.global-search-bar.expandable-search:focus-within { border-color: rgba(255, 255, 255, 0.55); }
+.global-search-bar.expandable-search input { padding: 0; }
+@media (max-width: 600px) {
+  .global-search-bar.expandable-search.is-open { width: min(260px, calc(100vw - 150px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-search-bar.expandable-search { transition: none; }
 }

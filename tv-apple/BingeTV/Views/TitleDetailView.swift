@@ -218,7 +218,8 @@ struct TitleDetailView: View {
     }
 
     private var resumeProgress: Double? {
-        guard let position = resume?.positionSeconds, let duration = resume?.durationSeconds, duration > 0, position > 30 else { return nil }
+        guard let duration = resume?.durationSeconds, duration > 0,
+              let position = ResumeRule.start(position: resume?.positionSeconds, duration: duration) else { return nil }
         return min(1, position / duration)
     }
 
@@ -284,7 +285,7 @@ struct TitleDetailView: View {
     // without the web view, or a title with no streaming id.
     private func start(season: Int?, episode: Int?, name: String?) {
         let sameAsResume = title.kind == .movie || (season == resume?.currentSeason && episode == resume?.currentEpisode)
-        let startAt = sameAsResume ? resume?.positionSeconds : nil
+        let startAt = sameAsResume ? ResumeRule.start(position: resume?.positionSeconds, duration: resume?.durationSeconds) : nil
         if WebEngines.isAvailable, title.tmdbId != nil {
             playing = PlayRequest(title: title, season: season, episode: episode, startAt: startAt, seasons: seasons)
             return
@@ -356,7 +357,8 @@ struct TitleDetailView: View {
         let season = title.kind == .tvShow ? (resume?.currentSeason ?? seasons.first?.seasonNumber ?? 1) : nil
         let episode = title.kind == .tvShow ? (resume?.currentEpisode ?? 1) : nil
         Warmup.shared.prepare(PlayRequest(title: title, season: season, episode: episode,
-                                          startAt: resume?.positionSeconds, seasons: seasons))
+                                          startAt: ResumeRule.start(position: resume?.positionSeconds, duration: resume?.durationSeconds),
+                                          seasons: seasons))
     }
 
     private func loadEpisodes() async {

@@ -1,4 +1,4 @@
-import { fantasyGameFor, isBenchSlot, parseLeagueInput, pickMyTeam, playingInGame, sortRoster } from './fantasy';
+import { fantasyGameFor, formatPoints, isBenchSlot, parseLeagueInput, pickMyTeam, playingInGame, playingNow, sortRoster, summarizeTeam } from './fantasy';
 
 describe('fantasy', () => {
   it('maps the sport being watched to its ESPN Fantasy game', () => {
@@ -31,5 +31,27 @@ describe('fantasy', () => {
     const data = { teams: [{ id: 1 }, { id: 2, mine: true }] };
     expect(pickMyTeam(data, { teamId: 1 }).id).toBe(1);
     expect(pickMyTeam(data, {}).id).toBe(2);
+  });
+
+  it('summarizes a tracked team: its matchup, opponent and starters', () => {
+    const data = { teams: [
+      { id: 1, name: 'Mine', abbrev: 'ME', matchup: { points: 87.4, opponentId: 2, opponentPoints: 92.1 },
+        roster: [{ id: 10, slotId: 0, points: 20 }, { id: 11, slotId: 20, points: 5 }] },
+      { id: 2, name: 'Rival', abbrev: 'RIV', roster: [] },
+    ] };
+    const summary = summarizeTeam('ffl', data, { teamId: 1 });
+    expect(summary.team.name).toBe('Mine');
+    expect(summary.opponent.name).toBe('Rival');
+    expect(summary.points).toBe(87.4);
+    expect(summary.opponentPoints).toBe(92.1);
+    expect(summary.starters.map((p) => p.id)).toEqual([10]);
+    expect(summarizeTeam('ffl', { teams: [{ id: 3, roster: [{ id: 1, slotId: 0, points: 7.25 }] }] }, { teamId: 3 }).points).toBe(7.3);
+  });
+
+  it('counts starters playing right now and formats points', () => {
+    const starters = [{ proTeamId: 23, proTeam: 'PIT' }, { proTeamId: 11, proTeam: 'IND' }];
+    expect(playingNow(starters, [{ short: 'PIT' }])).toHaveLength(1);
+    expect(formatPoints(12)).toBe('12');
+    expect(formatPoints(12.345)).toBe('12.3');
   });
 });

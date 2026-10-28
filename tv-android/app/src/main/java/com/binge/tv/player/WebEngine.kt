@@ -69,6 +69,8 @@ sealed class MediaCommand(val js: String) {
     class AudioTrack(i: Int) : MediaCommand("audio:$i")
     class TextTrack(i: Int) : MediaCommand("text:$i")
     class CaptionStyle(size: Int, background: String) : MediaCommand("cue:$size:$background")
+    // Server subtitles shifted by the viewer (seconds, + = later).
+    class CueShift(seconds: Double) : MediaCommand("cueshift:$seconds")
 }
 
 // The server's own player page in an Android WebView, loaded top-level, with

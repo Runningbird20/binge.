@@ -1,3 +1,4 @@
+import LoadingBar from './components/LoadingBar';
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -188,29 +189,8 @@ function AppRoutes() {
   );
 }
 
-// Shaped like a browse page (billboard + rows) so the real page drops in
-// without everything shifting.
 function AppRouteFallback() {
-  return (
-    <div className="app-layout">
-      <div className="page-content st-route-skel" aria-busy="true" aria-label="Loading">
-        <div className="st-route-skel-hero skeleton-block" />
-        {[0, 1].map((row) => (
-          <div key={row} className="st-route-skel-row">
-            <div className="st-route-skel-title skeleton-block" />
-            <div className="st-route-skel-cards">
-              {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} className="st-skel">
-                  <div className="st-skel-art skeleton-block" />
-                  <div className="st-skel-line skeleton-block" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <div className="app-layout"><main className="page-content"><LoadingBar /></main></div>;
 }
 
 export default function App() {

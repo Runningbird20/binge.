@@ -1,3 +1,4 @@
+import ThemedSelect from './ThemedSelect';
 import { useState } from 'react';
 import { requireSupabaseClient } from '../utils/supabase';
 import { signInWithSupabase, updateAccountProfile } from '../utils/supabaseData';
@@ -40,9 +41,7 @@ export default function ProfileSecurityDialog({ profile, email, editing, locked,
       <form className="profile-delete-card profile-security-card" role="dialog" aria-modal="true" aria-labelledby="profile-security-title" onSubmit={submit}>
         <h3 id="profile-security-title">{editing ? 'Edit' : 'Unlock'} {profile.name}</h3>
         {editing && <>
-          <label>Age rating<select className="profile-picker-add-input" value={isKids ? 'kids' : 'all'} onChange={(e) => setIsKids(e.target.value === 'kids')}>
-            <option value="all">All ratings</option><option value="kids">Kids — G, PG, TV-Y, TV-Y7, TV-G, TV-PG</option>
-          </select></label>
+          <label>Age rating<ThemedSelect aria-label="Age rating" value={isKids ? 'kids' : 'all'} onChange={(e) => setIsKids(e.target.value === 'kids')} options={[{ value: 'all', label: 'All ratings' }, { value: 'kids', label: 'Kids — G, PG, TV-Y, TV-Y7, TV-G, TV-PG' }]} /></label>
           <label>Account password<input className="profile-picker-add-input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
           <p>Confirm your account password to change age restrictions or the profile lock.</p>
         </>}

@@ -106,23 +106,34 @@ enum AniSkip {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let search = season > 1 ? "\(name) Season \(season)" : name
+        // A page of candidates, not AniList's single best guess: for "Frieren:
+        // Beyond Journey's End" that guess is the mini-anime spin-off.
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "query": "query($s:String){Media(search:$s,type:ANIME){idMal episodes countryOfOrigin synonyms title{english romaji}}}",
+            "query": "query($s:String){Page(perPage:8){media(search:$s,type:ANIME){idMal episodes countryOfOrigin synonyms title{english romaji}}}}",
             "variables": ["s": search],
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: request),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let media = (root["data"] as? [String: Any])?["Media"] as? [String: Any],
-              let id = (media["idMal"] as? NSNumber)?.intValue,
-              media["countryOfOrigin"] as? String == "JP" else { return nil }
+              let page = (root["data"] as? [String: Any])?["Page"] as? [String: Any],
+              let candidates = page["media"] as? [[String: Any]] else { return nil }
+        return pickMalId(candidates, name: name, season: season, episode: episode)
+    }
+
+    // The first Japanese candidate named exactly like the title (a later
+    // season: starting with it) that has this episode.
+    static func pickMalId(_ candidates: [[String: Any]], name: String, season: Int, episode: Int) -> Int? {
         let normalize = { (text: String) in
             text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
         }
-        let titles = media["title"] as? [String: Any]
-        let names = ([titles?["english"], titles?["romaji"]].compactMap { $0 as? String } + (media["synonyms"] as? [String] ?? [])).map(normalize)
         let wanted = normalize(name)
-        guard names.contains(where: { season > 1 ? $0.hasPrefix(wanted) : $0 == wanted }) else { return nil }
-        if let count = (media["episodes"] as? NSNumber)?.intValue, episode > count { return nil }
-        return id
+        for media in candidates {
+            guard let id = (media["idMal"] as? NSNumber)?.intValue, media["countryOfOrigin"] as? String == "JP" else { continue }
+            let titles = media["title"] as? [String: Any]
+            let names = ([titles?["english"], titles?["romaji"]].compactMap { $0 as? String } + (media["synonyms"] as? [String] ?? [])).map(normalize)
+            guard names.contains(where: { season > 1 ? $0.hasPrefix(wanted) : $0 == wanted }) else { continue }
+            if let count = (media["episodes"] as? NSNumber)?.intValue, episode > count { continue }
+            return id
+        }
+        return nil
     }
 }

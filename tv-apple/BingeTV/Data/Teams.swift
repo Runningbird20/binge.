@@ -64,13 +64,19 @@ final class TeamCenter: ObservableObject {
         ] + app.ownerQuery)) ?? []
     }
 
-    func isFollowing(_ team: Scoreboard.Competitor.Team) -> Bool {
-        teams.contains { $0.teamId == team.id }
+    // ESPN team ids are per league (NFL 5 is the Browns, NBA 5 the Cavaliers).
+    static func followed(_ teams: [FollowedTeam], teamId: String?, leaguePath: String) -> FollowedTeam? {
+        guard let teamId else { return nil }
+        return teams.first { $0.teamId == teamId && $0.leaguePath == leaguePath }
+    }
+
+    func isFollowing(_ team: Scoreboard.Competitor.Team, leaguePath: String) -> Bool {
+        Self.followed(teams, teamId: team.id, leaguePath: leaguePath) != nil
     }
 
     func toggle(_ team: Scoreboard.Competitor.Team, leaguePath: String) async {
         guard let app, let session = app.session, let teamId = team.id else { return }
-        if let existing = teams.first(where: { $0.teamId == teamId }) {
+        if let existing = Self.followed(teams, teamId: teamId, leaguePath: leaguePath) {
             try? await Supabase.shared.delete("followed_teams", [URLQueryItem(name: "id", value: "eq.\(existing.id)")])
         } else {
             try? await Supabase.shared.insert("followed_teams", [
@@ -94,11 +100,10 @@ final class TeamCenter: ObservableObject {
     private func check() async {
         let paths = Set(teams.map(\.leaguePath))
         guard !paths.isEmpty else { return }
-        let ids = Set(teams.map(\.teamId))
         for path in paths {
             guard let league = League.all.first(where: { $0.path == path }) ?? Optional(League(id: path, name: path, path: path)),
                   let events = try? await Scoreboard.load(league) else { continue }
-            for event in events where event.competitors.contains(where: { ids.contains($0.team.id ?? "") }) {
+            for event in events where event.competitors.contains(where: { Self.followed(teams, teamId: $0.team.id, leaguePath: path) != nil }) {
                 if let alert = Self.alert(for: event, sport: path.split(separator: "/").first.map(String.init) ?? "") {
                     var seen = sent
                     guard !seen.contains(alert.id) else { continue }
@@ -144,7 +149,14 @@ final class TeamCenter: ObservableObject {
         if period > regulation {
             return GameAlert(id: "\(event.id):ot", headline: "Overtime! \(matchup)", detail: score, teams: tokens)
         }
-        let late: Bool = sport == "baseball" ? period >= 8 : (period == regulation && (event.status.clock ?? 9999) <= (sport == "soccer" ? 900 : 300))
+        // ESPN's clock counts down in each period, except soccer's, which is
+        // the time played (5400 = 90').
+        let late: Bool
+        switch sport {
+        case "baseball": late = period >= 8
+        case "soccer": late = period == regulation && (event.status.clock ?? 0) >= 75 * 60
+        default: late = period == regulation && (event.status.clock ?? 9999) <= 300
+        }
         if late, margin <= close {
             return GameAlert(id: "\(event.id):close", headline: "Close game: \(matchup)",
                              detail: "\(score) · \(event.status.type.shortDetail ?? "")", teams: tokens)

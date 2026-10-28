@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CaretLeft, CaretRight, Info, Play, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
@@ -84,7 +85,7 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
   const touchRef = useRef(null);
 
   if (loading) {
-    return <div className="st-hero st-hero--loading skeleton-block" aria-hidden="true" />;
+    return <LoadingBar label="Loading featured titles…" />;
   }
 
   if (!slides.length) {

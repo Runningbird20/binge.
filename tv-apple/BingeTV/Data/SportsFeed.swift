@@ -55,7 +55,7 @@ struct SportGame: Identifiable, Hashable {
 
     // Same rules as the site's inferLeague (sportsProviders.js).
     var league: String {
-        if let tag, !tag.contains("24/7"), !tag.isEmpty { return tag }
+        if let tag, !tag.contains("24/7"), !tag.isEmpty { return SportsFeed.canonicalLeague(tag) }
         if is247 { return "24/7 Channels" }
         if let tokens = teamTokens {
             let inSet = { (set: Set<String>) in tokens.allSatisfy { set.contains($0) } }
@@ -84,6 +84,23 @@ enum SportsFeed {
     static let nflTeams: Set<String> = ["cardinals", "falcons", "ravens", "bills", "panthers", "bears", "bengals", "browns", "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars", "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots", "saints", "giants", "jets", "eagles", "steelers", "49ers", "seahawks", "buccaneers", "titans", "commanders"]
     static let nbaTeams: Set<String> = ["hawks", "celtics", "nets", "hornets", "bulls", "cavaliers", "mavericks", "nuggets", "pistons", "warriors", "rockets", "pacers", "clippers", "lakers", "grizzlies", "heat", "bucks", "timberwolves", "pelicans", "knicks", "thunder", "magic", "76ers", "suns", "blazers", "kings", "spurs", "raptors", "jazz", "wizards"]
     static let nhlTeams: Set<String> = ["ducks", "bruins", "sabres", "flames", "hurricanes", "blackhawks", "avalanche", "jackets", "stars", "wings", "oilers", "panthers", "kings", "wild", "canadiens", "predators", "devils", "islanders", "rangers", "senators", "flyers", "penguins", "sharks", "kraken", "blues", "lightning", "leafs", "canucks", "knights", "capitals", "jets", "mammoth"]
+    // Same aliases as the site's canonicalLeague (sportsProviders.js), so
+    // "NCAAF" and "College Football" are one row.
+    private static let leagueAliases: [String: String] = [
+        "ncaaf": "College Football", "ncaa football": "College Football", "college football": "College Football",
+        "ncaab": "College Basketball", "ncaa basketball": "College Basketball", "college basketball": "College Basketball",
+        "epl": "Premier League", "english premier league": "Premier League", "premier league": "Premier League",
+        "la liga": "LaLiga", "laliga": "LaLiga",
+        "ucl": "Champions League", "uefa champions league": "Champions League", "champions league": "Champions League",
+        "f1": "Formula 1", "formula one": "Formula 1", "formula 1": "Formula 1",
+        "wwe": "Wrestling", "aew": "Wrestling", "wrestling": "Wrestling",
+        "ufc": "UFC", "mma": "MMA",
+    ]
+
+    static func canonicalLeague(_ name: String) -> String {
+        leagueAliases[name.trimmingCharacters(in: .whitespaces).lowercased()] ?? name
+    }
+
     // PPV's own category names → the site's.
     private static let ppvCategories: [String: String] = ["Ice Hockey": "Hockey", "Football": "Soccer", "MMA": "Combat Sports", "Boxing": "Combat Sports", "Wrestling": "Combat Sports", "Motorsport": "Racing", "Motorsports": "Racing"]
 
@@ -249,10 +266,13 @@ enum SportsFeed {
 
     // MARK: Merging (one entry per game)
 
+    // Club suffixes, not nicknames: "Toronto FC" and "Austin FC" are different teams.
+    private static let clubSuffixes: Set<String> = ["fc", "cf", "sc", "afc", "ac", "cd", "sv", "fk", "bk", "if", "ud", "cp"]
+
     static func tokens(teams: (home: String, away: String)?, name: String) -> Set<String>? {
         func nickname(_ team: String) -> String? {
             let words = team.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
-            return words.last
+            return words.last { !clubSuffixes.contains($0) } ?? words.last
         }
         if let teams, let a = nickname(teams.home), let b = nickname(teams.away) { return [a, b] }
         let lower = " " + name.lowercased() + " "
@@ -293,7 +313,7 @@ enum SportsFeed {
         (!a[0].isDisjoint(with: b[0]) && !a[1].isDisjoint(with: b[1])) || (!a[0].isDisjoint(with: b[1]) && !a[1].isDisjoint(with: b[0]))
     }
 
-    private static func merge(_ entries: [SportGame]) -> [SportGame] {
+    static func merge(_ entries: [SportGame]) -> [SportGame] {
         var games: [SportGame] = []
         for entry in entries {
             let tokens = entry.teamTokens
@@ -368,7 +388,22 @@ enum SportsFeed {
                 urls.append(list[round])
             }
         }
-        return urls.prefix(limit).map { label, url in
+        // Feed families that played on this Apple TV go first (stable, so
+        // equal scores keep the interleaved order).
+        // Best quality: the sharpest feeds seen here (or labelled 1080p / 4K)
+        // come before the merely reliable ones, so they're among those raced.
+        let best = QualityPreference.current == .best
+        let quality = { (label: String) in
+            max(QualityMemory.nominal(label), UserDefaults.standard.integer(forKey: "binge.q." + label))
+        }
+        let ranked = urls.enumerated()
+            .sorted {
+                let a = (best ? quality($0.element.0) : 0, SportsMemory.score($0.element.0), -$0.offset)
+                let b = (best ? quality($1.element.0) : 0, SportsMemory.score($1.element.0), -$1.offset)
+                return a > b
+            }
+            .map(\.element)
+        return ranked.prefix(limit).map { label, url in
             StreamServer(id: url.absoluteString, name: label) { _, _, _, _ in url }
         }
     }
@@ -393,5 +428,29 @@ enum SportsFeed {
                 return ("\(stream.label)\(number)\(truthy(item["hd"]) ? " HD" : "")\(language)", url)
             }
         }
+    }
+}
+
+// Which sports feeds play on this Apple TV (as on Fire TV and the website):
+// a feed family that worked goes first next time, one that keeps failing
+// goes last. Families: "PPV", "StreamFree", "Streamed · admin"…
+enum SportsMemory {
+    static func family(_ label: String) -> String {
+        if label.hasPrefix("PPV") { return "PPV" }
+        if label.hasPrefix("StreamFree") { return "StreamFree" }
+        if label.hasPrefix("Streamed") {
+            let source = label.components(separatedBy: " · ").dropFirst().first?.components(separatedBy: " ").first ?? ""
+            return "Streamed · " + source
+        }
+        return label.components(separatedBy: " ·").first ?? label
+    }
+
+    private static func key(_ label: String) -> String { "binge.sportsFeed." + family(label) }
+
+    static func score(_ label: String) -> Int { UserDefaults.standard.integer(forKey: key(label)) }
+
+    static func record(_ label: String, worked: Bool) {
+        let next = min(30, max(-9, score(label) + (worked ? 3 : -1)))
+        UserDefaults.standard.set(next, forKey: key(label))
     }
 }
