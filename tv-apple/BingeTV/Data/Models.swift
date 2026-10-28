@@ -169,9 +169,12 @@ enum ReleaseWindow {
         return formatter
     }()
 
+    // Whole calendar days from today (0 = today), so a daylight-saving
+    // change in between doesn't push "30 days out" to 30 and an hour.
     private static func days(until value: String?) -> Double? {
         guard let value, let date = formatter.date(from: String(value.prefix(10))) else { return nil }
-        return date.timeIntervalSinceNow / 86_400
+        let calendar = Calendar.current
+        return calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: date)).day.map(Double.init)
     }
 
     static func isRecent(_ value: String?, days: Double) -> Bool {
