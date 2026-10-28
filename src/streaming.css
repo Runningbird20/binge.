@@ -1632,10 +1632,21 @@
    PROFILE (pf-*)
 ═══════════════════════════════════════════════════════════════ */
 
+.page-content.pf-page {
+  max-width: none;
+  padding: 0 0 5rem;
+  --pf-content-gutter: max(3vw, calc((100% - 1440px) / 2 + 3vw));
+}
+
+.pf-page > .pf-section {
+  padding-left: var(--pf-content-gutter);
+  padding-right: var(--pf-content-gutter);
+}
+
 .pf-hero {
   position: relative;
-  margin: -1.75rem calc(-1 * var(--st-gutter)) 0;
-  padding: clamp(3rem, 8vw, 5.5rem) var(--st-gutter) 1.75rem;
+  margin: 0;
+  padding: clamp(3rem, 8vw, 5.5rem) var(--pf-content-gutter) 1.75rem;
   overflow: hidden;
   isolation: isolate;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -1781,7 +1792,10 @@
 .profile-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.25rem 0; color: var(--exp-text-dim); }
 
 @media (max-width: 768px) {
-  .pf-hero { margin-top: -1rem; }
+  .page-content.pf-page {
+    --pf-content-gutter: 1rem;
+    padding-bottom: 2rem;
+  }
   .pf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pf-stats > div:first-child { grid-column: 1 / -1; }
 }

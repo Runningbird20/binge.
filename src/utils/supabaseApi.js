@@ -1,4 +1,5 @@
 import {
+  isSupabaseConfigured,
   getSupabaseUser,
   requireSupabaseClient,
   toSupabaseError,
@@ -668,6 +669,10 @@ async function handleProfileGet(pathname) {
 }
 
 export async function executeSupabaseRoute(method, path, body) {
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const { pathname, searchParams } = parseApiPath(path);
 

@@ -12,7 +12,9 @@ import {
   fetchAccountProfiles,
   createAccountProfile,
 } from '../utils/supabaseData';
+import { isNeonAuthConfigured, neonSignIn, neonSignUp, getNeonSession, neonSignOut } from '../utils/neon';
 import { normalizeUserType } from '../utils/userAccess';
+
 import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId, setActiveProfileOwnsLegacyRows } from '../utils/activeProfile';
 import { hydratePlaybackPrefs } from '../utils/streamPreferences';
 import { hydrateSettings } from '../utils/profileSettings';
@@ -89,6 +91,28 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
+    if (isNeonAuthConfigured) {
+      try {
+        const neonUser = await getNeonSession();
+        if (neonUser) {
+          const formatted = {
+            id: neonUser.id,
+            email: neonUser.email,
+            username: neonUser.name || (neonUser.email ? neonUser.email.split('@')[0] : 'media-fan'),
+            userType: neonUser.role || 'user',
+            isAdmin: neonUser.role === 'admin',
+            isDev: neonUser.role === 'dev',
+            fromNeon: true,
+          };
+          commitUser(formatted);
+          setAuthLoading(false);
+          return formatted;
+        }
+      } catch (err) {
+        console.warn('[auth] Neon session restore error:', err);
+      }
+    }
+
     if (!isSupabaseConfigured || !supabase) {
       const storedUser = readStoredUser();
       if (storedUser) {
@@ -105,6 +129,7 @@ export function AuthProvider({ children }) {
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
+
 
   useEffect(() => {
     let active = true;
@@ -275,12 +300,72 @@ export function AuthProvider({ children }) {
   }, [activeProfile]);
 
   const signIn = useCallback(async (credentials) => {
+    if (isNeonAuthConfigured) {
+      try {
+        const result = await neonSignIn(credentials);
+        if (result.user) {
+          const formatted = {
+            id: result.user.id,
+            email: result.user.email,
+            username: result.user.name || (result.user.email ? result.user.email.split('@')[0] : 'media-fan'),
+            userType: result.user.role || 'user',
+            isAdmin: result.user.role === 'admin',
+            isDev: result.user.role === 'dev',
+            fromNeon: true,
+          };
+          if (result.token) {
+            setTokenCache(result.token);
+          }
+          commitUser(formatted);
+          return formatted;
+        }
+      } catch (neonErr) {
+        if (!isSupabaseConfigured && process.env.NODE_ENV !== 'test') {
+          throw neonErr;
+        }
+        console.warn('[auth] Neon sign-in failed, trying Supabase fallback:', neonErr.message);
+      }
+    }
+
     const nextUser = await signInWithSupabase(credentials);
     commitUser(nextUser);
     return nextUser;
   }, [commitUser]);
 
   const signUp = useCallback(async (payload) => {
+    if (isNeonAuthConfigured) {
+      try {
+        const result = await neonSignUp({
+          email: payload.email,
+          password: payload.password,
+          name: payload.username || payload.name || '',
+        });
+        if (result.user) {
+          const formatted = {
+            id: result.user.id,
+            email: result.user.email,
+            username: result.user.name || payload.username || (result.user.email ? result.user.email.split('@')[0] : 'media-fan'),
+            userType: result.user.role || 'user',
+            isAdmin: result.user.role === 'admin',
+            isDev: result.user.role === 'dev',
+            bio: payload.bio || '',
+            avatarUrl: payload.avatarUrl || null,
+            fromNeon: true,
+          };
+          if (result.token) {
+            setTokenCache(result.token);
+          }
+          commitUser(formatted);
+          return { user: formatted, requiresEmailConfirmation: false };
+        }
+      } catch (neonErr) {
+        if (!isSupabaseConfigured && process.env.NODE_ENV !== 'test') {
+          throw neonErr;
+        }
+        console.warn('[auth] Neon sign-up failed, trying Supabase fallback:', neonErr.message);
+      }
+    }
+
     const result = await signUpWithSupabase(payload);
     if (result.user) {
       commitUser(result.user);
@@ -299,22 +384,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // Clear local state up front instead of waiting on the network
-    // round-trip to Supabase — the UI should leave the logged-in state
-    // immediately, not stall on server/network latency. The remote
-    // sign-out (revoking the session server-side) still happens, just
-    // in the background.
+    // Clear local state up front instead of waiting on network
     clearTokenCache();
     clearActiveProfileId();
     setUser(null);
     setProfiles([]);
     setActiveProfileIdState(null);
     try {
+      neonSignOut();
       window.localStorage.removeItem('token');
       window.localStorage.removeItem('user');
     } catch {}
     void signOutFromSupabase().catch(() => {});
   }, []);
+
 
   // Admin/dev privileges are account-level, but must not follow onto sub-
   // profiles — a kid (or any non-default) profile shouldn't get the Admin
