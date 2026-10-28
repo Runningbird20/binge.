@@ -1,3 +1,5 @@
+import LoadingBar from './LoadingBar';
+import ThemedSelect from './ThemedSelect';
 // "Your fantasy teams" under the live score: every ESPN Fantasy team this
 // profile tracks for the sport being watched (utils/fantasy.js), each with
 // this week's matchup and the players who are in this game, points updating
@@ -56,16 +58,14 @@ function TrackedTeam({ entry, gameTeams, live, onNeedsLogin }) {
       </div>
     );
   }
-  if (!data) return <div className="st-fr-skel skeleton-block" aria-hidden="true" />;
+  if (!data) return <LoadingBar compact label="Loading roster…" />;
   const summary = summarizeTeam(entry.game, data, entry);
   if (!summary) {
     return (
       <label className="st-fr-field">
         <span>Which team is yours in {data.leagueName || 'this league'}?</span>
-        <select value="" onChange={(e) => setFantasyTeam(entry, Number(e.target.value)).catch(() => {})}>
-          <option value="" disabled>Choose your team</option>
-          {data.teams.map((team) => <option key={team.id} value={team.id}>{team.name}{team.owner ? ` (${team.owner})` : ''}</option>)}
-        </select>
+        <ThemedSelect aria-label="Choose your fantasy team" value="" onChange={(e) => setFantasyTeam(entry, Number(e.target.value)).catch(() => {})}
+            options={[{ value: '', label: 'Choose your team', disabled: true }, ...data.teams.map((team) => ({ value: team.id, label: `${team.name}${team.owner ? ` (${team.owner})` : ''}` }))]} />
       </label>
     );
   }
@@ -115,7 +115,7 @@ export default function FantasyRoster({ espnPath, gameTeams, live }) {
   if (adding) {
     body = <FantasyTeamForm presetGame={game} login={saved?.login} signedIn={saved?.signedIn} askLogin={askLogin} onDone={() => { setAdding(false); setAskLogin(false); }} />;
   } else if (saved === undefined) {
-    body = <div className="st-fr-skel skeleton-block" aria-hidden="true" />;
+    body = <LoadingBar compact label="Loading roster…" />;
   } else if (!teams.length) {
     body = <p className="st-fr-note">Add your ESPN {sport} teams to see your players during {sport} games.</p>;
   } else {

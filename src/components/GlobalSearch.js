@@ -38,6 +38,7 @@ export default function GlobalSearch() {
   const [loading, setLoading]   = useState(false);
   const [recent, setRecent]     = useState(() => getRecentSearches());
   const inputRef = useRef(null);
+  const toggleRef = useRef(null);
   const wrapRef  = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,11 +47,13 @@ export default function GlobalSearch() {
   function open() {
     setExpanded(true);
     setRecent(getRecentSearches());
-    setTimeout(() => inputRef.current?.focus(), 50);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  function close() {
+  function close(restoreFocus = false) {
     setExpanded(false);
+    setLoading(false);
+    if (restoreFocus) toggleRef.current?.focus();
     setQuery('');
     setResults(null);
     setGames([]);
@@ -59,7 +62,8 @@ export default function GlobalSearch() {
 
   useEffect(() => {
     const term = debounced.trim();
-    if (term.length < 2) {
+    if (!expanded || term.length < 2) {
+      setLoading(false);
       setResults(null);
       setGames([]);
       setPerson(null);
@@ -74,7 +78,7 @@ export default function GlobalSearch() {
     searchGames(term).then((list) => { if (!cancelled) setGames(list); }).catch(() => {});
     searchPerson(term).then((match) => { if (!cancelled) setPerson(match); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [debounced]);
+  }, [debounced, expanded]);
 
   useEffect(() => {
     if (!expanded) return undefined;
@@ -107,7 +111,7 @@ export default function GlobalSearch() {
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Escape') { inputRef.current?.blur(); close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); return; }
     if (e.key === 'Enter' && query.trim().length >= 2) searchFor(query.trim());
   }
 
@@ -115,26 +119,26 @@ export default function GlobalSearch() {
 
   return (
     <div className="global-search-wrap" ref={wrapRef}>
-      <div
-        className={`global-search-bar${expanded ? ' is-expanded' : ''}`}
-        onClick={() => !expanded && open()}
-      >
-        <span className="global-search-bar-icon">
-          <MagnifyingGlass size={20} weight="bold" aria-hidden="true" />
-        </span>
+      <div className={`global-search-bar expandable-search${expanded ? ' is-expanded is-open' : ''}`} onKeyDown={handleKeyDown}>
+        <button ref={toggleRef} type="button" className="expandable-search-toggle global-search-toggle"
+          aria-label={expanded ? 'Collapse search' : 'Open search'} aria-expanded={expanded}
+          onClick={() => expanded ? close(true) : open()}>
+          <MagnifyingGlass size={22} weight="bold" aria-hidden="true" />
+        </button>
         <input
           ref={inputRef}
-          type="text"
+          type="search"
+          disabled={!expanded}
+          tabIndex={expanded ? 0 : -1}
           className="global-search-bar-input"
           placeholder="Titles, people, teams…"
           aria-label="Search titles, people and games (press / )"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={open}
-          onKeyDown={handleKeyDown}
           autoComplete="off"
         />
-        {loading && <span className="global-search-bar-loading" />}
+        {expanded && <button type="button" className="expandable-search-close" aria-label="Close search" onClick={() => close(true)}><X size={18} weight="bold" aria-hidden="true" /></button>}
       </div>
 
       {showDropdown && (

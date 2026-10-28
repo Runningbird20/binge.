@@ -356,20 +356,6 @@
   opacity: 0;
   transition: opacity 0.18s ease;
 }
-.st-card-play {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -80%);
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #fff;
-  color: #0b0d12;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .st-card-hover-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1040,18 +1026,7 @@
   top: 14px;
   right: 14px;
   z-index: 6;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(12, 14, 20, 0.82);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
 }
-.td-close:hover { background: #fff; color: #0b0d12; }
 .td-close:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
 /* Hero */
@@ -1437,6 +1412,8 @@
 .genre-scroll-btn {
   width: 36px;
   height: 36px;
+  padding: 0;
+  box-sizing: border-box;
   border-radius: 50%;
   border: 1px solid var(--exp-border-strong);
   background: rgba(14, 17, 24, 0.92);
@@ -1444,6 +1421,7 @@
   opacity: 1;
 }
 .genre-scroll-btn:disabled { opacity: 0; pointer-events: none; }
+.genre-scroll-btn svg { display: block; flex-shrink: 0; }
 
 /* Grid */
 .st-grid {
@@ -1706,6 +1684,8 @@
 }
 .pf-bio { margin: 0; color: var(--exp-text-dim); max-width: 60ch; }
 .pf-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.st-pill-link,
+.pf-action-link { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; text-decoration: none; box-sizing: border-box; }
 
 /* Facts as one readable line ("48 titles · 112 hours watched"), not a row
    of big-number tiles. */
@@ -1739,21 +1719,8 @@
 .pf-card { display: flex; flex-direction: column; }
 .pf-card-controls { display: flex; gap: 0.4rem; margin-top: 0.5rem; align-items: center; }
 .pf-status-select { flex: 1; min-width: 0; }
-.pf-icon-btn {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 8px;
-  border: 1px solid var(--exp-border);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--exp-text-dim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.pf-icon-btn:hover { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.5); }
-.pf-icon-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.pf-card-poster-wrap { position: relative; }
+.pf-card-controls .pf-status-select { width: 100%; }
 
 .pf-stars {
   position: absolute;
@@ -1769,17 +1736,7 @@
   font-size: 0.8rem;
   font-weight: 800;
 }
-.pf-review {
-  margin: 0.45rem 0 0;
-  font-size: 0.82rem;
-  line-height: 1.45;
-  font-style: italic;
-  color: var(--exp-text-dim);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+
 .pf-link-btn {
   align-self: flex-start;
   margin-top: 0.35rem;
@@ -2003,10 +1960,24 @@
   margin-bottom: 2.25rem;
   white-space: normal;
 }
-.profile-picker-grid.profile-picker-grid { gap: clamp(1rem, 3vw, 2.25rem); }
+.profile-picker-grid.profile-picker-grid {
+  --profile-tile-size: clamp(104px, 11vw, 150px);
+  gap: clamp(1rem, 3vw, 2.25rem);
+}
+.profile-picker-grid .profile-picker-tile { width: calc(var(--profile-tile-size) + 1rem); }
+.profile-picker-grid .profile-picker-tile .profile-avatar {
+  /* Override ProfileAvatar's inline size only inside the profile picker. */
+  width: var(--profile-tile-size) !important;
+  height: var(--profile-tile-size) !important;
+  font-size: calc(var(--profile-tile-size) * 0.55) !important;
+  box-sizing: border-box;
+  border-radius: 14px;
+}
+.profile-picker-grid .profile-avatar svg { width: 75%; height: 75%; }
 .profile-picker-avatar.profile-picker-avatar {
-  width: clamp(104px, 11vw, 150px);
-  height: clamp(104px, 11vw, 150px);
+  width: var(--profile-tile-size, clamp(104px, 11vw, 150px));
+  height: var(--profile-tile-size, clamp(104px, 11vw, 150px));
+  box-sizing: border-box;
   border-radius: 14px;
   transition: transform 0.18s, box-shadow 0.18s;
 }
@@ -2019,7 +1990,6 @@
 .profile-picker-tile-btn:focus-visible { outline: none; }
 .profile-picker-name.profile-picker-name { font-size: 1.05rem; color: var(--exp-text-dim); margin-top: 0.8rem; }
 .profile-picker-tile-btn:hover .profile-picker-name { color: #fff; }
-.profile-picker-back.profile-picker-back { margin-top: 2.5rem; }
 
 /* Player chrome */
 .player-header-btns { display: flex; gap: 0.4rem; }
@@ -2778,7 +2748,6 @@
   pointer-events: none;
 }
 .st-card:hover .st-card-playnow, .st-card:focus-visible .st-card-playnow { background: #fff; color: #0b0d12; transform: translate(-50%, -50%) scale(1.06); }
-.st-cw-cell .st-card-hover .st-card-play { display: none; }
 .st-cw-info {
   position: absolute;
   top: 0.95rem;
@@ -3945,6 +3914,77 @@ kbd {
   .wp-stamp-mark { width: 112px; height: 112px; }
 }
 
+.profile-picker-edit-btn {
+  display: block;
+  margin: 8px auto 0;
+  padding: 8px 14px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #191919;
+  color: #ccc;
+  cursor: pointer;
+}
+.profile-picker-edit-btn:hover { color: #fff; border-color: #888; }
+.profile-security-card { width: min(440px, 90vw); padding: 24px; gap: 16px; }
+.profile-security-card label { display: flex; flex-wrap: wrap; gap: 8px; color: #ddd; font-size: 0.9rem; }
+.profile-security-card label > .profile-picker-add-input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; }
+.profile-security-card .profile-picker-add-error { color: #f08080; }
+
+/* Shared hero action circles. */
+.st-hero-actions { align-items: center; }
+.st-hero-actions .st-hero-play,
+.st-hero-actions .st-hero-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(11, 13, 18, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.st-hero-play svg { margin-left: 2px; }
+.st-hero-actions .st-hero-play:hover,
+.st-hero-actions .st-hero-info:hover { background: #fff; color: #0b0d12; border-color: #fff; }
+.st-hero-actions .st-hero-play:focus-visible,
+.st-hero-actions .st-hero-info:focus-visible { outline: none; box-shadow: var(--st-focus); }
+@media (prefers-reduced-motion: reduce) {
+  .st-hero-actions .st-hero-play,
+  .st-hero-actions .st-hero-info { transition: none; }
+}
+
+/* Shared pill styling for playback and profile actions. */
+.st-btn.st-btn--pill,
+.st-btn.td-resume-control {
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.st-btn.st-btn--pill:hover,
+.st-btn.td-resume-control:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.st-btn.td-resume-control.td-play--compact {
+  min-width: 0;
+  width: auto;
+  flex: 0 0 auto;
+  padding-inline: 1rem;
+}
+
 /* ── Your fantasy teams (FantasyBoard.js, Sports page) ───────────────────
    One card per tracked ESPN team: logo, name, league · record · seed, this
    week's scoreline, and how many starters are playing right now. A card
@@ -4042,4 +4082,198 @@ kbd {
 @media (max-width: 600px) {
   .fb-cards { grid-template-columns: minmax(0, 1fr); }
   .fb-score b { font-size: 1.25rem; }
+}
+
+/* Season selection shares the saved-status dropdown's pill styling. */
+.themed-select .themed-select-control {
+  min-height: 44px;
+  padding: 0 2.5rem 0 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.themed-select .themed-select-control:hover:not(:disabled),
+.themed-select.themed-select--open .themed-select-control {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+.themed-select .themed-select-chevron { color: rgba(255, 255, 255, 0.8); }
+
+/* Expanded detail dropdowns follow the same dark pill controls. */
+.themed-select-menu--pill {
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  background: rgba(24, 27, 35, 0.97);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.themed-select-menu--pill .themed-select-option {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  color: #ddd;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.themed-select-menu--pill .themed-select-option:hover,
+.themed-select-menu--pill .themed-select-option.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+  color: #fff;
+}
+.themed-select-menu--pill .themed-select-option.selected {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.themed-select-menu--pill .themed-select-option.selected::after {
+  content: '✓';
+  margin-left: auto;
+  color: var(--st-match);
+}
+.themed-select-menu--pill .themed-select-option:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
+/* Converted native selectors keep their layout without the old outer box. */
+.themed-select.set-select {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  width: 240px;
+}
+.fb-field > .themed-select,
+.st-fr-field > .themed-select,
+.adm-field > .themed-select,
+.profile-security-card label > .themed-select { width: 100%; min-width: 0; }
+.st-pb-report > .themed-select { width: 180px; max-width: 100%; }
+
+/* Dark glass keeps genre labels readable as posters scroll beneath them. */
+.genre-bar .genre-chip:not(.active) {
+  background: rgba(15, 18, 25, 0.76);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #f4f6f8;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.16);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.genre-bar .genre-chip:not(.active):hover {
+  background: rgba(30, 34, 43, 0.88);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+.page-content .catalog-search-row {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.expandable-search {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  max-width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--exp-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--exp-text-dim);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: width 280ms ease, border-color 160ms ease;
+}
+.expandable-search.is-open { width: min(420px, calc(100vw - 3rem)); }
+.expandable-search:focus-within { border-color: rgba(255, 255, 255, 0.55); }
+.expandable-search-toggle,
+.expandable-search-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.expandable-search button:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.expandable-search button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+.expandable-search input {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+}
+.expandable-search input::placeholder { color: #a8adb8; }
+.expandable-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+@media (max-width: 600px) {
+  .expandable-search.is-open { width: min(300px, calc(100vw - 3rem)); }
+}
+@media (prefers-reduced-motion: reduce) { .expandable-search { transition: none; } }
+
+/* Search wrappers provide the focus treatment; avoid a rectangular ring inside. */
+input:is([type="search"], .catalog-search-input, .st-search-input, .global-search-input):is(:focus, :focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Header search follows the same click-to-expand control as catalog search. */
+.global-search-bar.expandable-search,
+.global-search-bar.expandable-search:hover {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--exp-border);
+  box-shadow: none;
+}
+.global-search-bar.expandable-search.is-open {
+  width: min(360px, calc(100vw - 180px));
+}
+.global-search-bar.expandable-search:focus-within { border-color: rgba(255, 255, 255, 0.55); }
+.global-search-bar.expandable-search input { padding: 0; }
+@media (max-width: 600px) {
+  .global-search-bar.expandable-search.is-open { width: min(260px, calc(100vw - 150px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-search-bar.expandable-search { transition: none; }
+}
+
+.profile-picker-content .profile-picker-error {
+  color: #f4f6f8;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(15, 18, 25, 0.85);
+}
+
+.btn-text-action.btn-text-action,
+.btn-text-action.btn-text-action:hover,
+.btn-text-action.btn-text-action:active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: #fff;
 }

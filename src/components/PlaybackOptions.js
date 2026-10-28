@@ -1,3 +1,4 @@
+import ThemedSelect from './ThemedSelect';
 import { useEffect, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
 import { haptic } from '../utils/haptics';
@@ -101,16 +102,12 @@ export function PlaybackOptionsPanel({
         {onReportAudio && (
           <label className="st-pb-report">
             <span>Audio on this server</span>
-            <select
+            <ThemedSelect
               value={current?.audio || ''}
               onChange={(event) => onReportAudio(event.target.value)}
               aria-label="Report the audio language on the current server"
-            >
-              <option value="" disabled>Tell us…</option>
-              {['en', 'ko', 'ja', 'es', 'fr', 'hi', 'zh', 'de', 'it', 'pt'].map((code) => (
-                <option key={code} value={code}>{languageName(code)}</option>
-              ))}
-            </select>
+              options={[{ value: '', label: 'Tell us…', disabled: true }, ...['en', 'ko', 'ja', 'es', 'fr', 'hi', 'zh', 'de', 'it', 'pt'].map((code) => ({ value: code, label: languageName(code) }))]}
+            />
           </label>
         )}
         {blockedCount > 0 && (

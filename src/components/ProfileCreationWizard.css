@@ -1,0 +1,80 @@
+.profile-wizard .profile-wizard-permission {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  margin: 24px 0;
+  text-align: left;
+  background: #191919;
+  border: 1px solid #303030;
+  border-radius: 14px;
+  transition: border-color 160ms ease;
+}
+.profile-wizard .profile-wizard-permission.is-enabled { border-color: #696969; }
+.profile-wizard-permission-copy { flex: 1; min-width: 0; }
+.profile-wizard-permission-title {
+  display: block;
+  color: #f4f6f8;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.profile-wizard-permission-description {
+  display: block;
+  color: #aaa;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.profile-wizard .profile-wizard-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 24px;
+}
+.profile-wizard-switch-track {
+  display: block;
+  width: 44px;
+  height: 26px;
+  padding: 3px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: #444;
+  transition: background 160ms ease;
+}
+.profile-wizard-switch-thumb {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f4f6f8;
+  box-shadow: 0 1px 3px #0005;
+  transition: transform 160ms ease, background 160ms ease;
+}
+.profile-wizard-switch[aria-checked="true"] .profile-wizard-switch-track { background: #f4f6f8; }
+.profile-wizard-switch[aria-checked="true"] .profile-wizard-switch-thumb { transform: translateX(18px); background: #161616; }
+.profile-wizard .onboarding-actions { gap: 12px; }
+.profile-wizard .onboarding-actions button {
+  min-height: 44px;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.profile-wizard .onboarding-actions .btn-primary { background: #f4f6f8; color: #111; border: 1px solid #f4f6f8; }
+.profile-wizard .onboarding-actions .btn-primary:hover { background: #fff; }
+.profile-wizard .onboarding-actions .btn-ghost { background: transparent; color: #bbb; border: 1px solid #383838; }
+.profile-wizard .onboarding-actions .btn-ghost:hover { background: #242424; color: #fff; }
+.profile-wizard button:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.profile-wizard button:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 480px) {
+  .profile-wizard .profile-wizard-permission { padding: 16px; gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-wizard-permission, .profile-wizard-switch-track, .profile-wizard-switch-thumb { transition: none !important; }
+}

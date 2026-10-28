@@ -1,3 +1,4 @@
+import LoadingBar from '../../components/LoadingBar';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { supabase } from '../../utils/supabase';
@@ -72,7 +73,7 @@ export default function AdminServers() {
         </button>
       </div>
       {message && <p className="adm-note" role="status">{message}</p>}
-      {!rows && <div className="adm-skeleton skeleton-block" aria-hidden="true" />}
+      {!rows && <LoadingBar />}
       {rows?.length === 0 && <p className="adm-empty">No checks yet — press Check now.</p>}
       {rows?.length > 0 && (
         <table className="adm-table">

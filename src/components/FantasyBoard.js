@@ -1,3 +1,5 @@
+import LoadingBar from './LoadingBar';
+import ThemedSelect from './ThemedSelect';
 // "Your fantasy teams" on the Sports page: every ESPN Fantasy team this
 // profile tracks (any sport, several per sport), as cards with this week's
 // matchup and how many starters are playing right now. A card opens its
@@ -132,17 +134,15 @@ function TeamCard({ entry, liveTeams, open, onToggle, onFixLogin }) {
       </div>
     );
   }
-  if (!data) return <div className="fb-card fb-card--skel skeleton-block" aria-hidden="true" />;
+  if (!data) return <LoadingBar compact label="Loading fantasy team…" />;
   if (!summary) {
     return (
       <div className="fb-card">
         <p className="fb-card-name">{data.leagueName || `${sport} league`}</p>
         <label className="fb-field">
           <span>Which team is yours?</span>
-          <select value="" onChange={(e) => setFantasyTeam(entry, Number(e.target.value)).catch(() => {})}>
-            <option value="" disabled>Choose a team</option>
-            {data.teams.map((team) => <option key={team.id} value={team.id}>{team.name}{team.owner ? ` (${team.owner})` : ''}</option>)}
-          </select>
+          <ThemedSelect aria-label="Choose your fantasy team" value="" onChange={(e) => setFantasyTeam(entry, Number(e.target.value)).catch(() => {})}
+            options={[{ value: '', label: 'Choose a team', disabled: true }, ...data.teams.map((team) => ({ value: team.id, label: `${team.name}${team.owner ? ` (${team.owner})` : ''}` }))]} />
         </label>
       </div>
     );

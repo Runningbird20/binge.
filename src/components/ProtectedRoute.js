@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { canAccessUserType, getDefaultRouteForUserType } from '../utils/userAccess';
@@ -5,9 +6,7 @@ import { canAccessUserType, getDefaultRouteForUserType } from '../utils/userAcce
 export default function ProtectedRoute({ children, allowedUserTypes }) {
   const { isAuthenticated, authLoading, user, canUseAdminFeatures, canUseDevFeatures } = useAuth();
 
-  // While auth is loading, render nothing (invisible) rather than
-  // a loading spinner that causes a visible flash on every navigation
-  if (authLoading) return null;
+  if (authLoading) return <LoadingBar label="Loading your account…" />;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

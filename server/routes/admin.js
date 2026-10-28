@@ -7,7 +7,7 @@ const neonDb   = require('../neonDb');
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
-    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    try { _sbCreateClient = require('../data-access/client').createHybridClient; }
     catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
   }
   return _sbCreateClient;
@@ -50,7 +50,7 @@ async function requireAdmin(req, res) {
 
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) { res.status(503).json({ error: 'Admin auth not configured' }); return null; }
     const sb = getCreateClient()(url, key, { global: { headers: { Authorization: `Bearer ${token}` } } });
     const { data: { user }, error } = await sb.auth.getUser(token);
@@ -75,7 +75,7 @@ function safeInt(val, fallback = 0) {
 // to delete accounts. ──────────────────────────────────────────
 function requireServiceRoleClient(res) {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!url || !key) {
     res.status(503).json({
       error: 'Account creation and deletion require SUPABASE_SERVICE_ROLE_KEY to be set on the server (Supabase project settings → API → service_role key).',
@@ -116,14 +116,14 @@ router.post('/errors', (req, res) => {
 router.get('/users', async (req, res) => {
   const user = await requireAdmin(req, res); if (!user) return;
 
-  if (neonDb.isConfigured()) {
+  if (process.env.REACT_APP_AUTH_PROVIDER === 'neon' && neonDb.isConfigured()) {
     try {
       const result = await neonDb.query(`
-        SELECT id, name AS username, email, created_at,
+        SELECT id, name AS username, email, "createdAt" AS created_at,
                CASE WHEN role = 'admin' THEN true ELSE false END AS is_admin,
                true AS is_public
         FROM neon_auth.user
-        ORDER BY created_at DESC
+        ORDER BY "createdAt" DESC
         LIMIT 200
       `);
       return res.json(result.rows);
@@ -134,7 +134,7 @@ router.get('/users', async (req, res) => {
 
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) return res.json([]);
     const sb  = getCreateClient()(url, key);
     const { data, error } = await sb.from('profiles')
@@ -147,7 +147,7 @@ router.get('/users', async (req, res) => {
     // the service-role admin API. Best-effort: if the service role isn't
     // configured, the list still renders, just without this column.
     let lastSignInById = {};
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if ((process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) {
       try {
         const { data: authList } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
         lastSignInById = Object.fromEntries(
@@ -175,7 +175,7 @@ router.get('/users', async (req, res) => {
 router.patch('/users/:id/toggle-admin', async (req, res) => {
   const user = await requireAdmin(req, res); if (!user) return;
 
-  if (neonDb.isConfigured()) {
+  if (process.env.REACT_APP_AUTH_PROVIDER === 'neon' && neonDb.isConfigured()) {
     try {
       const current = await neonDb.query('SELECT id, role FROM neon_auth.user WHERE id = $1', [req.params.id]);
       if (!current.rows.length) return res.status(404).json({ error: 'User not found' });
@@ -189,7 +189,7 @@ router.patch('/users/:id/toggle-admin', async (req, res) => {
 
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     const sb  = getCreateClient()(url, key);
     const { data: profile } = await sb.from('profiles').select('is_admin').eq('id', req.params.id).single();
     if (!profile) return res.status(404).json({ error: 'User not found' });
@@ -209,7 +209,7 @@ router.delete('/users/:id', async (req, res) => {
     return res.status(400).json({ error: "You can't delete your own account." });
   }
 
-  if (neonDb.isConfigured()) {
+  if (process.env.REACT_APP_AUTH_PROVIDER === 'neon' && neonDb.isConfigured()) {
     try {
       await neonDb.query('DELETE FROM neon_auth.user WHERE id = $1', [req.params.id]);
       return res.json({ success: true });

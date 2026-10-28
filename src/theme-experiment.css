@@ -639,7 +639,7 @@ body {
 }
 
 .genre-bar-wrap {
-  padding: 0.6rem 1.5rem 0.9rem;
+  padding: 0.75rem 1.5rem;
 }
 
 /* Scroll fade — softly dissolves the chip row into whatever is behind it
@@ -1412,32 +1412,6 @@ body {
   background: var(--exp-text);
   border-color: var(--exp-text);
   color: #0b0d12;
-}
-
-.rate-review-textarea {
-  width: 100%;
-  min-height: 72px;
-  resize: vertical;
-  background: var(--exp-surface);
-  border: 1px solid var(--exp-border);
-  border-radius: var(--exp-radius);
-  color: var(--exp-text);
-  font-family: inherit;
-  font-size: 0.85rem;
-  padding: 0.65rem 0.8rem;
-}
-.rate-review-textarea:focus {
-  outline: none;
-  border-color: var(--exp-border-strong);
-}
-.rate-review-textarea::placeholder { color: var(--exp-text-faint); }
-
-.rate-review-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--exp-text-faint);
 }
 
 /* ── Profile page ──────────────────────────────────────────────── */

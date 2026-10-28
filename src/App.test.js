@@ -10,6 +10,7 @@ import * as AuthContextModule from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
 import * as supabaseDataModule from './utils/supabaseData';
 import * as supabaseCatalogModule from './utils/supabaseMovieCatalog';
+import { invalidateCachedPrefix } from './utils/sessionCache';
 
 const mockNavigate = jest.fn();
 let mockSearchParams = new URLSearchParams();
@@ -111,6 +112,9 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  // Pages hydrate from the per-tab cache first; one test's fixtures must not
+  // show up in the next.
+  invalidateCachedPrefix('');
   mockNavigate.mockReset();
   mockSearchParams = new URLSearchParams();
   global.fetch = jest.fn();
@@ -267,7 +271,7 @@ test('resume links for in-progress movies launch the player instead of the card'
 
   render(<Home />);
 
-  const resumeLink = await screen.findByRole('link', { name: /^resume$/i });
+  const resumeLink = await screen.findByRole('link', { name: /^resume interstellar$/i });
   expect(resumeLink).toHaveAttribute('href', '/movie/42?play=1');
 
   ratingsSpy.mockRestore();

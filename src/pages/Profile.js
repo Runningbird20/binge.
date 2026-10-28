@@ -1,7 +1,8 @@
+import LoadingBar from '../components/LoadingBar';
 import SlidingTabs from '../components/SlidingTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal, CalendarBlank } from '@phosphor-icons/react';
+import { FilmSlate, MonitorPlay, BookOpen, X, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal, CalendarBlank } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -93,16 +94,28 @@ function WatchlistCard({ item, location, onStatusChange, onRemove }) {
 
   return (
     <article className="st-grid-cell pf-card">
+      <div className="pf-card-poster-wrap">
       <Link to={getMediaUrl(item)} state={{ backgroundLocation: location }} className="st-card" aria-label={item.title}>
         <CardPoster item={item}>
           {progressBadge && <span className="st-badge">{progressBadge}</span>}
         </CardPoster>
         <p className="st-card-title">{item.title || '—'}</p>
       </Link>
+        <button
+          type="button"
+          className="st-cw-remove"
+          onClick={() => onRemove(item)}
+          title={`Remove ${item.title}`}
+          aria-label={`Remove ${item.title}`}
+        >
+          <X size={14} weight="bold" />
+        </button>
+      </div>
 
       <div className="pf-card-controls">
         <ThemedSelect
           className="pf-status-select"
+          variant="pill"
           value={item.status}
           aria-label={`Status for ${item.title}`}
           options={getStatusOptions(item.media_type).map((status) => ({
@@ -111,15 +124,7 @@ function WatchlistCard({ item, location, onStatusChange, onRemove }) {
           }))}
           onChange={(event) => onStatusChange(item, event.target.value)}
         />
-        <button
-          type="button"
-          className="pf-icon-btn"
-          onClick={() => onRemove(item)}
-          title={`Remove ${item.title}`}
-          aria-label={`Remove ${item.title}`}
-        >
-          <Trash size={16} weight="bold" />
-        </button>
+
       </div>
     </article>
   );
@@ -198,7 +203,7 @@ function WatchlistTab({
       <p className="pf-count">{filtered.length} title{filtered.length === 1 ? '' : 's'}</p>
 
       {loading ? (
-        <div className="loading-state">Loading your library...</div>
+        <LoadingBar label="Loading your library..." />
       ) : filtered.length === 0 ? (
         <div className="pf-empty">
           <p>{items.length === 0 ? 'Your list is empty.' : 'No saved titles match this filter.'}</p>
@@ -247,7 +252,6 @@ function RatingCard({ rating, location }) {
         </CardPoster>
         <p className="st-card-title">{rating.title || '—'}</p>
       </Link>
-      {rating.review && <p className="pf-review">“{rating.review}”</p>}
       <button type="button" className="pf-link-btn" onClick={() => setBreakdownOpen((open) => !open)}>
         {breakdownOpen ? 'Hide breakdown' : 'View breakdown'}
       </button>
@@ -291,7 +295,7 @@ function RatingsTab({ items, loading, location, typeFilter, onTypeFilterChange, 
       </div>
 
       {loading ? (
-        <div className="loading-state">Loading your ratings...</div>
+        <LoadingBar label="Loading your ratings..." />
       ) : filtered.length === 0 ? (
         <div className="pf-empty">
           <p>No ratings yet{typeFilter ? ' for this type' : ''}.</p>
@@ -429,12 +433,12 @@ export default function Profile() {
               <h1 className="pf-name">{displayName}</h1>
               {user?.bio && <p className="pf-bio">{user.bio}</p>}
               <div className="pf-actions">
-                <Link to="/account-settings" className="st-btn st-btn--ghost"><PencilSimple size={16} weight="bold" /> Edit profile</Link>
-                <Link to="/settings" className="st-btn st-btn--ghost"><SlidersHorizontal size={16} weight="bold" /> Settings</Link>
-                <Link to="/profiles" className="st-btn st-btn--ghost"><Users size={16} weight="bold" /> Switch profile</Link>
-                <Link to="/calendar" className="st-btn st-btn--ghost"><CalendarBlank size={16} weight="bold" /> Release calendar</Link>
-                <Link to="/history" className="st-btn st-btn--ghost"><ClockCounterClockwise size={16} weight="bold" /> Watch history</Link>
-                <Link to="/wrapped" className="st-btn st-btn--ghost"><Sparkle size={16} weight="bold" /> Your {new Date().getFullYear()} Wrapped</Link>
+                <Link to="/account-settings" className="genre-chip pf-action-link"><PencilSimple size={16} weight="bold" /> Edit profile</Link>
+                <Link to="/settings" className="genre-chip pf-action-link"><SlidersHorizontal size={16} weight="bold" /> Settings</Link>
+                <Link to="/profiles" className="genre-chip pf-action-link"><Users size={16} weight="bold" /> Switch profile</Link>
+                <Link to="/calendar" className="genre-chip pf-action-link"><CalendarBlank size={16} weight="bold" /> Release calendar</Link>
+                <Link to="/history" className="genre-chip pf-action-link"><ClockCounterClockwise size={16} weight="bold" /> Watch history</Link>
+                <Link to="/wrapped" className="genre-chip pf-action-link"><Sparkle size={16} weight="bold" /> Your {new Date().getFullYear()} Wrapped</Link>
               </div>
             </div>
           </div>

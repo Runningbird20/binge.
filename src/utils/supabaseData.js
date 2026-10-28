@@ -1131,7 +1131,7 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRating
   // note on fetchSupabaseWatchlist above.
   const profileId = isOwnRatings ? getActiveProfileId() : null;
 
-  const selectColumns = ['id', 'user_id', 'media_id', ...schema.columns, 'review', 'created_at'].join(', ');
+  const selectColumns = ['id', 'user_id', 'media_id', ...schema.columns, 'created_at'].join(', ');
   let query = client
     .from(schema.table)
     .select(selectColumns)
@@ -1188,13 +1188,12 @@ export async function fetchSupabaseRatingMap(mediaType) {
   }, {});
 }
 
-export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null, review }) {
+export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null }) {
   if (!isSupabaseConfigured || !supabase) {
     await api.post('/ratings', {
       media_type: mediaType,
       media_id: Number(mediaId),
       categories,
-      review,
     });
 
     if (media) {
@@ -1226,13 +1225,6 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
   schema.columns.forEach((column) => {
     payload[column] = Number(categories[column]);
   });
-
-  // Only touch the review column when a value was explicitly passed in —
-  // upsert() only overwrites keys present in the payload, so a quick
-  // star-only save never clobbers an existing review.
-  if (review !== undefined) {
-    payload.review = review;
-  }
 
   const { error } = await client
     .from(schema.table)

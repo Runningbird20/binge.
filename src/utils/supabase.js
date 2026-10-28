@@ -1,3 +1,7 @@
+import { splitDatabaseClient } from './mediaDatabase';
+import { createNeonQueryClient } from './neonQuery';
+import { getApiBaseUrl } from './neon';
+import { trackedFetch } from './loadingProgress';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL_ENV_KEYS = [
@@ -49,9 +53,25 @@ export const supabaseEnv = {
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseKey)
+const authClient = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseKey, { global: { fetch: trackedFetch } })
   : null;
+
+// Only catalog/media metadata queries go to Neon. User data and Auth stay Supabase.
+async function requestNeon(path, body) {
+  const base = getApiBaseUrl();
+  try {
+    const response = await trackedFetch(`${base}/api/neon-data/${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return await response.json();
+  } catch (error) { return { data: null, error: { message: error.message || 'Unable to reach the Neon media API.' } }; }
+}
+const neonMedia = createNeonQueryClient(
+  (spec) => requestNeon('query', spec), (name, args = {}) => requestNeon(`rpc/${encodeURIComponent(name)}`, args)
+);
+export const supabase = authClient ? splitDatabaseClient(authClient, neonMedia) : null;
 
 // A second client with session persistence off, used for one-shot signUp()
 // calls made on someone else's behalf (e.g. an admin creating an account).
@@ -66,6 +86,7 @@ export function getSessionlessSupabaseClient() {
 
   if (!sessionlessClient) {
     sessionlessClient = createClient(supabaseUrl, supabaseKey, {
+      global: { fetch: trackedFetch },
       auth: {
         // A distinct storageKey gives this client its own Navigator LockManager
         // lock name — without it, GoTrueClient derives the lock from the project
@@ -315,7 +336,7 @@ async function retryFunctionWithRefresh(functionName, body) {
   }
 
   const retryHeaders = await getSupabaseFunctionHeaders();
-  return fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
+  return trackedFetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
     method: 'POST',
     headers: retryHeaders,
     body: JSON.stringify(body ?? {}),
@@ -356,7 +377,7 @@ export async function invokeSupabaseFunction(functionName, body) {
   let response;
 
   try {
-    response = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
+    response = await trackedFetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body ?? {}),

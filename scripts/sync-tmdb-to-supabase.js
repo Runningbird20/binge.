@@ -318,6 +318,7 @@ async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 
-if (require.main === module) main();
+// Keep the old command working, but never write new catalog rows to Supabase.
+if (require.main === module) require('./sync-tmdb-to-neon').main().catch((error) => { console.error(error.message); process.exit(1); });
 
 module.exports = { movieRecord, tvRecord, tmdbFetch };

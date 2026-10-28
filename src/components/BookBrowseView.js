@@ -64,7 +64,7 @@ export default function BookBrowseView({ refreshKey = 0 }) {
       />
 
       <div className="st-browse-toolbar">
-        <Link className="st-btn st-btn--ghost" to="/books?view=all">
+        <Link className="genre-chip st-pill-link" to="/books?view=all">
           <SquaresFour size={18} weight="bold" /> Browse all books
         </Link>
       </div>

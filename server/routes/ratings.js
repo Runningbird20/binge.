@@ -5,6 +5,7 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use((req,res,next) => process.env.REACT_APP_AUTH_PROVIDER !== 'neon' ? require('./supabaseUserData').ratings(req,res,next) : next());
 
 const SCHEMA = {
   movie: {
@@ -46,7 +47,7 @@ router.get('/my', async (req, res) => {
         if (!schema) continue;
         const meta = MEDIA_META[type];
         const rows = await neonDb.query(`
-          SELECT r.*, '${type}' AS media_type,
+          SELECT r.id, r.user_id, r.media_id, r.created_at, ${schema.columns.map((col) => `r.${col}`).join(', ')}, '${type}' AS media_type,
                  m.title, m.year, m.genre,
                  m.${meta.imageCol} AS image_url
           FROM ${schema.table} r
@@ -68,7 +69,7 @@ router.get('/my', async (req, res) => {
     const meta = MEDIA_META[type];
     try {
       const rows = db.prepare(`
-        SELECT r.*, '${type}' AS media_type,
+        SELECT r.id, r.user_id, r.media_id, r.created_at, ${schema.columns.map((col) => `r.${col}`).join(', ')}, '${type}' AS media_type,
                m.title, m.year, m.genre,
                m.${meta.imageCol} AS image_url
         FROM ${schema.table} r
@@ -95,7 +96,7 @@ router.get('/:media_type/:media_id', async (req, res) => {
   if (neonDb.isConfigured()) {
     try {
       const result = await neonDb.query(
-        `SELECT * FROM ${schema.table} WHERE user_id = $1 AND media_id = $2`,
+        `SELECT id, user_id, media_id, created_at, ${schema.columns.join(', ')} FROM ${schema.table} WHERE user_id = $1 AND media_id = $2`,
         [req.user.id, parsedMediaId]
       );
       return res.json(result.rows[0] || null);
@@ -106,7 +107,7 @@ router.get('/:media_type/:media_id', async (req, res) => {
 
   try {
     const rating = db.prepare(
-      `SELECT * FROM ${schema.table} WHERE user_id = ? AND media_id = ?`
+      `SELECT id, user_id, media_id, created_at, ${schema.columns.join(', ')} FROM ${schema.table} WHERE user_id = ? AND media_id = ?`
     ).get(req.user.id, parsedMediaId);
     res.json(rating || null);
   } catch {
@@ -116,7 +117,7 @@ router.get('/:media_type/:media_id', async (req, res) => {
 
 // POST /api/ratings
 router.post('/', async (req, res) => {
-  const { media_type, media_id, categories, review } = req.body;
+  const { media_type, media_id, categories } = req.body;
   if (!media_type || !media_id || !categories) {
     return res.status(400).json({ error: 'media_type, media_id, and categories are required' });
   }
@@ -145,18 +146,17 @@ router.post('/', async (req, res) => {
 
       if (existing.rows.length > 0) {
         const updateSets = cols.map((col, idx) => `${col} = $${idx + 3}`);
-        updateSets.push(`review = $${cols.length + 3}`);
         await neonDb.query(
           `UPDATE ${schema.table} SET ${updateSets.join(', ')} WHERE user_id = $1 AND media_id = $2`,
-          [req.user.id, parsedMediaId, ...values, review || null]
+          [req.user.id, parsedMediaId, ...values]
         );
       } else {
         const colList = cols.join(', ');
         const placeholders = cols.map((_, idx) => `$${idx + 3}`).join(', ');
         await neonDb.query(
-          `INSERT INTO ${schema.table} (user_id, media_id, ${colList}, review)
-           VALUES ($1, $2, ${placeholders}, $${cols.length + 3})`,
-          [req.user.id, parsedMediaId, ...values, review || null]
+          `INSERT INTO ${schema.table} (user_id, media_id, ${colList})
+           VALUES ($1, $2, ${placeholders})`,
+          [req.user.id, parsedMediaId, ...values]
         );
       }
       return res.json({ success: true });
@@ -173,11 +173,11 @@ router.post('/', async (req, res) => {
     const values = cols.map((c) => Number(categories[c]));
 
     db.prepare(`
-      INSERT INTO ${schema.table} (user_id, media_id, ${colList}, review)
-      VALUES (?, ?, ${placeholders}, ?)
+      INSERT INTO ${schema.table} (user_id, media_id, ${colList})
+      VALUES (?, ?, ${placeholders})
       ON CONFLICT(user_id, media_id)
-      DO UPDATE SET ${updateSet}, review = excluded.review
-    `).run(req.user.id, parsedMediaId, ...values, review || null);
+      DO UPDATE SET ${updateSet}
+    `).run(req.user.id, parsedMediaId, ...values);
 
     res.json({ success: true });
   } catch (err) {

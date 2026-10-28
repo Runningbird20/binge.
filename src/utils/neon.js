@@ -15,15 +15,27 @@ const NEON_FUNCTION_HELLO_BASE_URL =
 
 // Authentication can remain on Supabase while application data uses Neon.
 export const isNeonAuthConfigured = Boolean(NEON_AUTH_BASE_URL)
-  && process.env.REACT_APP_AUTH_PROVIDER !== 'supabase';
+  && process.env.REACT_APP_AUTH_PROVIDER === 'neon';
 export const isNeonFunctionsConfigured = Boolean(NEON_FUNCTION_HELLO_BASE_URL);
 
+const isLocalHost = (host) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host || '');
+
+// A localhost API URL (from a copied .env) only makes sense when the page is
+// also local; a deployed site uses its own origin's /api instead.
 export function getApiBaseUrl() {
-  const configured =
+  const configured = (
     process.env.REACT_APP_API_URL ||
     process.env.REACT_APP_LEGACY_API_URL ||
-    '';
-  return configured.replace(/\/+$/, '');
+    ''
+  ).trim().replace(/\/+$/, '');
+  if (!configured || typeof window === 'undefined') return configured;
+  try {
+    const target = new URL(configured, window.location.href);
+    if (isLocalHost(target.hostname) && !isLocalHost(window.location.hostname)) return '';
+  } catch {
+    return '';
+  }
+  return configured;
 }
 
 export function getClientOrigin() {

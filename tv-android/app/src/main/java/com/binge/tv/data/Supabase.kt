@@ -44,6 +44,10 @@ fun toJson(value: Any?): JsonElement = when (value) {
 object Supabase {
     enum class Auth { REQUIRED, OPTIONAL }
 
+    /** The media catalog lives in Neon and is read through the site's /api/neon-data
+     *  (read-only, public). Accounts and user data stay on Supabase. */
+    private val mediaTables = setOf("movies", "tv_shows", "books", "movie_genres", "tv_show_genres", "book_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache")
+
     private lateinit var prefs: SharedPreferences
     var session: AuthSession? = null
         private set
@@ -141,13 +145,19 @@ object Supabase {
 
     private suspend fun send(method: String, table: String, query: List<Pair<String, String>>, body: Any?, auth: Auth, prefer: String? = null): String {
         if (!Config.isConfigured) throw BingeException("This build is missing its settings.")
-        val url = "${Config.supabaseUrl}/rest/v1/$table".toHttpUrl().newBuilder().apply {
+        val mediaRead = method == "GET" && table in mediaTables
+        val endpoint = if (mediaRead) "${Config.siteUrl}/api/neon-data/rest/$table" else "${Config.supabaseUrl}/rest/v1/$table"
+        val url = endpoint.toHttpUrl().newBuilder().apply {
             query.forEach { (k, v) -> addQueryParameter(k, v) }
         }.build()
-        val builder = Request.Builder().url(url).header("apikey", Config.supabaseKey)
-        when (auth) {
-            Auth.REQUIRED -> builder.header("Authorization", "Bearer ${validSession().accessToken}")
-            Auth.OPTIONAL -> runCatching { validSession() }.getOrNull()?.let { builder.header("Authorization", "Bearer ${it.accessToken}") }
+        val builder = Request.Builder().url(url)
+        // Catalog reads go to our own API, which needs no Supabase credentials.
+        if (!mediaRead) {
+            builder.header("apikey", Config.supabaseKey)
+            when (auth) {
+                Auth.REQUIRED -> builder.header("Authorization", "Bearer ${validSession().accessToken}")
+                Auth.OPTIONAL -> runCatching { validSession() }.getOrNull()?.let { builder.header("Authorization", "Bearer ${it.accessToken}") }
+            }
         }
         prefer?.let { builder.header("Prefer", it) }
         val requestBody = body?.let { toJson(it).toString().toRequestBody(JSON) }

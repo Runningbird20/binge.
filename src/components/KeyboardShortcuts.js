@@ -193,6 +193,8 @@ export default function KeyboardShortcuts() {
       if (event.key === '?') { event.preventDefault(); setOpen(true); return; }
       if (event.key === '/') {
         event.preventDefault();
+        const searchToggle = [...document.querySelectorAll('.global-search-toggle')].find(visible);
+        if (searchToggle?.getAttribute('aria-expanded') === 'false') { searchToggle.click(); return; }
         const input = [...document.querySelectorAll('.global-search-bar-input, .st-search-input')].find(visible);
         if (input) input.focus();
         else navigate('/search');
