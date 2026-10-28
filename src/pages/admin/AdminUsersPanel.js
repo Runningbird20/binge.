@@ -1,3 +1,4 @@
+import LoadingBar from '../../components/LoadingBar';
 import SlidingTabs from '../../components/SlidingTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { MagnifyingGlass, Plus, ShieldCheck, Trash, X } from '@phosphor-icons/react';
@@ -170,7 +171,7 @@ export default function AdminUsersPanel() {
 
       {message && <p className="adm-note" role="status">{message}</p>}
       {error && <p className="adm-error-inline" role="alert">{error}</p>}
-      {!users && <div className="adm-skeleton skeleton-block" aria-hidden="true" />}
+      {!users && <LoadingBar />}
       {users && visible.length === 0 && !error && <p className="adm-empty">No users match.</p>}
 
       {visible.length > 0 && (

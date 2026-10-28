@@ -18,6 +18,7 @@ export default function ThemedSelect({
   onChange,
   options = [],
   className = '',
+  variant = 'pill',
   label = '',
   'aria-label': ariaLabel,
   disabled = false,
@@ -59,22 +60,25 @@ export default function ThemedSelect({
   const placeMenu = useCallback(() => {
     const control = rootRef.current?.querySelector('.themed-select-control');
     if (!control) return;
-    const rect = control.getBoundingClientRect();
-    const width = Math.max(rect.width, 180);
+    // The status control sits inside a pill with a leading check icon.
+    // Anchor to that whole pill so the menu doesn't shift to the right.
+    const anchor = variant === 'pill' ? rootRef.current.closest('.td-status') || control : control;
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(Math.max(rect.width, 180), window.innerWidth - 16);
     const estimated = Math.min(260, normalizedOptions.length * 44 + 16);
     const below = window.innerHeight - rect.bottom;
     const up = below < estimated + 12 && rect.top > below;
     setMenuStyle({
       position: 'fixed',
       zIndex: 4000,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      left: Math.max(8, Math.min(rect.left + (rect.width - width) / 2, window.innerWidth - width - 8)),
       right: 'auto',
       width,
       top: up ? 'auto' : rect.bottom + 7,
       bottom: up ? window.innerHeight - rect.top + 7 : 'auto',
       maxHeight: Math.max(120, Math.min(260, (up ? rect.top : below) - 16)),
     });
-  }, [normalizedOptions.length]);
+  }, [normalizedOptions.length, variant]);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
@@ -156,7 +160,7 @@ export default function ThemedSelect({
         <span className="themed-select-chevron" aria-hidden="true" />
       </button>
       {open && menuStyle && createPortal(
-        <div ref={menuRef} className="themed-select-menu" role="listbox" aria-label={controlLabel} style={menuStyle}>
+        <div ref={menuRef} className={`themed-select-menu${variant ? ` themed-select-menu--${variant}` : ''}`} role="listbox" aria-label={controlLabel} style={menuStyle}>
           {normalizedOptions.map((option, index) => {
             const selected = String(option.value) === String(value);
             const active = index === activeIndex;

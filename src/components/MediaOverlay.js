@@ -110,10 +110,10 @@ export default function MediaOverlay({ mediaType }) {
     else navigate(config.homePath);
   }
 
-  async function handleRate(target, categories, review) {
+  async function handleRate(target, categories) {
     try {
-      await saveSupabaseRating({ mediaType, mediaId: target.id, categories, media: target, review });
-      setUserRating({ ...categories, media_id: target.id, review });
+      await saveSupabaseRating({ mediaType, mediaId: target.id, categories, media: target });
+      setUserRating({ ...categories, media_id: target.id });
       setDetailMessage('Rating saved!');
     } catch (err) {
       setDetailMessage(err.message);

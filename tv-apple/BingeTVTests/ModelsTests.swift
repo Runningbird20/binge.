@@ -347,3 +347,21 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
         #expect(ContinueItem(title: t, season: nil, episode: nil, position: 1200, duration: 5400).playRequest.startAt == 1200)
     }
 }
+
+// The catalog is read from Neon through the site; everything else (and every
+// write) stays on Supabase.
+@Suite struct DatabaseSplitTests {
+    @Test func catalogReadsGoToNeon() {
+        for table in ["movies", "tv_shows", "books", "title_ratings", "subtitle_cache"] {
+            #expect(Supabase.isMediaRead("GET", table: table))
+        }
+    }
+
+    @Test func userDataAndWritesStayOnSupabase() {
+        for table in ["watchlist", "continue_watching", "movie_ratings", "account_profiles", "profile_shares", "rpc/stream_report_summary"] {
+            #expect(!Supabase.isMediaRead("GET", table: table))
+        }
+        #expect(!Supabase.isMediaRead("POST", table: "title_ratings"))
+        #expect(!Supabase.isMediaRead("PATCH", table: "movies"))
+    }
+}

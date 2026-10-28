@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getDefaultRouteForUserType } from '../utils/userAccess';
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -15,8 +14,8 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const user = await signIn(form);
-      navigate(getDefaultRouteForUserType(user));
+      await signIn(form);
+      navigate('/profiles', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -62,6 +61,9 @@ export default function Login() {
 
         <p className="auth-switch">
           Don't have an account? <Link to="/signup">Sign up</Link>
+        </p>
+        <p className="auth-switch">
+          <Link to="/forgot-password">Forgot password?</Link>
         </p>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import LoadingBar from '../components/LoadingBar';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CalendarPlus, CalendarBlank } from '@phosphor-icons/react';
@@ -53,7 +54,7 @@ export default function ReleaseCalendar() {
           )}
         </header>
 
-        {!data && !error && <div className="cal-skeleton skeleton-block" aria-hidden="true" />}
+        {!data && !error && <LoadingBar />}
         {error && <p className="hist-message" role="alert">{error}</p>}
 
         {data && data.events.length === 0 && (

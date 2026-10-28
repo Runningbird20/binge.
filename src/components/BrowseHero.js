@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CaretLeft, CaretRight, Info, Play, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
@@ -84,7 +85,7 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
   const touchRef = useRef(null);
 
   if (loading) {
-    return <div className="st-hero st-hero--loading skeleton-block" aria-hidden="true" />;
+    return <LoadingBar label="Loading featured titles…" />;
   }
 
   if (!slides.length) {
@@ -186,11 +187,11 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
           {item._onOpen ? (
             // Items that open in-page (e.g. manga) instead of a route.
             <>
-              <button type="button" className="st-btn st-btn--primary" onClick={() => item._onOpen(item)}>
-                <Play size={18} weight="fill" /> {item._playLabel || playLabel}
+              <button type="button" className="st-hero-play" aria-label={`${item._playLabel || playLabel} ${item.title}`} title={item._playLabel || playLabel} onClick={() => item._onOpen(item)}>
+                <Play size={22} weight="fill" aria-hidden="true" />
               </button>
-              <button type="button" className="st-btn st-btn--secondary" onClick={() => item._onOpen(item)}>
-                <Info size={18} weight="bold" /> More Info
+              <button type="button" className="st-preview-icon st-hero-info" aria-label={`More info about ${item.title}`} title="More info" onClick={() => item._onOpen(item)}>
+                <Info size={20} weight="bold" aria-hidden="true" />
               </button>
             </>
           ) : (
@@ -198,12 +199,12 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
               {item._comingSoon ? (
                 <span className="st-badge st-badge--soon st-badge--lg">Coming soon</span>
               ) : (
-                <Link className="st-btn st-btn--primary" to={item._playUrl || titleUrl(item, { play: true })} state={{ backgroundLocation: location }}>
-                  <Play size={18} weight="fill" /> {item._playLabel || playLabel}
+                <Link className="st-hero-play" aria-label={`${item._playLabel || playLabel} ${item.title}`} title={item._playLabel || playLabel} to={item._playUrl || titleUrl(item, { play: true })} state={{ backgroundLocation: location }}>
+                  <Play size={22} weight="fill" aria-hidden="true" />
                 </Link>
               )}
-              <Link className="st-btn st-btn--secondary" to={titleUrl(item)} state={{ backgroundLocation: location }}>
-                <Info size={18} weight="bold" /> More Info
+              <Link className="st-preview-icon st-hero-info" aria-label={`More info about ${item.title}`} title="More info" to={titleUrl(item)} state={{ backgroundLocation: location }}>
+                <Info size={20} weight="bold" aria-hidden="true" />
               </Link>
             </>
           )}

@@ -1,3 +1,4 @@
+import LoadingBar from '../../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../utils/supabase';
 import { ago } from './AdminServers';
@@ -45,7 +46,7 @@ export default function AdminErrors() {
         </div>
         <label className="adm-check"><input type="checkbox" checked={showResolved} onChange={(event) => setShowResolved(event.target.checked)} /> Show resolved</label>
       </div>
-      {!events && <div className="adm-skeleton skeleton-block" aria-hidden="true" />}
+      {!events && <LoadingBar />}
       {events && groups.length === 0 && <p className="adm-empty">No errors 🎉</p>}
       <ul className="adm-errors">
         {groups.map((group) => {

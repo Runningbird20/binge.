@@ -1,3 +1,4 @@
+import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Info, X } from '@phosphor-icons/react';
@@ -440,7 +441,7 @@ export default function Home() {
       <main className="page-content st-home">
         <PullToRefresh onRefresh={handleRefresh} disabled={authLoading || !user}>
         {(authLoading || !user) ? (
-          <div className="loading-state">Loading dashboard...</div>
+          <LoadingBar label="Loading dashboard..." />
         ) : (
         <>
         <BrowseHero items={heroItems} kicker={`Welcome back, ${name}`} />
@@ -551,7 +552,7 @@ export default function Home() {
 
         <div className="home-sections st-home-stats">
           <ProfileStatsHeader user={user} activeProfile={activeProfile} watchlist={watchlistItems} ratings={ratingsItems} />
-          {dataLoading && <div className="loading-state">Loading your library…</div>}
+          {dataLoading && <LoadingBar label="Loading your library…" />}
         </div>
         </>
         )}

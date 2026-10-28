@@ -89,12 +89,6 @@ const neonDb = require('./neonDb');
 const neonAuth = require('./neonAuth');
 const neonFunctions = require('./neonFunctions');
 
-// Initialize Neon Postgres schema if configured
-if (neonDb.isConfigured()) {
-  neonDb.initAppTables().catch((err) => {
-    console.warn('[Neon Postgres] Auto-init error:', err.message);
-  });
-}
 
 app.get('/api/health', async (_req, res) => {
   const neonPg = await neonDb.healthCheck().catch((err) => ({ ok: false, error: err.message }));
@@ -165,8 +159,10 @@ const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 10, message: 'Too ma
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/signup', authLimiter);
 
+app.use('/api/neon-data', require('./routes/neonData'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/lists', require('./routes/lists'));
+app.use('/api/media', (req,res,next) => process.env.REACT_APP_AUTH_PROVIDER !== 'neon' && req.path.startsWith('/episode-progress') ? require('./middleware/auth').requireAuth(req,res,() => require('./routes/supabaseUserData').episodes(req,res,next)) : next());
 app.use('/api/media', require('./routes/media'));
 app.use('/api/watchlist', require('./routes/watchlist'));
 app.use('/api/ratings', require('./routes/ratings'));

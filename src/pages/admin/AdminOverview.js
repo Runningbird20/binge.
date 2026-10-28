@@ -1,3 +1,4 @@
+import LoadingBar from '../../components/LoadingBar';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
@@ -20,6 +21,23 @@ function Bars({ series, label }) {
   );
 }
 
+// admin_stats (Supabase, user data) returns top titles as ids; their names and
+// posters come from the Neon catalog.
+async function withTitles(top) {
+  const tables = { movie: 'movies', tv_show: 'tv_shows' };
+  const found = new Map();
+  await Promise.all(Object.entries(tables).map(async ([type, table]) => {
+    const ids = top.filter((t) => t.media_type === type).map((t) => t.media_id);
+    if (!ids.length) return;
+    const { data } = await supabase.from(table).select('id,title,poster_url').in('id', ids);
+    (data || []).forEach((row) => found.set(`${type}:${row.id}`, row));
+  }));
+  return top.map((t) => {
+    const row = found.get(`${t.media_type}:${t.media_id}`);
+    return { ...t, title: t.title || row?.title, poster_url: t.poster_url || row?.poster_url };
+  });
+}
+
 // Dashboard: who's here, what they're watching, and whether anything needs
 // attention (errors, servers).
 export default function AdminOverview({ onOpenTab }) {
@@ -27,14 +45,14 @@ export default function AdminOverview({ onOpenTab }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    supabase.rpc('admin_stats').then(({ data, error: rpcError }) => {
-      if (rpcError) setError(rpcError.message);
-      else setStats(data);
+    supabase.rpc('admin_stats').then(async ({ data, error: rpcError }) => {
+      if (rpcError) { setError(rpcError.message); return; }
+      setStats({ ...data, top_titles: await withTitles(data?.top_titles || []) });
     });
   }, []);
 
   if (error) return <p className="adm-empty" role="alert">Couldn’t load stats: {error}</p>;
-  if (!stats) return <div className="adm-skeleton skeleton-block" aria-hidden="true" />;
+  if (!stats) return <LoadingBar />;
 
   const tiles = [
     ['Users', stats.users_total, `+${stats.users_new_7d} this week`],

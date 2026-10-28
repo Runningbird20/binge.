@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import SlidingTabs from './SlidingTabs';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ArrowLeft, ArrowSquareOut, BookOpen, MagnifyingGlass, Play, Star, WarningCircle, X } from '@phosphor-icons/react';
@@ -146,7 +147,7 @@ function MangaReader({ comic, chapters, index, onClose, onPrev, onNext }) {
         <div className="manga-reader-body vertical" ref={topRef}>
           {loading && (
             <div className="manga-reader-loading">
-              <div className="manga-reader-spinner" />
+              <LoadingBar compact label="Loading manga…" />
               <p>Loading pages…</p>
             </div>
           )}

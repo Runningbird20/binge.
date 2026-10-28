@@ -1,3 +1,4 @@
+import ThemedSelect from '../../components/ThemedSelect';
 import { useCallback, useEffect, useState } from 'react';
 import { Trash } from '@phosphor-icons/react';
 import { supabase } from '../../utils/supabase';
@@ -59,11 +60,7 @@ export default function AdminAnnouncements() {
         </label>
         <label className="adm-field">
           <span>Style</span>
-          <select value={form.level} onChange={update('level')}>
-            <option value="info">Info (blue)</option>
-            <option value="warning">Warning (amber)</option>
-            <option value="critical">Critical (red)</option>
-          </select>
+          <ThemedSelect aria-label="Announcement style" value={form.level} onChange={update('level')} options={[{ value: 'info', label: 'Info (blue)' }, { value: 'warning', label: 'Warning (amber)' }, { value: 'critical', label: 'Critical (red)' }]} />
         </label>
         <label className="adm-field">
           <span>Ends after (hours, optional)</span>

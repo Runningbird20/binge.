@@ -1,7 +1,8 @@
+import ExpandableSearch from '../components/ExpandableSearch';
 import SlidingTabs from '../components/SlidingTabs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { BookOpen, Check, DownloadSimple, FilmStrip, MagnifyingGlass, Plus, X } from '@phosphor-icons/react';
+import { BookOpen, Check, DownloadSimple, FilmStrip, Plus, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import GridTitleTile from '../components/GridTitleTile';
 import BookBrowseView from '../components/BookBrowseView';
@@ -286,9 +287,9 @@ export function BookDetailsModal({
     }
   }
 
-  async function handleRatingSave(categories, review) {
+  async function handleRatingSave(categories) {
     if (typeof onRate !== 'function') return;
-    await onRate(book, categories, review);
+    await onRate(book, categories);
   }
 
   const cover = posterSrc(getCoverUrl(book));
@@ -392,7 +393,7 @@ export function BookDetailsModal({
 
           <Adaptations book={book} />
 
-          <section className="td-section td-rate" aria-label="Your rating and review">
+          <section className="td-section td-rate" aria-label="Your rating">
             <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
             <RateReviewPanel
               mediaType="book"
@@ -504,10 +505,10 @@ export default function Books() {
   );
 
   const genreValues = useMemo(() => {
-    if (!activeLabel) return [];
+    if (searchTerm || !activeLabel) return [];
     const activeGroup = genreGroups.find((group) => group.label === activeLabel);
     return activeGroup ? activeGroup.values : [activeLabel];
-  }, [genreGroups, activeLabel]);
+  }, [genreGroups, activeLabel, searchTerm]);
 
   useEffect(() => {
     function handleScroll() {
@@ -924,10 +925,10 @@ export default function Books() {
     setAddingBookId(null);
   }
 
-  async function handleRate(book, categories, review) {
+  async function handleRate(book, categories) {
     try {
-      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book, review });
-      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id, review } }));
+      await saveSupabaseRating({ mediaType: 'book', mediaId: book.id, categories, media: book });
+      setUserRatings((current) => ({ ...current, [book.id]: { ...categories, media_id: book.id } }));
       setDetailMessage('Rating saved!');
     } catch (err) {
       setDetailMessage(err.message);
@@ -1016,30 +1017,10 @@ export default function Books() {
               <div>
                 <h1 className="st-page-title">Books</h1>
               </div>
-              <Link className="st-btn st-btn--ghost" to="/books">Back to highlights</Link>
+              <Link className="genre-chip st-pill-link" to="/books">Back to highlights</Link>
             </header>
             <div className="catalog-search-row">
-              <div className="catalog-search-bar">
-                <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
-                <input
-                  type="text"
-                  className="catalog-search-input"
-                  placeholder="Search books…"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  aria-label="Search books"
-                />
-                {searchInput && (
-                  <button
-                    type="button"
-                    className="catalog-search-clear"
-                    onClick={() => setSearchInput('')}
-                    aria-label="Clear search"
-                  >
-                    <X size={14} weight="bold" />
-                  </button>
-                )}
-              </div>
+              <ExpandableSearch label="Search books" value={searchInput} onChange={setSearchInput} />
               <ThemedSelect
                 className="catalog-sort-select"
                 aria-label="Sort books by"
@@ -1049,7 +1030,7 @@ export default function Books() {
               />
             </div>
 
-            <GenreScrollBar ariaLabel="Book genres">
+            <GenreScrollBar collapsed={Boolean(searchInput.trim())} ariaLabel="Book genres">
               <button
                 type="button"
                 className={`genre-chip${activeLabel === '' ? ' active' : ''}`}

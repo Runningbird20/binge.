@@ -22,9 +22,13 @@ There is no separate lint script; ESLint runs as part of `react-scripts build`/`
 
 ### Data import / seeding scripts
 
-The repo also owns the pipeline that populates the Supabase catalog tables (movies/tv_shows/books) from external sources. These are standalone Node scripts, not part of the app runtime — see `npm run` entries prefixed `import:*`, `generate:supabase:*`, and `supabase:*` in `package.json` (Goodreads, TMDB, Plex, Internet Archive, Open Library scrapers/importers, and `scripts/run-supabase-sql.js` for applying `supabase/repeatable_schema.sql` + seed files). Only touch these when the task is specifically about catalog data, not app features. The bulk sync (`scripts/sync-tmdb-to-supabase.js`, `sync-tmdb.yml`) works through TMDB's export by popularity and misses small new regional releases; `scripts/sync-language-to-supabase.js` (`npm run import:malayalam`, `:preview` = TMDB-only dry run; daily `sync-languages.yml`, `LANGUAGES=ml`) adds every title of a language from the last 3 years + 30 days ahead plus the all-time popular ones, and re-fetches anything released in the last 120 days.
+The repo also owns the pipeline that populates the catalog tables (movies/tv_shows/books, **in Neon**) from external sources. These are standalone Node scripts, not part of the app runtime — see `npm run` entries prefixed `import:*`, `generate:supabase:*`, and `supabase:*` in `package.json` (Goodreads, TMDB, Plex, Internet Archive, Open Library scrapers/importers, and `scripts/run-supabase-sql.js` for applying `supabase/repeatable_schema.sql` + seed files). Only touch these when the task is specifically about catalog data, not app features. The bulk sync (`scripts/sync-tmdb-to-supabase.js`, `sync-tmdb.yml`) works through TMDB's export by popularity and misses small new regional releases; `scripts/sync-language-to-supabase.js` (`npm run import:malayalam`, `:preview` = TMDB-only dry run; daily `sync-languages.yml`, `LANGUAGES=ml`) adds every title of a language from the last 3 years + 30 days ahead plus the all-time popular ones, and re-fetches anything released in the last 120 days.
 
 ## Architecture
+
+### Two databases: Neon = media catalog, Supabase = accounts + user data
+
+Nothing lives in both (see `docs/database-split.md`). The `supabase` client exported by `src/utils/supabase.js` is split: `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache, subtitle_cache and `rpc('search_catalog')` go to Neon through `/api/neon-data` (read-only, media tables only); everything else is real Supabase. Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/neon-data/rest/{table}`. Never join user tables to media in SQL (they're in different databases) — fetch ids, then look titles up. Duplicates are removed by `.github/workflows/database-split.yml`.
 
 ### Supabase-first, Express as a privileged fallback
 

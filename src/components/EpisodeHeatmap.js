@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { tmdbGet } from '../utils/tmdb';
@@ -108,7 +109,7 @@ export default function EpisodeHeatmap({ tmdbId, seasons, onPlay }) {
     return { best, averages, top, low };
   }, [data, seasonNumbers]);
 
-  if (!data) return <section className="td-section" aria-label="Episode ratings"><div className="hm-skeleton skeleton-block" aria-hidden="true" /></section>;
+  if (!data) return <section className="td-section" aria-label="Episode ratings"><LoadingBar compact label="Loading episode ratings…" /></section>;
   if (!summary?.best) return null;
 
   const maxEpisodes = Math.max(...seasonNumbers.map((season) => (data[season] || []).length));

@@ -12,7 +12,7 @@ on:
 
 jobs:
   sync:
-    name: TMDB discover → Supabase
+    name: TMDB discover → Neon
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -34,7 +34,7 @@ jobs:
       - name: Run language sync
         run: node scripts/sync-language-to-supabase.js
         env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+          NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
-          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LANGUAGES:                 ml

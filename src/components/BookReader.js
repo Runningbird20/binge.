@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowsIn, ArrowsOut, BookOpen, Books, Minus, Plus, X } from '@phosphor-icons/react';
 import { findReadableEdition } from '../utils/bookAccess';
@@ -164,7 +165,7 @@ export default function BookReader({ book, onClose }) {
       <div className="br-body" style={canStyle ? { background: theme.bg } : undefined}>
         {!access && (
           <div className="br-state">
-            <span className="br-spinner" aria-hidden="true" />
+            <LoadingBar compact label="Loading book…" />
             <p>Finding the best free edition of <em>{book.title}</em>…</p>
           </div>
         )}
@@ -173,7 +174,7 @@ export default function BookReader({ book, onClose }) {
           <>
             {!frameReady && (
               <div className="br-state br-state--overlay">
-                <span className="br-spinner" aria-hidden="true" />
+                <LoadingBar compact label="Loading book…" />
                 <p>Opening {access.label}…</p>
               </div>
             )}
