@@ -17,6 +17,7 @@ import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import PasswordReset from './pages/PasswordReset';
 import Signup from './pages/Signup';
 import './App.css';
 import './theme-experiment.css';
@@ -79,7 +80,7 @@ const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
-const NO_NAV_PATHS = ['/', '/login', '/signup'];
+const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];
 
 function AppShell({ children }) {
   const { isMobile } = useDeviceType();
@@ -143,6 +144,8 @@ function AppRoutes() {
         <Route path="/"          element={<Landing />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/signup"    element={<Signup />} />
+        <Route path="/forgot-password" element={<PasswordReset />} />
+        <Route path="/reset-password" element={<PasswordReset recovery />} />
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Baby, X } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
+import ProfileSecurityDialog from '../components/ProfileSecurityDialog';
+import { requireSupabaseClient } from '../utils/supabase';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileCreationWizard from '../components/ProfileCreationWizard';
 
@@ -56,16 +58,17 @@ function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
   );
 }
 
-function ProfileTile({ profile, active, canDelete, onClick, onRequestDelete }) {
+function ProfileTile({ profile, active, canDelete, onClick, onRequestDelete, onEdit, locked }) {
   return (
     <div className={`profile-picker-tile${active ? ' active' : ''}`}>
       <button type="button" className="profile-picker-tile-btn" onClick={onClick}>
         <ProfileAvatar profile={profile} size={96} />
-        <span className="profile-picker-name">{profile.name}</span>
+        <span className="profile-picker-name">{profile.name}{locked ? ' 🔒' : ''}</span>
         {profile.is_kids && (
           <span className="profile-picker-kids-badge"><Baby size={12} weight="bold" /> Kids</span>
         )}
       </button>
+      <button type="button" className="profile-picker-edit-btn" onClick={onEdit} aria-label={`Edit ${profile.name}`}>Edit profile</button>
       {canDelete && (
         <button
           type="button"
@@ -86,6 +89,18 @@ export default function ProfilePicker() {
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [securityTarget, setSecurityTarget] = useState(null);
+  const [locks, setLocks] = useState(null);
+  const [lockError, setLockError] = useState('');
+  async function loadLocks() {
+    try {
+      const { data, error } = await requireSupabaseClient().rpc('list_profile_locks');
+      if (error) throw error;
+      setLocks(new Set((data || []).map((row) => row.profile_id)));
+      setLockError('');
+    } catch { setLockError('Unable to load profile locks. Please try again.'); }
+  }
+  useEffect(() => { loadLocks(); }, []);
 
   // Only the default profile can delete other profiles — matches the
   // "main account holder" framing (the default profile is the one
@@ -101,7 +116,8 @@ export default function ProfilePicker() {
       <div className="profile-picker-content">
         <h1 className="profile-picker-title">Who's watching?</h1>
 
-        {profilesLoading ? (
+        {lockError && <p role="alert">{lockError} <button type="button" className="btn-ghost" onClick={loadLocks}>Retry</button></p>}
+        {profilesLoading || !locks ? (
           <p className="profile-picker-loading">Loading profiles…</p>
         ) : (
           <div className="profile-picker-grid">
@@ -111,7 +127,9 @@ export default function ProfilePicker() {
                 profile={profile}
                 active={activeProfile?.id === profile.id}
                 canDelete={canManage && !profile.is_default}
-                onClick={() => switchProfile(profile.id)}
+                locked={locks.has(profile.id)}
+                onEdit={() => setSecurityTarget({ profile, editing: true })}
+                onClick={() => locks.has(profile.id) ? setSecurityTarget({ profile, editing: false }) : switchProfile(profile.id)}
                 onRequestDelete={setDeleteTarget}
               />
             ))}
@@ -129,6 +147,12 @@ export default function ProfilePicker() {
         </button>
       </div>
 
+      {securityTarget && <ProfileSecurityDialog
+        profile={securityTarget.profile} email={user?.email} editing={securityTarget.editing}
+        locked={locks?.has(securityTarget.profile.id)} onCancel={() => setSecurityTarget(null)}
+        onSaved={async () => { await refreshProfiles(); await loadLocks(); setSecurityTarget(null); }}
+        onUnlock={() => switchProfile(securityTarget.profile.id)}
+      />}
       {deleteTarget && (
         <DeleteProfileConfirm
           profile={deleteTarget}

@@ -446,7 +446,7 @@ export default function MediaDetailsModal({
                 )}
                 <div className="td-actions">
                   {canWatch ? (
-                    <button type="button" className="st-btn st-btn--primary td-play" onClick={resume}>
+                    <button type="button" className={`st-btn td-resume-control td-play${resumeLabel === 'Play' ? ' td-play--compact' : ''}`} onClick={resume}>
                       <Play size={20} weight="fill" />
                       {resumeLabel}
                     </button>
@@ -505,7 +505,7 @@ export default function MediaDetailsModal({
 
           {isMobile && canWatch && !showTrailer && (
             <div className="td-mobile-bar">
-              <button type="button" className="st-btn st-btn--primary" onClick={resume}>
+              <button type="button" className={`st-btn td-resume-control${resumeLabel === 'Play' ? ' td-play--compact' : ''}`} onClick={resume}>
                 <Play size={20} weight="fill" /> {resumeLabel}
               </button>
               {onWatchlist && !saved && (

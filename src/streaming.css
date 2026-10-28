@@ -356,20 +356,6 @@
   opacity: 0;
   transition: opacity 0.18s ease;
 }
-.st-card-play {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -80%);
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #fff;
-  color: #0b0d12;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .st-card-hover-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1972,10 +1958,24 @@
   margin-bottom: 2.25rem;
   white-space: normal;
 }
-.profile-picker-grid.profile-picker-grid { gap: clamp(1rem, 3vw, 2.25rem); }
+.profile-picker-grid.profile-picker-grid {
+  --profile-tile-size: clamp(104px, 11vw, 150px);
+  gap: clamp(1rem, 3vw, 2.25rem);
+}
+.profile-picker-grid .profile-picker-tile { width: calc(var(--profile-tile-size) + 1rem); }
+.profile-picker-grid .profile-picker-tile .profile-avatar {
+  /* Override ProfileAvatar's inline size only inside the profile picker. */
+  width: var(--profile-tile-size) !important;
+  height: var(--profile-tile-size) !important;
+  font-size: calc(var(--profile-tile-size) * 0.55) !important;
+  box-sizing: border-box;
+  border-radius: 14px;
+}
+.profile-picker-grid .profile-avatar svg { width: 75%; height: 75%; }
 .profile-picker-avatar.profile-picker-avatar {
-  width: clamp(104px, 11vw, 150px);
-  height: clamp(104px, 11vw, 150px);
+  width: var(--profile-tile-size, clamp(104px, 11vw, 150px));
+  height: var(--profile-tile-size, clamp(104px, 11vw, 150px));
+  box-sizing: border-box;
   border-radius: 14px;
   transition: transform 0.18s, box-shadow 0.18s;
 }
@@ -2726,6 +2726,7 @@
 .st-preview-video, .st-hero-trailer iframe { pointer-events: none; }
 
 /* ── Continue Watching: visible play + details ───────────────── */
+.st-card-play,
 .st-card-playnow {
   position: absolute;
   left: 50%;
@@ -2746,6 +2747,7 @@
   transition: transform 0.15s, background 0.15s;
   pointer-events: none;
 }
+.st-card:hover .st-card-play, .st-card:focus-visible .st-card-play,
 .st-card:hover .st-card-playnow, .st-card:focus-visible .st-card-playnow { background: #fff; color: #0b0d12; transform: translate(-50%, -50%) scale(1.06); }
 .st-cw-cell .st-card-hover .st-card-play { display: none; }
 .st-cw-info {
@@ -3912,4 +3914,73 @@ kbd {
   .wp-progress { right: 10.5rem; }
   .wp-stubs { grid-template-columns: repeat(2, 1fr); }
   .wp-stamp-mark { width: 112px; height: 112px; }
+}
+
+.profile-picker-edit-btn {
+  display: block;
+  margin: 8px auto 0;
+  padding: 8px 14px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #191919;
+  color: #ccc;
+  cursor: pointer;
+}
+.profile-picker-edit-btn:hover { color: #fff; border-color: #888; }
+.profile-security-card { width: min(440px, 90vw); padding: 24px; gap: 16px; }
+.profile-security-card label { display: flex; flex-wrap: wrap; gap: 8px; color: #ddd; font-size: 0.9rem; }
+.profile-security-card label > .profile-picker-add-input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; }
+.profile-security-card .profile-picker-add-error { color: #f08080; }
+
+/* Shared hero action circles. */
+.st-hero-actions { align-items: center; }
+.st-hero-actions .st-hero-play,
+.st-hero-actions .st-hero-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(11, 13, 18, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.st-hero-play svg { margin-left: 2px; }
+.st-hero-actions .st-hero-play:hover,
+.st-hero-actions .st-hero-info:hover { background: #fff; color: #0b0d12; border-color: #fff; }
+.st-hero-actions .st-hero-play:focus-visible,
+.st-hero-actions .st-hero-info:focus-visible { outline: none; box-shadow: var(--st-focus); }
+@media (prefers-reduced-motion: reduce) {
+  .st-hero-actions .st-hero-play,
+  .st-hero-actions .st-hero-info { transition: none; }
+}
+
+/* Match the detail playback action to the saved-status pill. */
+.st-btn.td-resume-control {
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.st-btn.td-resume-control:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.st-btn.td-resume-control.td-play--compact {
+  min-width: 0;
+  width: auto;
+  flex: 0 0 auto;
+  padding-inline: 1rem;
 }
