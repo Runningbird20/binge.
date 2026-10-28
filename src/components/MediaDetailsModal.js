@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
@@ -51,6 +52,7 @@ function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
         {seasons.length > 1 ? (
           <ThemedSelect
             className="td-season-select"
+            variant="pill"
             aria-label="Season"
             value={String(season)}
             options={seasons.map((entry) => ({ value: String(entry.season_number), label: `${entry.name || `Season ${entry.season_number}`} (${entry.episode_count} ep)` }))}
@@ -62,7 +64,7 @@ function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
       </div>
 
       <ol className="td-episodes">
-        {!episodes && Array.from({ length: 4 }, (_, index) => <li key={index} className="td-episode td-episode--skeleton skeleton-block" />)}
+        {!episodes && <li style={{ listStyle: 'none' }}><LoadingBar compact label="Loading episodes…" /></li>}
         {episodes?.map((episode) => {
           const isWatched = watched.has(`${season}:${episode.number}`);
           const upcoming = episode.airDate && new Date(episode.airDate) > new Date();
@@ -121,7 +123,7 @@ function PreviouslyOn({ tmdbId, season, episode, daysAway, onPlay, onCancel }) {
       <div className="td-recap-card">
         <h3 id="td-recap-title">Previously on…</h3>
         <p className="td-recap-note"><ClockCounterClockwise size={16} weight="bold" aria-hidden="true" /> You were last here {daysAway} days ago.</p>
-        {!recap && <div className="td-recap-skeleton skeleton-block" aria-hidden="true" />}
+        {!recap && <LoadingBar compact label="Loading recap…" />}
         <ol className="td-recap-list">
           {recap?.map((ep) => (
             <li key={`${ep.season}:${ep.number}`}>
@@ -212,7 +214,7 @@ function MoreLikeThis({ mediaType, tmdbId }) {
     <section className="td-section" aria-label="More like this">
       <div className="td-section-head"><h3>More Like This</h3></div>
       <div className="td-more-grid">
-        {!items && Array.from({ length: 6 }, (_, index) => <div key={index} className="td-more-card td-more-card--skeleton skeleton-block" />)}
+        {!items && <div style={{ gridColumn: '1 / -1' }}><LoadingBar compact label="Loading similar titles…" /></div>}
         {items?.map((entry) => (
           <Link
             key={entry.id}
@@ -246,7 +248,7 @@ function MoreLikeThis({ mediaType, tmdbId }) {
 
 // Netflix-style title page, shared by desktop and mobile (it reflows to a
 // full-screen sheet on phones): backdrop + logo art, Play/Resume, Trailer,
-// My List, facts, episodes, More Like This, and your rating & review.
+// My List, facts, episodes, More Like This, and your rating.
 export default function MediaDetailsModal({
   item,
   mediaType,
@@ -274,7 +276,6 @@ export default function MediaDetailsModal({
   const [showRecap, setShowRecap] = useState(false);
   const dialogRef = useRef(null);
   const overlayRef = useRef(null);
-  const rateRef = useRef(null);
   const { isMobile } = useDeviceType();
   const details = useTitleDetails(item, mediaType);
   const isTV = mediaType === 'tv_show';
@@ -386,9 +387,9 @@ export default function MediaDetailsModal({
     else play();
   }
 
-  async function handleRatingSave(categories, review) {
+  async function handleRatingSave(categories) {
     if (typeof onRate !== 'function') return;
-    await onRate(item, categories, review);
+    await onRate(item, categories);
     haptic('success');
   }
 
@@ -404,7 +405,7 @@ export default function MediaDetailsModal({
           ref={dialogRef}
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" className="td-close" onClick={close} aria-label="Close details">
+          <button type="button" className="td-close td-round-btn" onClick={close} aria-label="Close details">
             <X size={20} weight="bold" />
           </button>
 
@@ -454,7 +455,7 @@ export default function MediaDetailsModal({
                     <span className="st-badge st-badge--soon st-badge--lg">Coming {formatReleaseDay(item) || 'soon'}</span>
                   )}
                   {details?.trailerKey && (
-                    <button type="button" className="st-btn st-btn--secondary" onClick={() => setShowTrailer(true)}>
+                    <button type="button" className="st-btn td-resume-control td-play--compact" onClick={() => setShowTrailer(true)}>
                       <FilmStrip size={18} weight="bold" /> Trailer
                     </button>
                   )}
@@ -475,6 +476,7 @@ export default function MediaDetailsModal({
                       <Check size={16} weight="bold" aria-hidden="true" />
                       <ThemedSelect
                         className="td-status-select"
+                        variant="pill"
                         aria-label="My List status"
                         value={watchlistEntry.status}
                         options={getStatusOptions(mediaType).map((value) => ({ value, label: STATUS_LABELS[value] }))}
@@ -482,15 +484,6 @@ export default function MediaDetailsModal({
                       />
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className="td-round-btn"
-                    onClick={() => rateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    aria-label="Rate this title"
-                    title="Rate this title"
-                  >
-                    <Star size={20} weight={userRating ? 'fill' : 'bold'} />
-                  </button>
                   {allowActions && <RemindButton item={item} mediaType={mediaType} />}
                   {allowActions && <SendToProfileButton item={item} mediaType={mediaType} />}
                 </div>
@@ -566,7 +559,7 @@ export default function MediaDetailsModal({
 
           <MoreLikeThis mediaType={mediaType} tmdbId={details?.tmdbId} />
 
-          <section className="td-section td-rate" ref={rateRef} aria-label="Your rating and review">
+          <section className="td-section td-rate" aria-label="Your rating">
             <div className="td-section-head">
               <h3>Your Rating &amp; Review</h3>
               {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}

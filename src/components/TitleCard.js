@@ -110,7 +110,6 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         ) : null}
         {playNow && <span className="st-card-playnow" aria-hidden="true"><Play size={22} weight="fill" /></span>}
         <div className="st-card-hover" aria-hidden="true">
-          {!comingSoon && <span className="st-card-play"><Play size={22} weight="fill" /></span>}
           <div className="st-card-hover-meta">
             {showMatch && item._match && <span className="st-match">{item._match}% match</span>}
             {year && <span>{year}</span>}

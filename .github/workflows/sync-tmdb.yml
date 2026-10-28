@@ -64,3 +64,13 @@ jobs:
           TYPE:                      tv
           MAX_DETAILS_PER_RUN:       '5000'
           MIN_POPULARITY:            '1'
+
+      # Older rows were imported without original_language / age_rating;
+      # fill a batch of them each run (only empty columns are written).
+      - name: Backfill missing language and age ratings
+        run: node scripts/backfill-catalog-fields.js
+        env:
+          TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAX_ROWS:                  '1000'      # ~4000 lookups at ~3/s, inside the job's 90 min with the sync

@@ -1,3 +1,5 @@
+import LoadingBar from '../components/LoadingBar';
+import ThemedSelect from '../components/ThemedSelect';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellSimple, Keyboard, Star, Trash } from '@phosphor-icons/react';
@@ -45,9 +47,7 @@ function SelectRow({ label, description, value, options, onChange }) {
         <span className="set-row-label">{label}</span>
         {description && <span className="set-row-desc">{description}</span>}
       </span>
-      <select className="set-select" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
+      <ThemedSelect className="set-select" aria-label={label} value={value} options={options} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -107,14 +107,11 @@ function TeamsSettings() {
           <span className="set-row-label">Add a team</span>
           <span className="set-row-desc">Alerts: 30 minutes before start, close games late, overtime, and no-hitters.</span>
         </span>
-        <select className="set-select" value={league} onChange={(event) => setLeague(event.target.value)}>
-          <option value="">Choose a league…</option>
-          {FOLLOWABLE_LEAGUES.map(([path, label]) => <option key={path} value={path}>{label}</option>)}
-        </select>
+        <ThemedSelect className="set-select" aria-label="Choose a league" value={league} onChange={(event) => setLeague(event.target.value)} options={[{ value: '', label: 'Choose a league…' }, ...FOLLOWABLE_LEAGUES.map(([value, label]) => ({ value, label }))]} />
       </label>
       {league && (
         <div className="set-team-grid">
-          {!options && <div className="hm-skeleton skeleton-block" aria-hidden="true" />}
+          {!options && <LoadingBar compact label="Loading teams…" />}
           {options?.map((team) => {
             const on = followedIds.has(String(team.id));
             return (

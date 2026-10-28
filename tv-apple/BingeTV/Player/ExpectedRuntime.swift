@@ -37,6 +37,11 @@ enum ExpectedRuntime {
         return seconds
     }
 
+    // Another server already played this same length (within 3%, or a minute).
+    static func agree(_ duration: Double, _ others: [Double]) -> Bool {
+        others.contains { abs($0 - duration) <= max(60, duration * 0.03) }
+    }
+
     // Different cuts and credits vary a little; a different video doesn't.
     static func isWrong(_ duration: Double, expected: Double) -> Bool {
         guard duration > 60, expected > 0 else { return false }

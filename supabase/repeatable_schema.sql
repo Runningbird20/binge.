@@ -310,7 +310,6 @@ create table if not exists public.movie_ratings (
   originality numeric(2,1) not null check (originality between 1 and 5 and originality * 2 = floor(originality * 2)),
   pacing numeric(2,1) not null check (pacing between 1 and 5 and pacing * 2 = floor(pacing * 2)),
   cinematography numeric(2,1) not null check (cinematography between 1 and 5 and cinematography * 2 = floor(cinematography * 2)),
-  review text,
   created_at timestamptz not null default now(),
   unique (user_id, media_id)
 );
@@ -323,7 +322,6 @@ alter table public.movie_ratings
   add column if not exists originality numeric(2,1),
   add column if not exists pacing numeric(2,1),
   add column if not exists cinematography numeric(2,1),
-  add column if not exists review text,
   add column if not exists created_at timestamptz not null default now();
 
 do $$
@@ -351,7 +349,6 @@ create table if not exists public.tv_show_ratings (
   writing numeric(2,1) not null check (writing between 1 and 5 and writing * 2 = floor(writing * 2)),
   pacing numeric(2,1) not null check (pacing between 1 and 5 and pacing * 2 = floor(pacing * 2)),
   resonance numeric(2,1) not null check (resonance between 1 and 5 and resonance * 2 = floor(resonance * 2)),
-  review text,
   created_at timestamptz not null default now(),
   unique (user_id, media_id)
 );
@@ -366,7 +363,6 @@ alter table public.tv_show_ratings
   add column if not exists writing numeric(2,1),
   add column if not exists pacing numeric(2,1),
   add column if not exists resonance numeric(2,1),
-  add column if not exists review text,
   add column if not exists created_at timestamptz not null default now();
 
 do $$
@@ -393,7 +389,6 @@ create table if not exists public.book_ratings (
   originality numeric(2,1) not null check (originality between 1 and 5 and originality * 2 = floor(originality * 2)),
   pacing numeric(2,1) not null check (pacing between 1 and 5 and pacing * 2 = floor(pacing * 2)),
   resonance numeric(2,1) not null check (resonance between 1 and 5 and resonance * 2 = floor(resonance * 2)),
-  review text,
   created_at timestamptz not null default now(),
   unique (user_id, media_id)
 );
@@ -407,7 +402,6 @@ alter table public.book_ratings
   add column if not exists originality numeric(2,1),
   add column if not exists pacing numeric(2,1),
   add column if not exists resonance numeric(2,1),
-  add column if not exists review text,
   add column if not exists created_at timestamptz not null default now();
 
 do $$

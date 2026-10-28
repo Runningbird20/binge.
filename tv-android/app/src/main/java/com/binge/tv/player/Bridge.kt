@@ -22,11 +22,14 @@ object Bridge {
     if (v.textTracks) for (i=0;i<v.textTracks.length;i++){ var tt=v.textTracks[i]; if(tt.kind==='subtitles'||tt.kind==='captions') x.push({i:i, l:tt.label||'', g:tt.language||'', on:i===window.__bingeTextIdx, n:tt.cues?tt.cues.length:0}); }
     return {a:a, x:x}; }
   if (window.__bingeTextIdx === undefined) window.__bingeTextIdx = -2;
+  // Subtitle timing from the app (seconds, + = later): the line shown is the one for currentTime - shift.
+  if (window.__bingeCueShift === undefined) window.__bingeCueShift = 0;
   function cueText(v){ var tl=v.textTracks; if(!tl) return '';
     if (window.__bingeTextIdx===-2){ for (var k=0;k<tl.length;k++){ if(tl[k].mode==='showing' && (tl[k].kind==='subtitles'||tl[k].kind==='captions')){ window.__bingeTextIdx=k; break; } } }
     var idx=window.__bingeTextIdx; if(idx<0 || !tl[idx]) return '';
     var tr=tl[idx]; if(tr.mode!=='hidden') tr.mode='hidden';
-    var cues=tr.activeCues; if(!cues||!cues.length){ var all=tr.cues, now=v.currentTime, hit=[];
+    var shift=window.__bingeCueShift||0;
+    var cues=shift?null:tr.activeCues; if(!cues||!cues.length){ var all=tr.cues, now=v.currentTime-shift, hit=[];
       if(all) for (var q=0;q<all.length;q++){ if(all[q].startTime<=now && all[q].endTime>now) hit.push(all[q]); else if(all[q].startTime>now) break; }
       cues=hit; } if(!cues.length) return '';
     var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ')); }
@@ -85,6 +88,7 @@ object Bridge {
   function apply(cmd){
     if(cmd==='unfill'){ unpin(); return; }
     if(cmd==='trim'){ trim(); return; }
+    if(cmd.indexOf('cueshift:')===0){ window.__bingeCueShift=parseFloat(cmd.slice(9))||0; return; }
     if(cmd==='cushion:on'){ cush.on=true; return; }
     if(cmd==='cushion:start'){ cush.on=true; var cv=pick(); if(cv && ahead(cv)<4) cushHold(cv, 4); return; }
     if(cmd.indexOf('cue:')===0){ cue(cmd); return; }
@@ -108,7 +112,7 @@ object Bridge {
   try{ window.open=function(){ return null; }; }catch(e){}
   setInterval(function(){ var v=pick(); if(!v) return;
     if (window.__bingeMuted && !v.muted) v.muted=true;
-    try{ if(window.BingeBridge) window.BingeBridge.post(JSON.stringify(state(v))); }catch(e){} }, 400);
+    try{ if(window.BingeBridge) window.BingeBridge.post(JSON.stringify(state(v))); }catch(e){} }, 250);
 })();
 """
 }

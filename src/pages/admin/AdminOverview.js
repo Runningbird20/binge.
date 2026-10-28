@@ -1,3 +1,4 @@
+import LoadingBar from '../../components/LoadingBar';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../utils/supabase';
@@ -34,7 +35,7 @@ export default function AdminOverview({ onOpenTab }) {
   }, []);
 
   if (error) return <p className="adm-empty" role="alert">Couldn’t load stats: {error}</p>;
-  if (!stats) return <div className="adm-skeleton skeleton-block" aria-hidden="true" />;
+  if (!stats) return <LoadingBar />;
 
   const tiles = [
     ['Users', stats.users_total, `+${stats.users_new_7d} this week`],

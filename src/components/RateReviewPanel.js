@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight } from '@phosphor-icons/react';
 import StarRating from './StarRating';
 import RatingInput from './RatingInput';
 import { RATING_CATEGORIES, computeStarRating, buildUniformCategories } from './RatingArtifact';
-
-const REVIEW_SAVE_DEBOUNCE_MS = 600;
 
 function extractCategories(mediaType, value) {
   const categories = RATING_CATEGORIES[mediaType] || [];
@@ -17,17 +15,12 @@ function extractCategories(mediaType, value) {
   return result;
 }
 
-// Quick score by default (writes the same value across every category via
-// buildUniformCategories, matching what the rest of the app already reads),
-// with an optional expander for real per-category values plus an always-on
-// review field — both save through the same onSave(categories, review) call.
+// Quick stars and optional per-category ratings share the same save action.
 export default function RateReviewPanel({ mediaType, value, onSave, allowActions = true, size = 'lg', actions = null }) {
   const [draftStars, setDraftStars] = useState(0);
   const [draftCategories, setDraftCategories] = useState({});
-  const [reviewDraft, setReviewDraft] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const reviewSaveTimer = useRef(null);
 
   useEffect(() => {
     const stars = computeStarRating(mediaType, value) || 0;
@@ -36,18 +29,13 @@ export default function RateReviewPanel({ mediaType, value, onSave, allowActions
     setDraftCategories(
       Object.keys(explicitCategories).length ? explicitCategories : buildUniformCategories(mediaType, stars)
     );
-    setReviewDraft(value?.review || '');
   }, [value, mediaType]);
 
-  useEffect(() => () => {
-    if (reviewSaveTimer.current) clearTimeout(reviewSaveTimer.current);
-  }, []);
-
-  async function persist(categories, review) {
+  async function persist(categories) {
     if (typeof onSave !== 'function') return;
     setIsSaving(true);
     try {
-      await onSave(categories, review);
+      await onSave(categories);
     } finally {
       setIsSaving(false);
     }
@@ -58,33 +46,14 @@ export default function RateReviewPanel({ mediaType, value, onSave, allowActions
     const categories = buildUniformCategories(mediaType, nextValue);
     setDraftStars(nextValue);
     setDraftCategories(categories);
-    persist(categories, reviewDraft);
+    persist(categories);
   }
 
   function handleCategoryChange(updatedCategories) {
     if (!allowActions) return;
     setDraftCategories(updatedCategories);
     setDraftStars(computeStarRating(mediaType, updatedCategories) || 0);
-    persist(updatedCategories, reviewDraft);
-  }
-
-  function handleReviewChange(event) {
-    const text = event.target.value;
-    setReviewDraft(text);
-    if (!allowActions) return;
-    if (reviewSaveTimer.current) clearTimeout(reviewSaveTimer.current);
-    reviewSaveTimer.current = setTimeout(() => {
-      persist(draftCategories, text);
-    }, REVIEW_SAVE_DEBOUNCE_MS);
-  }
-
-  function handleReviewBlur() {
-    if (!allowActions) return;
-    if (reviewSaveTimer.current) {
-      clearTimeout(reviewSaveTimer.current);
-      reviewSaveTimer.current = null;
-    }
-    persist(draftCategories, reviewDraft);
+    persist(updatedCategories);
   }
 
   const hasDetailCategories = (RATING_CATEGORIES[mediaType] || []).length > 0;
@@ -114,18 +83,6 @@ export default function RateReviewPanel({ mediaType, value, onSave, allowActions
       {detailOpen && (
         <RatingInput mediaType={mediaType} value={draftCategories} onChange={handleCategoryChange} />
       )}
-
-      <div>
-        <p className="rate-review-label">Review</p>
-        <textarea
-          className="rate-review-textarea"
-          value={reviewDraft}
-          onChange={handleReviewChange}
-          onBlur={handleReviewBlur}
-          placeholder="Share your thoughts on this title (only visible to you)..."
-          disabled={!allowActions}
-        />
-      </div>
 
       {isSaving && <span className="rating-saving-hint">Saving...</span>}
     </div>

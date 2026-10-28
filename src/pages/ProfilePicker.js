@@ -1,3 +1,4 @@
+import LoadingBar from '../components/LoadingBar';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Baby, X } from '@phosphor-icons/react';
@@ -118,7 +119,7 @@ export default function ProfilePicker() {
 
         {lockError && <p role="alert">{lockError} <button type="button" className="btn-ghost" onClick={loadLocks}>Retry</button></p>}
         {profilesLoading || !locks ? (
-          <p className="profile-picker-loading">Loading profiles…</p>
+          <LoadingBar label="Loading profiles…" />
         ) : (
           <div className="profile-picker-grid">
             {profiles.map((profile) => (

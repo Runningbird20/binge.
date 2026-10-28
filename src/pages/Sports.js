@@ -8,6 +8,7 @@ import Navbar from '../components/Navbar';
 import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import LiveScorePanel from '../components/LiveScorePanel';
+import FantasyBoard from '../components/FantasyBoard';
 import useDeviceType from '../hooks/useDeviceType';
 import { expandStreamProviders, loadSportsStreams, resolveProviderEmbedUrl, providerLabel, sameGame, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
 import { fetchScoreboards } from '../utils/liveScores';
@@ -1064,6 +1065,7 @@ export default function Sports() {
                 renderItem={(item) => <GameCard stream={item} nowMs={nowMs} onSelect={select} multi={multi} />}
               />
             )}
+            <FantasyBoard streams={streams} />
             {soon.length > 0 && (
               <TitleRow
                 className="st-row--wide"

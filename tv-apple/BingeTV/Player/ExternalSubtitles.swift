@@ -14,6 +14,17 @@ struct ExternalSubtitleFile: Equatable {
     let release: String?
     let versions: Int
     let version: Int
+    // The longest cue, so a long one (a sign, a song) still shows behind
+    // short lines that start after it.
+    private let longest: Double
+
+    init(cues: [SubtitleCue], release: String?, versions: Int, version: Int) {
+        self.cues = cues
+        self.release = release
+        self.versions = versions
+        self.version = version
+        longest = cues.map { $0.end - $0.start }.max() ?? 0
+    }
 
     // The line(s) on screen at a given second (cues are sorted by start).
     func text(at time: Double) -> String {
@@ -26,8 +37,8 @@ struct ExternalSubtitleFile: Equatable {
         var index = low - 1
         while index >= 0, lines.count < 3 {
             let cue = cues[index]
+            if time - cue.start > longest { break }
             if cue.end > time { lines.insert(cue.text, at: 0) }
-            if time - cue.start > 15 { break }
             index -= 1
         }
         return lines.joined(separator: "\n")
@@ -65,26 +76,51 @@ enum ExternalSubtitles {
                                     versions: (json["versions"] as? NSNumber)?.intValue ?? 1, version: version)
     }
 
-    // WebVTT (and SRT-style comma decimals): blocks of "start --> end" + text.
+    // WebVTT (and SRT-style comma decimals): "start --> end" + text lines,
+    // until a blank line. Each timing line starts a new cue, so files that
+    // separate cues with a line of spaces, or not at all, still parse.
     static func parse(_ vtt: String) -> [SubtitleCue] {
         let normalized = vtt.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         var cues: [SubtitleCue] = []
-        for block in normalized.components(separatedBy: "\n\n") {
-            let lines = block.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-            guard let timingIndex = lines.firstIndex(where: { $0.contains("-->") }) else { continue }
-            let parts = lines[timingIndex].components(separatedBy: "-->")
-            guard parts.count == 2, let start = seconds(parts[0]),
-                  let end = seconds(parts[1].trimmingCharacters(in: .whitespaces).components(separatedBy: " ").first ?? "") else { continue }
-            let text = lines[(timingIndex + 1)...]
-                .joined(separator: "\n")
-                .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: #"\{\\[^}]*\}"#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: "&amp;", with: "&").replacingOccurrences(of: "&lt;", with: "<")
-                .replacingOccurrences(of: "&gt;", with: ">").replacingOccurrences(of: "&nbsp;", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty, end > start { cues.append(SubtitleCue(start: start, end: end, text: text)) }
+        var timing: (start: Double, end: Double)?
+        var text: [String] = []
+
+        func finish() {
+            defer { timing = nil; text = [] }
+            guard let timing, timing.end > timing.start else { return }
+            let clean = clean(text.joined(separator: "\n"))
+            if !clean.isEmpty { cues.append(SubtitleCue(start: timing.start, end: timing.end, text: clean)) }
         }
+
+        for raw in normalized.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.contains("-->") {
+                // An SRT counter with no blank line before it belongs to the next cue.
+                if timing != nil, let last = text.last, !last.isEmpty, last.allSatisfy(\.isNumber) { text.removeLast() }
+                finish()
+                let parts = line.components(separatedBy: "-->")
+                if parts.count == 2, let start = seconds(parts[0]),
+                   let end = seconds(parts[1].trimmingCharacters(in: .whitespaces).components(separatedBy: " ").first ?? "") {
+                    timing = (start, end)
+                }
+            } else if line.isEmpty {
+                finish()
+            } else if timing != nil {
+                text.append(raw)
+            }
+        }
+        finish()
         return cues.sorted { $0.start < $1.start }
+    }
+
+    // Markup out, entities decoded once (&amp; last, so "&amp;lt;" stays "&lt;").
+    private static func clean(_ text: String) -> String {
+        text.replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\{\\[^}]*\}"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&nbsp;", with: " ").replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'").replacingOccurrences(of: "&amp;", with: "&")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // "01:02:03.456", "02:03.456" or "01:02:03,456".

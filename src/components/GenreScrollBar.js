@@ -1,3 +1,4 @@
+import { motion, useReducedMotion } from 'framer-motion';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import useDragScroll from '../hooks/useDragScroll';
 
@@ -6,11 +7,20 @@ import useDragScroll from '../hooks/useDragScroll';
 // scrolling plus hover-revealed arrow buttons, since the bar previously only
 // supported native touch/trackpad scroll (no affordance for a mouse-only
 // desktop user).
-export default function GenreScrollBar({ ariaLabel, children }) {
+export default function GenreScrollBar({ ariaLabel, children, collapsed = false }) {
+  const reduceMotion = useReducedMotion();
   const { ref, canScrollLeft, canScrollRight, scrollBy } = useDragScroll();
 
   return (
-    <div className="genre-bar-outer">
+    <motion.div
+      className="genre-bar-outer"
+      initial={false}
+      animate={{ height: collapsed ? 0 : 'auto', opacity: collapsed ? 0 : 1 }}
+      transition={{ duration: reduceMotion ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+      style={{ overflow: 'hidden', pointerEvents: collapsed ? 'none' : undefined }}
+      inert={collapsed ? true : undefined}
+      aria-hidden={collapsed || undefined}
+    >
       <button
         type="button"
         className="genre-scroll-btn genre-scroll-btn-left"
@@ -36,6 +46,6 @@ export default function GenreScrollBar({ ariaLabel, children }) {
       >
         <CaretRight size={14} weight="bold" />
       </button>
-    </div>
+    </motion.div>
   );
 }

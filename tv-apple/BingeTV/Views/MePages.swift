@@ -165,7 +165,10 @@ struct CalendarView: View {
             return out
         }
         let grouped = Dictionary(grouping: found, by: { Calendar.current.startOfDay(for: $0.0) })
-        days = grouped.keys.sorted().prefix(30).map { day in (day, grouped[day]!.map { ($0.1, $0.2) }) }
+        // Same order every visit (the lookups finish in any order).
+        days = grouped.keys.sorted().prefix(30).map { day in
+            (day, grouped[day]!.sorted { $0.1.name.localizedCaseInsensitiveCompare($1.1.name) == .orderedAscending }.map { ($0.1, $0.2) })
+        }
         loaded = true
     }
 }
@@ -181,6 +184,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("binge.audioDescription") private var audioDescription = false
     @AppStorage("binge.largeText") private var largeText = false
     @AppStorage(MultiviewLayout.key) private var multiviewLayout = MultiviewLayout.grid.rawValue
+    @AppStorage(MultiviewEngine.key) private var multiviewEngine = MultiviewEngine.page.rawValue
     @AppStorage(PlaybackPrefs.skipIntroKey) private var skipIntroButton = true
     @State private var audio = PlaybackPrefs.audio
     @State private var subtitle = PlaybackPrefs.subtitle
@@ -207,7 +211,7 @@ struct PlaybackSettingsView: View {
                     .buttonStyle(PillButtonStyle(selected: subtitle == code))
                 }
             }
-            group("Quality", "Best quality looks for a sharper stream, up to 4K, for a few seconds after a video starts.") {
+            group("Quality", "Best quality starts on the server that has looked sharpest on this Apple TV (it learns from what you watch, movies and sports). Fastest start plays whichever server is ready first.") {
                 ForEach(QualityPreference.allCases) { option in
                     Button(option.label) { quality = option.rawValue }
                         .buttonStyle(PillButtonStyle(selected: quality == option.rawValue))
@@ -216,6 +220,12 @@ struct PlaybackSettingsView: View {
             group("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.") {
                 Button("On") { skipIntroButton = true }.buttonStyle(PillButtonStyle(selected: skipIntroButton))
                 Button("Off") { skipIntroButton = false }.buttonStyle(PillButtonStyle(selected: !skipIntroButton))
+            }
+            group("Multiview engine", "One page plays every game in a single web page (up to 4 games, much less memory). Separate pages is the older way, at most 2.") {
+                ForEach(MultiviewEngine.allCases) { option in
+                    Button(option.label) { multiviewEngine = option.rawValue }
+                        .buttonStyle(PillButtonStyle(selected: multiviewEngine == option.rawValue))
+                }
             }
             group("Multiview layout", "With 2 or 3 games: equal tiles, or one big game with the others stacked beside it.") {
                 ForEach(MultiviewLayout.allCases) { option in

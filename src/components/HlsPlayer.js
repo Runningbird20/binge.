@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 
@@ -76,7 +77,7 @@ export default function HlsPlayer({ src, className = '', style = {} }) {
     <div style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
       {status === 'connecting' && (
         <div className="hls-connecting">
-          <div className="hls-spinner" />
+          <LoadingBar compact label="Loading video…" />
           <span>Connecting to stream...</span>
         </div>
       )}

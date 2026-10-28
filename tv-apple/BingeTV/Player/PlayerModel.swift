@@ -26,7 +26,12 @@ final class PlayerModel: ObservableObject {
     typealias Playback = MediaState
 
     @Published private(set) var request: PlayRequest
-    @Published private(set) var server: StreamServer?
+    @Published private(set) var server: StreamServer? {
+        didSet { if oldValue != server { serverSince = Date() } }
+    }
+    // When the current server started (its resolution counts after 30s).
+    private var serverSince = Date()
+    private var qualityRecordedAt = Date.distantPast
     @Published private(set) var playback = Playback()
     @Published private(set) var started = false
     @Published private(set) var racingNames = ""
@@ -101,7 +106,10 @@ final class PlayerModel: ObservableObject {
         self.request = request
         self.app = app
         surface.backgroundColor = .black
-        PiPController.shared.playerOpened()
+        // Not during this init: SwiftUI builds the model mid view update, and
+        // publishing then is undefined behaviour. (The main queue keeps the
+        // open/close order.)
+        DispatchQueue.main.async { PiPController.shared.playerOpened() }
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
@@ -144,6 +152,9 @@ final class PlayerModel: ObservableObject {
         return "S\(s):E\(e)"
     }
     private var web: WebEngine? { race?.winner?.web }
+    #if DEBUG
+    private var debugFroze = false
+    #endif
 
     // MARK: Races
 
@@ -183,6 +194,7 @@ final class PlayerModel: ObservableObject {
         surface.addSubview(next.container)
         next.onChange = { [weak self] in self?.raceChanged() }
         racingNames = next.candidates.map(\.server.name).joined(separator: ", ")
+        if next.winner == nil { server = nil }
         started = false
         warmedNext = false
         userPaused = false
@@ -218,7 +230,7 @@ final class PlayerModel: ObservableObject {
     func close() {
         guard !closed else { return }
         closed = true
-        PiPController.shared.playerClosed()
+        DispatchQueue.main.async { PiPController.shared.playerClosed() }
         timer?.invalidate()
         timer = nil
         lifecycle.forEach(NotificationCenter.default.removeObserver)
@@ -356,7 +368,8 @@ final class PlayerModel: ObservableObject {
             print("[tracks] audio -> \(Self.displayName(match))")
             #endif
         }
-        let subtitles = PlaybackPrefs.subtitle
+        // What's chosen in this player (starts as the profile's preference).
+        let subtitles = subtitleLanguage
         if usingExternalSubtitles {
             if textTracks.contains(where: \.on) { web.send(.textTrack(-1)) }
         } else if subtitles == "off" {
@@ -387,10 +400,10 @@ final class PlayerModel: ObservableObject {
         if emptySubtitleSince == nil { emptySubtitleSince = Date(); return }
         guard Date().timeIntervalSince(emptySubtitleSince!) > 2.5 else { return }
         emptySubtitleSince = nil
-        let language = String(current.language.prefix(2)).lowercased()
+        let language = PlaybackPrefs.baseLanguage(current.language)
         let sameLanguage = state.text.filter { track in
             !triedSubtitleTracks.contains(track.index)
-                && (String(track.language.prefix(2)).lowercased() == language
+                && (PlaybackPrefs.baseLanguage(track.language) == language
                     || Self.displayName(track).hasPrefix(Self.displayName(current)))
         }
         // Plain "English" before "English 2" / "English [CC]": the stream's
@@ -409,18 +422,23 @@ final class PlayerModel: ObservableObject {
     }
 
     static func matches(_ track: MediaTrack, _ code: String) -> Bool {
-        let language = track.language.lowercased()
-        // Servers use 2-letter (ko) or 3-letter (kor) codes, sometimes with a region.
-        if language == code || language.hasPrefix(code + "-") || (language.count == 3 && language.hasPrefix(code)) { return true }
+        // Servers use 2-letter (ko) or 3-letter (kor, fre/fra) codes, sometimes with a region.
+        if !track.language.isEmpty, PlaybackPrefs.baseLanguage(track.language) == code.lowercased() { return true }
         let name = PlaybackPrefs.languageName(code).lowercased()
-        return track.label.lowercased().contains(name)
+        return !name.isEmpty && track.label.lowercased().contains(name)
+    }
+
+    // A name worth showing a viewer, or nil for an unlabeled track ("Track 1" means nothing).
+    static func spokenName(_ track: MediaTrack) -> String? {
+        track.label.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression).isEmpty && track.language.isEmpty
+            ? nil : displayName(track)
     }
 
     static func displayName(_ track: MediaTrack) -> String {
         // "14. Korean" → "Korean"
         let label = track.label.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
         if !label.isEmpty { return label }
-        if !track.language.isEmpty { return PlaybackPrefs.languageName(String(track.language.prefix(2))) }
+        if !track.language.isEmpty { return PlaybackPrefs.languageName(track.language) }
         return "Track \(track.index + 1)"
     }
 
@@ -480,6 +498,24 @@ final class PlayerModel: ObservableObject {
     }
 
     // Switch this player to a live game (from a game alert).
+    // Live: ◀ / ▶ change game like changing channels (the next or previous
+    // live game in the schedule's order), without going back to Sports.
+    private var flipping = false
+    func flipGame(by step: Int) {
+        guard request.isLive, !flipping else { return }
+        flipping = true
+        Task {
+            defer { flipping = false }
+            let games = await SportsFeed.load().filter { $0.isLive && !$0.streams.isEmpty }
+            guard games.count > 1 else { notice = "No other live games right now."; showHUD(); return }
+            let index = request.game.flatMap { current in games.firstIndex { $0.id == current.id } } ?? -1
+            let next = games[(index + step + games.count) % games.count]
+            notice = "Switching to \(next.title)…"
+            showHUD()
+            await switchToLive(next)
+        }
+    }
+
     func switchToLive(_ game: SportGame) async {
         let servers = await SportsFeed.servers(for: game)
         guard !servers.isEmpty else { notice = "Couldn't find a stream for \(game.title)."; return }
@@ -487,6 +523,7 @@ final class PlayerModel: ObservableObject {
         let title = Title(kind: .movie, dbId: 0, name: game.title, year: nil, overview: nil, genre: nil, ageRating: nil)
         request = PlayRequest(title: title, liveStreams: servers, subtitle: "LIVE · \(game.league)", game: game)
         upNextCountdown = nil
+        upNextClock.reset()
         stillWatching = false
         raced = []
         recoveries = 0
@@ -514,6 +551,7 @@ final class PlayerModel: ObservableObject {
         request.episode = episode
         request.startAt = nil
         upNextCountdown = nil
+        upNextClock.reset()
         openedAt = Date()
         recoveries = 0
         handPicked = false
@@ -527,6 +565,14 @@ final class PlayerModel: ObservableObject {
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
         } else {
+            // The last episode's video must stop now: planning the next race
+            // takes a moment, and its state would otherwise be read as the
+            // new episode's (marking it watched, saving its position).
+            race?.stop()
+            race?.container.removeFromSuperview()
+            race = nil
+            started = false
+            playback = Playback()
             startPlannedRace()
         }
     }
@@ -556,7 +602,7 @@ final class PlayerModel: ObservableObject {
     // A foreign-language title with subtitles wanted, on a server that has
     // none (Vidy draws its own and exposes no tracks): move to one that has.
     private func checkSubtitlesAvailable(_ state: Playback) {
-        let wanted = PlaybackPrefs.subtitle
+        let wanted = subtitleLanguage
         guard started, !request.isLive, wanted != "off", state.text.isEmpty, !usingExternalSubtitles, !externalLoading,
               let original = originalLanguage, !original.hasPrefix(wanted) else { noSubsSince = nil; return }
         if noSubsSince == nil { noSubsSince = Date() }
@@ -659,9 +705,16 @@ final class PlayerModel: ObservableObject {
 
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
+        // Learn what this server really delivers (Best quality ranks by it).
+        if started, let server, !state.paused, state.height > 0,
+           Date().timeIntervalSince(serverSince) > 30, Date().timeIntervalSince(qualityRecordedAt) > 20 {
+            qualityRecordedAt = Date()
+            QualityMemory.record(server, height: state.height)
+        }
         watchClock(state)
         // Playing, but the video's length says it's a different title.
-        if started, let expected, ExpectedRuntime.isWrong(state.d, expected: expected) {
+        // The race may have dropped TMDB's length (servers agreed on another cut).
+        if started, let expected, race?.expectedDuration != nil, ExpectedRuntime.isWrong(state.d, expected: expected) {
             self.expected = nil
             recover(reason: "had the wrong video")
             return
@@ -689,8 +742,9 @@ final class PlayerModel: ObservableObject {
         // but its clock stops (a network stall). -BingeKillAfter N: the page
         // goes away entirely.
         let stallAfter = UserDefaults.standard.double(forKey: "BingeStallAfter")
-        if stallAfter > 0, recoveries == 0, started, state.t > stallAfter, let modern = web as? ModernWebView {
-            modern.evaluate("var v=document.querySelector('video'); if(v&&!v.__frozen){v.__frozen=1; var t=v.currentTime; Object.defineProperty(v,'currentTime',{get:function(){return t},set:function(){}}); Object.defineProperty(v,'paused',{get:function(){return false}});}", nil)
+        if stallAfter > 0, !debugFroze, recoveries == 0, started, state.t > stallAfter, let modern = web as? ModernWebView {
+            debugFroze = true // once: the standby that takes over must not be frozen too
+            modern.evaluate("window.__bingeRun && window.__bingeRun('debugfreeze')", nil)
         }
         let killAfter = UserDefaults.standard.double(forKey: "BingeKillAfter")
         if killAfter > 0, recoveries == 0, started, state.t > killAfter {
@@ -806,10 +860,10 @@ final class PlayerModel: ObservableObject {
 
     var nextEpisode: (season: Int, episode: Int)? {
         guard isEpisode, let s = request.season, let e = request.episode else { return nil }
-        if let count = request.seasons.first(where: { $0.seasonNumber == s })?.episodeCount, e < count { return (s, e + 1) }
-        if request.seasons.contains(where: { $0.seasonNumber == s + 1 && ($0.episodeCount ?? 0) > 0 }) { return (s + 1, 1) }
-        return nil
+        return EpisodeOrder.next(season: s, episode: e, seasons: request.seasons)
     }
+
+    private var upNextClock = UpNextCountdown()
 
     private func handleUpNext(_ state: Playback) {
         guard let next = nextEpisode, started, state.d > 120 else { return }
@@ -837,13 +891,21 @@ final class PlayerModel: ObservableObject {
                 }
                 return
             }
-            let value = upNextCountdown ?? 10
-            if upNextCountdown == nil { upNextCountdown = value } else if value > 0 { upNextCountdown = value - 1 }
+            // Real seconds: this runs on every poll (4 times a second).
+            upNextCountdown = upNextClock.tick(now: Date())
             if upNextCountdown == 0 { playNext(automatic: true) }
+        } else if let countdown = upNextCountdown, countdown > 0 {
+            // Skipped back out of the credits: the card goes away, and comes
+            // back with a fresh countdown next time.
+            upNextCountdown = nil
+            upNextClock.reset()
         }
     }
 
-    func cancelUpNext() { upNextCountdown = -1 }
+    func cancelUpNext() {
+        upNextClock.cancel()
+        upNextCountdown = -1
+    }
 
     func playNext(automatic: Bool = false) {
         guard let next = nextEpisode else { return }
@@ -864,6 +926,38 @@ final class PlayerModel: ObservableObject {
         let position = playback.t, duration = playback.d
         Task { await app.saveProgress(title: request.title, season: request.season, episode: request.episode,
                                       position: position, duration: duration) }
+    }
+}
+
+// Up Next's 10-second countdown, in real seconds however often it's ticked.
+struct UpNextCountdown {
+    static let seconds = 10
+    private var startedAt: Date?
+    private(set) var isCancelled = false
+
+    // The number to show now (10…0), or -1 once cancelled.
+    mutating func tick(now: Date) -> Int {
+        if isCancelled { return -1 }
+        let start = startedAt ?? now
+        startedAt = start
+        return max(0, Self.seconds - Int(now.timeIntervalSince(start)))
+    }
+
+    mutating func cancel() { isCancelled = true }
+
+    mutating func reset() {
+        startedAt = nil
+        isCancelled = false
+    }
+}
+
+enum EpisodeOrder {
+    // The episode after this one: the next in the season, else the next
+    // season's first (if it has episodes).
+    static func next(season: Int, episode: Int, seasons: [TMDBDetails.Season]) -> (season: Int, episode: Int)? {
+        if let count = seasons.first(where: { $0.seasonNumber == season })?.episodeCount, episode < count { return (season, episode + 1) }
+        if seasons.contains(where: { $0.seasonNumber == season + 1 && ($0.episodeCount ?? 0) > 0 }) { return (season + 1, 1) }
+        return nil
     }
 }
 

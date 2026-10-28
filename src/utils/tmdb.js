@@ -1,3 +1,4 @@
+import { trackedFetch } from './loadingProgress';
 // Thin browser-side TMDB client for the browse rows and recommendations.
 //
 // The catalog's own popularity/vote columns are a one-off import snapshot
@@ -62,7 +63,7 @@ export async function tmdbGet(path, params = {}) {
 
   const request = (async () => {
     try {
-      const response = await fetch(`${BASE_URL}${path}?${search.toString()}`);
+      const response = await trackedFetch(`${BASE_URL}${path}?${search.toString()}`);
       if (!response.ok) return null;
       const data = await response.json();
       memoryCache.set(cacheKey, { ts: Date.now(), data });

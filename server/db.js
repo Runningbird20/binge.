@@ -620,7 +620,7 @@ db.exec(`
     originality INTEGER NOT NULL CHECK(originality >= 1 AND originality <= 5),
     pacing INTEGER NOT NULL CHECK(pacing >= 1 AND pacing <= 5),
     cinematography INTEGER NOT NULL CHECK(cinematography >= 1 AND cinematography <= 5),
-    review TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id), UNIQUE (user_id, media_id)
   );
 
@@ -634,7 +634,7 @@ db.exec(`
     writing INTEGER NOT NULL CHECK(writing >= 1 AND writing <= 6),
     pacing INTEGER NOT NULL CHECK(pacing >= 1 AND pacing <= 5),
     resonance INTEGER NOT NULL CHECK(resonance >= 1 AND resonance <= 6),
-    review TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id), UNIQUE (user_id, media_id)
   );
 
@@ -647,7 +647,7 @@ db.exec(`
     originality INTEGER NOT NULL CHECK(originality >= 1 AND originality <= 5),
     pacing INTEGER NOT NULL CHECK(pacing >= 1 AND pacing <= 5),
     resonance INTEGER NOT NULL CHECK(resonance >= 1 AND resonance <= 6),
-    review TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id), UNIQUE (user_id, media_id)
   );
 
@@ -786,6 +786,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_books_genre ON books(genre);
   CREATE INDEX IF NOT EXISTS idx_books_source_key ON books(source_key);
 `);
+
+// Remove retired text reviews from existing SQLite databases as well as new ones.
+db.transaction(() => {
+  for (const table of ['movie_ratings', 'tv_show_ratings', 'book_ratings']) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (columns.some((column) => column.name === 'review')) {
+      db.exec(`ALTER TABLE ${table} DROP COLUMN review`);
+    }
+  }
+})();
 
 syncPreferredMovies();
 syncPreferredTvShows();

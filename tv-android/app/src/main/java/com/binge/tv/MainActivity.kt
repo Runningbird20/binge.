@@ -79,8 +79,22 @@ class MainActivity : ComponentActivity() {
         setContentView(root)
     }
 
+    // Escape hatch: Back twice within 1.2s always leaves a video, whatever
+    // state the player or an overlay is in (a stuck player used to need the
+    // Fire TV restarted).
+    private var lastBackUp = 0L
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         Ambient.touch()
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+            val now = android.os.SystemClock.uptimeMillis()
+            val exit = com.binge.tv.ui.PlayerLifecycle.exit
+            if (exit != null && now - lastBackUp < 1200) {
+                lastBackUp = 0
+                exit()
+                return true
+            }
+            lastBackUp = now
+        }
         return super.dispatchKeyEvent(event)
     }
 

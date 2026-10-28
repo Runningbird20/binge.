@@ -148,6 +148,17 @@ struct WatchlistRow: Decodable {
     let mediaId: Int
 }
 
+// Same rule as the site's getResumePosition (playbackPositions.js): nothing
+// to resume when barely started, or when effectively finished (in the last
+// two minutes, i.e. the credits), so Resume doesn't open on the credits.
+enum ResumeRule {
+    static func start(position: Double?, duration: Double?) -> Double? {
+        guard let position, position > 30 else { return nil }
+        if let duration, duration > 0, position > duration - 120 { return nil }
+        return position
+    }
+}
+
 // Same rule as the site's releaseWindow.js: released → shown; out within
 // 30 days → shown as Coming Soon; later → hidden.
 enum ReleaseWindow {
@@ -158,9 +169,12 @@ enum ReleaseWindow {
         return formatter
     }()
 
+    // Whole calendar days from today (0 = today), so a daylight-saving
+    // change in between doesn't push "30 days out" to 30 and an hour.
     private static func days(until value: String?) -> Double? {
         guard let value, let date = formatter.date(from: String(value.prefix(10))) else { return nil }
-        return date.timeIntervalSinceNow / 86_400
+        let calendar = Calendar.current
+        return calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: date)).day.map(Double.init)
     }
 
     static func isRecent(_ value: String?, days: Double) -> Bool {
@@ -180,6 +194,6 @@ enum KidsFilter {
     static let allowed: Set<String> = ["G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG"]
     static func allows(_ rating: String?) -> Bool {
         guard let rating else { return false }
-        return allowed.contains(rating.uppercased())
+        return allowed.contains(rating.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
     }
 }

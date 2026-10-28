@@ -119,11 +119,11 @@ router.get('/users', async (req, res) => {
   if (neonDb.isConfigured()) {
     try {
       const result = await neonDb.query(`
-        SELECT id, name AS username, email, created_at,
+        SELECT id, name AS username, email, "createdAt" AS created_at,
                CASE WHEN role = 'admin' THEN true ELSE false END AS is_admin,
                true AS is_public
         FROM neon_auth.user
-        ORDER BY created_at DESC
+        ORDER BY "createdAt" DESC
         LIMIT 200
       `);
       return res.json(result.rows);
