@@ -1,35 +1,70 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProfileSecurityDialog from './ProfileSecurityDialog';
-import { requireSupabaseClient } from '../utils/supabase';
-import { signInWithSupabase, updateAccountProfile } from '../utils/supabaseData';
-jest.mock('../utils/supabase', () => ({ requireSupabaseClient: jest.fn() }));
-jest.mock('../utils/supabaseData', () => ({ signInWithSupabase: jest.fn(), updateAccountProfile: jest.fn() }));
-const profile = { id: 'profile-1', name: 'Carl', is_kids: false };
-let rpc;
-beforeEach(() => { jest.clearAllMocks(); rpc = jest.fn().mockResolvedValue({ data: true }); requireSupabaseClient.mockReturnValue({ rpc }); });
-test('does not unlock after an incorrect PIN', async () => {
-  rpc.mockResolvedValue({ data: false });
+import * as supabaseModule from '../utils/supabase';
+import * as supabaseDataModule from '../utils/supabaseData';
+
+const profile = { id: 'p1', name: 'Kids' };
+const boxes = () => screen.getAllByLabelText(/digit \d of 4/i);
+
+function setup(verifies) {
+  const rpc = jest.fn().mockResolvedValue({ data: verifies, error: null });
+  jest.spyOn(supabaseModule, 'requireSupabaseClient').mockReturnValue({ rpc });
   const onUnlock = jest.fn();
-  render(<ProfileSecurityDialog profile={profile} onUnlock={onUnlock} />);
-  fireEvent.change(screen.getByLabelText('Four-digit PIN'), { target: { value: '1234' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect PIN');
+  const onCancel = jest.fn();
+  render(<ProfileSecurityDialog profile={profile} editing={false} onUnlock={onUnlock} onCancel={onCancel} />);
+  return { rpc, onUnlock, onCancel };
+}
+
+afterEach(() => jest.restoreAllMocks());
+
+test('typing moves through the boxes and submits on the fourth digit', async () => {
+  const { rpc, onUnlock } = setup(true);
+  expect(screen.getByRole('heading', { name: /enter your pin to access this profile/i })).toBeInTheDocument();
+  expect(boxes()[0]).toHaveFocus();
+  '1234'.split('').forEach((d, i) => fireEvent.change(boxes()[i], { target: { value: d } }));
+  await waitFor(() => expect(onUnlock).toHaveBeenCalled());
+  expect(rpc).toHaveBeenCalledWith('verify_profile_pin', { target_profile: 'p1', entered_pin: '1234' });
+});
+
+test('Backspace on an empty box clears and returns to the previous one', () => {
+  setup(true);
+  fireEvent.change(boxes()[0], { target: { value: '7' } });
+  expect(boxes()[1]).toHaveFocus();
+  fireEvent.keyDown(boxes()[1], { key: 'Backspace' });
+  expect(boxes()[0]).toHaveFocus();
+  expect(boxes()[0]).toHaveValue('');
+});
+
+test('pasting a PIN fills every box', async () => {
+  const { rpc } = setup(true);
+  fireEvent.paste(boxes()[0], { clipboardData: { getData: () => '98 76' } });
+  await waitFor(() => expect(rpc).toHaveBeenCalledWith('verify_profile_pin', { target_profile: 'p1', entered_pin: '9876' }));
+});
+
+test('a wrong PIN shows an error and clears the boxes', async () => {
+  const { onUnlock } = setup(false);
+  fireEvent.paste(boxes()[0], { clipboardData: { getData: () => '0000' } });
+  expect(await screen.findByText(/incorrect pin/i)).toHaveAttribute('role', 'alert');
+  boxes().forEach((box) => expect(box).toHaveValue(''));
   expect(onUnlock).not.toHaveBeenCalled();
 });
-test('unlocks only after server verification', async () => {
-  const onUnlock = jest.fn();
-  render(<ProfileSecurityDialog profile={profile} onUnlock={onUnlock} />);
-  fireEvent.change(screen.getByLabelText('Four-digit PIN'), { target: { value: '0123' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
-  await waitFor(() => expect(onUnlock).toHaveBeenCalled());
-  expect(rpc).toHaveBeenCalledWith('verify_profile_pin', { target_profile: profile.id, entered_pin: '0123' });
+
+test('the close button and Escape go back to the profiles', () => {
+  const { onCancel } = setup(true);
+  fireEvent.click(screen.getByRole('button', { name: /back to profiles/i }));
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(onCancel).toHaveBeenCalledTimes(2);
 });
+
 test('failed account password verification prevents profile changes', async () => {
-  signInWithSupabase.mockRejectedValue(new Error('Invalid password'));
-  render(<ProfileSecurityDialog editing profile={profile} email="user@example.com" />);
+  const rpc = jest.fn();
+  jest.spyOn(supabaseModule, 'requireSupabaseClient').mockReturnValue({ rpc });
+  jest.spyOn(supabaseDataModule, 'signInWithSupabase').mockRejectedValue(new Error('Invalid password'));
+  const update = jest.spyOn(supabaseDataModule, 'updateAccountProfile').mockResolvedValue();
+  render(<ProfileSecurityDialog editing profile={{ ...profile, is_kids: false }} email="user@example.com" />);
   fireEvent.change(screen.getByLabelText('Account password'), { target: { value: 'wrong' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Invalid password');
-  expect(updateAccountProfile).not.toHaveBeenCalled();
+  expect(update).not.toHaveBeenCalled();
   expect(rpc).not.toHaveBeenCalled();
 });
