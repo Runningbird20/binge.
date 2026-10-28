@@ -4290,7 +4290,10 @@ input:is([type="search"], .catalog-search-input, .st-search-input, .global-searc
   padding: 24px 16px;
   text-align: center;
   color: #fff;
-  background: radial-gradient(ellipse at 50% 30%, #2a1919 0%, #1c1212 55%, #140d0d 100%);
+  /* The site's blue fade (same tones as the empty Home hero). */
+  background:
+    radial-gradient(80% 70% at 50% 0%, rgba(80, 98, 140, 0.35) 0%, rgba(11, 13, 18, 0) 65%),
+    linear-gradient(170deg, #1a2030 0%, #0b0d12 75%);
 }
 .profile-lock-close {
   position: absolute;
@@ -4334,7 +4337,7 @@ input:is([type="search"], .catalog-search-input, .st-search-input, .global-searc
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.32);
   border-radius: 10px;
-  background: linear-gradient(180deg, #1a1010 0%, #120b0b 100%);
+  background: linear-gradient(180deg, #151a26 0%, #0d1018 100%);
   color: #fff;
   caret-color: #fff;
   font-size: 1.9rem;
@@ -4348,7 +4351,7 @@ input:is([type="search"], .catalog-search-input, .st-search-input, .global-searc
 .profile-lock-box:focus,
 .profile-lock-box:focus-visible {
   border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 0 0 3px #160d0d, 0 0 0 6px #fff;
+  box-shadow: 0 0 0 3px #0f121a, 0 0 0 6px #fff;
   outline: none;
 }
 .profile-lock-box:disabled { opacity: 0.6; }
