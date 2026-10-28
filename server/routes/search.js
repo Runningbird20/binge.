@@ -5,7 +5,7 @@ const neonDb  = require('../neonDb');
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
-    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    try { _sbCreateClient = require('../data-access/client').createHybridClient; }
     catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
   }
   return _sbCreateClient;
@@ -13,7 +13,7 @@ function getCreateClient() {
 
 function getSb() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) return null;
   return getCreateClient()(url, key);
 }
@@ -80,16 +80,14 @@ router.get('/', async (req, res) => {
           })
         );
       }
-      if (typeArr.includes('people')) {
+      // Profiles are account data, so people come from Supabase.
+      const sb = typeArr.includes('people') ? getSb() : null;
+      if (sb) {
         tasks.push(
-          neonDb.query(`
-            SELECT id, username, avatar_url, bio
-            FROM profiles
-            WHERE username ILIKE $1
-            LIMIT $2
-          `, [exactPat, limit]).then((r) => {
-            results.people = r.rows;
-          }).catch(() => { results.people = []; })
+          Promise.resolve(sb.from('profiles').select('id, username, avatar_url, bio')
+            .ilike('username', exactPat).limit(limit))
+            .then(({ data }) => { results.people = data || []; })
+            .catch(() => { results.people = []; })
         );
       }
       await Promise.all(tasks);

@@ -5,6 +5,7 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use((req,res,next) => process.env.REACT_APP_AUTH_PROVIDER !== 'neon' ? require('./supabaseUserData').ratings(req,res,next) : next());
 
 const SCHEMA = {
   movie: {

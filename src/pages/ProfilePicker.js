@@ -5,7 +5,7 @@ import { Plus, Baby, X } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
 import ProfileSecurityDialog from '../components/ProfileSecurityDialog';
-import { requireSupabaseClient } from '../utils/supabase';
+import { fetchProfileLocks } from '../utils/profileLocks';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileCreationWizard from '../components/ProfileCreationWizard';
 
@@ -93,13 +93,14 @@ export default function ProfilePicker() {
   const [securityTarget, setSecurityTarget] = useState(null);
   const [locks, setLocks] = useState(null);
   const [lockError, setLockError] = useState('');
+  const [locksAvailable, setLocksAvailable] = useState(false);
   async function loadLocks() {
     try {
-      const { data, error } = await requireSupabaseClient().rpc('list_profile_locks');
-      if (error) throw error;
-      setLocks(new Set((data || []).map((row) => row.profile_id)));
+      const result = await fetchProfileLocks();
+      setLocks(result.ids);
+      setLocksAvailable(result.available);
       setLockError('');
-    } catch { setLockError('Unable to load profile locks. Please try again.'); }
+    } catch { setLocks(null); setLockError('Unable to load profile locks. Please try again.'); }
   }
   useEffect(() => { loadLocks(); }, []);
 
@@ -117,10 +118,10 @@ export default function ProfilePicker() {
       <div className="profile-picker-content">
         <h1 className="profile-picker-title">Who's watching?</h1>
 
-        {lockError && <p role="alert">{lockError} <button type="button" className="btn-ghost" onClick={loadLocks}>Retry</button></p>}
-        {profilesLoading || !locks ? (
+        {lockError && <p className="profile-picker-error" role="alert">{lockError} <button type="button" className="btn-ghost" onClick={loadLocks}>Retry</button></p>}
+        {profilesLoading || (!locks && !lockError) ? (
           <LoadingBar label="Loading profiles…" />
-        ) : (
+        ) : locks ? (
           <div className="profile-picker-grid">
             {profiles.map((profile) => (
               <ProfileTile
@@ -141,15 +142,15 @@ export default function ProfilePicker() {
               <span className="profile-picker-name">Add Profile</span>
             </button>
           </div>
-        )}
+        ) : null}
 
-        <button type="button" className="btn-secondary profile-picker-back" onClick={() => navigate(-1)}>
+        <button type="button" className="btn-secondary profile-picker-back btn-text-action" onClick={() => navigate(-1)}>
           Back
         </button>
       </div>
 
       {securityTarget && <ProfileSecurityDialog
-        profile={securityTarget.profile} email={user?.email} editing={securityTarget.editing}
+        profile={securityTarget.profile} email={user?.email} editing={securityTarget.editing} locksAvailable={locksAvailable}
         locked={locks?.has(securityTarget.profile.id)} onCancel={() => setSecurityTarget(null)}
         onSaved={async () => { await refreshProfiles(); await loadLocks(); setSecurityTarget(null); }}
         onUnlock={() => switchProfile(securityTarget.profile.id)}

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { requireSupabaseClient } from '../utils/supabase';
 import { signInWithSupabase, updateAccountProfile } from '../utils/supabaseData';
 
-export default function ProfileSecurityDialog({ profile, email, editing, locked, onCancel, onSaved, onUnlock }) {
+export default function ProfileSecurityDialog({ profile, email, editing, locked, locksAvailable = true, onCancel, onSaved, onUnlock }) {
   const [isKids, setIsKids] = useState(Boolean(profile.is_kids));
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
@@ -45,11 +45,12 @@ export default function ProfileSecurityDialog({ profile, email, editing, locked,
           <label>Account password<input className="profile-picker-add-input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
           <p>Confirm your account password to change age restrictions or the profile lock.</p>
         </>}
-        {!remove && <label>{editing ? locked ? 'New four-digit PIN (leave blank to keep)' : 'Four-digit PIN (optional)' : 'Four-digit PIN'}
+        {locksAvailable && !remove && <label>{editing ? locked ? 'New four-digit PIN (leave blank to keep)' : 'Four-digit PIN (optional)' : 'Four-digit PIN'}
           <input className="profile-picker-add-input" type="password" inputMode="numeric" autoComplete="off" maxLength={4} pattern="[0-9]{4}" required={!editing} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
         </label>}
-        {editing && pin && !remove && <label>Confirm PIN<input className="profile-picker-add-input" type="password" inputMode="numeric" maxLength={4} required value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, ''))} /></label>}
-        {editing && locked && <label><input type="checkbox" checked={remove} onChange={(e) => setRemove(e.target.checked)} /> Remove profile lock</label>}
+        {editing && locksAvailable && pin && !remove && <label>Confirm PIN<input className="profile-picker-add-input" type="password" inputMode="numeric" maxLength={4} required value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, ''))} /></label>}
+        {editing && locksAvailable && locked && <label><input type="checkbox" checked={remove} onChange={(e) => setRemove(e.target.checked)} /> Remove profile lock</label>}
+        {editing && !locksAvailable && <p>Profile PINs are currently unavailable.</p>}
         {error && <p className="profile-picker-add-error" role="alert">{error}</p>}
         <div className="profile-picker-add-actions">
           <button className="btn-primary" type="submit" disabled={busy}>{busy ? 'Please wait…' : editing ? 'Save changes' : 'Unlock'}</button>

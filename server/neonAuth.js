@@ -14,7 +14,7 @@ function getJwksUrl() {
 }
 
 function isConfigured() {
-  return Boolean(getAuthBaseUrl() && getJwksUrl());
+  return process.env.REACT_APP_AUTH_PROVIDER === 'neon' && Boolean(getAuthBaseUrl() && getJwksUrl());
 }
 
 async function fetchJwksKeys() {

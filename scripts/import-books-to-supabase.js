@@ -53,9 +53,9 @@ async function insertBatch(client, records) {
 }
 
 async function main() {
-  const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!connectionString) {
-    console.error('Missing SUPABASE_DB_URL in .env');
+    console.error('Missing Neon DATABASE_URL in .env');
     process.exit(1);
   }
 

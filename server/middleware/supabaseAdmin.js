@@ -8,7 +8,7 @@ let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
     try {
-      _sbCreateClient = require('@supabase/supabase-js').createClient;
+      _sbCreateClient = require('../data-access/client').createHybridClient;
     } catch {
       _sbCreateClient = null;
     }
@@ -19,7 +19,7 @@ function getCreateClient() {
 function serviceClient() {
   if (service) return service;
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!url || !key) return null;
   const cc = getCreateClient();
   if (!cc) return null;

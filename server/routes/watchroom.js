@@ -3,7 +3,7 @@ const router  = express.Router();
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
-    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    try { _sbCreateClient = require('../data-access/client').createHybridClient; }
     catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
   }
   return _sbCreateClient;
@@ -11,7 +11,7 @@ function getCreateClient() {
 
 function getSb() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
   return getCreateClient()(url, key);
 }
 
@@ -20,7 +20,7 @@ async function getUser(req) {
   if (!token) return null;
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) return null;
     const sb = getCreateClient()(url, key, { global: { headers: { Authorization: `Bearer ${token}` } } });
     const { data: { user }, error } = await sb.auth.getUser(token);
