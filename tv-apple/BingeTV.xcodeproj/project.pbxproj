@@ -18,6 +18,20 @@
 			remoteGlobalIDString = B1A0000000000000000002F1;
 			remoteInfo = TopShelf;
 		};
+		B1A000000000000000000303 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B1A000000000000000000121 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1A0000000000000000000F1;
+			remoteInfo = BingeTV;
+		};
+		B1A000000000000000000403 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B1A000000000000000000121 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1A0000000000000000000F1;
+			remoteInfo = BingeTV;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -43,6 +57,8 @@
 		B1A0000000000000000002B1 /* TopShelf-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "TopShelf-Info.plist"; sourceTree = "<group>"; };
 		B1A0000000000000000002B2 /* BingeTV.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BingeTV.entitlements; sourceTree = "<group>"; };
 		B1A0000000000000000002B3 /* TopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TopShelf.entitlements; sourceTree = "<group>"; };
+		B1A000000000000000000301 /* BingeTVTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BingeTVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1A000000000000000000401 /* BingeTVUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BingeTVUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -54,6 +70,16 @@
 		B1A0000000000000000002C9 /* TopShelf */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TopShelf;
+			sourceTree = "<group>";
+		};
+		B1A000000000000000000302 /* BingeTVTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BingeTVTests;
+			sourceTree = "<group>";
+		};
+		B1A000000000000000000402 /* BingeTVUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BingeTVUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -73,6 +99,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1A000000000000000000312 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A000000000000000000412 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -81,6 +121,8 @@
 			children = (
 				B1A0000000000000000000C1 /* BingeTV */,
 				B1A0000000000000000002C9 /* TopShelf */,
+				B1A000000000000000000302 /* BingeTVTests */,
+				B1A000000000000000000402 /* BingeTVUITests */,
 				B1A0000000000000000000E3 /* Config */,
 				B1A0000000000000000000E2 /* Products */,
 			);
@@ -91,6 +133,8 @@
 			children = (
 				B1A0000000000000000000A1 /* BingeTV.app */,
 				B1A0000000000000000002A1 /* TopShelf.appex */,
+				B1A000000000000000000301 /* BingeTVTests.xctest */,
+				B1A000000000000000000401 /* BingeTVUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -153,6 +197,48 @@
 			productReference = B1A0000000000000000002A1 /* TopShelf.appex */;
 			productType = "com.apple.product-type.tv-app-extension";
 		};
+		B1A000000000000000000305 /* BingeTVTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1A000000000000000000320 /* Build configuration list for PBXNativeTarget "BingeTVTests" */;
+			buildPhases = (
+				B1A000000000000000000311 /* Sources */,
+				B1A000000000000000000312 /* Frameworks */,
+				B1A000000000000000000313 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B1A000000000000000000304 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B1A000000000000000000302 /* BingeTVTests */,
+			);
+			name = BingeTVTests;
+			productName = BingeTVTests;
+			productReference = B1A000000000000000000301 /* BingeTVTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B1A000000000000000000405 /* BingeTVUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1A000000000000000000420 /* Build configuration list for PBXNativeTarget "BingeTVUITests" */;
+			buildPhases = (
+				B1A000000000000000000411 /* Sources */,
+				B1A000000000000000000412 /* Frameworks */,
+				B1A000000000000000000413 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B1A000000000000000000404 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B1A000000000000000000402 /* BingeTVUITests */,
+			);
+			name = BingeTVUITests;
+			productName = BingeTVUITests;
+			productReference = B1A000000000000000000401 /* BingeTVUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -168,6 +254,14 @@
 					};
 					B1A0000000000000000002F1 = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					B1A000000000000000000305 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = B1A0000000000000000000F1;
+					};
+					B1A000000000000000000405 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = B1A0000000000000000000F1;
 					};
 				};
 			};
@@ -187,6 +281,8 @@
 			targets = (
 				B1A0000000000000000000F1 /* BingeTV */,
 				B1A0000000000000000002F1 /* TopShelf */,
+				B1A000000000000000000305 /* BingeTVTests */,
+				B1A000000000000000000405 /* BingeTVUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -200,6 +296,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		B1A0000000000000000002F4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A000000000000000000313 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A000000000000000000413 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -223,6 +333,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1A000000000000000000311 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A000000000000000000411 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -230,6 +354,16 @@
 			isa = PBXTargetDependency;
 			target = B1A0000000000000000002F1 /* TopShelf */;
 			targetProxy = B1A0000000000000000002D1 /* PBXContainerItemProxy */;
+		};
+		B1A000000000000000000304 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1A0000000000000000000F1 /* BingeTV */;
+			targetProxy = B1A000000000000000000303 /* PBXContainerItemProxy */;
+		};
+		B1A000000000000000000404 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1A0000000000000000000F1 /* BingeTV */;
+			targetProxy = B1A000000000000000000403 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -389,6 +523,80 @@
 			};
 			name = Release;
 		};
+		B1A000000000000000000321 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1A0000000000000000000B1 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(BINGE_TEAM)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID).bingetvtests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BingeTV.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BingeTV";
+			};
+			name = Debug;
+		};
+		B1A000000000000000000322 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1A0000000000000000000B1 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(BINGE_TEAM)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID).bingetvtests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BingeTV.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/BingeTV";
+			};
+			name = Release;
+		};
+		B1A000000000000000000421 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1A0000000000000000000B1 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(BINGE_TEAM)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID).bingetvuitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = BingeTV;
+			};
+			name = Debug;
+		};
+		B1A000000000000000000422 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B1A0000000000000000000B1 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "$(BINGE_TEAM)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BINGE_BUNDLE_ID).bingetvuitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = BingeTV;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -415,6 +623,24 @@
 			buildConfigurations = (
 				B1A0000000000000000002FA /* Debug */,
 				B1A0000000000000000002FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1A000000000000000000320 /* Build configuration list for PBXNativeTarget "BingeTVTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1A000000000000000000321 /* Debug */,
+				B1A000000000000000000322 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1A000000000000000000420 /* Build configuration list for PBXNativeTarget "BingeTVUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1A000000000000000000421 /* Debug */,
+				B1A000000000000000000422 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -43,6 +43,7 @@
     "start:client": "react-scripts start",
     "server": "node server/index.js",
     "dev": "npm start",
+    "import:backfill-catalog": "node scripts/backfill-catalog-fields.js",
     "import:goodreads": "node goodreads_scraper.js",
     "import:goodreads:quick": "node goodreads_scraper.js --pages 3 --quick",
     "import:goodreads:full": "node goodreads_scraper.js --pages 10",

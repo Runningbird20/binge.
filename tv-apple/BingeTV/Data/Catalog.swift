@@ -39,6 +39,8 @@ enum Catalog {
             title.backdrop = TMDB.image(item.backdropPath, TMDB.wide)
             title.tmdbId = item.id
             title.comingSoon = ReleaseWindow.isComingSoon(item.date)
+            // The catalog's own column is usually empty; TMDB's lists say.
+            if title.originalLanguage?.isEmpty ?? true { title.originalLanguage = item.originalLanguage }
             return title
         }
     }

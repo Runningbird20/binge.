@@ -253,7 +253,7 @@ struct SportsView: View {
     private func followMenu(_ event: Scoreboard.Event) -> some View {
         if app.isSignedIn, let path = boards.first(where: { $0.1.contains(event) })?.0.path {
             ForEach(event.competitors, id: \.self) { competitor in
-                let following = teams.isFollowing(competitor.team)
+                let following = teams.isFollowing(competitor.team, leaguePath: path)
                 Button {
                     Task { await teams.toggle(competitor.team, leaguePath: path) }
                 } label: {
