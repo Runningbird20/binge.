@@ -4277,3 +4277,93 @@ input:is([type="search"], .catalog-search-input, .st-search-input, .global-searc
   -webkit-backdrop-filter: none;
   color: #fff;
 }
+
+/* ─── Profile lock (PIN entry) ─────────────────────────────────────────── */
+.profile-lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  color: #fff;
+  background: radial-gradient(ellipse at 50% 30%, #2a1919 0%, #1c1212 55%, #140d0d 100%);
+}
+.profile-lock-close {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.profile-lock-close:hover { background: rgba(255, 255, 255, 0.08); }
+.profile-lock-status {
+  margin: 0 0 1.1rem;
+  color: #b3b3b3;
+  font-size: clamp(0.95rem, 1.3vw, 1.15rem);
+}
+.profile-lock-title {
+  margin: 0 0 2.75rem;
+  font-size: clamp(1.75rem, 4.4vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  max-width: 100%;
+  white-space: normal; /* App.css sets h1 { white-space: nowrap } globally */
+  text-wrap: balance;
+}
+.profile-lock-boxes {
+  display: flex;
+  gap: clamp(10px, 1.2vw, 14px);
+}
+.profile-lock-box {
+  width: clamp(52px, 4.6vw, 66px);
+  height: clamp(66px, 5.8vw, 84px);
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #1a1010 0%, #120b0b 100%);
+  color: #fff;
+  caret-color: #fff;
+  font-size: 1.9rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.profile-lock-box:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.55); }
+/* White ring with a dark gap, like the box is lifted out of the row. */
+.profile-lock-box:focus,
+.profile-lock-box:focus-visible {
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 0 3px #160d0d, 0 0 0 6px #fff;
+  outline: none;
+}
+.profile-lock-box:disabled { opacity: 0.6; }
+.profile-lock-boxes--error .profile-lock-box { border-color: #e87c03; }
+.profile-lock-boxes--error { animation: profile-lock-shake 0.32s ease; }
+.profile-lock-error {
+  min-height: 1.4em;
+  margin: 1.25rem 0 0;
+  color: #e87c03;
+  font-size: 0.98rem;
+}
+@keyframes profile-lock-shake {
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-lock-boxes--error { animation: none; }
+}
