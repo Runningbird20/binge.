@@ -1,3 +1,4 @@
+import SlidingTabs from '../components/SlidingTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FilmSlate, MonitorPlay, BookOpen, Trash, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal, CalendarBlank } from '@phosphor-icons/react';
@@ -59,7 +60,7 @@ function resolvePosterUrl(url) {
 
 function TypeFilterBar({ value, onChange }) {
   return (
-    <div className="st-tabs st-tabs--sm" role="group" aria-label="Filter by type">
+    <SlidingTabs className="st-tabs st-tabs--sm" role="group" aria-label="Filter by type">
       {TYPE_FILTERS.map((t) => (
         <button
           key={t.value}
@@ -71,7 +72,7 @@ function TypeFilterBar({ value, onChange }) {
           {t.Icon && <t.Icon size={15} weight="bold" aria-hidden="true" />} {t.label}
         </button>
       ))}
-    </div>
+    </SlidingTabs>
   );
 }
 
@@ -453,7 +454,7 @@ export default function Profile() {
         </header>
 
         <section className="pf-section">
-          <div className="st-tabs" role="tablist" aria-label="Library">
+          <SlidingTabs className="st-tabs" role="tablist" aria-label="Library">
             <button
               type="button"
               role="tab"
@@ -472,7 +473,7 @@ export default function Profile() {
             >
               Ratings &amp; Reviews <span className="pf-tab-count">{ratings.length}</span>
             </button>
-          </div>
+          </SlidingTabs>
 
           {activeTab === 'watchlist' ? (
             <WatchlistTab
