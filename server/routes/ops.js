@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const { serviceClient, userFromRequest, adminOnly } = require('../middleware/supabaseAdmin');
+const neonDb = require('../neonDb');
 const cron = require('./cron');
 
 const router = express.Router();
@@ -24,6 +25,27 @@ function fingerprint(message, stack) {
 }
 
 async function insertError(row) {
+  if (neonDb.isConfigured()) {
+    try {
+      await neonDb.query(
+        `INSERT INTO error_events (source, message, stack, url, user_agent, user_id, fingerprint)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          row.source || 'server',
+          row.message,
+          row.stack || null,
+          row.url || null,
+          row.user_agent || null,
+          row.user_id || null,
+          fingerprint(row.message, row.stack),
+        ]
+      );
+      return;
+    } catch {
+      // non-fatal
+    }
+  }
+
   const db = serviceClient();
   if (!db) return;
   await db.from('error_events').insert({ ...row, fingerprint: fingerprint(row.message, row.stack) });
