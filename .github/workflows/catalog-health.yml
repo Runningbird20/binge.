@@ -1,0 +1,46 @@
+name: Catalog health
+
+# Weekly report in the run summary: catalog row counts, how many movies and
+# series lack vote_average / popularity / original_language, and how many of
+# TMDB's trending titles match a catalog row (normally ~95%). Fails below 90%
+# coverage so a broken sync shows up. Read-only (scripts/catalog-health.js).
+#
+# Secrets: DATABASE_URL (Neon), TMDB_API_KEY.
+
+on:
+  schedule:
+    - cron: '41 6 * * 1'   # Mondays
+  workflow_dispatch:
+    inputs:
+      min_coverage:
+        description: 'Fail below this trending coverage (%)'
+        required: false
+        default: '90'
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Catalog health report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: scripts/package.json
+
+      - name: Install script dependencies
+        run: npm install
+        working-directory: scripts
+
+      - name: Report
+        run: node scripts/catalog-health.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          MIN_COVERAGE: ${{ inputs.min_coverage || '90' }}

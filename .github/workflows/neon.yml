@@ -2,8 +2,9 @@ name: Neon Database CI & Branching
 
 # This GitHub Action manages Neon Postgres database workflows:
 # 1. Pull Requests: creates an isolated, instant preview database branch using
-#    neondatabase/create-branch-action@v6 off the 'production' branch, runs health
-#    checks and tests against it, then automatically deletes it when the PR closes.
+#    neondatabase/create-branch-action@v6 off the 'production' branch, runs a health
+#    check against it, then automatically deletes it when the PR closes.
+#    Tests and the production build run in ci.yml.
 # 2. Main/Production Push & Manual: verifies Neon database connectivity & schema health.
 #
 # Required secrets in GitHub repository (Settings → Secrets and variables → Actions):
@@ -27,7 +28,6 @@ on:
         type: choice
         options:
           - 'health-check'
-          - 'test-suite'
 
 concurrency:
   group: neon-${{ github.workflow }}-${{ github.ref }}
@@ -115,20 +115,3 @@ jobs:
           "
         env:
           DATABASE_URL: ${{ steps.create-neon-branch.outputs.db_url || secrets.DATABASE_URL }}
-
-      # ── Run unit test suite ──
-      - name: Run Test Suite
-        if: github.event.action != 'closed'
-        run: npm test -- --watchAll=false
-        env:
-          DATABASE_URL: ${{ steps.create-neon-branch.outputs.db_url || secrets.DATABASE_URL }}
-          CI: true
-
-      # ── Verify production build ──
-      - name: Build Application
-        if: github.event.action != 'closed'
-        run: npm run build
-        env:
-          DATABASE_URL: ${{ steps.create-neon-branch.outputs.db_url || secrets.DATABASE_URL }}
-          CI: false
-
