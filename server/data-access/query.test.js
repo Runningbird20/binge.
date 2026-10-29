@@ -32,3 +32,19 @@ test('bigint ids come back as numbers, like PostgREST',()=>{
  const parse=db.getPool?.()?.options?.types?.getTypeParser(20);
  if(parse){assert.equal(parse('236187'),236187);assert.equal(parse('9007199254740993'),'9007199254740993');}
 });
+test('search cache keys ignore case, accents and punctuation',()=>{
+ const {searchKey}=require('./client');
+ assert.equal(searchKey('Amélie!',24),searchKey('amelie',24));
+ assert.equal(searchKey('Spider-Man',24),searchKey('spider man',24));
+ assert.notEqual(searchKey('dune',24),searchKey('dune',10));
+ assert.equal(searchKey('오징어 게임',24),'24|오징어 게임');
+});
+test('repeated searches are served from the cache',async()=>{
+ const {rpc}=require('./client');const original=db.query;let calls=0;
+ db.query=async()=>{calls+=1;return {rows:[{id:1,title:'Dune'}]};};
+ try{
+  const first=await rpc('search_catalog',{q:'Dune: Part Two',lim:24});
+  const second=await rpc('search_catalog',{q:'dune part two',lim:24});
+  assert.equal(calls,1);assert.deepEqual(second.data,first.data);
+ }finally{db.query=original;}
+});

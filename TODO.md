@@ -19,7 +19,7 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 ## Catalog data
 
 - [ ] **Fill in missing catalog fields.** In Neon, 44% of movies have no `vote_average`/`popularity` and 43% no `original_language`. `backfill-catalog-fields.js` does 1,000 rows per twice-weekly run, so it would take months to catch up. Run a one-off large backfill (or a nightly job with a higher `MAX_ROWS`), then rely on the twice-weekly run.
-- [ ] **Search on Neon.** Search now goes through `/api/neon-data`. Look into Neon full-text or trigram ranking in `search_catalog` (typos, accents, "the" prefixes) and cache popular queries.
+- [x] **Search on Neon.** Search now goes through `/api/neon-data`. Look into Neon full-text or trigram ranking in `search_catalog` (typos, accents, "the" prefixes) and cache popular queries.
 
 ## Features
 
