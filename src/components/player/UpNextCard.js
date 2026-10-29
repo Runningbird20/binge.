@@ -1,5 +1,5 @@
 import { Play } from '@phosphor-icons/react';
-import { UP_NEXT_COUNTDOWN } from '../utils/embedProviders';
+import { UP_NEXT_COUNTDOWN } from '../../utils/embedProviders';
 
 // The "Up next" card near the end of an episode. secondsLeft counts down to
 // autoplay; null means autoplay is off and it waits for a tap.
