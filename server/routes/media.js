@@ -1,8 +1,8 @@
 const express = require('express');
-const db = require('../db');
 const neonDb = require('../neonDb');
 const { requireAuth } = require('../middleware/auth');
 const { serviceClient } = require('../middleware/supabaseAdmin');
+const { episodes } = require('./supabaseUserData');
 const { buildBookGenreFacets, matchesBookGenreFacet } = require('../bookGenres');
 const { calculateMovieRelevance } = require('../utils/movieRelevance');
 
@@ -19,6 +19,11 @@ async function ratingStats(table, columns, max, mediaId) {
 }
 
 const router = express.Router();
+
+// Episode progress is user data in Supabase.
+router.use((req, res, next) => (
+  req.path.startsWith('/episode-progress') ? requireAuth(req, res, () => episodes(req, res, next)) : next()
+));
 
 let cachedMovieTotalCount = null;
 let cachedMovieTotalTime = 0;
@@ -275,7 +280,7 @@ async function enrichMovieForRelevance(movie) {
 
   if (!imdbId) {
     const enrichedAt = new Date().toISOString();
-    db.prepare('UPDATE movies SET ratings_enriched_at = ? WHERE id = ?').run(enrichedAt, movie.id);
+    await neonDb.query('UPDATE movies SET ratings_enriched_at = $1 WHERE id = $2', [enrichedAt, movie.id]);
     return { ...movie, ratings_enriched_at: enrichedAt };
   }
 
@@ -287,21 +292,11 @@ async function enrichMovieForRelevance(movie) {
     ratings_enriched_at: new Date().toISOString(),
   };
 
-  db.prepare(`
-    UPDATE movies
-    SET imdb_id = ?,
-        rotten_tomatoes_score = ?,
-        imdb_rating = ?,
-        metacritic_score = ?,
-        ratings_enriched_at = ?
-    WHERE id = ?
-  `).run(
-    imdbId,
-    payload.rotten_tomatoes_score,
-    payload.imdb_rating,
-    payload.metacritic_score,
-    payload.ratings_enriched_at,
-    movie.id
+  await neonDb.query(
+    `UPDATE movies
+     SET imdb_id = $1, rotten_tomatoes_score = $2, imdb_rating = $3, metacritic_score = $4, ratings_enriched_at = $5
+     WHERE id = $6`,
+    [imdbId, payload.rotten_tomatoes_score, payload.imdb_rating, payload.metacritic_score, payload.ratings_enriched_at, movie.id]
   );
 
   return { ...movie, imdb_id: imdbId, ...payload };
@@ -538,183 +533,114 @@ router.get('/movies', async (req, res) => {
   const pageSize = normalizePageSize(req.query.page_size, 48, 100);
   const offset   = (page - 1) * pageSize;
 
-  if (neonDb.isConfigured()) {
-    try {
-      const whereConditions = ['source_key IS NOT NULL'];
-      const queryParams = [];
-      let pIdx = 1;
+  try {
+    const whereConditions = ['source_key IS NOT NULL'];
+    const queryParams = [];
+    let pIdx = 1;
 
-      if (search && search.trim()) {
-        whereConditions.push(`(title ILIKE $${pIdx} OR director ILIKE $${pIdx} OR overview ILIKE $${pIdx})`);
-        queryParams.push(`%${search.trim()}%`);
-        pIdx++;
-      }
-
-      if (genre && genre.trim()) {
-        whereConditions.push(`genre ILIKE $${pIdx}`);
-        queryParams.push(`%${genre.trim()}%`);
-        pIdx++;
-      }
-
-      if (year) {
-        whereConditions.push(`year = $${pIdx}`);
-        queryParams.push(Number(year));
-        pIdx++;
-      }
-
-      const isUpcoming = req.query.upcoming === '1' || req.query.upcoming === 'true';
-      if (!isUpcoming && sort === 'relevance') {
-        whereConditions.push(`(year IS NULL OR year <= ${new Date().getFullYear()})`);
-      }
-
-      if (req.query.kids_safe === '1' || req.query.kids_safe === 'true') {
-        whereConditions.push(`age_rating IN ('G', 'PG', 'TV-G', 'TV-Y', 'TV-Y7', 'TV-PG')`);
-      }
-
-      const whereClause = whereConditions.join(' AND ');
-
-      let orderBy = 'title ASC';
-      if (sort === 'year-desc') {
-        orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC';
-      } else if (sort === 'year-asc') {
-        orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC';
-      } else if (sort === 'title-desc') {
-        orderBy = 'title DESC';
-      } else if (sort === 'popularity' || sort === 'popularity-desc' || sort === 'relevance') {
-        orderBy = 'CASE WHEN popularity IS NULL THEN 1 ELSE 0 END, popularity DESC, title ASC';
-      } else if (sort === 'rating' || sort === 'rating-desc') {
-        orderBy = 'CASE WHEN vote_average IS NULL THEN 1 ELSE 0 END, vote_average DESC, popularity DESC';
-      }
-
-      const isUnfiltered = queryParams.length === 0;
-      let totalPromise;
-      if (isUnfiltered && cachedMovieTotalCount != null && Date.now() - cachedMovieTotalTime < 3600000) {
-        totalPromise = Promise.resolve({ rows: [{ total: cachedMovieTotalCount }] });
-      } else {
-        totalPromise = neonDb.query(`SELECT COUNT(*) as total FROM movies WHERE ${whereClause}`, queryParams)
-          .then((res) => {
-            if (isUnfiltered) {
-              cachedMovieTotalCount = Number(res.rows[0]?.total || 0);
-              cachedMovieTotalTime = Date.now();
-            }
-            return res;
-          });
-      }
-
-      const itemsQuery = `
-        SELECT *
-        FROM movies
-        WHERE ${whereClause}
-        ORDER BY ${orderBy}
-        LIMIT $${pIdx} OFFSET $${pIdx + 1}
-      `;
-
-      const [countRes, itemsRes, genresRes] = await Promise.all([
-        totalPromise,
-        neonDb.query(itemsQuery, [...queryParams, pageSize, offset]),
-        neonDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
-      ]);
-
-      const total = Number(countRes.rows[0]?.total || 0);
-      const items = itemsRes.rows.map((row) => ({
-        ...row,
-        id: Number(row.id),
-      }));
-
-      const genres = genresRes.rows.map((r) => r.genre).filter(Boolean);
-
-      return res.json({
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.max(1, Math.ceil(total / pageSize)),
-        facets: { genres },
-      });
-    } catch (err) {
-      console.warn('Neon /movies query error, falling back:', err.message);
+    if (search && search.trim()) {
+      whereConditions.push(`(title ILIKE $${pIdx} OR director ILIKE $${pIdx} OR overview ILIKE $${pIdx})`);
+      queryParams.push(`%${search.trim()}%`);
+      pIdx++;
     }
-  }
 
-  if (typeof db.syncImportedMovies === 'function') {
-    db.syncImportedMovies();
-  }
+    if (genre && genre.trim()) {
+      whereConditions.push(`genre ILIKE $${pIdx}`);
+      queryParams.push(`%${genre.trim()}%`);
+      pIdx++;
+    }
 
-  const params   = [];
+    if (year) {
+      whereConditions.push(`year = $${pIdx}`);
+      queryParams.push(Number(year));
+      pIdx++;
+    }
 
-  // Dedup subquery — prefer TMDB over Plex for same title+year
-  let innerWhere = 'WHERE source_key IS NOT NULL';
-  if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  if (year)   { innerWhere += ' AND year = ?';       params.push(Number(year)); }
-  if (sort === 'relevance' && !req.query.upcoming) {
-    innerWhere += ' AND (year IS NULL OR year <= ?)';
-    params.push(new Date().getFullYear());
-  }
+    const isUpcoming = req.query.upcoming === '1' || req.query.upcoming === 'true';
+    if (!isUpcoming && sort === 'relevance') {
+      whereConditions.push(`(year IS NULL OR year <= ${new Date().getFullYear()})`);
+    }
 
-  // Determine ORDER BY for SQL (sort in DB, not in memory)
-  const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
-                : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
-                : sort === 'title-desc'? 'title DESC'
-                : 'title ASC';
+    if (req.query.kids_safe === '1' || req.query.kids_safe === 'true') {
+      whereConditions.push(`age_rating IN ('G', 'PG', 'TV-G', 'TV-Y', 'TV-Y7', 'TV-PG')`);
+    }
 
-  const dedupeBase = `
-    SELECT m.*
-    FROM movies m
-    INNER JOIN (
-      SELECT
-        MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
-        MIN(id) AS any_id
+    const whereClause = whereConditions.join(' AND ');
+
+    let orderBy = 'title ASC';
+    if (sort === 'year-desc') {
+      orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC';
+    } else if (sort === 'year-asc') {
+      orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC';
+    } else if (sort === 'title-desc') {
+      orderBy = 'title DESC';
+    } else if (sort === 'popularity' || sort === 'popularity-desc' || sort === 'relevance') {
+      orderBy = 'CASE WHEN popularity IS NULL THEN 1 ELSE 0 END, popularity DESC, title ASC';
+    } else if (sort === 'rating' || sort === 'rating-desc') {
+      orderBy = 'CASE WHEN vote_average IS NULL THEN 1 ELSE 0 END, vote_average DESC, popularity DESC';
+    }
+
+    const isUnfiltered = queryParams.length === 0;
+    let totalPromise;
+    if (isUnfiltered && cachedMovieTotalCount != null && Date.now() - cachedMovieTotalTime < 3600000) {
+      totalPromise = Promise.resolve({ rows: [{ total: cachedMovieTotalCount }] });
+    } else {
+      totalPromise = neonDb.query(`SELECT COUNT(*) as total FROM movies WHERE ${whereClause}`, queryParams)
+        .then((res) => {
+          if (isUnfiltered) {
+            cachedMovieTotalCount = Number(res.rows[0]?.total || 0);
+            cachedMovieTotalTime = Date.now();
+          }
+          return res;
+        });
+    }
+
+    const itemsQuery = `
+      SELECT *
       FROM movies
-      ${innerWhere}
-      GROUP BY LOWER(TRIM(title)), COALESCE(year, 0)
-    ) dedup ON m.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    ${innerWhere}
-  `;
+      WHERE ${whereClause}
+      ORDER BY ${orderBy}
+      LIMIT $${pIdx} OFFSET $${pIdx + 1}
+    `;
 
-  const countParams = [...params, ...params]; // params used twice (inner + outer WHERE)
-  const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
-  const items = sort === 'relevance'
-    ? (await sortRowsByMovieRelevance(
-        db.prepare(dedupeBase).all(...countParams)
-      )).slice(offset, offset + pageSize)
-    : db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
+    const [countRes, itemsRes, genresRes] = await Promise.all([
+      totalPromise,
+      neonDb.query(itemsQuery, [...queryParams, pageSize, offset]),
+      neonDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
+    ]);
 
-  const genres = buildMediaGenreFacets(
-    db.prepare(`
-      SELECT DISTINCT genre FROM movies
-      WHERE source_key IS NOT NULL AND genre IS NOT NULL AND TRIM(genre) <> ''
-    `).all().map((row) => row.genre)
-  );
+    const total = Number(countRes.rows[0]?.total || 0);
+    const items = itemsRes.rows.map((row) => ({
+      ...row,
+      id: Number(row.id),
+    }));
 
-  res.json({
-    items,
-    total,
-    page,
-    pageSize,
-    totalPages: Math.ceil(total / pageSize),
-    facets: { genres },
-  });
+    const genres = genresRes.rows.map((r) => r.genre).filter(Boolean);
+
+    return res.json({
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      facets: { genres },
+    });
+  } catch (err) {
+    console.error('Neon /movies query error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/movies/genres', async (_req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const result = await neonDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC');
-      if (result.rows.length > 0) {
-        return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
-      }
-    } catch (err) {
-      console.warn('Neon movie genres error:', err.message);
+  try {
+    const result = await neonDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC');
+    if (result.rows.length > 0) {
+      return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
     }
+  } catch (err) {
+    console.error('Neon movie genres error:', err.message);
+    res.status(500).json({ error: err.message });
   }
-  const genres = buildMediaGenreFacets(
-    db.prepare(`
-      SELECT DISTINCT genre FROM movies
-      WHERE source_key IS NOT NULL AND genre IS NOT NULL AND TRIM(genre) <> ''
-    `).all().map((row) => row.genre)
-  );
-  res.json({ genres });
 });
 
 router.get('/by-tmdb-ids', async (req, res) => {
@@ -734,427 +660,21 @@ router.get('/by-tmdb-ids', async (req, res) => {
 
   const keys = rawIds.map((id) => `${prefix}${id}`);
 
-  if (neonDb.isConfigured()) {
-    try {
-      const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
-      const query = `
-        SELECT *
-        FROM ${table}
-        WHERE source_key IN (${placeholders})
-      `;
-      const result = await neonDb.query(query, keys);
-      const items = result.rows.map((r) => ({ ...r, id: Number(r.id) }));
-      return res.json({ items });
-    } catch (err) {
-      console.error('Neon by-tmdb-ids error:', err.message);
-    }
-  }
-
-  // Fallback to SQLite
   try {
-    const placeholders = keys.map(() => '?').join(', ');
-    const items = db.prepare(`SELECT * FROM ${table} WHERE source_key IN (${placeholders})`).all(...keys);
-    res.json({ items });
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const query = `
+      SELECT *
+      FROM ${table}
+      WHERE source_key IN (${placeholders})
+    `;
+    const result = await neonDb.query(query, keys);
+    const items = result.rows.map((r) => ({ ...r, id: Number(r.id) }));
+    return res.json({ items });
   } catch (err) {
+    console.error('Neon by-tmdb-ids error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
-// ─── Curated rows endpoint ────────────────────────────────────────────────────
-// Returns multiple named buckets in one call for the Netflix-style homepage layout
-
-function getTopDeduped(table, where, orderBy, limit, extraParams = []) {
-  // Returns deduplicated rows (prefer tmdb) matching a WHERE clause
-  const alias = table === 'movies' ? 'm' : 't';
-  const idCol  = table === 'movies' ? 'tmdb_id' : 'tmdb_id';
-  const q = `
-    SELECT ${alias}.*
-    FROM ${table} ${alias}
-    INNER JOIN (
-      SELECT
-        MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
-        MIN(id) AS any_id
-      FROM ${table}
-      WHERE source_key IS NOT NULL
-      GROUP BY LOWER(TRIM(title))${table === 'movies' ? ', COALESCE(year, 0)' : ''}
-    ) dedup ON ${alias}.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    WHERE ${alias}.source_key IS NOT NULL ${where ? 'AND ' + where : ''}
-    ORDER BY ${orderBy}
-    LIMIT ?
-  `;
-  try {
-    return db.prepare(q).all(...extraParams, limit);
-  } catch (e) {
-    console.error('curated query error:', e.message, q);
-    return [];
-  }
-}
-
-// Movie row definitions
-async function buildMovieRows() {
-  const CURRENT_YEAR = new Date().getFullYear();
-  const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
-  const featuredItems = (await sortRowsByMovieRelevance(
-    getTopDeduped(
-      'movies',
-      `year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`,
-      'popularity DESC, year DESC, title ASC',
-      500
-    )
-  )).slice(0, 48);
-  const rows = [
-    {
-      id: 'featured',
-      title: 'Featured Picks',
-      seeAll: '/movies?sort=relevance',
-      items: featuredItems,
-    },
-    {
-      id: 'upcoming',
-      title: 'Upcoming Releases',
-      seeAll: '/movies?sort=year-desc&upcoming=1',
-      items: getTopDeduped('movies', `year > ${CURRENT_YEAR} AND poster_url IS NOT NULL`, `year ASC, RANDOM()`, 48),
-    },
-    {
-      id: 'trending',
-      title: 'Trending Now',
-      seeAll: '/movies?sort=year-desc',
-      items: getTopDeduped('movies', `year >= ${CURRENT_YEAR - 1} ${NO_FUTURE.replace('AND poster_url IS NOT NULL','')} AND poster_url IS NOT NULL`, 'RANDOM()', 48),
-    },
-    {
-      id: 'new_releases',
-      title: 'New Releases',
-      seeAll: '/movies?sort=year-desc',
-      items: getTopDeduped('movies', `year = ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'RANDOM()', 48),
-    },
-    {
-      id: 'top_rated',
-      title: 'Top Rated',
-      seeAll: '/movies?sort=year-desc',
-      items: getTopDeduped('movies', `year IS NOT NULL ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'action',
-      title: 'Action & Adventure',
-      seeAll: '/movies?genre=Action',
-      items: getTopDeduped('movies', `genre LIKE '%Action%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'superhero',
-      title: 'Superhero',
-      seeAll: '/movies?category=superhero',
-      items: getTopDeduped('movies', `(title LIKE '%Marvel%' OR title LIKE '%Spider%' OR title LIKE '%Batman%' OR title LIKE '%Superman%' OR title LIKE '%Avengers%' OR title LIKE '%Iron Man%' OR title LIKE '%Thor%' OR title LIKE '%Captain America%' OR title LIKE '%Black Panther%' OR title LIKE '%Doctor Strange%' OR title LIKE '%Guardians%' OR title LIKE '%X-Men%' OR title LIKE '%Deadpool%' OR title LIKE '%Wonder Woman%' OR title LIKE '%Aquaman%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'comedy',
-      title: 'Comedy',
-      seeAll: '/movies?genre=Comedy',
-      items: getTopDeduped('movies', `genre LIKE '%Comedy%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'horror',
-      title: 'Horror',
-      seeAll: '/movies?genre=Horror',
-      items: getTopDeduped('movies', `genre LIKE '%Horror%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'scifi',
-      title: 'Sci-Fi',
-      seeAll: '/movies?genre=Science+Fiction',
-      items: getTopDeduped('movies', `(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'drama',
-      title: 'Drama',
-      seeAll: '/movies?genre=Drama',
-      items: getTopDeduped('movies', `genre LIKE '%Drama%' AND genre NOT LIKE '%Horror%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'thriller',
-      title: 'Thriller & Mystery',
-      seeAll: '/movies?genre=Thriller',
-      items: getTopDeduped('movies', `(genre LIKE '%Thriller%' OR genre LIKE '%Mystery%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'romance',
-      title: 'Romance',
-      seeAll: '/movies?genre=Romance',
-      items: getTopDeduped('movies', `genre LIKE '%Romance%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'family',
-      title: 'Family & Animation',
-      seeAll: '/movies?genre=Family',
-      items: getTopDeduped('movies', `(genre LIKE '%Family%' OR genre LIKE '%Animation%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'fantasy',
-      title: 'Fantasy & Adventure',
-      seeAll: '/movies?genre=Fantasy',
-      items: getTopDeduped('movies', `(genre LIKE '%Fantasy%' OR genre LIKE '%Adventure%') AND genre NOT LIKE '%Horror%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'documentary',
-      title: 'Documentary',
-      seeAll: '/movies?genre=Documentary',
-      items: getTopDeduped('movies', `genre LIKE '%Documentary%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'international',
-      title: 'International',
-      seeAll: '/movies?genre=International',
-      items: getTopDeduped('movies', `poster_url IS NOT NULL AND year <= ${CURRENT_YEAR} AND year >= 2000 AND director IS NOT NULL`, 'RANDOM()', 48),
-    },
-    {
-      id: 'holiday',
-      title: 'Holiday & Christmas',
-      seeAll: '/movies?category=holiday',
-      items: getTopDeduped('movies', `(title LIKE '%Christmas%' OR title LIKE '%Holiday%' OR title LIKE '%Santa%' OR title LIKE '%Noel%' OR synopsis LIKE '%Christmas%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'war',
-      title: 'War & History',
-      seeAll: '/movies?genre=War',
-      items: getTopDeduped('movies', `(genre LIKE '%War%' OR genre LIKE '%History%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'classics',
-      title: 'Timeless Classics',
-      seeAll: '/movies?sort=year-asc',
-      items: getTopDeduped('movies', `year < 1990 AND year > 1920 AND poster_url IS NOT NULL`, 'RANDOM()', 48),
-    },
-    {
-      id: 'crime',
-      title: 'Crime',
-      seeAll: '/movies?genre=Crime',
-      items: getTopDeduped('movies', `genre LIKE '%Crime%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'music',
-      title: 'Music & Concert',
-      seeAll: '/movies?genre=Music',
-      items: getTopDeduped('movies', `genre LIKE '%Music%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'western',
-      title: 'Western',
-      seeAll: '/movies?genre=Western',
-      items: getTopDeduped('movies', `genre LIKE '%Western%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-  ];
-  return rows.filter(r => r.items.length > 0);
-}
-
-async function buildTvRows() {
-  const CURRENT_YEAR = new Date().getFullYear();
-  const NO_FUTURE = `AND year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`;
-  const relevanceMap = await getTraktRelevanceMap('tv');
-  const featuredItems = sortRowsByTraktRelevance(
-    getTopDeduped('tv_shows', `year <= ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'title ASC', 500),
-    relevanceMap
-  ).slice(0, 48);
-  const rows = [
-    {
-      id: 'featured',
-      title: 'Featured Series',
-      seeAll: '/tv-shows?sort=relevance',
-      items: featuredItems,
-    },
-    {
-      id: 'upcoming',
-      title: 'Coming Soon',
-      seeAll: '/tv-shows?sort=year-desc&upcoming=1',
-      items: getTopDeduped('tv_shows', `year > ${CURRENT_YEAR} AND poster_url IS NOT NULL`, 'year ASC, RANDOM()', 48),
-    },
-    {
-      id: 'trending',
-      title: 'Trending Now',
-      seeAll: '/tv-shows?sort=year-desc',
-      items: getTopDeduped('tv_shows', `year >= ${CURRENT_YEAR - 1} ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'top_rated',
-      title: 'Top Rated',
-      seeAll: '/tv-shows',
-      items: getTopDeduped('tv_shows', `year IS NOT NULL ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'drama',
-      title: 'Drama',
-      seeAll: '/tv-shows?genre=Drama',
-      items: getTopDeduped('tv_shows', `genre LIKE '%Drama%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'comedy',
-      title: 'Comedy & Sitcoms',
-      seeAll: '/tv-shows?genre=Comedy',
-      items: getTopDeduped('tv_shows', `genre LIKE '%Comedy%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'crime',
-      title: 'Crime & Mystery',
-      seeAll: '/tv-shows?genre=Crime',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Crime%' OR genre LIKE '%Mystery%' OR genre LIKE '%Thriller%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'scifi',
-      title: 'Sci-Fi & Fantasy',
-      seeAll: '/tv-shows?genre=Sci-Fi',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Sci-Fi%' OR genre LIKE '%Science Fiction%' OR genre LIKE '%Fantasy%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'superhero',
-      title: 'Superhero Shows',
-      seeAll: '/tv-shows?category=superhero',
-      items: getTopDeduped('tv_shows', `(title LIKE '%Marvel%' OR title LIKE '%Arrow%' OR title LIKE '%Flash%' OR title LIKE '%Supergirl%' OR title LIKE '%Daredevil%' OR title LIKE '%Loki%' OR title LIKE '%WandaVision%' OR title LIKE '%Hawkeye%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'anime',
-      title: 'Anime',
-      seeAll: '/tv-shows?genre=Anime',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Anime%' OR genre LIKE '%Animation%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'action',
-      title: 'Action & Adventure',
-      seeAll: '/tv-shows?genre=Action',
-      items: getTopDeduped('tv_shows', `genre LIKE '%Action%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'reality',
-      title: 'Reality & Competition',
-      seeAll: '/tv-shows?genre=Reality',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Reality%' OR genre LIKE '%Game Show%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'horror',
-      title: 'Horror & Supernatural',
-      seeAll: '/tv-shows?genre=Horror',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Horror%' OR genre LIKE '%Supernatural%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'documentary',
-      title: 'Documentary',
-      seeAll: '/tv-shows?genre=Documentary',
-      items: getTopDeduped('tv_shows', `genre LIKE '%Documentary%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'kids',
-      title: 'Kids & Family',
-      seeAll: '/tv-shows?genre=Kids',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Kids%' OR genre LIKE '%Family%' OR genre LIKE '%Children%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'binge',
-      title: 'Binge-Worthy (4+ Seasons)',
-      seeAll: '/tv-shows?min_seasons=4',
-      items: getTopDeduped('tv_shows', `seasons >= 4 ${NO_FUTURE}`, 'seasons DESC, RANDOM()', 48),
-    },
-    {
-      id: 'kdrama',
-      title: 'K-Drama & Asian',
-      seeAll: '/tv-shows?category=kdrama',
-      items: getTopDeduped('tv_shows', `(genre LIKE '%Korean%' OR synopsis LIKE '%Korea%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'classics',
-      title: 'Classic TV',
-      seeAll: '/tv-shows?sort=year-asc',
-      items: getTopDeduped('tv_shows', `year < 2000 AND year > 1950 AND poster_url IS NOT NULL`, 'RANDOM()', 48),
-    },
-    {
-      id: 'medical',
-      title: 'Medical Drama',
-      seeAll: '/tv-shows?category=medical',
-      items: getTopDeduped('tv_shows', `(title LIKE '%House%' OR title LIKE '%Grey%' OR title LIKE '%ER%' OR title LIKE '%Scrubs%' OR title LIKE '%Medical%' OR synopsis LIKE '%hospital%' OR synopsis LIKE '%doctor%') ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-    {
-      id: 'talk',
-      title: 'Talk & Late Night',
-      seeAll: '/tv-shows?genre=Talk',
-      items: getTopDeduped('tv_shows', `genre LIKE '%Talk%' ${NO_FUTURE}`, 'RANDOM()', 48),
-    },
-  ];
-  return rows.filter(r => r.items.length > 0);
-}
-
-function buildBookRows() {
-  const rows = [
-    {
-      id: 'fiction',
-      title: 'Popular Fiction',
-      seeAll: '/books?genre=Fiction',
-      items: getBooksDeduped("AND (genre LIKE '%Fiction%' OR genre = 'General Fiction')"),
-    },
-    {
-      id: 'scifi',
-      title: 'Science Fiction',
-      seeAll: '/books?genre=Science+Fiction',
-      items: getBooksDeduped("AND genre LIKE '%Science Fiction%'"),
-    },
-    {
-      id: 'fantasy',
-      title: 'Fantasy',
-      seeAll: '/books?genre=Fantasy',
-      items: getBooksDeduped("AND genre LIKE '%Fantasy%'"),
-    },
-    {
-      id: 'mystery',
-      title: 'Mystery & Thriller',
-      seeAll: '/books?genre=Mystery',
-      items: getBooksDeduped("AND (genre LIKE '%Mystery%' OR genre LIKE '%Thriller%' OR genre LIKE '%Crime%')"),
-    },
-    {
-      id: 'romance',
-      title: 'Romance',
-      seeAll: '/books?genre=Romance',
-      items: getBooksDeduped("AND genre LIKE '%Romance%'"),
-    },
-    {
-      id: 'biography',
-      title: 'Biography & Memoir',
-      seeAll: '/books?genre=Biography',
-      items: getBooksDeduped("AND (genre LIKE '%Biography%' OR genre LIKE '%Memoir%')"),
-    },
-    {
-      id: 'history',
-      title: 'History',
-      seeAll: '/books?genre=History',
-      items: getBooksDeduped("AND genre LIKE '%History%'"),
-    },
-    {
-      id: 'horror',
-      title: 'Horror',
-      seeAll: '/books?genre=Horror',
-      items: getBooksDeduped("AND genre LIKE '%Horror%'"),
-    },
-    {
-      id: 'selfhelp',
-      title: 'Self Help & Psychology',
-      seeAll: '/books?genre=Self+Help',
-      items: getBooksDeduped("AND (genre LIKE '%Self Help%' OR genre LIKE '%Psychology%' OR genre LIKE '%Philosophy%')"),
-    },
-    {
-      id: 'classics',
-      title: 'Classic Literature',
-      seeAll: '/books?genre=Classic',
-      items: getBooksDeduped("AND (genre LIKE '%Classic%' OR (year < 1960 AND year > 1800))"),
-    },
-    {
-      id: 'adventure',
-      title: 'Adventure',
-      seeAll: '/books?genre=Adventure',
-      items: getBooksDeduped("AND genre LIKE '%Adventure%'"),
-    },
-    {
-      id: 'truecrime',
-      title: 'True Crime',
-      seeAll: '/books?genre=True+Crime',
-      items: getBooksDeduped("AND genre LIKE '%True Crime%'"),
-    },
-  ];
-  return rows.filter(r => r.items.length > 0);
-}
 
 // ─── Popular titles cache (Trakt relevance) ───────────────────────────────────
 
@@ -1171,13 +691,15 @@ async function fetchPopularTitlesFromTrakt(mediaType) {
   if (!relevanceMap.size) return null;
 
   const table = type === 'tv' ? 'tv_shows' : 'movies';
-  const rows = db.prepare(`
-    SELECT *
-    FROM ${table}
-    WHERE source_key IS NOT NULL
-      AND poster_url IS NOT NULL
-      AND TRIM(poster_url) <> ''
-  `).all();
+  const keys = [...relevanceMap.keys()]
+    .filter((key) => /^tmdb:\d+$/.test(key))
+    .map((key) => `tmdb:${type === 'tv' ? 'tv' : 'movie'}:${key.slice(5)}`);
+  if (!keys.length) return null;
+  const { rows } = await neonDb.query(
+    `SELECT * FROM ${table}
+     WHERE source_key = ANY($1) AND poster_url IS NOT NULL AND TRIM(poster_url) <> ''`,
+    [keys]
+  );
 
   const titles = sortRowsByTraktRelevance(rows, relevanceMap)
     .slice(0, 80)
@@ -1339,98 +861,58 @@ async function getCuratedBookRowsNeon() {
 }
 
 router.get(['/movies/curated', '/movie-rows'], async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const rows = await getCuratedMovieRowsNeon();
-      return res.json({ rows });
-    } catch (err) {
-      console.warn('Neon movie curated error, falling back:', err.message);
-    }
-  }
   try {
-    const rows = await buildMovieRows();
-    res.json({ rows });
+    const rows = await getCuratedMovieRowsNeon();
+    return res.json({ rows });
   } catch (err) {
-    console.error('Movie curated error:', err);
+    console.error('Neon movie curated error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get(['/tv-shows/curated', '/tv-show-rows'], async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const rows = await getCuratedTvRowsNeon();
-      return res.json({ rows });
-    } catch (err) {
-      console.warn('Neon tv curated error, falling back:', err.message);
-    }
-  }
   try {
-    const rows = await buildTvRows();
-    res.json({ rows });
+    const rows = await getCuratedTvRowsNeon();
+    return res.json({ rows });
   } catch (err) {
-    console.error('TV curated error:', err);
+    console.error('Neon tv curated error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get(['/books/curated', '/book-rows'], async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const rows = await getCuratedBookRowsNeon();
-      return res.json({ rows });
-    } catch (err) {
-      console.warn('Neon book curated error, falling back:', err.message);
-    }
-  }
   try {
-    const rows = buildBookRows();
-    res.json({ rows });
+    const rows = await getCuratedBookRowsNeon();
+    return res.json({ rows });
   } catch (err) {
-    console.error('Books curated error:', err);
+    console.error('Neon book curated error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/movies/:id', async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const movieRes = await neonDb.query(
-        'SELECT * FROM movies WHERE id = $1 AND source_key IS NOT NULL',
-        [req.params.id]
-      );
-      if (movieRes.rows.length === 0) {
-        return res.status(404).json({ error: 'Not found' });
-      }
-
-      const movie = { ...movieRes.rows[0], id: Number(movieRes.rows[0].id) };
-      const statsRes = await ratingStats('movie_ratings', ['acting', 'writing', 'originality', 'pacing', 'cinematography'], 25, req.params.id);
-
-      const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
-      return res.json({
-        ...movie,
-        avg_rating: stats.avg_rating != null ? Number(stats.avg_rating) : null,
-        rating_count: Number(stats.rating_count || 0),
-      });
-    } catch (err) {
-      console.warn('Neon /movies/:id error, falling back to SQLite:', err.message);
+  try {
+    const movieRes = await neonDb.query(
+      'SELECT * FROM movies WHERE id = $1 AND source_key IS NOT NULL',
+      [req.params.id]
+    );
+    if (movieRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
     }
-  }
 
-  if (typeof db.syncImportedMovies === 'function') {
-    db.syncImportedMovies();
-  }
+    const movie = { ...movieRes.rows[0], id: Number(movieRes.rows[0].id) };
+    const statsRes = await ratingStats('movie_ratings', ['acting', 'writing', 'originality', 'pacing', 'cinematography'], 25, req.params.id);
 
-  const movie = db
-    .prepare('SELECT * FROM movies WHERE id = ? AND source_key IS NOT NULL')
-    .get(req.params.id);
-  if (!movie) return res.status(404).json({ error: 'Not found' });
-  const stats = db.prepare(
-    `SELECT ROUND(AVG(CAST(acting+writing+originality+pacing+cinematography AS REAL)/25*10), 1) AS avg_rating,
-            COUNT(*) AS rating_count
-     FROM movie_ratings WHERE media_id = ?`
-  ).get(req.params.id);
-  res.json({ ...movie, ...stats });
+    const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
+    return res.json({
+      ...movie,
+      avg_rating: stats.avg_rating != null ? Number(stats.avg_rating) : null,
+      rating_count: Number(stats.rating_count || 0),
+    });
+  } catch (err) {
+    console.error('Neon /movies/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- TV Shows ---
@@ -1440,227 +922,139 @@ router.get('/tv-shows', async (req, res) => {
   const pageSize = normalizePageSize(req.query.page_size, 48, 100);
   const offset   = (page - 1) * pageSize;
 
-  if (neonDb.isConfigured()) {
-    try {
-      const whereConditions = ['source_key IS NOT NULL'];
-      const queryParams = [];
-      let pIdx = 1;
+  try {
+    const whereConditions = ['source_key IS NOT NULL'];
+    const queryParams = [];
+    let pIdx = 1;
 
-      if (search && search.trim()) {
-        whereConditions.push(`(title ILIKE $${pIdx} OR creator ILIKE $${pIdx} OR overview ILIKE $${pIdx})`);
-        queryParams.push(`%${search.trim()}%`);
-        pIdx++;
-      }
-
-      if (genre && genre.trim()) {
-        whereConditions.push(`genre ILIKE $${pIdx}`);
-        queryParams.push(`%${genre.trim()}%`);
-        pIdx++;
-      }
-
-      if (req.query.year) {
-        whereConditions.push(`year = $${pIdx}`);
-        queryParams.push(Number(req.query.year));
-        pIdx++;
-      }
-
-      const isUpcoming = req.query.upcoming === '1' || req.query.upcoming === 'true';
-      if (!isUpcoming && sort === 'relevance') {
-        whereConditions.push(`(year IS NULL OR year <= ${new Date().getFullYear()})`);
-      }
-
-      if (req.query.kids_safe === '1' || req.query.kids_safe === 'true') {
-        whereConditions.push(`age_rating IN ('G', 'PG', 'TV-G', 'TV-Y', 'TV-Y7', 'TV-PG')`);
-      }
-
-      const whereClause = whereConditions.join(' AND ');
-
-      let orderBy = 'title ASC';
-      if (sort === 'year-desc') {
-        orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC';
-      } else if (sort === 'year-asc') {
-        orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC';
-      } else if (sort === 'title-desc') {
-        orderBy = 'title DESC';
-      } else if (sort === 'popularity' || sort === 'popularity-desc' || sort === 'relevance') {
-        orderBy = 'CASE WHEN popularity IS NULL THEN 1 ELSE 0 END, popularity DESC, title ASC';
-      } else if (sort === 'rating' || sort === 'rating-desc') {
-        orderBy = 'CASE WHEN vote_average IS NULL THEN 1 ELSE 0 END, vote_average DESC, popularity DESC';
-      }
-
-      const isUnfiltered = queryParams.length === 0;
-      let totalPromise;
-      if (isUnfiltered && cachedTvTotalCount != null && Date.now() - cachedTvTotalTime < 3600000) {
-        totalPromise = Promise.resolve({ rows: [{ total: cachedTvTotalCount }] });
-      } else {
-        totalPromise = neonDb.query(`SELECT COUNT(*) as total FROM tv_shows WHERE ${whereClause}`, queryParams)
-          .then((res) => {
-            if (isUnfiltered) {
-              cachedTvTotalCount = Number(res.rows[0]?.total || 0);
-              cachedTvTotalTime = Date.now();
-            }
-            return res;
-          });
-      }
-
-      const itemsQuery = `
-        SELECT *
-        FROM tv_shows
-        WHERE ${whereClause}
-        ORDER BY ${orderBy}
-        LIMIT $${pIdx} OFFSET $${pIdx + 1}
-      `;
-
-      const [countRes, itemsRes, genresRes] = await Promise.all([
-        totalPromise,
-        neonDb.query(itemsQuery, [...queryParams, pageSize, offset]),
-        neonDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
-      ]);
-
-      const total = Number(countRes.rows[0]?.total || 0);
-      const items = itemsRes.rows.map((row) => ({
-        ...row,
-        id: Number(row.id),
-      }));
-
-      const genres = genresRes.rows.map((r) => r.genre).filter(Boolean);
-
-      return res.json({
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.max(1, Math.ceil(total / pageSize)),
-        facets: { genres },
-      });
-    } catch (err) {
-      console.warn('Neon /tv-shows query error, falling back:', err.message);
+    if (search && search.trim()) {
+      whereConditions.push(`(title ILIKE $${pIdx} OR creator ILIKE $${pIdx} OR overview ILIKE $${pIdx})`);
+      queryParams.push(`%${search.trim()}%`);
+      pIdx++;
     }
-  }
 
-  if (typeof db.syncImportedTvShows === 'function') {
-    db.syncImportedTvShows();
-  }
+    if (genre && genre.trim()) {
+      whereConditions.push(`genre ILIKE $${pIdx}`);
+      queryParams.push(`%${genre.trim()}%`);
+      pIdx++;
+    }
 
-  const params   = [];
+    if (req.query.year) {
+      whereConditions.push(`year = $${pIdx}`);
+      queryParams.push(Number(req.query.year));
+      pIdx++;
+    }
 
-  let innerWhere = 'WHERE source_key IS NOT NULL';
-  if (search) { innerWhere += ' AND title LIKE ?'; params.push(`%${search}%`); }
-  if (genre)  { innerWhere += ' AND genre LIKE ?';  params.push(`%${genre}%`); }
-  if (sort === 'relevance' && !req.query.upcoming) {
-    innerWhere += ' AND (year IS NULL OR year <= ?)';
-    params.push(new Date().getFullYear());
-  }
+    const isUpcoming = req.query.upcoming === '1' || req.query.upcoming === 'true';
+    if (!isUpcoming && sort === 'relevance') {
+      whereConditions.push(`(year IS NULL OR year <= ${new Date().getFullYear()})`);
+    }
 
-  const orderBy = sort === 'year-desc' ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC'
-                : sort === 'year-asc'  ? 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC'
-                : sort === 'title-desc'? 'title DESC'
-                : 'title ASC';
+    if (req.query.kids_safe === '1' || req.query.kids_safe === 'true') {
+      whereConditions.push(`age_rating IN ('G', 'PG', 'TV-G', 'TV-Y', 'TV-Y7', 'TV-PG')`);
+    }
 
-  const dedupeBase = `
-    SELECT t.*
-    FROM tv_shows t
-    INNER JOIN (
-      SELECT
-        MIN(CASE WHEN source_key LIKE 'tmdb:%' THEN id END) AS tmdb_id,
-        MIN(id) AS any_id
+    const whereClause = whereConditions.join(' AND ');
+
+    let orderBy = 'title ASC';
+    if (sort === 'year-desc') {
+      orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC';
+    } else if (sort === 'year-asc') {
+      orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC';
+    } else if (sort === 'title-desc') {
+      orderBy = 'title DESC';
+    } else if (sort === 'popularity' || sort === 'popularity-desc' || sort === 'relevance') {
+      orderBy = 'CASE WHEN popularity IS NULL THEN 1 ELSE 0 END, popularity DESC, title ASC';
+    } else if (sort === 'rating' || sort === 'rating-desc') {
+      orderBy = 'CASE WHEN vote_average IS NULL THEN 1 ELSE 0 END, vote_average DESC, popularity DESC';
+    }
+
+    const isUnfiltered = queryParams.length === 0;
+    let totalPromise;
+    if (isUnfiltered && cachedTvTotalCount != null && Date.now() - cachedTvTotalTime < 3600000) {
+      totalPromise = Promise.resolve({ rows: [{ total: cachedTvTotalCount }] });
+    } else {
+      totalPromise = neonDb.query(`SELECT COUNT(*) as total FROM tv_shows WHERE ${whereClause}`, queryParams)
+        .then((res) => {
+          if (isUnfiltered) {
+            cachedTvTotalCount = Number(res.rows[0]?.total || 0);
+            cachedTvTotalTime = Date.now();
+          }
+          return res;
+        });
+    }
+
+    const itemsQuery = `
+      SELECT *
       FROM tv_shows
-      ${innerWhere}
-      GROUP BY LOWER(TRIM(title))
-    ) dedup ON t.id = COALESCE(dedup.tmdb_id, dedup.any_id)
-    ${innerWhere}
-  `;
+      WHERE ${whereClause}
+      ORDER BY ${orderBy}
+      LIMIT $${pIdx} OFFSET $${pIdx + 1}
+    `;
 
-  const countParams = [...params, ...params];
-  const total = db.prepare(`SELECT COUNT(*) as n FROM (${dedupeBase})`).get(...countParams)?.n || 0;
-  const items = sort === 'relevance'
-    ? sortRowsByTraktRelevance(
-        db.prepare(dedupeBase).all(...countParams),
-        await getTraktRelevanceMap('tv')
-      ).slice(offset, offset + pageSize)
-    : db.prepare(`${dedupeBase} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...countParams, pageSize, offset);
-  const genres = buildMediaGenreFacets(
-    db.prepare(`
-      SELECT DISTINCT genre
-      FROM tv_shows
-      WHERE source_key IS NOT NULL
-        AND genre IS NOT NULL
-        AND TRIM(genre) <> ''
-    `).all().map((row) => row.genre)
-  );
+    const [countRes, itemsRes, genresRes] = await Promise.all([
+      totalPromise,
+      neonDb.query(itemsQuery, [...queryParams, pageSize, offset]),
+      neonDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
+    ]);
 
-  res.json({
-    items,
-    total,
-    page,
-    pageSize,
-    totalPages: Math.ceil(total / pageSize),
-    facets: { genres },
-  });
+    const total = Number(countRes.rows[0]?.total || 0);
+    const items = itemsRes.rows.map((row) => ({
+      ...row,
+      id: Number(row.id),
+    }));
+
+    const genres = genresRes.rows.map((r) => r.genre).filter(Boolean);
+
+    return res.json({
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      facets: { genres },
+    });
+  } catch (err) {
+    console.error('Neon /tv-shows query error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/tv-shows/genres', async (_req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const result = await neonDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC');
-      if (result.rows.length > 0) {
-        return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
-      }
-    } catch (err) {
-      console.warn('Neon tv genres error:', err.message);
+  try {
+    const result = await neonDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC');
+    if (result.rows.length > 0) {
+      return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
     }
+  } catch (err) {
+    console.error('Neon tv genres error:', err.message);
+    res.status(500).json({ error: err.message });
   }
-  const genres = buildMediaGenreFacets(
-    db.prepare(`
-      SELECT DISTINCT genre
-      FROM tv_shows
-      WHERE source_key IS NOT NULL
-        AND genre IS NOT NULL
-        AND TRIM(genre) <> ''
-    `).all().map((row) => row.genre)
-  );
-  res.json({ genres });
 });
 
 router.get('/tv-shows/:id', async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const showRes = await neonDb.query(
-        'SELECT * FROM tv_shows WHERE id = $1 AND source_key IS NOT NULL',
-        [req.params.id]
-      );
-      if (showRes.rows.length === 0) {
-        return res.status(404).json({ error: 'Not found' });
-      }
-
-      const show = { ...showRes.rows[0], id: Number(showRes.rows[0].id) };
-      const statsRes = await ratingStats('tv_show_ratings', ['premise', 'originality', 'acting', 'cinematography', 'writing', 'pacing', 'resonance'], 38, req.params.id);
-
-      const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
-      return res.json({
-        ...show,
-        avg_rating: stats.avg_rating != null ? Number(stats.avg_rating) : null,
-        rating_count: Number(stats.rating_count || 0),
-      });
-    } catch (err) {
-      console.warn('Neon /tv-shows/:id error, falling back to SQLite:', err.message);
+  try {
+    const showRes = await neonDb.query(
+      'SELECT * FROM tv_shows WHERE id = $1 AND source_key IS NOT NULL',
+      [req.params.id]
+    );
+    if (showRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
     }
-  }
 
-  if (typeof db.syncImportedTvShows === 'function') {
-    db.syncImportedTvShows();
-  }
+    const show = { ...showRes.rows[0], id: Number(showRes.rows[0].id) };
+    const statsRes = await ratingStats('tv_show_ratings', ['premise', 'originality', 'acting', 'cinematography', 'writing', 'pacing', 'resonance'], 38, req.params.id);
 
-  const show = db
-    .prepare('SELECT * FROM tv_shows WHERE id = ? AND source_key IS NOT NULL')
-    .get(req.params.id);
-  if (!show) return res.status(404).json({ error: 'Not found' });
-  const stats = db.prepare(
-    `SELECT ROUND(AVG(CAST(premise+originality+acting+cinematography+writing+pacing+resonance AS REAL)/38*10), 1) AS avg_rating,
-            COUNT(*) AS rating_count
-     FROM tv_show_ratings WHERE media_id = ?`
-  ).get(req.params.id);
-  res.json({ ...show, ...stats });
+    const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
+    return res.json({
+      ...show,
+      avg_rating: stats.avg_rating != null ? Number(stats.avg_rating) : null,
+      rating_count: Number(stats.rating_count || 0),
+    });
+  } catch (err) {
+    console.error('Neon /tv-shows/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Books ---
@@ -1670,197 +1064,103 @@ router.get('/books', async (req, res) => {
   const pageSize = normalizePageSize(req.query.page_size, 24);
   const offset = (page - 1) * pageSize;
 
-  if (neonDb.isConfigured()) {
-    try {
-      const whereConditions = ['source_key IS NOT NULL'];
-      const queryParams = [];
-      let pIdx = 1;
+  try {
+    const whereConditions = ['source_key IS NOT NULL'];
+    const queryParams = [];
+    let pIdx = 1;
 
-      if (search && search.trim()) {
-        whereConditions.push(`(title ILIKE $${pIdx} OR author ILIKE $${pIdx})`);
-        queryParams.push(`%${search.trim()}%`);
-        pIdx++;
-      }
-
-      if (genre && genre.trim()) {
-        whereConditions.push(`genre ILIKE $${pIdx}`);
-        queryParams.push(`%${genre.trim()}%`);
-        pIdx++;
-      }
-
-      if (minYear) {
-        whereConditions.push(`(year IS NULL OR year >= $${pIdx})`);
-        queryParams.push(Number(minYear));
-        pIdx++;
-      }
-
-      const whereClause = whereConditions.join(' AND ');
-
-      let orderBy = 'title ASC';
-      if (sort === 'year-desc') {
-        orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC';
-      } else if (sort === 'year-asc') {
-        orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC';
-      }
-
-      const [countRes, itemsRes, facetsRes, genresRes] = await Promise.all([
-        neonDb.query(`SELECT COUNT(*) as total FROM books WHERE ${whereClause}`, queryParams),
-        neonDb.query(`SELECT * FROM books WHERE ${whereClause} ORDER BY ${orderBy} LIMIT $${pIdx} OFFSET $${pIdx + 1}`, [...queryParams, pageSize, offset]),
-        neonDb.query('SELECT MIN(year) AS min_year, MAX(year) AS max_year FROM books WHERE year IS NOT NULL').catch(() => ({ rows: [{}] })),
-        neonDb.query('SELECT genre FROM book_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
-      ]);
-
-      const total = Number(countRes.rows[0]?.total || 0);
-      const items = itemsRes.rows.map((row) => ({ ...row, id: Number(row.id) }));
-      const facets = facetsRes.rows[0] || {};
-      const genres = genresRes.rows.map((r) => r.genre).filter(Boolean);
-
-      return res.json({
-        items,
-        total,
-        page,
-        pageSize,
-        totalPages: Math.max(1, Math.ceil(total / pageSize)),
-        facets: {
-          genres,
-          minYear: facets.min_year ?? null,
-          maxYear: facets.max_year ?? null,
-        },
-      });
-    } catch (err) {
-      console.warn('Neon /books query error, falling back:', err.message);
+    if (search && search.trim()) {
+      whereConditions.push(`(title ILIKE $${pIdx} OR author ILIKE $${pIdx})`);
+      queryParams.push(`%${search.trim()}%`);
+      pIdx++;
     }
-  }
 
-  if (typeof db.syncImportedBooks === 'function') {
-    db.syncImportedBooks();
-  }
+    if (genre && genre.trim()) {
+      whereConditions.push(`genre ILIKE $${pIdx}`);
+      queryParams.push(`%${genre.trim()}%`);
+      pIdx++;
+    }
 
-  let whereClause = 'WHERE source_key IS NOT NULL';
-  const params = [];
-  if (search) {
-    whereClause += ' AND (title LIKE ? OR author LIKE ?)';
-    params.push(`%${search}%`, `%${search}%`);
-  }
-  if (minYear) {
-    whereClause += ' AND (year IS NULL OR year >= ?)';
-    params.push(Number(minYear));
-  }
+    if (minYear) {
+      whereConditions.push(`(year IS NULL OR year >= $${pIdx})`);
+      queryParams.push(Number(minYear));
+      pIdx++;
+    }
 
-  const itemsQuery = `SELECT * FROM books ${whereClause}`;
-  const facetsQuery = `
-    SELECT
-      MIN(year) AS min_year,
-      MAX(year) AS max_year
-    FROM books
-    WHERE year IS NOT NULL
-  `;
-  const genresQuery = `
-    SELECT DISTINCT genre
-    FROM books
-    WHERE genre IS NOT NULL AND TRIM(genre) <> ''
-    ORDER BY genre ASC
-  `;
+    const whereClause = whereConditions.join(' AND ');
 
-  const allItems = db.prepare(itemsQuery).all(...params);
-  const filteredItems = genre
-    ? allItems.filter((book) => matchesBookGenreFacet(book.genre, genre))
-    : allItems;
-  const sortedItems = filteredItems.sort((left, right) => {
+    let orderBy = 'title ASC';
     if (sort === 'year-desc') {
-      if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
-      if (left.year == null) return 1;
-      if (right.year == null) return -1;
-      return right.year - left.year || left.title.localeCompare(right.title);
+      orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year DESC, title ASC';
+    } else if (sort === 'year-asc') {
+      orderBy = 'CASE WHEN year IS NULL THEN 1 ELSE 0 END, year ASC, title ASC';
     }
 
-    if (sort === 'year-asc') {
-      if (left.year == null && right.year == null) return left.title.localeCompare(right.title);
-      if (left.year == null) return 1;
-      if (right.year == null) return -1;
-      return left.year - right.year || left.title.localeCompare(right.title);
-    }
+    const [countRes, itemsRes, facetsRes, genresRes] = await Promise.all([
+      neonDb.query(`SELECT COUNT(*) as total FROM books WHERE ${whereClause}`, queryParams),
+      neonDb.query(`SELECT * FROM books WHERE ${whereClause} ORDER BY ${orderBy} LIMIT $${pIdx} OFFSET $${pIdx + 1}`, [...queryParams, pageSize, offset]),
+      neonDb.query('SELECT MIN(year) AS min_year, MAX(year) AS max_year FROM books WHERE year IS NOT NULL').catch(() => ({ rows: [{}] })),
+      neonDb.query('SELECT genre FROM book_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
+    ]);
 
-    return left.title.localeCompare(right.title);
-  });
-  const total = sortedItems.length;
-  const items = sortedItems.slice(offset, offset + pageSize);
-  const facets = db.prepare(facetsQuery).get();
-  const genres = buildBookGenreFacets(db.prepare(genresQuery).all().map((row) => row.genre));
+    const total = Number(countRes.rows[0]?.total || 0);
+    const items = itemsRes.rows.map((row) => ({ ...row, id: Number(row.id) }));
+    const facets = facetsRes.rows[0] || {};
+    const genres = genresRes.rows.map((r) => r.genre).filter(Boolean);
 
-  res.json({
-    items,
-    total,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    facets: {
-      genres,
-      minYear: facets?.min_year ?? null,
-      maxYear: facets?.max_year ?? null,
-    },
-  });
+    return res.json({
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      facets: {
+        genres,
+        minYear: facets.min_year ?? null,
+        maxYear: facets.max_year ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('Neon /books query error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/books/genres', async (_req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const result = await neonDb.query('SELECT genre FROM book_genres ORDER BY genre ASC');
-      if (result.rows.length > 0) {
-        return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
-      }
-    } catch (err) {
-      console.warn('Neon book genres error:', err.message);
+  try {
+    const result = await neonDb.query('SELECT genre FROM book_genres ORDER BY genre ASC');
+    if (result.rows.length > 0) {
+      return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
     }
+  } catch (err) {
+    console.error('Neon book genres error:', err.message);
+    res.status(500).json({ error: err.message });
   }
-  const genresQuery = `
-    SELECT DISTINCT genre FROM books
-    WHERE genre IS NOT NULL AND TRIM(genre) <> ''
-    ORDER BY genre ASC
-  `;
-  const genres = buildBookGenreFacets(db.prepare(genresQuery).all().map((row) => row.genre));
-  res.json({ genres });
 });
 
 router.get('/books/:id', async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const bookRes = await neonDb.query(
-        'SELECT * FROM books WHERE id = $1 AND source_key IS NOT NULL',
-        [req.params.id]
-      );
-      if (bookRes.rows.length === 0) {
-        return res.status(404).json({ error: 'Not found' });
-      }
-
-      const book = { ...bookRes.rows[0], id: Number(bookRes.rows[0].id) };
-      const statsRes = await ratingStats('book_ratings', ['prose', 'plot', 'characters', 'originality', 'pacing', 'resonance'], 32, req.params.id);
-
-      const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
-      return res.json({
-        ...book,
-        avg_rating: stats.avg_rating != null ? Number(stats.avg_rating) : null,
-        rating_count: Number(stats.rating_count || 0),
-      });
-    } catch (err) {
-      console.warn('Neon /books/:id error, falling back to SQLite:', err.message);
+  try {
+    const bookRes = await neonDb.query(
+      'SELECT * FROM books WHERE id = $1 AND source_key IS NOT NULL',
+      [req.params.id]
+    );
+    if (bookRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
     }
-  }
 
-  if (typeof db.syncImportedBooks === 'function') {
-    db.syncImportedBooks();
-  }
+    const book = { ...bookRes.rows[0], id: Number(bookRes.rows[0].id) };
+    const statsRes = await ratingStats('book_ratings', ['prose', 'plot', 'characters', 'originality', 'pacing', 'resonance'], 32, req.params.id);
 
-  const book = db
-    .prepare('SELECT * FROM books WHERE id = ? AND source_key IS NOT NULL')
-    .get(req.params.id);
-  if (!book) return res.status(404).json({ error: 'Not found' });
-  const stats = db.prepare(
-    `SELECT ROUND(AVG(CAST(prose+plot+characters+originality+pacing+resonance AS REAL)/32*10), 1) AS avg_rating,
-            COUNT(*) AS rating_count
-     FROM book_ratings WHERE media_id = ?`
-  ).get(req.params.id);
-  res.json({ ...book, ...stats });
+    const stats = statsRes.rows[0] || { avg_rating: null, rating_count: 0 };
+    return res.json({
+      ...book,
+      avg_rating: stats.avg_rating != null ? Number(stats.avg_rating) : null,
+      rating_count: Number(stats.rating_count || 0),
+    });
+  } catch (err) {
+    console.error('Neon /books/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── TMDB ID lookup for embed player ─────────────────────────────────────────
@@ -2028,114 +1328,6 @@ router.get('/tmdb-season', async (req, res) => {
     };
     tmdbSeasonCache.set(cacheKey, { data: result, ts: Date.now() });
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── Episode progress tracking ────────────────────────────────────────────────
-// Mark episode as watched
-router.post('/episode-progress', requireAuth, async (req, res) => {
-  const { media_id, season, episode } = req.body;
-  if (!media_id || !season || !episode) {
-    return res.status(400).json({ error: 'media_id, season, episode required' });
-  }
-
-  if (neonDb.isConfigured()) {
-    try {
-      await neonDb.query(`
-        DELETE FROM episode_progress
-        WHERE user_id = $1 AND media_id = $2 AND season = $3 AND episode = $4
-      `, [req.user.id, Number(media_id), Number(season), Number(episode)]);
-      await neonDb.query(`
-        INSERT INTO episode_progress (user_id, media_id, season, episode, watched_at)
-        VALUES ($1, $2, $3, $4, NOW())
-      `, [req.user.id, Number(media_id), Number(season), Number(episode)]);
-      return res.json({ success: true });
-    } catch (err) {
-      console.warn('Neon episode-progress error, trying fallback:', err.message);
-    }
-  }
-
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS episode_progress (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        media_id INTEGER NOT NULL,
-        season INTEGER NOT NULL,
-        episode INTEGER NOT NULL,
-        watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, media_id, season, episode)
-      )
-    `);
-    db.prepare(`
-      INSERT OR REPLACE INTO episode_progress (user_id, media_id, season, episode, watched_at)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(req.user.id, Number(media_id), Number(season), Number(episode));
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get all watched episodes for a show
-router.get('/episode-progress/:mediaId', requireAuth, async (req, res) => {
-  if (neonDb.isConfigured()) {
-    try {
-      const rows = await neonDb.query(`
-        SELECT season, episode, watched_at FROM episode_progress
-        WHERE user_id = $1 AND media_id = $2
-        ORDER BY watched_at DESC
-      `, [req.user.id, Number(req.params.mediaId)]);
-      return res.json(rows.rows);
-    } catch (err) {
-      console.warn('Neon get episode-progress error, trying fallback:', err.message);
-    }
-  }
-
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS episode_progress (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        media_id INTEGER NOT NULL,
-        season INTEGER NOT NULL,
-        episode INTEGER NOT NULL,
-        watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, media_id, season, episode)
-      )
-    `);
-    const rows = db.prepare(`
-      SELECT season, episode, watched_at FROM episode_progress
-      WHERE user_id = ? AND media_id = ?
-      ORDER BY watched_at DESC
-    `).all(req.user.id, Number(req.params.mediaId));
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Unmark episode as watched
-router.delete('/episode-progress', requireAuth, async (req, res) => {
-  const { media_id, season, episode } = req.body;
-  if (neonDb.isConfigured()) {
-    try {
-      await neonDb.query(`
-        DELETE FROM episode_progress WHERE user_id = $1 AND media_id = $2 AND season = $3 AND episode = $4
-      `, [req.user.id, Number(media_id), Number(season), Number(episode)]);
-      return res.json({ success: true });
-    } catch (err) {
-      console.warn('Neon delete episode-progress error, trying fallback:', err.message);
-    }
-  }
-
-  try {
-    db.prepare(`
-      DELETE FROM episode_progress WHERE user_id = ? AND media_id = ? AND season = ? AND episode = ?
-    `).run(req.user.id, Number(media_id), Number(season), Number(episode));
-    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

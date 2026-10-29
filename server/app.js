@@ -86,13 +86,11 @@ app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 60_000, max: 200, message: 'Too many requests — slow down.' }));
 
 const neonDb = require('./neonDb');
-const neonAuth = require('./neonAuth');
 const neonFunctions = require('./neonFunctions');
 
 
 app.get('/api/health', async (_req, res) => {
   const neonPg = await neonDb.healthCheck().catch((err) => ({ ok: false, error: err.message }));
-  const neonAt = await neonAuth.healthCheck().catch((err) => ({ ok: false, error: err.message }));
   const neonFn = await neonFunctions.healthCheck().catch((err) => ({ ok: false, error: err.message }));
 
   res.json({
@@ -101,7 +99,6 @@ app.get('/api/health', async (_req, res) => {
     neon: {
       branch: process.env.NEON_BRANCH || 'production',
       postgres: { ok: neonPg.ok, configured: neonPg.configured },
-      auth: { ok: neonAt.ok, configured: neonAt.configured },
       functions: { ok: neonFn.ok, configured: neonFn.configured },
     },
   });
@@ -109,14 +106,12 @@ app.get('/api/health', async (_req, res) => {
 
 // Comprehensive Neon diagnostics endpoint
 app.get('/api/neon/health', async (_req, res) => {
-  const [postgres, auth, functions] = await Promise.all([
+  const [postgres, functions] = await Promise.all([
     neonDb.healthCheck(),
-    neonAuth.healthCheck(),
     neonFunctions.healthCheck(),
   ]);
 
   const allHealthy = (!postgres.configured || postgres.ok) &&
-                     (!auth.configured || auth.ok) &&
                      (!functions.configured || functions.ok);
 
   res.status(allHealthy ? 200 : 503).json({
@@ -124,7 +119,6 @@ app.get('/api/neon/health', async (_req, res) => {
     branch: process.env.NEON_BRANCH || 'production',
     services: {
       postgres,
-      auth,
       functions,
     },
   });
@@ -154,15 +148,7 @@ app.get('/api/neon/postgres/test', async (_req, res) => {
 });
 
 
-// Auth endpoints get a strict limit: 10 attempts / 15 min per IP
-const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 10, message: 'Too many login attempts — try again later.' });
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/signup', authLimiter);
-
 app.use('/api/neon-data', require('./routes/neonData'));
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/lists', require('./routes/lists'));
-app.use('/api/media', (req,res,next) => process.env.REACT_APP_AUTH_PROVIDER !== 'neon' && req.path.startsWith('/episode-progress') ? require('./middleware/auth').requireAuth(req,res,() => require('./routes/supabaseUserData').episodes(req,res,next)) : next());
 app.use('/api/media', require('./routes/media'));
 app.use('/api/watchlist', require('./routes/watchlist'));
 app.use('/api/ratings', require('./routes/ratings'));
