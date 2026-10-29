@@ -24,7 +24,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 ## Features
 
 - [ ] **"Forgot PIN?"** on the lock screen: confirm the account password, then clear or reset the PIN (`ProfileSecurityDialog.js`; `set_profile_lock` already supports removing it).
-- [ ] **Ticket book on the TVs.** `/wrapped?view=book` is web only; the TV apps already have Wrapped tickets to build on.
 - [ ] **Watch party / shared queue.** `profile_shares` already sends titles between profiles in an account; a "watch together" link that syncs play/pause through Supabase Realtime would build on it.
 - [ ] **Smarter "Because you watched".** Mix in the existing `collaborative_*_candidates` RPCs ("people who liked X also liked") alongside TMDB recommendations in `src/utils/personalization.js`.
 - [ ] **Per-profile time limits for kids profiles** (daily minutes, bedtime), enforced where playback positions are already saved.
