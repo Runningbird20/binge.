@@ -30,7 +30,7 @@ The repo also owns the pipeline that populates the catalog tables (movies/tv_sho
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `neon/` — catalog SQL, plus `neon/functions/` for `neon.ts`.
-- `tv-apple/`, `tv-android/` — the TV apps; `e2e/` — Playwright; `docs/` — longer write-ups; `backups/`, `data/` — catalog exports and scraper output.
+- `tv-apple/`, `tv-android/` — the TV apps; `e2e/` — Playwright; `docs/` — longer write-ups; `backups/`, `data/` — local-only (gitignored): catalog exports and scraper output/checkpoints.
 
 ## Architecture
 
