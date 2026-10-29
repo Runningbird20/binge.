@@ -95,7 +95,6 @@
   background: #0b0d12;
 }
 .st-hero--empty { margin-bottom: 1.5rem; border-radius: 0; }
-.st-hero--loading { border-radius: 0; }
 /* Books / Manga: the spotlight runs full-bleed under the nav like Movies
    and Series, with the Books | Manga tabs floating over its top edge. */
 .st-reading-tabs { position: relative; z-index: 3; width: fit-content; margin-bottom: -3.6rem; }
@@ -270,12 +269,6 @@
 
 .st-row-cell { flex: 0 0 var(--st-card-w); scroll-snap-align: start; min-width: 0; }
 
-.st-card-skeleton {
-  flex: 0 0 var(--st-card-w);
-  aspect-ratio: 2 / 3;
-  border-radius: 8px;
-}
-
 /* Arrows: always rendered, visible whenever there's more to scroll in that
    direction, full-height click targets like Netflix — usable with a plain
    mouse, no hover discovery or horizontal scroll wheel needed. */
@@ -421,9 +414,7 @@
 }
 
 /* Wide (16:9) cards — continue watching, sports */
-.st-row--wide .st-row-cell,
-.st-row--wide .st-card-skeleton { flex-basis: var(--st-wide-w); }
-.st-row--wide .st-card-skeleton { aspect-ratio: 16 / 9; }
+.st-row--wide .st-row-cell { flex-basis: var(--st-wide-w); }
 
 @media (max-width: 768px) {
   .st-hero { min-height: 62vh; margin-top: -1rem; }
@@ -809,48 +800,10 @@
 }
 
 /* Native <select> (keyboard + screen-reader friendly) styled to match. */
-.st-select {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 40px;
-  padding: 0 2.2rem 0 0.85rem;
-  border-radius: 8px;
-  border: 1px solid var(--exp-border-strong);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--exp-text);
-  max-width: 100%;
-}
-.st-select:focus-within { box-shadow: var(--st-focus); }
-.st-select-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--exp-text-faint);
-}
-.st-select select {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  min-width: 0;
-  max-width: 60vw;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  outline: none;
-}
-.st-select select option { background: #151a24; color: #fff; }
-.st-select-caret { position: absolute; right: 0.75rem; pointer-events: none; color: var(--exp-text-dim); }
 
 .st-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 @media (max-width: 768px) {
-  .st-sp-controls .st-select { width: 100%; }
-  .st-sp-controls .st-select select { flex: 1; max-width: none; }
   .st-sp-frame { border-radius: 0; margin: 0 calc(-1 * var(--st-gutter)); width: calc(100% + 2 * var(--st-gutter)); }
 }
 
@@ -939,7 +892,6 @@
 .st-pb-hint { margin: 0.6rem 0 0; font-size: 0.74rem; color: var(--exp-text-faint); line-height: 1.4; }
 .st-pb-broken { margin-top: 0.6rem; width: 100%; }
 .st-pb-done { grid-column: 1 / -1; justify-self: end; min-height: 38px; }
-
 
 /* Mobile: the panel sits inline in the controls area. */
 .mp-controls .st-pb-panel {
@@ -1202,7 +1154,6 @@
 .td-episode:hover { background: rgba(255, 255, 255, 0.05); }
 .td-episode:focus-visible { outline: none; box-shadow: var(--st-focus); }
 .td-episode:disabled { cursor: default; opacity: 0.6; }
-.td-episode--skeleton { height: 112px; margin-bottom: 0.5rem; border-radius: 8px; }
 .td-episode-num { font-size: 1.5rem; font-weight: 600; color: var(--exp-text-dim); text-align: center; }
 .td-episode-still {
   position: relative;
@@ -1278,7 +1229,6 @@
 }
 .td-more-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
 .td-more-card:focus-visible { outline: none; box-shadow: var(--st-focus); }
-.td-more-card--skeleton { aspect-ratio: 4 / 5; }
 .td-more-art { position: relative; aspect-ratio: 16 / 9; background: #10131a; overflow: hidden; }
 .td-more-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .td-more-body { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.8rem 0.9rem 1rem; }
@@ -1779,8 +1729,7 @@
 ═══════════════════════════════════════════════════════════════ */
 
 /* One button language everywhere (old pages still use .btn-*). */
-.btn-primary.btn-primary,
-.btn-secondary.btn-secondary {
+.btn-primary.btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1797,8 +1746,6 @@
 .btn-primary.btn-primary { background: #fff; color: #0b0d12; border: 1px solid #fff; }
 .btn-primary.btn-primary:hover { background: rgba(255, 255, 255, 0.85); }
 .btn-primary.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn-secondary.btn-secondary { background: rgba(255, 255, 255, 0.08); color: #fff; border: 1px solid var(--exp-border-strong); }
-.btn-secondary.btn-secondary:hover { background: rgba(255, 255, 255, 0.14); }
 .btn-block.btn-block { width: 100%; }
 
 /* Landing */
@@ -2265,14 +2212,6 @@
 .br-state--card h2 { margin: 0.25rem 0 0; font-size: 1.5rem; white-space: normal; }
 .br-state--card p { margin: 0; max-width: 34rem; color: var(--exp-text-dim); line-height: 1.55; }
 .br-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; margin-top: 0.75rem; }
-.br-spinner {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.15);
-  border-top-color: #fff;
-  animation: st-spin 0.9s linear infinite;
-}
 .br-note {
   padding: 0.45rem 1rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
   font-size: 0.78rem;
@@ -2496,7 +2435,6 @@
 
 /* ── Watch history ───────────────────────────────────────────── */
 .hist-message { margin: 0 0 1rem; padding: 0.6rem 0.9rem; border-radius: 8px; background: rgba(255, 255, 255, 0.06); color: var(--exp-text); font-size: 0.9rem; }
-.hist-skeleton { height: 320px; border-radius: 12px; }
 .hist-day { margin-bottom: 1.75rem; }
 .hist-day-title { margin: 0 0 0.6rem; font-size: 1rem; font-weight: 700; color: var(--exp-text-dim); white-space: normal; }
 .hist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
@@ -2682,7 +2620,6 @@
 }
 .td-recap-note { margin: 0.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.72); }
 .td-recap-card h3 { margin: 0.3rem 0 1rem; font-size: 1.7rem; font-weight: 900; font-style: italic; }
-.td-recap-skeleton { height: 220px; border-radius: 10px; }
 .td-recap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; }
 .td-recap-list li { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 0.9rem; align-items: start; }
 .td-recap-list li:not(:has(img)) { grid-template-columns: minmax(0, 1fr); }
@@ -2975,38 +2912,14 @@ button.bottom-nav-item { font: inherit; cursor: pointer; }
 .st-fr-name span { font-size: 0.72rem; color: rgba(255, 255, 255, 0.5); text-transform: capitalize; }
 .st-fr-points { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
 .st-fr-points .proj { font-weight: 600; font-size: 0.75rem; color: rgba(255, 255, 255, 0.45); }
-.st-fr-rest { margin-top: 0.5rem; }
-.st-fr-rest summary, .st-fr-private summary { cursor: pointer; font-size: 0.8rem; font-weight: 700; color: rgba(255, 255, 255, 0.7); padding: 0.35rem 0; }
-.st-fr-skel { height: 120px; border-radius: 8px; margin-top: 0.6rem; }
-.st-fr-form { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; }
 .st-fr-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: rgba(255, 255, 255, 0.7); margin-top: 0.4rem; }
 .st-fr-field input, .st-fr-field select {
   min-height: 38px; padding: 0 0.65rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14);
   background: #0d1017; color: #fff; font: inherit; font-size: 0.85rem;
 }
 .st-fr-field input:focus-visible, .st-fr-field select:focus-visible { outline: none; box-shadow: var(--st-focus); }
-.st-fr-private p { margin: 0.2rem 0 0.4rem; font-size: 0.75rem; line-height: 1.45; color: rgba(255, 255, 255, 0.55); }
-.st-fr-private code { font-size: 0.72rem; color: #fff; }
-.st-fr-error { margin: 0; font-size: 0.78rem; color: #ff8a80; }
-.st-fr-login { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; }
-.st-fr-login p { flex: 1 1 100%; }
-.st-fr-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.st-fr-remove { margin-left: auto; }
 
 /* ── Skeletons that match the real layout ─────────────────────── */
-.st-skel { display: flex; flex-direction: column; }
-.st-skel-art { aspect-ratio: 2 / 3; border-radius: 8px; }
-.st-skel-line { height: 0.8rem; width: 72%; margin-top: 0.55rem; border-radius: 4px; }
-.st-row--wide .st-skel { flex-basis: var(--st-wide-w); }
-.st-row--wide .st-skel-art { aspect-ratio: 16 / 9; }
-.st-row--ranked .st-skel-art { width: var(--st-card-w); margin-left: auto; }
-.st-row--ranked .st-skel-line { display: none; }
-.st-route-skel-hero { margin: -1.75rem calc(-1 * var(--st-gutter)) 2rem; height: clamp(420px, min(46vw, 82vh), 780px); border-radius: 0; }
-.st-route-skel-row { margin-bottom: 2rem; }
-.st-route-skel-title { height: 1.3rem; width: 220px; border-radius: 6px; margin-bottom: 0.9rem; }
-.st-route-skel-cards { display: flex; gap: 0.6rem; overflow: hidden; }
-.st-route-skel-cards .st-skel { flex: 0 0 var(--st-card-w); }
-@media (max-width: 768px) { .st-route-skel-hero { height: 62vh; margin-top: -1rem; } }
 .st-row-problem {
   display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border-radius: 10px;
   border: 1px dashed rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.65); font-size: 0.9rem;
@@ -3227,7 +3140,6 @@ kbd {
 .st-cw-cell .st-card-imdb { display: none; }
 
 /* ── Episode heatmap ──────────────────────────────────────────── */
-.hm-skeleton { height: 220px; border-radius: 12px; }
 .hm-source { display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.18); }
 .hm-source button { min-height: 34px; padding: 0 0.8rem; border: 0; background: transparent; color: rgba(255, 255, 255, 0.7); font: inherit; font-weight: 700; font-size: 0.82rem; cursor: pointer; }
 .hm-source button.active { background: #fff; color: #0b0d12; }
@@ -3285,7 +3197,6 @@ kbd {
 
 /* ── Release calendar ─────────────────────────────────────────── */
 .cal-page { max-width: 960px; }
-.cal-skeleton { height: 320px; border-radius: 14px; }
 .cal-day { margin-bottom: 1.6rem; }
 .cal-day-title { margin: 0 0 0.6rem; font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.6); }
 .cal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -3440,21 +3351,14 @@ kbd {
 .st-coldstart-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 /* Admin: streaming server status */
-.adm-servers { margin-top: 1.5rem; }
-.adm-servers-sub { margin: 0.2rem 0 0.8rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.6); }
-.adm-servers-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
-.adm-servers-list li { display: grid; grid-template-columns: 12px 140px 70px minmax(0, 1fr); align-items: center; gap: 0.6rem; font-size: 0.9rem; }
-.adm-server-name { font-weight: 700; }
 .adm-server-state { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
 .adm-server-state--up { color: var(--st-match); }
 .adm-server-state--slow { color: var(--st-soon); }
 .adm-server-state--down { color: #ff7b72; }
 .adm-server-state--unknown { color: rgba(255, 255, 255, 0.5); }
-.adm-server-meta { color: rgba(255, 255, 255, 0.6); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .admin-status-dot.red { background: #ff5f56; }
 .admin-status-dot.yellow { background: #f5c451; }
 .admin-status-dot.gray { background: rgba(255, 255, 255, 0.3); }
-@media (max-width: 600px) { .adm-servers-list li { grid-template-columns: 12px minmax(0, 1fr) auto; } .adm-server-meta { grid-column: 2 / -1; } }
 
 /* ═══════════════════════════════════════════════════════════════
    ACCESSIBILITY BASELINE
@@ -3528,7 +3432,6 @@ kbd {
 .adm-panel { margin-bottom: 1.5rem; padding: 1.25rem 1.4rem; border-radius: 16px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); }
 .adm-panel h3 { margin: 0; font-size: 1.15rem; }
 .adm-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.adm-skeleton { height: 240px; border-radius: 14px; }
 .adm-empty { color: rgba(255, 255, 255, 0.65); }
 .adm-note { font-size: 0.88rem; color: #cfe3ff; }
 /* Overview numbers as a scannable table, not big-number tiles. */
@@ -3669,8 +3572,7 @@ kbd {
 .st-game-art-icon .st-cat-icon { margin: 0; color: rgba(255, 255, 255, 0.85); }
 
 /* Inline icons in metadata sit on the text, not above it. */
-.mob-card-badge svg, .mob-card-avg-score svg, .mob-detail-community svg, .profile-hover-user-sub svg,
-.hp-meta svg { vertical-align: -0.1em; }
+.mob-card-badge svg, .mob-card-avg-score svg, .mob-detail-community svg, .profile-hover-user-sub svg { vertical-align: -0.1em; }
 .mr-see-all-arrow { vertical-align: -0.15em; }
 
 /* Error page: long headings wrap on phones. */
@@ -3963,7 +3865,6 @@ kbd {
 }
 
 /* Shared pill styling for playback and profile actions. */
-.st-btn.st-btn--pill,
 .st-btn.td-resume-control {
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.55);
@@ -3972,7 +3873,6 @@ kbd {
   font-size: 0.95rem;
   font-weight: 700;
 }
-.st-btn.st-btn--pill:hover,
 .st-btn.td-resume-control:hover {
   border-color: #fff;
   background: rgba(255, 255, 255, 0.12);
@@ -4003,7 +3903,6 @@ kbd {
 @media (hover: hover) { .fb-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); background: #191e29; } }
 .fb-card:focus-visible { outline: none; box-shadow: var(--st-focus); }
 .fb-card.open { border-color: var(--st-soon); box-shadow: inset 0 0 0 1px var(--st-soon); }
-.fb-card--skel { cursor: default; }
 .fb-card--problem { cursor: default; }
 .fb-card-top { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
 .fb-card-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
@@ -4323,7 +4222,6 @@ input:is([type="search"], .catalog-search-input, .st-search-input, .global-searc
   letter-spacing: -0.01em;
   line-height: 1.12;
   max-width: 100%;
-  white-space: normal; /* App.css sets h1 { white-space: nowrap } globally */
   text-wrap: balance;
 }
 .profile-lock-boxes {
