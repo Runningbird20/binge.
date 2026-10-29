@@ -13,6 +13,7 @@ import useDeviceType from '../hooks/useDeviceType';
 import { getSettings } from '../utils/profileSettings';
 import { isTvMode } from '../utils/tvMode';
 import { readPlayback } from '../utils/playbackMessages';
+import { preloadIsPlaying } from '../utils/preloadNext';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
@@ -80,11 +81,12 @@ const PROVIDERS = [
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidy.st');
       url.searchParams.set('color', 'F4F6F8');
-      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('autoplay', noAutoplay ? 'false' : 'true');
       if (startAt > 0) url.searchParams.set('progress', String(startAt));
       if (isTV) {
         url.searchParams.set('nextEpisode', 'true');
@@ -99,11 +101,13 @@ const PROVIDERS = [
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
+      const autoplay = noAutoplay ? 'false' : 'true';
       const base = isTV
-        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
-        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=${autoplay}&nextbutton=true`
+        : `https://vidlink.pro/movie/${id.value}?autoplay=${autoplay}`;
       // Documented startAt (seconds).
       return startAt > 0 ? `${base}&startAt=${startAt}` : base;
     },
@@ -118,11 +122,12 @@ const PROVIDERS = [
     subtitles: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth } = {}) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth, noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/embed/tv/${id.value}` : `/embed/movie/${id.value}`, 'https://cinesrc.st');
       if (isTV) { url.searchParams.set('s', season); url.searchParams.set('e', episode); }
-      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('autoplay', noAutoplay ? 'false' : 'true');
       if (startAt > 0) {
         url.searchParams.set('t', String(startAt));
         url.searchParams.set('continueprompt', 'false');
@@ -146,10 +151,11 @@ const PROVIDERS = [
     events: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidsrc.ru');
-      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('autoplay', noAutoplay ? 'false' : 'true');
       url.searchParams.set('colour', 'f4f6f8');
       url.searchParams.set('pausescreen', 'true');
       if (isTV) url.searchParams.set('autonextepisode', 'false');
@@ -197,12 +203,13 @@ const PROVIDERS = [
     subtitles: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
       url.searchParams.set(id.kind, id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
+      url.searchParams.set('autoplay', noAutoplay ? '0' : '1');
       // Documented: default subtitle language, ISO 639-1.
       if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
       return url.toString();
@@ -584,13 +591,27 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   // Warm the next episode in the last 90s (or a minute before the credits):
   // its player page, scripts and stream lookup load in a hidden frame, so
-  // the switch starts much faster. The frame has no autoplay permission,
-  // so it can't make a sound. Skipped with data saver on.
+  // the switch starts much faster. It must stay silent (see
+  // utils/preloadNext): only servers whose autoplay can be turned off load
+  // a frame (others just prefetch the page), autoplay is denied, and a frame
+  // that starts playing anyway is removed. Skipped with data saver on.
   const [preloadNext, setPreloadNext] = useState(false);
+  const [preloadSilenced, setPreloadSilenced] = useState(false);
+  const preloadRef = useRef(null);
   useEffect(() => {
     setUpNext(null);
     setPreloadNext(false);
+    setPreloadSilenced(false);
   }, [season, episode, item?.id]);
+  useEffect(() => {
+    if (!preloadNext || preloadSilenced) return undefined;
+    function onPreloadMessage(event) {
+      if (!preloadRef.current || event.source !== preloadRef.current.contentWindow) return;
+      if (preloadIsPlaying(readPlayback(event.data))) setPreloadSilenced(true);
+    }
+    window.addEventListener('message', onPreloadMessage);
+    return () => window.removeEventListener('message', onPreloadMessage);
+  }, [preloadNext, preloadSilenced]);
   useEffect(() => {
     if (!isTV || !nextEpisode || preloadNext || prefersLowBandwidth()) return undefined;
     const timer = setInterval(() => {
@@ -881,12 +902,17 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     health: providerHealth,
   };
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
-  const preloadUrl = preloadNext && nextEpisode
-    ? buildUrl(provider, externalId, mediaType, nextEpisode.season, nextEpisode.episode, subtitleLang)
+  const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
+  const preloadUrl = preloadNext && nextEpisode && !preloadSilenced
+    ? buildUrl(provider, externalId, mediaType, nextEpisode.season, nextEpisode.episode, subtitleLang, { noAutoplay: silentPreload })
     : null;
-  const preloadFrame = preloadUrl && (
-    <iframe className="st-preload-frame" src={preloadUrl} title="Next episode (loading)" aria-hidden="true" tabIndex={-1} referrerPolicy="no-referrer-when-downgrade" />
-  );
+  const preloadFrame = preloadUrl && (silentPreload ? (
+    <iframe ref={preloadRef} className="st-preload-frame" src={preloadUrl} title="Next episode (loading)" aria-hidden="true" tabIndex={-1}
+      allow="autoplay 'none'" referrerPolicy="no-referrer-when-downgrade" />
+  ) : (
+    // No way to stop this server autoplaying: fetch its page only, never run it.
+    <link rel="prefetch" href={preloadUrl} as="document" />
+  ));
 
   const [rotationLocked, setRotationLocked] = useState(false);
   const [rotateHint, setRotateHint] = useState(false);
