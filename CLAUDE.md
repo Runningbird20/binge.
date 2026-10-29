@@ -22,14 +22,14 @@ There is no separate lint script; ESLint runs as part of `react-scripts build`/`
 
 ### Data import / seeding scripts
 
-The repo also owns the pipeline that populates the catalog tables (movies/tv_shows/books, **in Neon**) from external sources. These are standalone Node scripts, not part of the app runtime — see `npm run` entries prefixed `import:*`, `generate:supabase:*`, and `supabase:*` in `package.json` (Goodreads, TMDB, Plex, Internet Archive, Open Library scrapers/importers in `scripts/scrapers/`, writing to the root `data/` folder, and `scripts/run-supabase-sql.js` for applying `supabase/repeatable_schema.sql` + seed files). Only touch these when the task is specifically about catalog data, not app features. The bulk sync (`scripts/sync-tmdb-to-neon.js`, `sync-tmdb.yml`; shared TMDB helpers in `scripts/tmdb-records.js`) works through TMDB's export by popularity and misses small new regional releases; `scripts/sync-language-to-supabase.js` (`npm run import:malayalam`, `:preview` = TMDB-only dry run; daily `sync-languages.yml`, `LANGUAGES=ml`) adds every title of a language from the last 3 years + 30 days ahead plus the all-time popular ones, and re-fetches anything released in the last 120 days.
+The repo also owns the pipeline that populates the catalog tables (movies/tv_shows/books, **in Neon**) from external sources. These are standalone Node scripts, not part of the app runtime — see `npm run` entries prefixed `import:*` and `supabase:*` in `package.json` (Goodreads, TMDB, Plex, Internet Archive, Open Library scrapers/importers in `scripts/scrapers/`, writing to the root `data/` folder, and `scripts/run-supabase-sql.js` for applying `supabase/repeatable_schema.sql` + seed files). Only touch these when the task is specifically about catalog data, not app features. The bulk sync (`scripts/sync-tmdb-to-neon.js`, `sync-tmdb.yml`; shared TMDB helpers in `scripts/tmdb-records.js`) works through TMDB's export by popularity and misses small new regional releases; `scripts/sync-language-to-supabase.js` (`npm run import:malayalam`, `:preview` = TMDB-only dry run; daily `sync-languages.yml`, `LANGUAGES=ml`) adds every title of a language from the last 3 years + 30 days ahead plus the all-time popular ones, and re-fetches anything released in the last 120 days.
 
 ## Repo layout
 
 - `src/` — the web app: `pages/`, `components/` (player hooks in `components/player/`), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`).
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
-- `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`, seed `chunks*/`); `neon/` — catalog SQL, plus `neon/functions/` for `neon.ts`.
+- `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `neon/` — catalog SQL, plus `neon/functions/` for `neon.ts`.
 - `tv-apple/`, `tv-android/` — the TV apps; `e2e/` — Playwright; `docs/` — longer write-ups; `backups/`, `data/` — catalog exports and scraper output.
 
 ## Architecture
@@ -63,7 +63,7 @@ Supabase Auth (email/password) is the identity system. A Postgres trigger, `hand
 
 ### Book ids must stay below 2^53
 
-Book ids were SHA-1-derived 60-bit numbers that JavaScript silently rounds (opening/saving books hit the wrong id). `scripts/generate-supabase-book-seed.js` now emits 52-bit ids; `supabase/migrations/20261007140000_book_ids_js_safe.sql` remaps existing rows (`id >> 8`). Any new id scheme must stay within `Number.MAX_SAFE_INTEGER`.
+Book ids were SHA-1-derived 60-bit numbers that JavaScript silently rounds (opening/saving books hit the wrong id). The seed generator that made them (since removed, see git history) switched to 52-bit ids; `supabase/migrations/20261007140000_book_ids_js_safe.sql` remaps existing rows (`id >> 8`). Any new id scheme must stay within `Number.MAX_SAFE_INTEGER`.
 
 ### Desktop / mobile component pairs
 
