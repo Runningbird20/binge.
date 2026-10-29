@@ -1,297 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowsIn, ArrowsOut, CaretDown, Check, DeviceRotate, LockSimple, LockSimpleOpen, Play, Plus, SkipForward, X } from '@phosphor-icons/react';
+import { ArrowsIn, ArrowsOut, CaretDown, Check, DeviceRotate, LockSimple, LockSimpleOpen, Plus, SkipForward, X } from '@phosphor-icons/react';
 import { api } from '../api';
-import {
-  fetchEpisodeProgress,
-  markEpisodeWatched,
-  unmarkEpisodeWatched,
-  upsertSupabaseContinueWatching,
-  updateWatchlistProgress,
-  fetchSupabaseResumePoint,
-} from '../utils/supabaseData';
+import { fetchEpisodeProgress, markEpisodeWatched, unmarkEpisodeWatched, upsertSupabaseContinueWatching, updateWatchlistProgress, fetchSupabaseResumePoint } from '../utils/supabaseData';
 import useDeviceType from '../hooks/useDeviceType';
 import { getSettings } from '../utils/profileSettings';
 import { isTvMode } from '../utils/tvMode';
 import { readPlayback } from '../utils/playbackMessages';
 import { useMiniPlayer } from '../contexts/MiniPlayerContext';
-import { getEmbeddedId } from '../utils/embedPlayability';
-import { fetchTmdbLanguageInfo, languageName } from '../utils/tmdb';
+import { fetchTmdbLanguageInfo } from '../utils/tmdb';
 import { reachabilityMap } from '../utils/hostReachability';
 import { useSeasonEpisodes } from '../hooks/useTitleDetails';
 import { formatClock, getResumePosition, mergeRemotePosition, positionKey, savePosition } from '../utils/playbackPositions';
-import {
-  fetchReportSummary,
-  fetchProviderHealth,
-  fetchDisabledServers,
-  rememberServer,
-  getPlaybackPrefs,
-  getServerMemory,
-  rankServers,
-  setCaptionCapableServers,
-  savePlaybackPrefs,
-  submitStreamReport,
-  wantedAudio,
-} from '../utils/streamPreferences';
+import { fetchReportSummary, fetchProviderHealth, fetchDisabledServers, rememberServer, getPlaybackPrefs, getServerMemory, rankServers, setCaptionCapableServers, savePlaybackPrefs, submitStreamReport, wantedAudio } from '../utils/streamPreferences';
 import PlaybackOptions, { MobilePlaybackPickers } from './PlaybackOptions';
+import UpNextCard from './UpNextCard';
+import useEmbedId from '../hooks/useEmbedId';
 import { haptic } from '../utils/haptics';
 import { fetchEpisodeMarkers, looksLikeIntroSkip, reportCredits, reportIntro } from '../utils/episodeMarkers';
 import { expectedRuntimeSeconds, isWrongLength } from '../utils/runtimeCheck';
+import { AUTO_WATCH_SECONDS, CONTINUE_WATCHING_DELAY_SECONDS, EVENT_PROVIDERS, FAILOVER_SECONDS, PAUSE_AWARE, PROVIDERS, PROVIDER_HOSTS, RESUMABLE, SERVER_CONFIRM_SECONDS, SERVER_LABELS, STALL_SECONDS, STALL_SWITCH_SECONDS, UP_NEXT_COUNTDOWN, UP_NEXT_SECONDS, bestServerFor, buildUrl, normalizeStartAt, prefersLowBandwidth, providerIdsFor } from '../utils/embedProviders';
 
-// Embed servers, best first. VidRift and Vidy lead: in testing they played
-// every title tried, including a new 2026 K-drama episode that vidsrc.ru
-// and 2Embed didn't have (identical on their own sites, so it's catalog
-// coverage, not our embed), and both report playback time for failover.
-// VidRift, Vidy and CineSrc were found via the sites they power
-// (7movies.ac, movy.sx, shuttletv.su) and are documented embed APIs. Verified 2026-10-07 by loading each in a real
-// browser, embedded in an iframe on a non-provider origin, and watching for
-// an actual HLS/MP4 stream (a 200 page proves nothing — vsembed.ru serves
-// its page but shows "This media is unavailable": its stream backend,
-// data.vidsrc.sh, resets every connection). vidsrc.ru is a different
-// service from vsembed.ru despite the name.
-// Removed that day: vsembed.su (domain now DNS-sinkholed as malicious),
-// multiembed.mov (connection reset), autoembed.co (no stream).
-//   events:    sends PLAYER_EVENT postMessages (play/timeupdate), so the
-//              player can confirm real playback instead of guessing
-//   subtitles: accepts a default subtitle language parameter
-//   idKinds:   which external ids the URL accepts
-//   types:     media types it actually streams
-const PROVIDERS = [
-  {
-    // https://vidrift.net/docs — TMDB ids only; posts vidrift:progress
-    // (currentTime) every 5s while playing. Played every title tested,
-    // including new K-drama episodes other servers lacked.
-    id: 'vidrift',
-    label: 'VidRift',
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
-      const path = mediaType === 'tv_show' ? `/embed/tv/${id.value}/${season}/${episode}` : `/embed/movie/${id.value}`;
-      const url = new URL(path, 'https://embed.vidrift.net');
-      url.searchParams.set('brand', 'binge.');
-      url.searchParams.set('brandColor', 'f4f6f8');
-      return url.toString();
-    },
-  },
-  {
-    // https://www.vidy.st (#docs) — posts PLAYER_EVENT play/timeupdate.
-    id: 'vidy',
-    label: 'Vidy',
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidy.st');
-      url.searchParams.set('color', 'F4F6F8');
-      url.searchParams.set('autoplay', 'true');
-      if (startAt > 0) url.searchParams.set('progress', String(startAt));
-      if (isTV) {
-        url.searchParams.set('nextEpisode', 'true');
-        // Auto-next is ours (Up Next card), not the player's.
-      }
-      return url.toString();
-    },
-  },
-  {
-    id: 'vidlink',
-    label: 'VidLink',
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
-      const isTV = mediaType === 'tv_show';
-      const base = isTV
-        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
-        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
-      // Documented startAt (seconds).
-      return startAt > 0 ? `${base}&startAt=${startAt}` : base;
-    },
-  },
-  {
-    // https://cinesrc.st/docs — posts cinesrc:timeupdate { currentTime }.
-    // subtitlelang (a language name) is undocumented but is what
-    // shuttletv.su sends; harmless if ignored.
-    id: 'cinesrc',
-    label: 'CineSrc',
-    events: true,
-    subtitles: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth } = {}) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? `/embed/tv/${id.value}` : `/embed/movie/${id.value}`, 'https://cinesrc.st');
-      if (isTV) { url.searchParams.set('s', season); url.searchParams.set('e', episode); }
-      url.searchParams.set('autoplay', 'true');
-      if (startAt > 0) {
-        url.searchParams.set('t', String(startAt));
-        url.searchParams.set('continueprompt', 'false');
-      }
-      if (lowBandwidth) url.searchParams.set('quality', '720');
-      url.searchParams.set('color', '#f4f6f8');
-      url.searchParams.set('prioritize', 'true');
-      url.searchParams.set('autonext', 'false');
-      if (subtitleLang) {
-        url.searchParams.set('subtitles', 'auto');
-        url.searchParams.set('subtitlelang', languageName(subtitleLang));
-      }
-      return url.toString();
-    },
-  },
-  {
-    // https://vidsrc.ru/docs — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
-    // MEDIA_DATA progress messages to the parent window.
-    id: 'vidsrc-ru',
-    label: 'VidSrc',
-    events: true,
-    idKinds: ['tmdb', 'imdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidsrc.ru');
-      url.searchParams.set('autoplay', 'true');
-      url.searchParams.set('colour', 'f4f6f8');
-      url.searchParams.set('pausescreen', 'true');
-      if (isTV) url.searchParams.set('autonextepisode', 'false');
-      return url.toString();
-    },
-  },
-  {
-    id: 'vidsrc-su',
-    label: 'VidSrc SU',
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
-      return mediaType === 'tv_show'
-        ? `https://vidsrc.su/embed/tv/${id.value}/${season}/${episode}`
-        : `https://vidsrc.su/embed/movie/${id.value}`;
-    },
-  },
-  {
-    id: 'videasy',
-    label: 'Videasy',
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
-      return mediaType === 'tv_show'
-        ? `https://player.videasy.net/tv/${id.value}/${season}/${episode}?nextEpisode=true`
-        : `https://player.videasy.net/movie/${id.value}`;
-    },
-  },
-  {
-    id: '2embed',
-    label: '2Embed',
-    idKinds: ['tmdb', 'imdb'],
-    types: ['tv_show', 'movie'],
-    buildUrl(id, mediaType, season, episode) {
-      return mediaType === 'tv_show'
-        ? `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`
-        : `https://www.2embed.stream/embed/movie/${id.value}`;
-    },
-  },
-  {
-    id: 'vidsrc-embed-ru',
-    label: 'VidSrc Classic',
-    subtitles: true,
-    idKinds: ['tmdb', 'imdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
-      url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
-      // Documented: default subtitle language, ISO 639-1.
-      if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
-      return url.toString();
-    },
-  },
-  {
-    id: 'vidsrc-rip',
-    label: 'VidSrc RIP',
-    idKinds: ['tmdb'],
-    types: ['movie'],
-    buildUrl(id) {
-      return `https://vidsrc.rip/embed/movie/${id.value}`;
-    },
-  },
-];
-
-const AUTO_WATCH_SECONDS = 5 * 60;
-// How long the player has to stay open on a title before it counts as
-// "actually watching" for Continue Watching purposes — a bare click that's
-// immediately closed (misclick, browsing) shouldn't leave a row behind.
-const CONTINUE_WATCHING_DELAY_SECONDS = 20;
-
-function buildUrl(providerId, externalId, mediaType, season, episode, subtitleLang = null, options = {}) {
-  const provider = PROVIDERS.find((entry) => entry.id === providerId) || PROVIDERS[0];
-  if (!provider) return null;
-  if (!externalId) return null;
-  try {
-    return provider.buildUrl(externalId, mediaType, season, episode, subtitleLang, options);
-  } catch {
-    return null;
-  }
-}
-
-// Servers that can play this title at all (media type + id kind).
-function providerIdsFor(mediaType, externalId) {
-  const type = mediaType === 'tv_show' ? 'tv_show' : 'movie';
-  const ids = PROVIDERS
-    .filter((entry) => entry.types.includes(type) && (!externalId || entry.idKinds.includes(externalId.kind)))
-    .map((entry) => entry.id);
-  return ids.length ? ids : PROVIDERS.map((entry) => entry.id);
-}
-// Host each server's player lives on, for the network reachability probe.
-const PROVIDER_HOSTS = Object.fromEntries(PROVIDERS.map((entry) => {
-  try {
-    return [entry.id, new URL(entry.buildUrl({ kind: 'tmdb', value: '1' }, 'movie', 1, 1, null, {})).hostname];
-  } catch {
-    return [entry.id, ''];
-  }
-}));
-const EVENT_PROVIDERS = new Set(PROVIDERS.filter((entry) => entry.events).map((entry) => entry.id));
-const SERVER_LABELS = Object.fromEntries(PROVIDERS.map((entry) => [entry.id, { label: entry.label, subtitles: Boolean(entry.subtitles) }]));
 setCaptionCapableServers(PROVIDERS.filter((entry) => entry.subtitles).map((entry) => entry.id));
-// How long a server has to stay open before it counts as "works" for this
-// title (and the one-time audio check appears).
-const SERVER_CONFIRM_SECONDS = 60;
-// No playback time from an event-capable server after this long = it
-// doesn't have this title; fail over automatically.
-const FAILOVER_SECONDS = 25;
-// Servers that report pause/play as well as time, so "time stopped moving"
-// can be told apart from "viewer paused" — buffering detection only runs
-// for these.
-const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'videasy']);
-// Servers that can start at a given second (URL param or message), so a
-// mid-play switch keeps the viewer's place.
-const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink']);
-const UP_NEXT_SECONDS = 30;   // show the Up Next card in the last 30s
-const UP_NEXT_COUNTDOWN = 10; // seconds before the next episode starts
-const STALL_SECONDS = 12;      // no progress while playing -> buffering
-const STALL_SWITCH_SECONDS = 30; // still stuck -> switch servers automatically
-
-function prefersLowBandwidth() {
-  if (getSettings().dataSaver) return true;
-  const connection = typeof navigator !== 'undefined' ? navigator.connection : null;
-  return Boolean(connection && (connection.saveData || (connection.downlink && connection.downlink < 3)));
-}
-
-function normalizeStartAt(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
-function bestServerFor(item, mediaType, prefs) {
-  const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
-  return rankServers(providerIdsFor(mediaType, getEmbeddedId(item)), {
-    prefs,
-    originalLanguage: item?.original_language || null,
-    memory: getServerMemory(memoryType, item?.id),
-  })[0]?.id || PROVIDERS[0].id;
-}
 
 export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode, initialPosition }) {
   const { isMobile, isLandscape } = useDeviceType();
@@ -327,9 +56,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const frozenStartRef = useRef({ key: '', value: null });
   const [season, setSeason] = useState(() => normalizeStartAt(initialSeason));
   const [episode, setEpisode] = useState(() => normalizeStartAt(initialEpisode));
-  const [externalId, setExternalId] = useState(() => getEmbeddedId(item));
-  const [lookupState, setLookupState] = useState(() => (getEmbeddedId(item) ? 'done' : 'loading'));
-  const [lookupError, setLookupError] = useState('');
+  const { externalId, lookupState, lookupError } = useEmbedId(item, mediaType);
   const [metadataWarning, setMetadataWarning] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [seasonEpisodeCounts, setSeasonEpisodeCounts] = useState({});
@@ -647,20 +374,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   }
 
   const upNextCard = upNext && nextEpisode && (
-    <div className="st-upnext" role="dialog" aria-label="Up next">
-      {nextInfo?.still && <img src={nextInfo.still} alt="" className="st-upnext-still" />}
-      <div className="st-upnext-body">
-        <strong>{nextInfo?.title || `Episode ${nextEpisode.episode}`}</strong>
-        <span className="st-upnext-meta">Next: season {nextEpisode.season}, episode {nextEpisode.episode}</span>
-        <div className="st-upnext-actions">
-          <button type="button" className="st-btn st-btn--primary" onClick={playNextEpisode}>
-            <Play size={16} weight="fill" /> {upNext.secondsLeft == null ? 'Play next episode' : `Play now${upNext.secondsLeft > 0 ? ` (${upNext.secondsLeft})` : ''}`}
-          </button>
-          <button type="button" className="st-btn st-btn--ghost" onClick={dismissUpNext}>Cancel</button>
-        </div>
-      </div>
-      {upNext.secondsLeft != null && <span className="st-upnext-bar" style={{ animationDuration: `${UP_NEXT_COUNTDOWN}s` }} aria-hidden="true" />}
-    </div>
+    <UpNextCard upNext={upNext} nextEpisode={nextEpisode} nextInfo={nextInfo} onPlay={playNextEpisode} onCancel={dismissUpNext} />
   );
 
   function syncPosition(seconds, duration) {
@@ -1010,60 +724,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   }, [episode, isTV, item?.id, season, watched]);
 
   useEffect(() => {
-    const embeddedId = getEmbeddedId(item);
-
-    if (embeddedId) {
-      setExternalId(embeddedId);
-      setLookupState('done');
-      setLookupError('');
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function fetchEmbedId() {
-      setExternalId(null);
-      setLookupState('loading');
-      setLookupError('');
-
-      try {
-        const params = new URLSearchParams({
-          title: item.title,
-          type: mediaType,
-          ...(item.year ? { year: item.year } : {}),
-        });
-        const data = await api.get(`/media/embed-id?${params}`);
-
-        if (cancelled) return;
-
-        if (data?.kind && data?.value) {
-          setExternalId({ kind: data.kind, value: String(data.value) });
-          setLookupState('done');
-          setLookupError('');
-        } else {
-          setLookupState('error');
-          setLookupError(`Could not find a provider-compatible IMDb or TMDB ID for "${item.title}".`);
-        }
-      } catch (err) {
-        if (cancelled) return;
-
-        setLookupState('error');
-        if (err.message?.includes('Couldn’t reach binge.') || err.message?.includes('You’re offline')) {
-          setLookupError('Unable to reach the API server. Make sure the backend is running.');
-        } else {
-          setLookupError(err.message || 'The stream lookup failed.');
-        }
-      }
-    }
-
-    fetchEmbedId();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [item, mediaType]);
-
-  useEffect(() => {
     if (!isTV || !tmdbId) return undefined;
 
     let cancelled = false;
@@ -1282,7 +942,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     return () => clearTimeout(timer);
   }, [embedUrl]);
 
-
   // VidRift takes its start position (and quality hint) as messages.
   function handleFrameLoad() {
     if (provider !== 'vidrift') return;
@@ -1321,7 +980,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     });
     onClose?.();
   }
-
 
   // ── Mobile player ────────────────────────────────────────────
   const epChipsRef = useRef(null);
