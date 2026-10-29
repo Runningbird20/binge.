@@ -176,7 +176,7 @@ export default function Settings() {
     // Turning kids mode off needs the account password, so a child can't
     // just flip it back.
     if (!next) { setKidsPrompt(true); return; }
-    await updateAccountProfile(activeProfile.id, { isKids: true });
+    await updateAccountProfile(activeProfile.id, { maturity: 'kids' });
     await refreshProfiles?.();
     flash('Kids mode on');
   }
@@ -187,7 +187,7 @@ export default function Settings() {
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.auth.signInWithPassword({ email: user.email, password });
       if (error) throw new Error('That password isn’t right.');
-      await updateAccountProfile(activeProfile.id, { isKids: false });
+      await updateAccountProfile(activeProfile.id, { maturity: 'all' });
       await refreshProfiles?.();
       setKidsPrompt(false);
       setPassword('');
@@ -264,9 +264,8 @@ export default function Settings() {
           />
           {kidsPrompt && (
             <form className="set-kids-form" onSubmit={confirmKidsOff}>
-              <label htmlFor="set-kids-password">Account password</label>
               <div>
-                <input id="set-kids-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
+                <input aria-label="Account password" placeholder="Account password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
                 <button type="submit" className="st-btn st-btn--primary">Turn off</button>
                 <button type="button" className="st-btn st-btn--ghost" onClick={() => { setKidsPrompt(false); setPassword(''); }}>Cancel</button>
               </div>

@@ -78,16 +78,16 @@ export default function PasswordReset({ recovery = false }) {
           <form className="auth-form" onSubmit={handleSubmit}>
             {recovery ? ready ? (
               <>
-                <label>New password
-                  <input type="password" autoComplete="new-password" minLength={6} required value={password} onChange={(event) => setPassword(event.target.value)} />
+                <label>
+                  <input aria-label="New password" placeholder="New password" type="password" autoComplete="new-password" minLength={6} required value={password} onChange={(event) => setPassword(event.target.value)} />
                 </label>
-                <label>Confirm new password
-                  <input type="password" autoComplete="new-password" minLength={6} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+                <label>
+                  <input aria-label="Confirm new password" placeholder="Confirm new password" type="password" autoComplete="new-password" minLength={6} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
                 </label>
               </>
             ) : !error && <p role="status">Checking your reset link…</p> : (
-              <label>Email
-                <input type="email" autoComplete="email" required autoFocus value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
+              <label>
+                <input aria-label="Email" placeholder="Email" type="email" autoComplete="email" required autoFocus value={email} onChange={(event) => setEmail(event.target.value)} />
               </label>
             )}
             {(!recovery || ready) && <button type="submit" className="btn-primary btn-block" disabled={loading}>

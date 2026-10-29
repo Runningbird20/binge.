@@ -90,6 +90,7 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
             <input
               type="text"
               className="profile-picker-add-input profile-wizard-name-input"
+              aria-label="Profile name"
               placeholder="Profile name"
               value={name}
               onChange={(event) => setName(event.target.value)}

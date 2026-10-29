@@ -90,6 +90,7 @@ Embed servers are cross-origin iframes — the app cannot detect which audio tra
 
 ### Settings, navigation & resilience (Oct 2026)
 
+- **Maturity levels** (`src/utils/kidsMode.js`): Toddler (G/TV-Y), Kids, Teens (+PG-13/TV-14), No restrictions, chosen with pills on Edit Profile. `is_kids` stays the master switch (the TV apps only read it and apply the Kids list); `account_profiles.settings.maturity` picks the level. Catalog filters take `kidsSafe` = `false` or the level (`maturityRestriction(profile)`, `ratingsFor`); only Toddler/Kids get the kids-only rows (`isChildLevel`).
 - **Profile settings** (`/settings`, `src/utils/profileSettings.js`): autoplay next, previews, data saver, haptics live in `account_profiles.settings` (jsonb) + localStorage; audio/subtitle prefs in `audio_pref`/`subtitle_pref`. `AuthContext` hydrates both from the profile row on load (row wins — it's written on every change). Never select `pin` into the client profile list.
 - **Server health** (`stream_provider_health()` RPC, counts-only/security definer): `rankServers` takes `health` — a provider broadly down today (`summarizeHealth`) ranks last and is labelled; title-specific reports still win.
 - **Reminders** (`watch_reminders`, `src/utils/reminders.js`, `RemindButton`, `ReminderWatcher`): delivered in-app when due, and by push via `GET /api/cron/reminders`. Vercel Hobby crons are daily, so frequent delivery needs Supabase pg_cron — `supabase/manual/schedule_reminders.sql` (fill in site URL + CRON_SECRET, run once).
@@ -242,6 +243,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **No identical icon-card grids.** The TV Me tab is a native `List`.
 - **Gold only marks actions, selection or state** (never taglines, section icons or captions).
 - **No purple/blue gradients or frosted glass as decoration.**
+- **Text fields are pills, like the search box**, with what goes in them as the placeholder plus a matching `aria-label` (no label above). One global rule at the end of `src/streaming.css` styles every text-type input/textarea; inputs inside their own pill wrapper opt out with `.field-bare`. Checkboxes are one global custom style there too (white fill + dark tick when checked); never restyle them per page.
 - **Every control has its states.** Loading uses skeletons, not page-centered spinners. Empty states explain what to do next.
 - **Verify in one batched screenshot round:** desktop plus a phone on the web, the simulator on tvOS.
 

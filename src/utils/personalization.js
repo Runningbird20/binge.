@@ -451,7 +451,7 @@ function becauseRows(seedLists, scoredByTmdbId, taste, limit) {
 const resultCache = new Map();
 
 function cacheKeyFor(mediaTypes, kidsSafe) {
-  return `${getActiveProfileId() || 'default'}|${mediaTypes.join(',')}|${kidsSafe ? 'kids' : 'all'}`;
+  return `${getActiveProfileId() || 'default'}|${mediaTypes.join(',')}|${kidsSafe || 'all'}`;
 }
 
 // Invalidate whenever the profile's history changes (rating saved etc.).

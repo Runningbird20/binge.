@@ -34,23 +34,23 @@ export default function Login() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label>
-            Email
             <input
+              aria-label="Email"
+              placeholder="Email"
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="you@example.com"
               required
               autoFocus
             />
           </label>
           <label>
-            Password
             <input
+              aria-label="Password"
+              placeholder="Password"
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder="••••••••"
               required
             />
           </label>

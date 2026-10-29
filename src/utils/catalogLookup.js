@@ -6,17 +6,17 @@ import { fetchCatalogByTmdbIds } from './supabaseMovieCatalog';
 import { tmdbImage } from './tmdb';
 import { identityKey } from './mediaIdentity';
 import { isBrowseable, isComingSoon } from './releaseWindow';
+import { ratingsFor } from './kidsMode';
 
 const matchCache = new Map();
 
-const KIDS_SAFE_RATINGS = ['G', 'PG', 'TV-G', 'TV-Y', 'TV-Y7', 'TV-PG'];
 const KIDS_GENRE_IDS = [10751, 16, 10762]; // Family, Animation, Kids
 
 // Many catalog rows have no age_rating, so for kids profiles an unrated
 // title must also be tagged Family/Animation/Kids on TMDB — otherwise a
 // "Because you watched" list could surface an unrated R-rated film.
-function isKidsSafe(row, result) {
-  if (row.age_rating) return KIDS_SAFE_RATINGS.includes(row.age_rating);
+function isKidsSafe(row, result, kidsSafe) {
+  if (row.age_rating) return ratingsFor(kidsSafe).includes(row.age_rating);
   return (result.genreIds || []).some((id) => KIDS_GENRE_IDS.includes(id));
 }
 
@@ -42,7 +42,7 @@ export async function resolveTmdbItems(results = [], mediaType, { kidsSafe = fal
   usable.forEach((result, index) => {
     const row = matches[index];
     if (!row) return;
-    if (kidsSafe && !isKidsSafe(row, result)) return;
+    if (kidsSafe && !isKidsSafe(row, result, kidsSafe)) return;
 
     const item = {
       ...row,

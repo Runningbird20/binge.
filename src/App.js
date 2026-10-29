@@ -66,6 +66,7 @@ const TVShows        = lazy(() => import('./pages/TVShows'));
 const Books          = lazy(() => import('./pages/Books'));
 const SearchResults  = lazy(() => import('./pages/SearchResults'));
 const ProfilePicker  = lazy(() => import('./pages/ProfilePicker'));
+const EditProfile    = lazy(() => import('./pages/EditProfile'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
 const Sports         = lazy(() => import('./pages/Sports'));
@@ -153,6 +154,7 @@ function AppRoutes() {
         <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
         <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
         <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
+        <Route path="/profiles/:profileId/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/history"   element={<ProtectedRoute><History /></ProtectedRoute>} />
         <Route path="/wrapped"   element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
