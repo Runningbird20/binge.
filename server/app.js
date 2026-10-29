@@ -33,14 +33,10 @@ app.use(helmet({
         // Manga / comics
         'https://mangakatana.com',
         'https://*.mangakatana.com',
-        'https://weebcentral.com',
-        'https://*.weebcentral.com',
         'https://asurascan.com',
         'https://*.asurascan.com',
         'https://webtoon.com',
         'https://*.webtoon.com',
-        'https://bato.to',
-        'https://*.bato.to',
         // Books
         'https://archive.org',
         // Sports streams and any other HTTPS embeds (CDN domains vary per provider)
@@ -158,11 +154,8 @@ app.use('/api/embed-proxy', require('./routes/embedProxy'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/manga',       require('./routes/manga'));
-app.use('/api/weebcentral', require('./routes/weebcentral'));
-app.use('/api/bato',        require('./routes/bato'));
 app.use('/api/books',       require('./routes/books'));
 app.use('/api/search', require('./routes/search'));
-app.use('/api/watchroom', require('./routes/watchroom'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));
