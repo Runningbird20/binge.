@@ -1621,6 +1621,15 @@
   overflow: hidden;
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55), 0 0 0 3px rgba(255, 255, 255, 0.12);
   flex-shrink: 0;
+  line-height: 0;
+}
+/* The avatar fills the rounded-square frame (the same shape as the profile
+   tiles), instead of its default circle with a grey ring inside it. */
+.pf-avatar .profile-avatar,
+.pf-avatar .user-avatar {
+  display: flex;
+  border-radius: 0;
+  border: 0;
 }
 .pf-identity { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .pf-name {
@@ -1980,6 +1989,10 @@
 .profile-picker-manage--done,
 .profile-picker-manage--done:hover { background: #fff; border-color: #fff; color: #0b0d12; }
 .profile-security-delete { margin-left: auto; }
+/* Profile dialogs (edit, delete): action buttons are pills, like the
+   Manage Profiles / Done pill behind them. */
+.profile-delete-card .btn-primary,
+.profile-delete-card .btn-danger { border-radius: 999px; padding-left: 1.4rem; padding-right: 1.4rem; }
 
 /* Player chrome */
 .player-header-btns { display: flex; gap: 0.4rem; }
@@ -2501,7 +2514,36 @@
 .hist-detail { margin: 0.15rem 0 0; font-size: 0.84rem; color: var(--exp-text-dim); display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; }
 .hist-time { color: var(--exp-text-faint); }
 .hist-hidden-note { margin: 0.15rem 0 0; font-size: 0.76rem; color: var(--st-soon); }
-.hist-actions { display: flex; gap: 0.35rem; }
+.hist-actions { display: flex; gap: 0.25rem; }
+/* Row actions show on hover / keyboard focus where there's a mouse; touch
+   screens always see them. */
+@media (hover: hover) and (pointer: fine) {
+  .hist-item .hist-actions { opacity: 0; transition: opacity 0.15s; }
+  .hist-item:hover .hist-actions,
+  .hist-item:focus-within .hist-actions { opacity: 1; }
+}
+
+/* Round icon buttons (history, calendar, settings, admin): no chrome at rest,
+   a soft fill on hover, red for destructive ones. */
+.pf-icon-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--exp-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pf-icon-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.pf-icon-btn--danger:hover { background: rgba(229, 72, 77, 0.16); color: #ff8589; }
+.pf-icon-btn:focus-visible { outline: none; box-shadow: var(--st-focus); color: #fff; }
+.pf-icon-btn:disabled { opacity: 0.4; cursor: default; background: transparent; }
 
 /* ── binge. Wrapped ──────────────────────────────────────────── */
 

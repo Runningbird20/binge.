@@ -230,7 +230,7 @@ export default function AdminUsersPanel() {
                         <button type="button" className="st-btn st-btn--ghost" onClick={() => setConfirmDelete(null)}>Cancel</button>
                       </span>
                     ) : (
-                      <button type="button" className="pf-icon-btn" onClick={() => setConfirmDelete(u.id)} aria-label={`Delete ${u.username}`} title="Delete account">
+                      <button type="button" className="pf-icon-btn pf-icon-btn--danger" onClick={() => setConfirmDelete(u.id)} aria-label={`Delete ${u.username}`} title="Delete account">
                         <Trash size={15} weight="bold" />
                       </button>
                     ))}
