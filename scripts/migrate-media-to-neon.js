@@ -20,7 +20,7 @@ async function main(){
    const schema=await db.query("select column_name,data_type,is_identity from information_schema.columns where table_schema='public' and table_name=$1 order by ordinal_position",[table]);
    if(!schema.rowCount)throw Error('Destination table missing: '+table);
    const columns=schema.rows.filter(r=>r.column_name!=='pin'&&r.column_name!=='review'&& !(r.column_name==='id'&&r.is_identity==='YES'&&!['movies','tv_shows','books'].includes(table))).map(r=>r.column_name);
-   const {count,error}=await sb.from(table).select('*',{count:'exact',head:true});
+   const {count,error}=await sb.from(table).select('*',{count:'exact'}).limit(1); // GET, so a dropped table is an error, not a null count
    if(error&&['PGRST205','42P01'].includes(error.code)){console.log(`${table}: already removed from Supabase`);continue;}
    if(error)throw Error(table+': '+error.message);
    const before=await db.query(`select count(*)::integer as n from public.${quote(table)}`);

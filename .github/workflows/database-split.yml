@@ -14,7 +14,7 @@ name: Database split (Neon media, Supabase accounts)
 # Deploy the web app first, and ship the TV apps that read media through
 # /api/neon-data: older builds read the Supabase catalog directly.
 #
-# Secrets: DATABASE_URL (Neon), NEON_API_KEY, SUPABASE_URL, SUPABASE_SECRET_KEY,
+# Secrets: DATABASE_URL (Neon), NEON_API_KEY, SUPABASE_URL, SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY),
 #          SUPABASE_DB_URL (Supabase → Connect → Session pooler URI; needed for DDL)
 # Variables (optional): NEON_PROJECT_ID, NEON_PARENT_BRANCH, BINGE_URL
 
@@ -47,7 +47,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -115,4 +115,4 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
