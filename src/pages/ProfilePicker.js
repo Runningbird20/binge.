@@ -1,6 +1,6 @@
 import LoadingBar from '../components/LoadingBar';
 import { useEffect, useState } from 'react';
-import { Plus, Baby, X } from '@phosphor-icons/react';
+import { Plus, Baby, Check, LockSimple, PencilSimple } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
 import ProfileSecurityDialog from '../components/ProfileSecurityDialog';
@@ -58,28 +58,29 @@ function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
   );
 }
 
-function ProfileTile({ profile, active, canDelete, onClick, onRequestDelete, onEdit, locked }) {
+// One profile. In manage mode the avatar dims under a pencil and a click
+// edits it (Netflix's "Manage Profiles"); otherwise a click picks it. A
+// profile with a PIN shows a lock in the avatar's corner. Only hover (or
+// keyboard focus) highlights a tile, not the profile currently in use.
+function ProfileTile({ profile, managing, locked, onClick }) {
+  const label = managing ? `Edit ${profile.name}` : `${profile.name}${locked ? ', locked with a PIN' : ''}`;
   return (
-    <div className={`profile-picker-tile${active ? ' active' : ''}`}>
-      <button type="button" className="profile-picker-tile-btn" onClick={onClick}>
-        <ProfileAvatar profile={profile} size={96} />
-        <span className="profile-picker-name">{profile.name}{locked ? ' 🔒' : ''}</span>
+    <div className={`profile-picker-tile${managing ? ' managing' : ''}`}>
+      <button type="button" className="profile-picker-tile-btn" onClick={onClick} aria-label={label}>
+        <span className="profile-picker-avatar-wrap">
+          <ProfileAvatar profile={profile} size={96} />
+          {locked && !managing && <LockSimple className="profile-picker-lock" size={16} weight="bold" aria-hidden="true" />}
+          {managing && (
+            <span className="profile-picker-edit-mark" aria-hidden="true">
+              <PencilSimple size={30} />
+            </span>
+          )}
+        </span>
+        <span className="profile-picker-name">{profile.name}</span>
         {profile.is_kids && (
           <span className="profile-picker-kids-badge"><Baby size={12} weight="bold" /> Kids</span>
         )}
       </button>
-      <button type="button" className="profile-picker-edit-btn" onClick={onEdit} aria-label={`Edit ${profile.name}`}>Edit profile</button>
-      {canDelete && (
-        <button
-          type="button"
-          className="profile-picker-delete-btn"
-          title={`Delete ${profile.name}`}
-          aria-label={`Delete ${profile.name}`}
-          onClick={(event) => { event.stopPropagation(); onRequestDelete(profile); }}
-        >
-          <X size={14} weight="bold" />
-        </button>
-      )}
     </div>
   );
 }
@@ -89,6 +90,7 @@ export default function ProfilePicker() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [securityTarget, setSecurityTarget] = useState(null);
+  const [managing, setManaging] = useState(false);
   const [locks, setLocks] = useState(null);
   const [lockError, setLockError] = useState('');
   const [locksAvailable, setLocksAvailable] = useState(false);
@@ -101,6 +103,13 @@ export default function ProfilePicker() {
     } catch { setLocks(null); setLockError('Unable to load profile locks. Please try again.'); }
   }
   useEffect(() => { loadLocks(); }, []);
+  // Esc leaves manage mode (unless a dialog is open; it handles Esc itself).
+  useEffect(() => {
+    if (!managing) return undefined;
+    function onKey(event) { if (event.key === 'Escape' && !securityTarget && !deleteTarget) setManaging(false); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [managing, securityTarget, deleteTarget]);
 
   // Only the default profile can delete other profiles — matches the
   // "main account holder" framing (the default profile is the one
@@ -125,22 +134,36 @@ export default function ProfilePicker() {
               <ProfileTile
                 key={profile.id}
                 profile={profile}
-                active={activeProfile?.id === profile.id}
-                canDelete={canManage && !profile.is_default}
+                managing={managing}
                 locked={locks.has(profile.id)}
-                onEdit={() => setSecurityTarget({ profile, editing: true })}
-                onClick={() => locks.has(profile.id) ? setSecurityTarget({ profile, editing: false }) : switchProfile(profile.id)}
-                onRequestDelete={setDeleteTarget}
+                onClick={() => {
+                  if (managing) setSecurityTarget({ profile, editing: true });
+                  else if (locks.has(profile.id)) setSecurityTarget({ profile, editing: false });
+                  else switchProfile(profile.id);
+                }}
               />
             ))}
-            <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
-              <span className="profile-picker-avatar profile-picker-avatar--add">
-                <Plus size={32} weight="bold" aria-hidden="true" />
-              </span>
-              <span className="profile-picker-name">Add Profile</span>
-            </button>
+            {/* Adding a profile is part of managing them, as on Netflix. */}
+            {managing && (
+              <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
+                <span className="profile-picker-avatar profile-picker-avatar--add">
+                  <Plus size={32} weight="bold" aria-hidden="true" />
+                </span>
+                <span className="profile-picker-name">Add Profile</span>
+              </button>
+            )}
           </div>
         ) : null}
+
+        {locks && !profilesLoading && (managing ? (
+          <button type="button" className="profile-picker-manage profile-picker-manage--done" onClick={() => setManaging(false)}>
+            <Check size={18} weight="bold" aria-hidden="true" /> Done
+          </button>
+        ) : (
+          <button type="button" className="profile-picker-manage" onClick={() => setManaging(true)}>
+            <PencilSimple size={18} aria-hidden="true" /> Manage Profiles
+          </button>
+        ))}
 
       </div>
 
@@ -149,6 +172,9 @@ export default function ProfilePicker() {
         locked={locks?.has(securityTarget.profile.id)} onCancel={() => setSecurityTarget(null)}
         onSaved={async () => { await refreshProfiles(); await loadLocks(); setSecurityTarget(null); }}
         onUnlock={() => switchProfile(securityTarget.profile.id)}
+        onDelete={canManage && !securityTarget.profile.is_default
+          ? () => { setDeleteTarget(securityTarget.profile); setSecurityTarget(null); }
+          : null}
       />}
       {deleteTarget && (
         <DeleteProfileConfirm

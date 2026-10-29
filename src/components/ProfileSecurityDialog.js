@@ -99,7 +99,7 @@ export default function ProfileSecurityDialog(props) {
   return <ProfileSettingsDialog {...props} />;
 }
 
-function ProfileSettingsDialog({ profile, email, locked, locksAvailable = true, onCancel, onSaved }) {
+function ProfileSettingsDialog({ profile, email, locked, locksAvailable = true, onCancel, onSaved, onDelete }) {
   const [isKids, setIsKids] = useState(Boolean(profile.is_kids));
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
@@ -144,6 +144,7 @@ function ProfileSettingsDialog({ profile, email, locked, locksAvailable = true, 
         <div className="profile-picker-add-actions">
           <button className="btn-primary" type="submit" disabled={busy}>{busy ? 'Please wait…' : 'Save changes'}</button>
           <button className="btn-ghost" type="button" disabled={busy} onClick={onCancel}>Cancel</button>
+          {onDelete && <button className="btn-danger profile-security-delete" type="button" disabled={busy} onClick={onDelete}>Delete profile</button>}
         </div>
       </form>
     </div>
