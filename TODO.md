@@ -4,22 +4,24 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Fix first
 
-- [x] **Profile PINs on the TV apps.** Locked profiles open without a PIN on Apple TV and Fire TV: neither app calls `verify_profile_pin` or `list_profile_locks`. Add the lock screen to the TV profile pickers (`tv-apple/BingeTV/App/AppModel.swift`, `tv-android/.../data/Supabase.kt` + the profile screen), with a 4-digit entry that works with the remote.
-- [x] **Finish the database split.** Done 2026-10-29: Supabase holds no catalog tables, Neon holds only the catalog (backup of Neon's old user-data copy in `server/data/database-split-backups/`, gitignored).
 - [ ] **Install the new TV builds.** TV apps from before the split read the catalog from Supabase, which no longer has it, so their rows are empty. Fire TV: the APK from the latest `tv-apk.yml` run. Apple TV: build and install from Xcode.
 
-## Clean up
+## Code clean up
 
-- [ ] **Remove the Neon Auth code paths.** Branches for `REACT_APP_AUTH_PROVIDER === 'neon'` in `server/routes/{watchlist,ratings,admin,auth}.js`, `server/neonAuth.js` and the auth half of `src/utils/neon.js` read user tables that the split removes from Neon.
-- [ ] **Retire the SQLite fallback server.** `server/db.js` (better-sqlite3, ~800 lines) still backs 8 routes as a fallback that writes to `/tmp` on Vercel and loses data on every cold start. Media now comes from Neon and user data from Supabase, so these fallbacks can go, along with `bcryptjs`/`jsonwebtoken` if the legacy `/api/auth` goes too.
-- [x] **Split the giant files.** `server/routes/media.js` (2,144 lines), `src/components/EmbedPlayer.js` (1,738) and `src/utils/supabaseData.js` (1,715) would be easier to change in smaller pieces, e.g. one module per server or per table.
-- [x] **Trim the CSS.** `src/styles/App.css` is 10,211 lines, much of it from pages that no longer exist (e.g. the old Watch Room `wr-*` rules). Search for selectors no component uses and delete them. Also drop the global `h1 { white-space: nowrap; }` (App.css): it stops headings wrapping on phones, and the PIN screen already has to override it.
-- [x] **Bump the GitHub Actions** (`actions/checkout`, `actions/setup-node`) to versions on Node 24 before GitHub's Node 20 removal, and pin `ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26.
+- [ ] **Delete the components nothing uses.** No file imports `HlsPlayer.js`, `MediaRow.js` or `RatingBadge.js`, and `MediaCard.js` / `MobileMediaCard.js` only import each other (`TitleCard` replaced them). Delete them, their CSS (`mob-card-*` and friends in `mobile.css` / `App.css`) and the `hls.js` dependency, which only `HlsPlayer` used.
+- [ ] **Remove the dead server routes.** Nothing in the app calls `/api/watchroom`, `/api/weebcentral` or `/api/bato` (`server/routes/{watchroom,weebcentral,bato}.js`, plus their CSP entries in `server/app.js`), and `server/utils/supabaseClient.js` isn't required anywhere.
+- [ ] **Retire the Supabase catalog seed pipeline.** Supabase no longer holds the catalog, so `generate-supabase-{movie,tv,book}-seed.js`, `prepare-non-destructive-chunks.js`, `run_chunks.js`, `seed_split.js`, `import-books-to-supabase.js`, `supabase/repeatable_*_seed.sql` and `supabase/chunks*/` (174 MB) are dead, along with the `generate:supabase:*` / `prepare:supabase:chunks` npm scripts. Keep `run-supabase-sql.js` for the schema.
+- [ ] **Take generated data out of git.** `backups/` (264 MB catalog export) and `data/` (146 MB scraper output) are tracked, so every clone downloads ~690 MB with the seed chunks. The catalog lives in Neon (with backup branches); move the exports to a GitHub Release or drop them, gitignore both folders, and optionally rewrite history to shrink the repo.
+- [ ] **One stylesheet layer instead of four.** `App.css` → `theme-experiment.css` → `mobile.css` → `streaming.css` each restyle the same selectors (`.genre-chip` in three files, `.btn-danger` in three, `.auth-form input` in two) and need 55 `!important`s to win. Fold `theme-experiment.css` (the "UI experiment" that became the real design) into the base, keep `mobile.css` to media queries, and remove rules a Playwright CSS-coverage pass shows are never used (~10,000 lines today).
+- [ ] **Rename files whose names are out of date.** `scripts/sync-language-to-supabase.js` writes to Neon (`import:malayalam` too: it handles any language), `src/utils/supabaseMovieCatalog.js` reads Neon, and `theme-experiment.css` is the main theme. Rename them and update imports, npm scripts, workflows and CLAUDE.md.
+- [ ] **Delete one-off scripts.** `scripts/migrate-legacy-auth-users.js` (the old auth migration, done) and `scripts/script_parser.py` aren't referenced by any npm script, workflow or doc.
+- [ ] **Review the lint suppressions.** 24 `react-hooks/exhaustive-deps` disables can hide stale-closure bugs (a hook reading an old profile or setting); fix the dependencies or leave a comment saying why each is safe. The 10 `no-await-in-loop` ones are deliberate (rate-limited APIs) and can stay.
+- [ ] **Split `src/App.test.js`.** At 815 lines it tests routing plus the Movies, Series and Books pages. Move the page tests next to their pages (`Movies.test.js`, …) and keep `App.test.js` for routing.
+- [ ] **Fix stale sections of CLAUDE.md.** "Desktop / mobile component pairs" still describes `MobileMediaDetail` / `MobileBookDetail` (removed) and the dead `MediaCard` pair, and contradicts the "Title / book detail modals" section above it. Re-check the rest against the code once the items above land.
 
 ## Catalog data
 
 - [ ] **Fill in missing catalog fields.** In Neon, 44% of movies have no `vote_average`/`popularity` and 43% no `original_language`. `backfill-catalog-fields.js` does 1,000 rows per twice-weekly run, so it would take months to catch up. Run a one-off large backfill (or a nightly job with a higher `MAX_ROWS`), then rely on the twice-weekly run.
-- [x] **Search on Neon.** Search now goes through `/api/neon-data`. Look into Neon full-text or trigram ranking in `search_catalog` (typos, accents, "the" prefixes) and cache popular queries.
 
 ## Features
 
@@ -28,18 +30,31 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **Smarter "Because you watched"** (on hold until binge. has enough users with overlapping ratings). Mix in the existing `collaborative_*_candidates` RPCs ("people who liked X also liked") as a lightly weighted extra source next to TMDB `/recommendations` (which already covers this from TMDB's audience) in `src/utils/personalization.js`.
 - [ ] **Per-profile time limits for kids profiles** (daily minutes, bedtime), enforced where playback positions are already saved.
 - [ ] **Offline-friendly lists.** The service worker already caches TMDB responses and art; cache My List and Continue Watching too so Home renders on a plane.
+- [ ] **Where to watch.** Nothing calls TMDB's `/watch/providers`. Show the legal streaming/rent/buy options for the viewer's country on the title page (`MediaDetailsModal.js`, `useTitleDetails.js`); TMDB requires a JustWatch credit next to it.
+- [ ] **Actor and director pages.** Search finds people (`searchPerson` in `src/utils/searchExtras.js`), but there's no `/person/:id` route, so you can't open someone's filmography. Add a page from TMDB `/person/{id}` + `combined_credits`, matched back to the catalog like the browse rows, and link the cast on title pages to it.
+- [ ] **Mark a whole season watched.** Episodes are only marked one at a time as they play (`components/player/useWatchedEpisodes.js`). Add "Mark season watched" and "Watched up to here" to the episode list, writing `episode_progress`, so catching up on a show you saw elsewhere takes one click.
+- [ ] **Reading progress across devices.** `BookReader.js` keeps your place in `localStorage` (`binge:reader-progress`), so it doesn't follow the profile to another device. Save it per profile in Supabase, like `continue_watching.position_seconds`.
+- [ ] **"Surprise me."** A button on Home and Movies/Series that picks one title from the profile's top recommendations (`buildPersonalizedRows`), respecting the release window and maturity level, and opens or plays it.
+- [ ] **Search filters.** `/search` (`SearchResults.js`) has no way to narrow results. Add chips for type, decade and language (`role="group"` + `aria-pressed`, like the genre chips), applied to both catalog results and Ask binge.
+- [ ] **Sleep timer on the website.** The TV apps have one (`PlayerModel.swift`, `PlayerModel.kt`); the web player doesn't. "End of episode / 30 / 60 min" in `PlaybackOptions.js`, pausing via the same position save as closing the player.
+- [ ] **Maturity levels on the TV apps.** The website has Toddler / Kids / Teens / No restrictions (`src/utils/kidsMode.js`), but the TV apps only read `is_kids` and apply the Kids list to every restricted profile. Read `settings.maturity` in `Models.swift` / `Models.kt`, extend `KidsFilter` with each level's ratings, and show the age pill on the TV profile pickers.
+
+## UI and UX
+
+- [ ] **Undo after removing something.** Removing a title from My List, Continue Watching or History happens instantly with no way back. `sonner` is already a dependency: show "Removed · Undo" for a few seconds and only then delete (`Home.js`, `Profile.js`, `History.js`).
+- [ ] **Spoiler-safe episode lists.** Episode stills and summaries further ahead than your next episode give plot away. Blur those stills and hide those summaries until tapped, with a switch in Settings (`MediaDetailsModal.js`, `profileSettings.js`).
+- [ ] **"Install binge." prompt.** The site is a PWA (manifest, service worker, shortcuts), but nothing handles `beforeinstallprompt`, so most people never install it. Offer Install in the Me sheet / Settings on Chrome and Android, and an "Add to Home Screen" how-to sheet on iPhone.
+- [ ] **Link previews for shared titles.** `/movie/:id`, `/tv-show/:id` and `/book/:id` are rendered in the browser, so iMessage, Discord and Slack show the generic site card. Serve `og:title` / `og:description` / `og:image` (the TMDB backdrop) for those paths from a small Vercel function before the app loads.
+- [ ] **Notification inbox.** New-episode, reminder, game and admin push alerts disappear once dismissed, and nothing in the app lists them. Add a bell in the navbar with the last 30 days of alerts (one table both crons write to), with unread dots.
+
+## Accounts and privacy
+
+- [ ] **Delete my account.** Account Settings has no delete; only admins can delete users (`/api/admin/users`). Add a self-service route that confirms the password and calls `auth.admin.deleteUser` (everything cascades from `auth.users`).
+- [ ] **Download my data.** Export ratings, My List, history and episode progress as JSON plus a Letterboxd-style CSV, the mirror of `/import` (`historyImport.js` already knows the formats).
+- [ ] **Two-step sign-in.** Supabase Auth supports TOTP authenticator apps, but nothing enrolls or challenges a factor. Add it to Account Settings and the login form, at least for admin accounts.
 
 ## GitHub Actions
 
-- [x] **One required check on every PR.** `neon.yml` builds with `CI: false`, so warnings that fail the Vercel build (unused variables) still pass, and the server tests (`node --test server/data-access/*.test.js`) never run. Add a `ci.yml` that runs Jest, the server tests and `CI=true npm run build`, and make it required on `main`. Keep `neon.yml` for the Neon preview branch only.
-- [x] **E2E against each Vercel preview.** Trigger on `deployment_status` (success) and run `npm run test:e2e` with `E2E_BASE_URL` set to the preview URL. That covers sign-up, play/resume, rating, the TV remote flow and the axe accessibility check. It needs `E2E_EMAIL`/`E2E_PASSWORD` for a test account and a Vercel protection-bypass secret, because previews sit behind Vercel login. An empty Home, like the one the preview showed this week, would fail it.
-- [x] **Apple TV build and unit tests.** Fire TV has `tv-apk.yml`, but nothing builds the Apple TV app. On changes under `tv-apple/**`, run `xcodebuild build-for-testing` and `tv-apple/scripts/run-tests.sh` (unit suites, no network) on a `macos` runner with a tvOS simulator.
-- [x] **Fire TV releases.** `tv-apk.yml` only runs on pushes and keeps the APK as a 90-day artifact. Also run it on PRs, and on a `tv-v*` tag attach the APK to a GitHub Release, so the stick always installs from the same stable link.
-- [x] **Check Supabase has every migration.** The profile-lock migration sat unapplied until the PIN screen said "currently unavailable". On PRs touching `supabase/migrations/` and nightly, list the tables and RPCs Supabase exposes (`GET /rest/v1/` with the secret key, no DB URL needed) and fail if one a migration creates is missing.
-- [x] **Weekly database-split audit.** Run `database-split.yml` in `audit` mode on a schedule, plus a check that Neon has no user tables and Supabase no catalog tables. Open an issue if it fails, so drift between the two databases gets noticed.
-- [x] **Catalog health report.** A weekly job that writes to the run summary: row counts, how many movies lack `vote_average`/`popularity`/`original_language`, and how many of TMDB's trending titles match a catalog row (`catalogLookup.js`, normally ~95%). Fail below 90% so a broken sync shows up.
-- [x] **Dependabot.** Add `.github/dependabot.yml` for npm (root and `scripts/`), Gradle (`tv-android`) and GitHub Actions, weekly and grouped, so updates arrive as a few PRs instead of piling up.
-- [x] **Secret scanning.** Run gitleaks on PRs. Local `.env` files hold service keys, and `server/data/database-split-backups/` holds user emails; both are gitignored, but one bad `git add -f` would publish them.
 - [ ] **Bundle size on PRs.** After `CI=true npm run build`, comment the gzipped size of `build/static/js/main.*.js` against `main`, so a heavy import gets noticed before it ships.
 - [ ] **Tidy merged branches.** A weekly job that deletes remote branches already merged into `main`. Unmerged branches stay; it only lists them in the run summary.
 
