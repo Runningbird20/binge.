@@ -5,12 +5,8 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 ## Fix first
 
 - [x] **Profile PINs on the TV apps.** Locked profiles open without a PIN on Apple TV and Fire TV: neither app calls `verify_profile_pin` or `list_profile_locks`. Add the lock screen to the TV profile pickers (`tv-apple/BingeTV/App/AppModel.swift`, `tv-android/.../data/Supabase.kt` + the profile screen), with a 4-digit entry that works with the remote.
-- [ ] **Finish the database split.**
-  1. Delete `REACT_APP_API_URL` from the Vercel project's environment variables.
-  2. Make sure the Preview environment has `DATABASE_URL`.
-  3. Deploy, then distribute the new TV builds.
-  4. Add the `NEON_API_KEY` and `SUPABASE_DB_URL` secrets.
-  5. Run **Actions → Database split**: first `audit`, then `apply`.
+- [x] **Finish the database split.** Done 2026-10-29: Supabase holds no catalog tables, Neon holds only the catalog (backup of Neon's old user-data copy in `server/data/database-split-backups/`, gitignored).
+- [ ] **Install the new TV builds.** TV apps from before the split read the catalog from Supabase, which no longer has it, so their rows are empty. Fire TV: the APK from the latest `tv-apk.yml` run. Apple TV: build and install from Xcode.
 
 ## Clean up
 
