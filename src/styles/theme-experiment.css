@@ -51,13 +51,6 @@ body {
   color: var(--exp-text);
 }
 
-.mr-heading {
-  font-size: 1.3rem;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--exp-text);
-}
-
 /* ── Buttons ────────────────────────────────────────────────── */
 
 .btn-primary {
@@ -183,34 +176,17 @@ body {
    same hover as .poster-tile (Movies/TV/Books pages) — the frame
    scales up with a glow ring + shadow, its border fades out. ──── */
 
-.mr-poster,
-.foryou-card,
-.media-card-poster {
+.foryou-card {
   border-radius: var(--exp-radius);
   border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
-.mr-card:hover .mr-poster,
 .foryou-card:hover {
   transform: scale(1.04);
   box-shadow: var(--exp-ring), var(--exp-shadow);
   border-color: transparent;
-}
-
-/* Row headings + see-all */
-.mr-see-all { color: var(--exp-text-faint); }
-.mr-see-all:hover { color: var(--exp-text); }
-
-.mr-fade-left  { background: linear-gradient(to right, var(--exp-bg-0), transparent); }
-.mr-fade-right { background: linear-gradient(to left,  var(--exp-bg-0), transparent); }
-
-.mr-arrow {
-  background: rgba(16, 19, 26, 0.85);
-  border: 1px solid var(--exp-border);
-  color: var(--exp-text);
-  backdrop-filter: blur(8px);
 }
 
 /* ── Recommended For You: poster-forward overlay cards ──────── */
@@ -315,8 +291,6 @@ body {
   outline: none;
 }
 .filter-input::placeholder { color: var(--exp-text-faint); }
-
-/* Curated/Browse pill toggle — like provider pills in streaming UIs */
 
 /* ── Catalog pages (Movies / Series): title + genre chips + grid ── */
 
@@ -873,7 +847,6 @@ body {
   box-shadow: var(--exp-shadow);
 }
 
-
 .profile-hover-section-label { color: var(--exp-text-faint); }
 
 .profile-hover-link { color: var(--exp-text-dim); }
@@ -897,25 +870,6 @@ body {
    alternative to a full per-category radar chart. Same visual language
    as the old .profile-wl-status-ind--rated indicator, generalized so it
    isn't tied to the watchlist card's hover-only visibility. ────────── */
-
-.rating-badge {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 1px;
-  line-height: 1;
-  color: var(--exp-text);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
-}
-.rating-badge-num { font-weight: 800; }
-.rating-badge-den { font-weight: 600; opacity: 0.8; }
-
-.rating-badge-sm .rating-badge-num { font-size: 0.72rem; }
-.rating-badge-sm .rating-badge-den { font-size: 0.46rem; }
-.rating-badge-md .rating-badge-num { font-size: 0.88rem; }
-.rating-badge-md .rating-badge-den { font-size: 0.52rem; }
-.rating-badge-lg .rating-badge-num { font-size: 1.1rem; }
-.rating-badge-lg .rating-badge-den { font-size: 0.62rem; }
 
 .rating-badge--corner {
   position: absolute;

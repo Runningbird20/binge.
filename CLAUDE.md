@@ -67,7 +67,7 @@ Book ids were SHA-1-derived 60-bit numbers that JavaScript silently rounds (open
 
 ### Desktop / mobile component pairs
 
-Several components render a completely different implementation on mobile rather than just using responsive CSS: `MediaCard.js` → `MobileMediaCard.js`, `MediaDetailsModal.js` → `MobileMediaDetail.js`, and book details have their own `MobileBookDetail.js`. The split is driven by `useIsMobile()` / `useDeviceType()` (`src/hooks/`). When changing behavior on one of these (e.g. adding/removing an action button), check whether the mobile counterpart needs the same change — they don't share implementation.
+Cards and title/book details are single responsive components (`TitleCard`, `MediaDetailsModal`, `BookDetailsModal`); the old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone. The one remaining split is the player: `EmbedPlayer.js` renders `components/player/MobilePlayer.js` or `DesktopPlayer.js` (chosen by `useIsMobile()` / `useDeviceType()` in `src/hooks/`). When changing a player control, change both layouts — they don't share markup.
 
 ### Routing & lazy loading
 

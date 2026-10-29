@@ -2584,7 +2584,6 @@
 
 /* The fact in each sentence carries the weight, not a giant number. */
 @media (max-width: 768px) {
-  /* Story-style tap zones on phones */
 }
 
 /* ── Sports Multiview ─────────────────────────────────────────── */
@@ -3691,8 +3690,7 @@ kbd {
 .st-game-art-icon .st-cat-icon { margin: 0; color: rgba(255, 255, 255, 0.85); }
 
 /* Inline icons in metadata sit on the text, not above it. */
-.mob-card-badge svg, .mob-card-avg-score svg, .mob-detail-community svg { vertical-align: -0.1em; }
-.mr-see-all-arrow { vertical-align: -0.15em; }
+.mob-detail-community svg { vertical-align: -0.1em; }
 
 /* Error page: long headings wrap on phones. */
 .st-page-error h1 { white-space: normal; text-wrap: balance; overflow-wrap: anywhere; }
