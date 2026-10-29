@@ -3,7 +3,7 @@
  * backfill-catalog-fields.js
  *
  * Fills original_language and age_rating on catalog rows that were imported
- * without them (sync-tmdb-to-supabase.js only enriches TMDB ids it hasn't
+ * without them (sync-tmdb-to-neon.js only enriches TMDB ids it hasn't
  * seen, so older rows never got these). Only empty columns are written;
  * most popular titles go first.
  *
@@ -24,7 +24,7 @@ try {
 } catch {}
 
 const { createCatalogClient } = require('./neon-catalog-client');
-const { tmdbFetch } = require('./sync-tmdb-to-supabase');
+const { tmdbFetch } = require('./tmdb-records');
 
 const TYPE = process.env.TYPE || 'both';
 const MAX_ROWS = parseInt(process.env.MAX_ROWS || '3000', 10);
