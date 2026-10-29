@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
-import { getEmbeddedId } from '../utils/embedPlayability';
+import { api } from '../../api';
+import { getEmbeddedId } from '../../utils/embedPlayability';
 
 // The IMDb/TMDB id the embed servers need for a title: from the catalog row
 // when it has one, otherwise looked up on the server by title and year.
