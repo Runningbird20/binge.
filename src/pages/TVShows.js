@@ -25,8 +25,8 @@ import {
   buildMediaGenreFacets,
   filterMediaItems,
   loadFallbackTvShows,
-} from '../catalogFallback';
-import { TV_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
+} from '../utils/catalogFallback';
+import { TV_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../utils/genreGroups';
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';

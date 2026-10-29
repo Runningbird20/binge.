@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { api } from '../api';
 import MediaDetailsModal from './MediaDetailsModal';
 import { BookDetailsModal } from '../pages/Books';
-import { loadFallbackBooks, loadFallbackMovies, loadFallbackTvShows } from '../catalogFallback';
+import { loadFallbackBooks, loadFallbackMovies, loadFallbackTvShows } from '../utils/catalogFallback';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,

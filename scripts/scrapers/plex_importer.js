@@ -16,16 +16,16 @@ const DEFAULT_RETRIES = 4;
 const DEFAULT_DELAY_MS = 250;
 const DEFAULT_DETAIL_CONCURRENCY = 1;
 const DEFAULT_MAX_ITEMS = 100;
-const DEFAULT_MOVIE_OUTPUT = path.join(__dirname, 'data', 'plex_movies.json');
-const DEFAULT_TV_OUTPUT = path.join(__dirname, 'data', 'plex_tv.json');
-const DEFAULT_MOVIE_BULK_OUTPUT = path.join(__dirname, 'data', 'plex_movies.bulk.jsonl');
-const DEFAULT_TV_BULK_OUTPUT = path.join(__dirname, 'data', 'plex_tv.bulk.jsonl');
-const DEFAULT_MOVIE_CHECKPOINT = path.join(__dirname, 'data', 'plex_movies.bulk.checkpoint.json');
-const DEFAULT_TV_CHECKPOINT = path.join(__dirname, 'data', 'plex_tv.bulk.checkpoint.json');
-const DEFAULT_MOVIE_PID_FILE = path.join(__dirname, 'data', 'plex_movies.runner.pid');
-const DEFAULT_TV_PID_FILE = path.join(__dirname, 'data', 'plex_tv.runner.pid');
-const DEFAULT_MOVIE_LOG_FILE = path.join(__dirname, 'data', 'plex_movies.runner.log');
-const DEFAULT_TV_LOG_FILE = path.join(__dirname, 'data', 'plex_tv.runner.log');
+const DEFAULT_MOVIE_OUTPUT = path.join(__dirname, '..', '..', 'data', 'plex_movies.json');
+const DEFAULT_TV_OUTPUT = path.join(__dirname, '..', '..', 'data', 'plex_tv.json');
+const DEFAULT_MOVIE_BULK_OUTPUT = path.join(__dirname, '..', '..', 'data', 'plex_movies.bulk.jsonl');
+const DEFAULT_TV_BULK_OUTPUT = path.join(__dirname, '..', '..', 'data', 'plex_tv.bulk.jsonl');
+const DEFAULT_MOVIE_CHECKPOINT = path.join(__dirname, '..', '..', 'data', 'plex_movies.bulk.checkpoint.json');
+const DEFAULT_TV_CHECKPOINT = path.join(__dirname, '..', '..', 'data', 'plex_tv.bulk.checkpoint.json');
+const DEFAULT_MOVIE_PID_FILE = path.join(__dirname, '..', '..', 'data', 'plex_movies.runner.pid');
+const DEFAULT_TV_PID_FILE = path.join(__dirname, '..', '..', 'data', 'plex_tv.runner.pid');
+const DEFAULT_MOVIE_LOG_FILE = path.join(__dirname, '..', '..', 'data', 'plex_movies.runner.log');
+const DEFAULT_TV_LOG_FILE = path.join(__dirname, '..', '..', 'data', 'plex_tv.runner.log');
 
 const WRITER_ROLE_PATTERNS = [
   /\bwriter\b/i,

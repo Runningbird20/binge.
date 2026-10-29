@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import Landing from './pages/Landing';
-import { useAuth } from './contexts/AuthContext';
+import Landing from './Landing';
+import { useAuth } from '../contexts/AuthContext';
 
 jest.mock(
   'react-router-dom',
@@ -12,7 +12,7 @@ jest.mock(
   { virtual: true }
 );
 
-jest.mock('./contexts/AuthContext', () => ({
+jest.mock('../contexts/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 

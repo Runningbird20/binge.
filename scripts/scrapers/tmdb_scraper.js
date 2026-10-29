@@ -5,9 +5,9 @@
  * - Covers popular lists + every genre + decade-based discovery + languages
  *
  * Usage:
- *   node tmdb_scraper.js --type both --pages 20
- *   node tmdb_scraper.js --type both --pages 50 --resume
- *   node tmdb_scraper.js --type both --pages 500  # maximum possible
+ *   node scripts/scrapers/tmdb_scraper.js --type both --pages 20
+ *   node scripts/scrapers/tmdb_scraper.js --type both --pages 50 --resume
+ *   node scripts/scrapers/tmdb_scraper.js --type both --pages 500  # maximum possible
  */
 
 require('dotenv').config();
@@ -17,7 +17,7 @@ const path = require('path');
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const TMDB_BASE    = 'https://api.themoviedb.org/3';
 const POSTER_BASE  = 'https://image.tmdb.org/t/p/w500';
-const DATA_DIR     = path.join(__dirname, 'data');
+const DATA_DIR     = path.join(__dirname, '..', '..', 'data');
 
 const args     = process.argv.slice(2);
 const getArg   = (name, fallback) => { const i = args.indexOf(name); return i !== -1 && args[i+1] ? args[i+1] : fallback; };

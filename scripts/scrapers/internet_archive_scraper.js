@@ -9,9 +9,9 @@ const fetchFn =
         throw new Error('This script requires Node.js 18+ with built-in fetch support.');
       })();
 
-const DEFAULT_OUTPUT = path.join(__dirname, 'data', 'internet_archive_books.json');
-const DEFAULT_BULK_OUTPUT = path.join(__dirname, 'data', 'internet_archive_books.bulk.jsonl');
-const DEFAULT_CHECKPOINT = path.join(__dirname, 'data', 'internet_archive_books.bulk.checkpoint.json');
+const DEFAULT_OUTPUT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.json');
+const DEFAULT_BULK_OUTPUT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.bulk.jsonl');
+const DEFAULT_CHECKPOINT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.bulk.checkpoint.json');
 const DEFAULT_LIMIT = 20;
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_BULK_PAGE_SIZE = 200;
