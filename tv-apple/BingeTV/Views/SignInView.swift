@@ -80,6 +80,14 @@ struct ProfilePickerView: View {
     @FocusState private var focused: String?
 
     var body: some View {
+        if let locked = app.pinProfile {
+            PinEntryView(profile: locked)
+        } else {
+            picker
+        }
+    }
+
+    private var picker: some View {
         VStack(spacing: 70) {
             Text("Who's watching?")
                 .font(.system(size: 64, weight: .bold))
@@ -88,14 +96,19 @@ struct ProfilePickerView: View {
             } else {
                 HStack(spacing: 56) {
                     ForEach(app.profiles) { profile in
-                        Button { app.choose(profile) } label: {
-                            ProfileAvatar(profile: profile, size: 220)
+                        Button { Task { await app.pick(profile) } } label: {
+                            ProfileAvatar(profile: profile, size: 220, locked: app.lockedProfileIds.contains(profile.id))
                         }
                         .buttonStyle(.borderless)
                         .focused($focused, equals: profile.id)
                     }
                 }
                 .focusSection()
+                if let error = app.lockCheckError {
+                    Text(error)
+                        .font(.headline)
+                        .foregroundStyle(Theme.muted)
+                }
             }
             Button("Sign out") { Task { await app.signOut() } }
                 .padding(.top, 20)
@@ -108,6 +121,7 @@ struct ProfilePickerView: View {
 struct ProfileAvatar: View {
     let profile: AccountProfile
     var size: CGFloat = 200
+    var locked = false
 
     private var color: Color { Color(hexString: profile.avatarColor) ?? Color(hex: 0x3B4A7A) }
 
@@ -127,6 +141,12 @@ struct ProfileAvatar: View {
             .hoverEffect(.highlight)
             HStack(spacing: 10) {
                 Text(profile.name).font(.headline)
+                if locked {
+                    Image(systemName: "lock.fill")
+                        .font(.headline)
+                        .foregroundStyle(Theme.muted)
+                        .accessibilityLabel("Locked with a PIN")
+                }
                 if profile.isKids { Badge(text: "Kids") }
             }
         }

@@ -533,7 +533,7 @@ enum ServerProbe {
         let app = AppModel()
         try await app.signIn(email: Live.env["BINGE_EMAIL"]!, password: Live.env["BINGE_PASSWORD"] ?? "")
         defer { Task { await app.signOut() } }
-        if app.phase == .choosingProfile { app.choose(app.profiles.first) }
+        if app.phase == .choosingProfile, let first = app.profiles.first { await app.pick(first) }
         await app.refreshList()
         let cw = try await app.continueWatching()
         let list = try await app.myList()
