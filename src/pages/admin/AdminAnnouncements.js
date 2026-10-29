@@ -97,7 +97,7 @@ export default function AdminAnnouncements() {
                 onClick={() => setActive(row.id, !row.active)}
                 disabled={Boolean(expired)}
               ><span /></button>
-              <button type="button" className="pf-icon-btn" onClick={() => remove(row.id)} aria-label="Delete announcement"><Trash size={15} weight="bold" /></button>
+              <button type="button" className="pf-icon-btn pf-icon-btn--danger" onClick={() => remove(row.id)} aria-label="Delete announcement"><Trash size={15} weight="bold" /></button>
             </li>
           );
         })}
