@@ -56,6 +56,5 @@ cannot run DDL). Catalog sync workflows (`sync-tmdb.yml`, `sync-languages.yml`)
 write to Neon with `DATABASE_URL` only.
 
 `supabase/repeatable_schema.sql` no longer creates catalog tables, and
-`npm run supabase:seed:catalogs` is gone. `REACT_APP_AUTH_PROVIDER=supabase`;
-the old Neon Auth code paths (`=neon`) expect user tables in Neon and no
-longer work after the cleanup.
+`npm run supabase:seed:catalogs` is gone. Supabase Auth is the only sign-in:
+the Neon Auth code paths and the legacy SQLite/JWT server were removed.

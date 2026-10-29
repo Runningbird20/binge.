@@ -1,0 +1,40 @@
+name: Supabase has every migration
+
+# Fails when Supabase is missing a table, view or function that a migration
+# creates (scripts/check-supabase-migrations.js), so an unapplied migration
+# shows up here instead of as a broken feature. Runs on PRs that touch
+# migrations and every night.
+#
+# Secrets: SUPABASE_URL, SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY).
+# Read-only: it only fetches the REST API's list of tables and functions.
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/check-supabase-migrations.js'
+      - '.github/workflows/supabase-migrations.yml'
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Migrations applied
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Compare migrations with Supabase
+        run: node scripts/check-supabase-migrations.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}

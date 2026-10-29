@@ -1,6 +1,5 @@
 const express = require('express');
 const router  = express.Router();
-const db      = require('../db');
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
@@ -94,15 +93,7 @@ router.get('/:username', async (req, res) => {
 
     function sbMeta(mediaType, mediaId) {
       const map = mediaType === 'movie' ? movieMap : mediaType === 'tv_show' ? tvMap : bookMap;
-      if (map.has(mediaId)) return map.get(mediaId);
-      // SQLite fallback for items only in local DB
-      try {
-        let row = null;
-        if (mediaType === 'movie')   row = db.prepare('SELECT title, year, poster_url as image_url FROM movies WHERE id = ?').get(mediaId);
-        if (mediaType === 'tv_show') row = db.prepare('SELECT title, year, poster_url as image_url FROM tv_shows WHERE id = ?').get(mediaId);
-        if (mediaType === 'book')    row = db.prepare('SELECT title, year, cover_url  as image_url FROM books  WHERE id = ?').get(mediaId);
-        return row || null;
-      } catch { return null; }
+      return map.get(mediaId) || null;
     }
 
     // Enrich ratings

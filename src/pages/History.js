@@ -169,7 +169,7 @@ export default function History() {
                       {entry.kind !== 'rated' && (
                         <button
                           type="button"
-                          className="pf-icon-btn"
+                          className="pf-icon-btn pf-icon-btn--danger"
                           onClick={() => remove(entry)}
                           disabled={busy === key}
                           title="Remove from history"

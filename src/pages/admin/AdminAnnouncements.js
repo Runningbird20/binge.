@@ -55,24 +55,20 @@ export default function AdminAnnouncements() {
       <p className="adm-muted">A banner at the top of every page.</p>
       <form className="adm-form" onSubmit={publish}>
         <label className="adm-field adm-field--wide">
-          <span>Message</span>
-          <textarea value={form.message} onChange={update('message')} maxLength={280} rows={2} required placeholder="Heads up: VidRift is having trouble tonight — Vidy and CineSrc are working." />
+          <textarea aria-label="Message" placeholder="Message" value={form.message} onChange={update('message')} maxLength={280} rows={2} required />
         </label>
         <label className="adm-field">
           <span>Style</span>
           <ThemedSelect aria-label="Announcement style" value={form.level} onChange={update('level')} options={[{ value: 'info', label: 'Info (blue)' }, { value: 'warning', label: 'Warning (amber)' }, { value: 'critical', label: 'Critical (red)' }]} />
         </label>
         <label className="adm-field">
-          <span>Ends after (hours, optional)</span>
-          <input type="number" min="1" max="720" value={form.hours} onChange={update('hours')} placeholder="Never" />
+          <input aria-label="Ends after (hours, optional)" placeholder="Ends after (hours, optional)" type="number" min="1" max="720" value={form.hours} onChange={update('hours')} />
         </label>
         <label className="adm-field">
-          <span>Link (optional)</span>
-          <input type="text" value={form.link_url} onChange={update('link_url')} placeholder="/sports or https://…" />
+          <input aria-label="Link (optional): /sports or https://…" placeholder="Link (optional): /sports or https://…" type="text" value={form.link_url} onChange={update('link_url')} />
         </label>
         <label className="adm-field">
-          <span>Link text</span>
-          <input type="text" value={form.link_label} onChange={update('link_label')} placeholder="Learn more" maxLength={40} />
+          <input aria-label="Link text" placeholder="Link text" type="text" value={form.link_label} onChange={update('link_label')} maxLength={40} />
         </label>
         <div className="adm-form-actions">
           <button type="submit" className="st-btn st-btn--primary" disabled={!form.message.trim()}>Publish</button>
@@ -97,7 +93,7 @@ export default function AdminAnnouncements() {
                 onClick={() => setActive(row.id, !row.active)}
                 disabled={Boolean(expired)}
               ><span /></button>
-              <button type="button" className="pf-icon-btn" onClick={() => remove(row.id)} aria-label="Delete announcement"><Trash size={15} weight="bold" /></button>
+              <button type="button" className="pf-icon-btn pf-icon-btn--danger" onClick={() => remove(row.id)} aria-label="Delete announcement"><Trash size={15} weight="bold" /></button>
             </li>
           );
         })}

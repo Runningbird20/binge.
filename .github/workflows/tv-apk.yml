@@ -1,25 +1,48 @@
 # Builds the Fire TV / Android TV app (tv-android/) and attaches the APK to
-# the run. Run it from the Actions tab ("Build TV app" → Run workflow), or it
-# runs on pushes that touch tv-android/.
+# the run. Runs on pushes and PRs that touch tv-android/, or from the Actions
+# tab ("Build TV app" → Run workflow).
+#
+# Releases: push a tag like tv-v1.4 and the APK is attached to a GitHub
+# Release of that name. The stick can always install the newest one from
+#   https://github.com/<owner>/<repo>/releases/latest/download/binge-tv.apk
 #
 # The native app needs the same public keys the website ships. Add them as
 # repo variables (Settings → Secrets and variables → Actions → Variables):
 #   REACT_APP_SUPABASE_URL, REACT_APP_SUPABASE_PUBLISHABLE_KEY (or _ANON_KEY),
 #   REACT_APP_TMDB_API_KEY, and optionally BINGE_URL (the site).
-# A CI-built APK is signed with CI's key, so it can't install over one built
-# on your Mac (uninstall first, or build locally — see tv-android/README.md).
+# Signing: release APKs use the debug key. Add your Mac's key as the secret
+# TV_DEBUG_KEYSTORE (base64 ~/.android/debug.keystore | pbcopy) so CI builds,
+# Releases and local builds all install over each other. Without it CI makes
+# a new key every run, and each APK needs an uninstall first.
 name: Build TV app
 
 on:
   workflow_dispatch:
   push:
+    # Branch pushes build when tv-android/ changes; tag pushes always build
+    # (GitHub doesn't apply path filters to tags). Listing tags without
+    # branches would stop branch pushes, hence '**'.
+    branches: ['**']
+    paths:
+      - 'tv-android/**'
+      - '.github/workflows/tv-apk.yml'
+    tags:
+      - 'tv-v*'
+  pull_request:
     paths:
       - 'tv-android/**'
       - '.github/workflows/tv-apk.yml'
 
+concurrency:
+  group: tv-apk-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write   # only used on tv-v* tags, to publish the Release
     env:
       BINGE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
       REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
@@ -27,17 +50,35 @@ jobs:
       REACT_APP_SUPABASE_ANON_KEY: ${{ vars.REACT_APP_SUPABASE_ANON_KEY }}
       REACT_APP_TMDB_API_KEY: ${{ vars.REACT_APP_TMDB_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '8.7'
+      - name: Use the shared signing key
+        env:
+          TV_DEBUG_KEYSTORE: ${{ secrets.TV_DEBUG_KEYSTORE }}
+        run: |
+          if [ -z "$TV_DEBUG_KEYSTORE" ]; then
+            echo "::warning::TV_DEBUG_KEYSTORE isn't set; this APK gets a one-off key and won't install over other builds."
+            exit 0
+          fi
+          mkdir -p ~/.android
+          echo "$TV_DEBUG_KEYSTORE" | base64 --decode > ~/.android/debug.keystore
       - name: Build release APK
         run: gradle -p tv-android assembleRelease
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binge-tv-apk
           path: tv-android/app/build/outputs/apk/release/app-release.apk
+      - name: Publish the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/tv-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cp tv-android/app/build/outputs/apk/release/app-release.apk binge-tv.apk
+          gh release create "$TAG" binge-tv.apk --title "binge. TV $TAG" --generate-notes --latest

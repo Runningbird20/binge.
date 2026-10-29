@@ -3,7 +3,7 @@
  * sync-language-to-supabase.js (legacy filename; writes the Neon catalog)
  *
  * Keeps one original language (Malayalam by default) complete and current in
- * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-supabase.js)
+ * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-neon.js)
  * works through TMDB's whole export by popularity and skips anything below
  * MIN_POPULARITY, so a small new regional release can wait weeks. This asks
  * TMDB discover directly:
@@ -35,7 +35,7 @@ try {
 } catch {}
 
 const { createCatalogClient } = require('./neon-catalog-client');
-const { movieRecord, tvRecord, tmdbFetch } = require('./sync-tmdb-to-supabase');
+const { movieRecord, tvRecord, tmdbFetch } = require('./tmdb-records');
 
 const LANGUAGES     = (process.env.LANGUAGES || 'ml').split(',').map(s => s.trim()).filter(Boolean);
 const TYPE          = process.env.TYPE || 'both';

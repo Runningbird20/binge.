@@ -11,6 +11,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var profile: AccountProfile?
     @Published private(set) var listIds: [String: Int] = [:] // Title.id → watchlist row id
     @Published var profileLoadError: String?
+    // Profile PINs (Data/ProfileLocks.swift): which profiles are locked, the
+    // one waiting for its PIN, and a lock check that failed in the picker.
+    @Published private(set) var lockedProfileIds: Set<String> = []
+    @Published var pinProfile: AccountProfile?
+    @Published var lockCheckError: String?
     // From Top Shelf (binge:// links); Home opens it once a profile is set.
     @Published var deepLink: DeepLink?
     // Debug-only: browse without an account (-BingeDemo launch argument).
@@ -56,20 +61,25 @@ final class AppModel: ObservableObject {
         profiles = []
         profile = nil
         listIds = [:]
+        lockedProfileIds = []
+        pinProfile = nil
         phase = .signedOut
     }
 
     // Netflix-style: with more than one profile, ask who's watching on launch.
+    // A single profile opens straight away unless it has a PIN.
     func loadProfiles() async {
         guard let session else { phase = .signedOut; return }
         profileLoadError = nil
+        pinProfile = nil
         do {
             profiles = try await Supabase.shared.select("account_profiles", [
                 URLQueryItem(name: "select", value: AccountProfile.columns),
                 URLQueryItem(name: "account_id", value: "eq.\(session.userId)"),
                 URLQueryItem(name: "order", value: "is_default.desc,created_at.asc"),
             ])
-            if profiles.count > 1 {
+            lockedProfileIds = try await ProfileLocks.lockedIds()
+            if profiles.count > 1 || profiles.contains(where: { lockedProfileIds.contains($0.id) }) {
                 phase = .choosingProfile
             } else {
                 choose(profiles.first)
@@ -81,7 +91,40 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func choose(_ next: AccountProfile?) {
+    // From the picker. Locks are checked again here (a PIN may have been set
+    // on another device since): a locked profile asks for its PIN first.
+    func pick(_ next: AccountProfile) async {
+        lockCheckError = nil
+        do {
+            lockedProfileIds = try await ProfileLocks.lockedIds()
+        } catch {
+            if handle(error) { return }
+            lockCheckError = "Couldn't check whether \(next.name) has a PIN. Try again."
+            return
+        }
+        if lockedProfileIds.contains(next.id) {
+            pinProfile = next
+        } else {
+            choose(next)
+        }
+    }
+
+    enum UnlockResult { case unlocked, wrongPin, failed(String) }
+
+    func unlock(with pin: String) async -> UnlockResult {
+        guard let target = pinProfile else { return .failed("Pick a profile first.") }
+        do {
+            guard try await ProfileLocks.verify(profileId: target.id, pin: pin) else { return .wrongPin }
+            pinProfile = nil
+            choose(target)
+            return .unlocked
+        } catch {
+            if handle(error) { return .failed(error.localizedDescription) }
+            return .failed("Couldn't check the PIN. Try again.")
+        }
+    }
+
+    private func choose(_ next: AccountProfile?) {
         profile = next
         applyPrefs()
         if let next { UserDefaults.standard.set(next.id, forKey: lastProfileKey) }
@@ -103,7 +146,11 @@ final class AppModel: ObservableObject {
     }
 
     func switchProfile() {
+        pinProfile = nil
+        lockCheckError = nil
         phase = .choosingProfile
+        // Refresh the lock badges; pick(_:) checks again before opening one.
+        Task { if let ids = try? await ProfileLocks.lockedIds() { lockedProfileIds = ids } }
     }
 
     // Returns true when the error ended the session (the UI then shows sign-in).

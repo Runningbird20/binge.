@@ -150,6 +150,7 @@ struct ProblemView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 900)
             Button("Try again", action: retry)
+                .buttonStyle(ActionButtonStyle())
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 80)
@@ -198,6 +199,46 @@ extension Title {
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: "  ·  ")
+    }
+}
+
+// Action buttons (Play, My List, Sign in, Try again…). The system's default
+// tvOS button draws its resting state in the tint colour, label included, so
+// under the app's gold tint it was a solid gold block whose text only showed
+// on focus. This draws every state itself. `primary` is the screen's main
+// action (gold at rest, per the "gold marks actions" rule); the rest are a
+// quiet translucent fill. Focus is white with black text for both.
+struct ActionButtonStyle: ButtonStyle {
+    var primary = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        ActionBody(configuration: configuration, primary: primary)
+    }
+
+    private struct ActionBody: View {
+        let configuration: ButtonStyleConfiguration
+        let primary: Bool
+        @Environment(\.isFocused) private var focused
+        @Environment(\.isEnabled) private var enabled
+
+        private var fill: Color {
+            if focused { return .white }
+            return primary ? Theme.gold : Color.white.opacity(0.12)
+        }
+
+        var body: some View {
+            configuration.label
+                .font(.headline)
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(focused || primary ? Color.black : Color.white)
+                .padding(.horizontal, 38)
+                .padding(.vertical, 20)
+                .background(Capsule().fill(fill))
+                .opacity(enabled ? 1 : 0.45)
+                .scaleEffect(focused ? 1.06 : (configuration.isPressed ? 0.97 : 1))
+                .shadow(color: .black.opacity(focused ? 0.45 : 0), radius: 14, y: 8)
+                .animation(.easeOut(duration: 0.15), value: focused)
+        }
     }
 }
 

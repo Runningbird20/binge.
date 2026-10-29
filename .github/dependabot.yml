@@ -1,0 +1,40 @@
+# Weekly dependency updates, grouped so they arrive as a few PRs instead of
+# one per package. Major versions come separately (they can break the build).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      web-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /scripts
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      scripts:
+        update-types: [minor, patch]
+
+  - package-ecosystem: gradle
+    directory: /tv-android
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      fire-tv:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']

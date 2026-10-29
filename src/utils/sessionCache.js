@@ -45,7 +45,7 @@ export function buildCatalogCacheKey(mediaType, { genreValues = [], searchTerm =
     [...genreValues].sort().join(','),
     searchTerm.trim().toLowerCase(),
     sortMode,
-    kidsSafe ? 'kids' : 'all',
+    kidsSafe ? String(kidsSafe) : 'all',
   ].join('::');
 }
 

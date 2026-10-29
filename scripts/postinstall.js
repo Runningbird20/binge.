@@ -8,10 +8,3 @@ function run(command) {
 }
 
 run('npx patch-package');
-
-if (process.env.VERCEL === '1') {
-  console.log('Skipping better-sqlite3 rebuild on Vercel for the frontend deployment.');
-  process.exit(0);
-}
-
-run('npm rebuild better-sqlite3');

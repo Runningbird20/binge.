@@ -31,7 +31,8 @@ async function main() {
   const report = {};
   try {
     for (const table of TABLES) {
-      const head = await sb.from(table).select('id', { head: true, count: 'exact' });
+      // A GET (not HEAD), so a dropped table comes back as an error, not a null count.
+      const head = await sb.from(table).select('id', { count: 'exact' }).limit(1);
       if (isMissingTable(head.error)) {
         console.log(`${table}: already removed from Supabase`);
         report[table] = { removedFromSupabase: true };

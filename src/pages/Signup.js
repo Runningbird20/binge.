@@ -189,34 +189,34 @@ export default function Signup() {
           </div>
 
           <label>
-            Username
             <input
+              aria-label="Username"
+              placeholder="Username"
               type="text"
               value={form.username}
               onChange={(e) => updateForm('username', e.target.value)}
-              placeholder="johndoe"
               required
               autoFocus
             />
           </label>
 
           <label>
-            Email
             <input
+              aria-label="Email"
+              placeholder="Email"
               type="email"
               value={form.email}
               onChange={(e) => updateForm('email', e.target.value)}
-              placeholder="you@example.com"
               required
             />
           </label>
 
           <label>
-            Bio
             <textarea
+              aria-label="Bio"
+              placeholder="Bio"
               value={form.bio}
               onChange={(e) => updateForm('bio', e.target.value)}
-              placeholder="Tell people what you love to watch, read, and recommend."
               rows={4}
               maxLength={MAX_BIO_LENGTH}
             />
@@ -224,12 +224,12 @@ export default function Signup() {
           </label>
 
           <label>
-            Password
             <input
+              aria-label="Password (at least 6 characters)"
+              placeholder="Password (at least 6 characters)"
               type="password"
               value={form.password}
               onChange={(e) => updateForm('password', e.target.value)}
-              placeholder="At least 6 characters"
               required
             />
           </label>

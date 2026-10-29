@@ -82,6 +82,7 @@ struct AmbientView: View {
                 Button(action: resume) {
                     Label(resumeLabel ?? "Back to binge.", systemImage: resumeLabel == nil ? "house.fill" : "play.fill")
                 }
+                .buttonStyle(ActionButtonStyle(primary: true))
                 .focused($focused)
                 Text("Swipe or press Back to leave").font(.caption).foregroundStyle(.white.opacity(0.6))
             }
