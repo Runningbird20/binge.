@@ -171,8 +171,10 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     blockedCount: serverChoice.blockedIds.size,
     health: serverChoice.providerHealth,
   };
+  // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
+  const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
   const preloadUrl = upNext.preloadNext && upNext.nextEpisode
-    ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang)
+    ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang, { noAutoplay: silentPreload })
     : null;
   const overlays = (
     <>
@@ -180,7 +182,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       {upNext.upNext && upNext.nextEpisode && (
         <UpNextCard upNext={upNext.upNext} nextEpisode={upNext.nextEpisode} nextInfo={upNext.nextInfo} onPlay={upNext.playNextEpisode} onCancel={upNext.dismissUpNext} />
       )}
-      {preloadUrl && <PreloadFrame url={preloadUrl} />}
+      {preloadUrl && <PreloadFrame url={preloadUrl} silent={silentPreload} />}
     </>
   );
   const failoverBar = (

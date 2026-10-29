@@ -33,7 +33,7 @@ module.exports = defineConfig({
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 900 }, storageState: 'e2e/.auth/user.json' },
       dependencies: ['setup'],
-      testIgnore: /(auth\.setup|tv\.spec)\.js/,
+      testIgnore: [/(auth\.setup|tv\.spec)\.js/, /journey\//],
     },
     {
       name: 'tv',

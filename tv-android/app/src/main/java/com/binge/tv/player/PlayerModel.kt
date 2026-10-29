@@ -429,7 +429,16 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         external = null
         loadExternalSubtitles()
         val warm = Warmup.take(request)
-        if (warm != null) adopt(warm) else startPlannedRace()
+        if (warm != null) adopt(warm) else {
+            // The last episode must stop now: planning the next race takes a
+            // moment, and meanwhile it would keep playing (and be heard) and
+            // its state would be read as the new episode's.
+            race?.let { it.stop(); surface.removeView(it.container) }
+            race = null
+            started = false
+            playback = MediaState()
+            startPlannedRace()
+        }
     }
 
     // MARK: Polling

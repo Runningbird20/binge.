@@ -29,8 +29,8 @@ export default function useUpNext({
 
   // Warm the next episode in the last 90s (or a minute before the credits):
   // its player page, scripts and stream lookup load in a hidden frame, so
-  // the switch starts much faster. The frame has no autoplay permission,
-  // so it can't make a sound. Skipped with data saver on.
+  // the switch starts much faster. It must stay silent: see PreloadFrame.
+  // Skipped with data saver on.
   const [preloadNext, setPreloadNext] = useState(false);
   useEffect(() => {
     setUpNext(null);

@@ -49,11 +49,12 @@ export const PROVIDERS = [
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidy.st');
       url.searchParams.set('color', 'F4F6F8');
-      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('autoplay', noAutoplay ? 'false' : 'true');
       if (startAt > 0) url.searchParams.set('progress', String(startAt));
       if (isTV) {
         url.searchParams.set('nextEpisode', 'true');
@@ -68,11 +69,13 @@ export const PROVIDERS = [
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
+      const autoplay = noAutoplay ? 'false' : 'true';
       const base = isTV
-        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=true&nextbutton=true`
-        : `https://vidlink.pro/movie/${id.value}?autoplay=true`;
+        ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=${autoplay}&nextbutton=true`
+        : `https://vidlink.pro/movie/${id.value}?autoplay=${autoplay}`;
       // Documented startAt (seconds).
       return startAt > 0 ? `${base}&startAt=${startAt}` : base;
     },
@@ -87,11 +90,12 @@ export const PROVIDERS = [
     subtitles: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth } = {}) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth, noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/embed/tv/${id.value}` : `/embed/movie/${id.value}`, 'https://cinesrc.st');
       if (isTV) { url.searchParams.set('s', season); url.searchParams.set('e', episode); }
-      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('autoplay', noAutoplay ? 'false' : 'true');
       if (startAt > 0) {
         url.searchParams.set('t', String(startAt));
         url.searchParams.set('continueprompt', 'false');
@@ -115,10 +119,11 @@ export const PROVIDERS = [
     events: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidsrc.ru');
-      url.searchParams.set('autoplay', 'true');
+      url.searchParams.set('autoplay', noAutoplay ? 'false' : 'true');
       url.searchParams.set('colour', 'f4f6f8');
       url.searchParams.set('pausescreen', 'true');
       if (isTV) url.searchParams.set('autonextepisode', 'false');
@@ -166,12 +171,13 @@ export const PROVIDERS = [
     subtitles: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode, subtitleLang) {
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { noAutoplay } = {}) {
       const isTV = mediaType === 'tv_show';
       const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
       url.searchParams.set(id.kind, id.value);
       if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', '1');
+      url.searchParams.set('autoplay', noAutoplay ? '0' : '1');
       // Documented: default subtitle language, ISO 639-1.
       if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
       return url.toString();

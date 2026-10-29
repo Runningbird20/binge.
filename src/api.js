@@ -8,8 +8,25 @@ function isLegacyBackendEnabled() {
     .toLowerCase() === 'true';
 }
 
+const isLocalHost = (host) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host || '');
+
+// A localhost API URL (a copied .env) only works when the page is local too.
+// Production was once built with http://localhost:5001, which sent every
+// visitor's admin, Ask binge. and other /api calls to their own computer.
+function configuredLegacyUrl() {
+  const configured = process.env.REACT_APP_LEGACY_API_URL?.trim();
+  if (!configured || typeof window === 'undefined') return configured;
+  try {
+    const target = new URL(configured, window.location.href);
+    if (isLocalHost(target.hostname) && !isLocalHost(window.location.hostname)) return '';
+  } catch {
+    return '';
+  }
+  return configured;
+}
+
 function resolveLegacyBaseUrl() {
-  const configuredApiUrl = process.env.REACT_APP_LEGACY_API_URL?.trim();
+  const configuredApiUrl = configuredLegacyUrl();
 
   if (!configuredApiUrl) {
     return (!isSupabaseConfigured || isLegacyBackendEnabled()) ? '/api' : null;

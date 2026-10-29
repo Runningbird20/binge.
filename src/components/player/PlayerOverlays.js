@@ -1,6 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
 import { SkipForward, X } from '@phosphor-icons/react';
 import { formatClock } from '../../utils/playbackPositions';
 import { RESUMABLE, SERVER_LABELS } from '../../utils/embedProviders';
+import { readPlayback } from '../../utils/playbackMessages';
+import { preloadIsPlaying } from '../../utils/preloadNext';
 
 const label = (id) => SERVER_LABELS[id]?.label || id;
 
@@ -39,8 +42,30 @@ export function SkipIntroButton({ onSkip, onHide }) {
 }
 
 // Hidden frame that warms the next episode's player (see useUpNext).
-export function PreloadFrame({ url }) {
-  return <iframe className="st-preload-frame" src={url} title="Next episode (loading)" aria-hidden="true" tabIndex={-1} referrerPolicy="no-referrer-when-downgrade" />;
+// The next episode, warming up hidden. It must never be heard (embed players
+// are cross-origin, so the page can't mute them): a server whose autoplay
+// can't be switched off only has its page prefetched; otherwise the frame
+// loads with autoplay off and denied, and removes itself if it reports
+// playback anyway (Safari ignores the autoplay permission).
+export function PreloadFrame({ url, silent }) {
+  const frameRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    setPlaying(false);
+    if (!silent) return undefined;
+    function onMessage(event) {
+      if (!frameRef.current || event.source !== frameRef.current.contentWindow) return;
+      if (preloadIsPlaying(readPlayback(event.data))) setPlaying(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [url, silent]);
+  if (!silent) return <link rel="prefetch" href={url} as="document" />;
+  if (playing) return null;
+  return (
+    <iframe ref={frameRef} className="st-preload-frame" src={url} title="Next episode (loading)" aria-hidden="true" tabIndex={-1}
+      allow="autoplay 'none'" referrerPolicy="no-referrer-when-downgrade" />
+  );
 }
 
 // "Buffering on X… Switch to Y" while a server stalls, else the notice for
