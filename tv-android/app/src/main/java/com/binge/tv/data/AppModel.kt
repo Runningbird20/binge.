@@ -32,6 +32,12 @@ object AppModel {
     var listIds by mutableStateOf<Map<String, Long>>(emptyMap())
         private set
     var profileLoadError by mutableStateOf<String?>(null)
+    // Profile PINs (ProfileLocks.kt): which profiles are locked, the one
+    // waiting for its PIN, and a lock check that failed in the picker.
+    var lockedProfileIds by mutableStateOf<Set<String>>(emptySet())
+        private set
+    var pinProfile by mutableStateOf<AccountProfile?>(null)
+    var lockCheckError by mutableStateOf<String?>(null)
     var deepLink by mutableStateOf<String?>(null)
 
     val isKids get() = profile?.isKids ?: false
@@ -57,18 +63,23 @@ object AppModel {
     suspend fun signOut() {
         Supabase.signOut()
         session = null; profiles = emptyList(); profile = null; listIds = emptyMap()
+        lockedProfileIds = emptySet(); pinProfile = null
         phase = Phase.SIGNED_OUT
     }
 
     // Netflix-style: with more than one profile, ask who's watching on launch.
+    // A single profile opens straight away unless it has a PIN.
     suspend fun loadProfiles() {
         val session = session ?: run { phase = Phase.SIGNED_OUT; return }
         profileLoadError = null
+        pinProfile = null
         try {
             profiles = Supabase.selectAs("account_profiles", listOf(
                 "select" to AccountProfile.COLUMNS, "account_id" to "eq.${session.userId}", "order" to "is_default.desc,created_at.asc",
             ))
-            if (profiles.size > 1) phase = Phase.CHOOSING_PROFILE else choose(profiles.firstOrNull())
+            lockedProfileIds = ProfileLocks.lockedIds()
+            if (profiles.size > 1 || profiles.any { it.id in lockedProfileIds }) phase = Phase.CHOOSING_PROFILE
+            else choose(profiles.firstOrNull())
         } catch (e: Exception) {
             if (handle(e)) return
             profileLoadError = e.message
@@ -76,7 +87,39 @@ object AppModel {
         }
     }
 
-    fun choose(next: AccountProfile?) {
+    // From the picker. Locks are checked again here (a PIN may have been set
+    // on another device since): a locked profile asks for its PIN first.
+    suspend fun pick(next: AccountProfile) {
+        lockCheckError = null
+        try {
+            lockedProfileIds = ProfileLocks.lockedIds()
+        } catch (e: Exception) {
+            if (handle(e)) return
+            lockCheckError = "Couldn't check whether ${next.name} has a PIN. Try again."
+            return
+        }
+        if (next.id in lockedProfileIds) pinProfile = next else choose(next)
+    }
+
+    sealed interface UnlockResult {
+        data object Unlocked : UnlockResult
+        data object WrongPin : UnlockResult
+        data class Failed(val message: String) : UnlockResult
+    }
+
+    suspend fun unlock(pin: String): UnlockResult {
+        val target = pinProfile ?: return UnlockResult.Failed("Pick a profile first.")
+        return try {
+            if (!ProfileLocks.verify(target.id, pin)) return UnlockResult.WrongPin
+            pinProfile = null
+            choose(target)
+            UnlockResult.Unlocked
+        } catch (e: Exception) {
+            if (handle(e)) UnlockResult.Failed(e.message ?: "Signed out.") else UnlockResult.Failed("Couldn't check the PIN. Try again.")
+        }
+    }
+
+    private fun choose(next: AccountProfile?) {
         profile = next
         applyPrefs()
         next?.let { Prefs.set(lastProfileKey, it.id) }
@@ -84,7 +127,13 @@ object AppModel {
         scope.launch { refreshList() }
     }
 
-    fun switchProfile() { phase = Phase.CHOOSING_PROFILE }
+    fun switchProfile() {
+        pinProfile = null
+        lockCheckError = null
+        phase = Phase.CHOOSING_PROFILE
+        // Refresh the lock badges; pick() checks again before opening one.
+        scope.launch { runCatching { ProfileLocks.lockedIds() }.onSuccess { lockedProfileIds = it } }
+    }
 
     suspend fun reloadProfile() {
         val id = profile?.id ?: return

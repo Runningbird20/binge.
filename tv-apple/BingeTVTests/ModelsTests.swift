@@ -365,3 +365,29 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
         #expect(!Supabase.isMediaRead("PATCH", table: "movies"))
     }
 }
+
+@Suite struct PinEntryTests {
+    @Test func takesFourDigitsThenStops() {
+        var entry = PinEntry()
+        for digit in [1, 2, 3, 4, 5] { entry.type(digit) }
+        #expect(entry.digits == "1234")
+        #expect(entry.isComplete)
+    }
+
+    @Test func deleteAndClear() {
+        var entry = PinEntry()
+        entry.type(7); entry.type(0)
+        entry.deleteLast()
+        #expect(entry.digits == "7")
+        entry.deleteLast(); entry.deleteLast()
+        #expect(entry.digits.isEmpty)
+        entry.type(9); entry.clear()
+        #expect(entry.digits.isEmpty && !entry.isComplete)
+    }
+
+    @Test func ignoresNonDigits() {
+        var entry = PinEntry()
+        entry.type(10); entry.type(-1)
+        #expect(entry.digits.isEmpty)
+    }
+}

@@ -4,7 +4,7 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Fix first
 
-- [ ] **Profile PINs on the TV apps.** Locked profiles open without a PIN on Apple TV and Fire TV: neither app calls `verify_profile_pin` or `list_profile_locks`. Add the lock screen to the TV profile pickers (`tv-apple/BingeTV/App/AppModel.swift`, `tv-android/.../data/Supabase.kt` + the profile screen), with a 4-digit entry that works with the remote.
+- [x] **Profile PINs on the TV apps.** Locked profiles open without a PIN on Apple TV and Fire TV: neither app calls `verify_profile_pin` or `list_profile_locks`. Add the lock screen to the TV profile pickers (`tv-apple/BingeTV/App/AppModel.swift`, `tv-android/.../data/Supabase.kt` + the profile screen), with a 4-digit entry that works with the remote.
 - [ ] **Finish the database split.**
   1. Delete `REACT_APP_API_URL` from the Vercel project's environment variables.
   2. Make sure the Preview environment has `DATABASE_URL`.
