@@ -149,17 +149,20 @@ struct TitleDetailView: View {
                 Button { play() } label: {
                     Label(playLabel, systemImage: "play.fill")
                 }
+                .buttonStyle(ActionButtonStyle(primary: true))
                 .focused($playFocused)
 
                 Button { toggleList() } label: {
                     Label(app.isInList(title) ? "In My List" : "My List",
                           systemImage: app.isInList(title) ? "checkmark" : "plus")
                 }
+                .buttonStyle(ActionButtonStyle())
                 .disabled(listBusy || !app.isSignedIn)
 
                 Button { rating = true } label: {
                     Label(myStars == nil ? "Rate" : "Rated", systemImage: myStars == nil ? "star" : "star.fill")
                 }
+                .buttonStyle(ActionButtonStyle())
                 .disabled(!app.isSignedIn)
 
                 // Household queue: put it in another profile's "Sent to you".
@@ -167,6 +170,7 @@ struct TitleDetailView: View {
                     Button { sending = true } label: {
                         Label(sentTo.map { "Sent to \($0)" } ?? "Send to…", systemImage: sentTo == nil ? "paperplane" : "checkmark")
                     }
+                    .buttonStyle(ActionButtonStyle())
                     .confirmationDialog("Send \(title.name) to", isPresented: $sending, titleVisibility: .visible) {
                         ForEach(app.profiles.filter { $0.id != app.profile?.id }) { profile in
                             Button(profile.name) {
@@ -426,6 +430,7 @@ struct HandoffView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Button("Done") { dismiss() }
+                        .buttonStyle(ActionButtonStyle())
                         .padding(.top, 16)
                 }
                 .frame(maxWidth: 860, alignment: .leading)

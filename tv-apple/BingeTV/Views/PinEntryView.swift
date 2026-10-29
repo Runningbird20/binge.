@@ -44,6 +44,7 @@ struct PinEntryView: View {
                 .focusSection()
 
             Button("Back to profiles") { app.pinProfile = nil }
+                .buttonStyle(ActionButtonStyle())
                 .padding(.top, 36)
         }
         .padding(Theme.edge)
@@ -94,6 +95,7 @@ struct PinEntryView: View {
                         .font(.system(size: 36, weight: .semibold))
                         .frame(width: 150, height: 96)
                 }
+                .buttonStyle(KeypadButtonStyle())
                 .focused($focusedKey, equals: Self.deleteKey)
                 .accessibilityLabel("Delete")
             }
@@ -106,6 +108,7 @@ struct PinEntryView: View {
                 .font(.system(size: 44, weight: .semibold))
                 .frame(width: 150, height: 96)
         }
+        .buttonStyle(KeypadButtonStyle())
         .focused($focusedKey, equals: digit)
     }
 
@@ -128,6 +131,28 @@ struct PinEntryView: View {
                 error = message
                 entry.clear()
             }
+        }
+    }
+}
+
+// Keypad keys: the label carries its own fixed size; this only draws the
+// key, white with black text when focused (see ActionButtonStyle).
+private struct KeypadButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        KeyBody(configuration: configuration)
+    }
+
+    private struct KeyBody: View {
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isFocused) private var focused
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(focused ? Color.black : Color.white)
+                .background(RoundedRectangle(cornerRadius: 14).fill(focused ? Color.white : Color.white.opacity(0.12)))
+                .scaleEffect(focused ? 1.08 : (configuration.isPressed ? 0.96 : 1))
+                .shadow(color: .black.opacity(focused ? 0.45 : 0), radius: 12, y: 6)
+                .animation(.easeOut(duration: 0.12), value: focused)
         }
     }
 }
