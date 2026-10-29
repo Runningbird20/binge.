@@ -1,6 +1,9 @@
 build
 node_modules
-data
+# Root import data only — a bare "data" also dropped src/utils/data from the build.
+/data
+# Local backups of user data (gitignored; never upload from a CLI deploy).
+/server/data
 server-live.stderr.log
 server-live.stdout.log
 *.db
