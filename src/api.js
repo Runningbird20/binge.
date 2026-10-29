@@ -48,12 +48,8 @@ async function fetchSupabaseToken() {
   }
 }
 
+// The API only accepts Supabase access tokens.
 async function getAuthToken() {
-  const token = window.localStorage.getItem('token') || window.localStorage.getItem('neon_auth_token');
-  if (token) {
-    return token;
-  }
-
   if (cachedToken) {
     return cachedToken;
   }
