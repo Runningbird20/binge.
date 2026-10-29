@@ -1,0 +1,59 @@
+name: E2E on Vercel previews
+
+# Runs the Playwright suite (sign-up, play/resume, rating, TV remote, import,
+# axe accessibility) against every Vercel preview once it's deployed.
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   E2E_EMAIL, E2E_PASSWORD             a dedicated test account (never a real one);
+#                                       without them the signed-in specs skip
+#   VERCEL_AUTOMATION_BYPASS_SECRET     Vercel → Project → Settings → Deployment
+#                                       Protection → Protection Bypass for Automation;
+#                                       previews sit behind Vercel login without it
+
+on: deployment_status
+
+concurrency:
+  group: e2e-${{ github.event.deployment.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E (preview)
+    if: github.event.deployment_status.state == 'success' && contains(github.event.deployment.environment, 'Preview')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E against the preview
+        run: npm run test:e2e
+        env:
+          CI: true
+          E2E_BASE_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: e2e-report/
+          retention-days: 14

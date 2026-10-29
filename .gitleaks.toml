@@ -1,0 +1,38 @@
+# gitleaks (secret-scan.yml): the default rules (API keys, tokens, private
+# keys…) plus files that must never be committed even though they're
+# gitignored — one `git add -f` would publish them.
+[extend]
+useDefault = true
+
+# vercel.json carries the public browser keys (REACT_APP_*: Supabase
+# publishable key, TMDB key, VAPID public key) on purpose. Anything else
+# there, like a service key, is still flagged.
+[[allowlists]]
+description = "Public REACT_APP_* values in vercel.json"
+condition = "AND"
+paths = ['''(^|/)vercel\.json$''']
+regexTarget = "line"
+regexes = ['''"REACT_APP_[A-Z0-9_]+"\s*:''']
+
+[[rules]]
+id = "env-file"
+description = "A .env file: holds the Supabase service key and other secrets"
+path = '''(^|/)\.env(\.[\w-]+)?$'''
+[rules.allowlist]
+# .env.example has placeholders; .env.test only holds a test flag.
+paths = ['''(^|/)\.env\.(example|test)$''']
+
+[[rules]]
+id = "database-split-backup"
+description = "Database-split backups hold user emails"
+path = '''(^|/)server/data/database-split-backups/'''
+
+[[rules]]
+id = "apple-tv-secrets"
+description = "Apple TV keys and signing team (generated from .env)"
+path = '''(^|/)tv-apple/Config/(Secrets|Signing)\.xcconfig$'''
+
+[[rules]]
+id = "android-keystore"
+description = "An Android signing keystore"
+path = '''\.(keystore|jks)$'''
