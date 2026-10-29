@@ -18,8 +18,9 @@ const MOVIE_QUERY = 'Fight Club';
 const SHOTS = path.join(__dirname, '..', '..', 'e2e-report', 'journey');
 const REPORT = path.join(SHOTS, 'report.jsonl');
 
-const PAGES = ['/', '/movies', '/tv-shows', '/books', '/sports', '/search?q=breaking%20bad', '/calendar', '/history',
-  '/wrapped', '/login', '/signup', '/forgot-password', '/movie/197851', `/tv-show/${SHOW.id}`, '/does-not-exist'];
+const PAGES = ['/home', '/movies', '/tv-shows', '/books', '/sports', '/search?q=breaking%20bad', '/calendar', '/history',
+  '/wrapped', '/profile', '/profiles', '/settings', '/account-settings', '/import', '/admin', '/admin?tab=users', '/admin?tab=errors',
+  '/movie/197851', `/tv-show/${SHOW.id}`, '/book/1', '/does-not-exist'];
 
 // Third-party noise that isn't ours to fix (ads blocked, trackers, embeds).
 const NOISE = /favicon|ERR_BLOCKED_BY_CLIENT|ERR_NAME_NOT_RESOLVED|net::ERR_FAILED|googlesyndication|doubleclick|chrome-extension|Failed to load resource: the server responded with a status of 404|status of 403|due to access control checks|cdn-cgi|Permissions-Policy|preload but not used|third-party cookie/i;
@@ -62,7 +63,39 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(SHOTS, `${test.info().project.name}-${name}.png`) });
 }
 
-test.describe.configure({ mode: 'serial' });
+
+// The site is for signed-in viewers (signed out, every page goes to /login),
+// so every check signs in with a test account: E2E_EMAIL / E2E_PASSWORD
+// (environment or .env; never written here). Without one the checks skip.
+const ACCOUNT = { email: process.env.E2E_EMAIL, password: process.env.E2E_PASSWORD };
+const SUPABASE = { url: process.env.REACT_APP_SUPABASE_URL, key: process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY };
+
+async function signIn(page) {
+  test.skip(!ACCOUNT.email || !ACCOUNT.password, 'Set E2E_EMAIL and E2E_PASSWORD (a test account) to run the walkthrough.');
+  await page.goto('/login');
+  await page.fill('input[type=email], input[autocomplete=email], input[autocomplete=username]', ACCOUNT.email);
+  await page.fill('input[type=password]', ACCOUNT.password);
+  await page.keyboard.press('Enter');
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 20_000 });
+  if (page.url().includes('/profiles')) {
+    await page.locator('button, a').filter({ hasText: /admin|main/i }).first().click().catch(() => {});
+    await page.waitForTimeout(2000);
+  }
+}
+
+test.beforeEach(async ({ page }) => { await signIn(page); });
+
+// Playing adds the show to this account's history: the test notes whether it
+// was there before and, if not, removes it afterwards with the account's own session.
+async function historyRow(page, mediaId) {
+  return page.evaluate(async ({ id, supabase }) => {
+    const key = Object.keys(localStorage).find((k) => /^sb-.*-auth-token$/.test(k));
+    const token = key && JSON.parse(localStorage.getItem(key))?.access_token;
+    const res = await fetch(`${supabase.url}/rest/v1/continue_watching?select=id&media_type=eq.tv_show&media_id=eq.${id}`,
+      { headers: { apikey: supabase.key, Authorization: `Bearer ${token}` } });
+    return { rows: res.ok ? await res.json() : [], ok: res.ok };
+  }, { id: mediaId, supabase: SUPABASE });
+}
 
 test('every main page loads cleanly', async ({ page }) => {
   test.setTimeout(240_000);
@@ -106,9 +139,12 @@ test('search finds titles, typos included', async ({ page }) => {
 test('a show plays with one sound, and the next episode takes over cleanly', async ({ page }) => {
   test.setTimeout(420_000);
   const errors = watchErrors(page);
+  const before = await historyRow(page, SHOW.id);
+  test.info().annotations.push({ type: 'history', description: before.rows.length ? 'was already in history' : 'added by this test' });
   await page.goto(`/tv-show/${SHOW.id}`);
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
   await shot(page, 'title-page');
-  const play = page.locator('.td-play').first();
+  const play = page.locator('.td-play:visible, .td-mobile-bar .td-resume-control:visible').first(); // phones: the sticky bar
   await expect(play).toBeVisible({ timeout: 30_000 });
   await play.click();
 
@@ -146,6 +182,17 @@ test('a show plays with one sound, and the next episode takes over cleanly', asy
   }
   record({ check: 'next-episode', project: test.info().project.name, maxAudible, sawPreload, sawUpNext, timeline, errors: errors.slice(0, 8) });
   await shot(page, 'after-next-episode');
+  if (!before.rows.length) {
+    await page.goto('/');
+    await page.evaluate(async ({ id, supabase }) => {
+      const key = Object.keys(localStorage).find((k) => /^sb-.*-auth-token$/.test(k));
+      const token = JSON.parse(localStorage.getItem(key)).access_token;
+      const headers = { apikey: supabase.key, Authorization: `Bearer ${token}` };
+      const rest = `${supabase.url}/rest/v1`;
+      await fetch(`${rest}/continue_watching?media_type=eq.tv_show&media_id=eq.${id}`, { method: 'DELETE', headers });
+      await fetch(`${rest}/episode_progress?media_id=eq.${id}`, { method: 'DELETE', headers });
+    }, { id: SHOW.id, supabase: SUPABASE });
+  }
   expect(maxAudible, 'two videos were playing sound at once').toBeLessThanOrEqual(1);
   expect.soft(timeline.some((step) => step.preloadPlaying > 0), 'the hidden next-episode frame was playing').toBe(false);
 });

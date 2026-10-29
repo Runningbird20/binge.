@@ -1,5 +1,6 @@
 import LoadingBar from './components/LoadingBar';
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
+import lazyWithReload from './utils/lazyWithReload';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
@@ -60,26 +61,26 @@ if (typeof window !== 'undefined') {
   }, { once: true });
 }
 
-const Home           = lazy(() => import('./pages/Home'));
-const Movies         = lazy(() => import('./pages/Movies'));
-const TVShows        = lazy(() => import('./pages/TVShows'));
-const Books          = lazy(() => import('./pages/Books'));
-const SearchResults  = lazy(() => import('./pages/SearchResults'));
-const ProfilePicker  = lazy(() => import('./pages/ProfilePicker'));
-const EditProfile    = lazy(() => import('./pages/EditProfile'));
-const AccountSettings = lazy(() => import('./pages/AccountSettings'));
-const AdminHome      = lazy(() => import('./pages/AdminHome'));
-const Sports         = lazy(() => import('./pages/Sports'));
-const Profile        = lazy(() => import('./pages/Profile'));
-const History        = lazy(() => import('./pages/History'));
-const Wrapped        = lazy(() => import('./pages/Wrapped'));
-const Settings       = lazy(() => import('./pages/Settings'));
-const ShareTarget    = lazy(() => import('./pages/ShareTarget'));
-const ReleaseCalendar = lazy(() => import('./pages/ReleaseCalendar'));
-const ImportHistory  = lazy(() => import('./pages/ImportHistory'));
-const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
+const Home           = lazyWithReload(() => import('./pages/Home'));
+const Movies         = lazyWithReload(() => import('./pages/Movies'));
+const TVShows        = lazyWithReload(() => import('./pages/TVShows'));
+const Books          = lazyWithReload(() => import('./pages/Books'));
+const SearchResults  = lazyWithReload(() => import('./pages/SearchResults'));
+const ProfilePicker  = lazyWithReload(() => import('./pages/ProfilePicker'));
+const EditProfile    = lazyWithReload(() => import('./pages/EditProfile'));
+const AccountSettings = lazyWithReload(() => import('./pages/AccountSettings'));
+const AdminHome      = lazyWithReload(() => import('./pages/AdminHome'));
+const Sports         = lazyWithReload(() => import('./pages/Sports'));
+const Profile        = lazyWithReload(() => import('./pages/Profile'));
+const History        = lazyWithReload(() => import('./pages/History'));
+const Wrapped        = lazyWithReload(() => import('./pages/Wrapped'));
+const Settings       = lazyWithReload(() => import('./pages/Settings'));
+const ShareTarget    = lazyWithReload(() => import('./pages/ShareTarget'));
+const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
+const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
+const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
-const UIPreview      = lazy(() => import('./pages/__UIPreview'));
+const UIPreview      = lazyWithReload(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
 const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];

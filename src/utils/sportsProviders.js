@@ -573,7 +573,14 @@ export async function loadSportsStreams(onUpdate) {
   const ordered = () => byFeed.filter(Boolean);
   let settled = 0;
   let lastError = null;
-  const feeds = [fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized];
+  // A feed switched off as a whole in Admin › Servers isn't even requested
+  // (a provider that's down, like Streamed redirecting its API away in Oct
+  // 2026, otherwise errors on every page that loads sports). Waits at most
+  // 1.5s for the switches.
+  const switches = await Promise.race([disabledPromise, new Promise((resolve) => setTimeout(() => resolve(new Set()), 1500))]);
+  const feedKeys = ['sports:ppv', 'sports:streamed', 'sports:streamfree'];
+  const feeds = [fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized]
+    .map((fetchFeed, index) => (switches.has(feedKeys[index]) ? async () => [] : fetchFeed));
   await Promise.all(feeds.map((fetchFeed, index) => fetchFeed()
     .then(async (items) => {
       byFeed[index] = items;

@@ -46,6 +46,21 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
+  // Keep the address on the episode being watched. After Up Next (or picking
+  // another episode) it still said the first one, with its ?t= near the end,
+  // so a refresh or a shared link went back to the end of that episode.
+  // replaceState: no history entry, and the router doesn't re-render.
+  useEffect(() => {
+    if (!isTV || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('episode') && !url.searchParams.has('play')) return;
+    if (url.searchParams.get('season') === String(season) && url.searchParams.get('episode') === String(episode)) return;
+    url.searchParams.set('season', String(season));
+    url.searchParams.set('episode', String(episode));
+    url.searchParams.delete('t');
+    window.history.replaceState(window.history.state, '', url);
+  }, [isTV, season, episode]);
+
   // What the embed last reported (see usePlaybackMessages).
   const playbackRef = useRef({ time: 0, duration: 0, playing: false, lastAdvanceAt: Date.now(), lastSavedAt: 0 });
   // Start position per load (provider + episode), frozen when the load

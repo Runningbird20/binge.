@@ -4,7 +4,11 @@
 // decode H.264, which nearly every stream uses. Chrome's autoplay is opened
 // all the way (the policy a site you use often gets), the case where a
 // hidden player could be heard.
+const path = require('path');
 const { defineConfig, devices } = require('@playwright/test');
+
+// E2E_EMAIL / E2E_PASSWORD (a test account) and the Supabase keys come from .env.
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
 
 const chromeArgs = ['--autoplay-policy=no-user-gesture-required'];
 

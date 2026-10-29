@@ -20,6 +20,11 @@
       "dest": "/api/[...slug]?slug=$1"
     },
     {
+      "src": "/static/(.*)",
+      "status": 404,
+      "dest": "/404.html"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
