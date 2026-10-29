@@ -45,6 +45,7 @@ struct SignInView: View {
                         Text(busy ? "Signing in…" : "Sign in").frame(maxWidth: .infinity)
                     }
                 }
+                .buttonStyle(ActionButtonStyle(primary: true))
                 .disabled(!canSubmit)
                 Text("Tip: an iPhone nearby can fill these in from the keyboard prompt.")
                     .font(.caption)
@@ -111,6 +112,7 @@ struct ProfilePickerView: View {
                 }
             }
             Button("Sign out") { Task { await app.signOut() } }
+                .buttonStyle(ActionButtonStyle())
                 .padding(.top, 20)
         }
         .padding(Theme.edge)

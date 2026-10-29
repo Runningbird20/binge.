@@ -643,10 +643,12 @@ struct SportsSpotlight: View {
                             Text("Watch live")
                         }
                     }
+                    .buttonStyle(ActionButtonStyle(primary: true))
                     Button(action: toggleMulti) {
                         Label(inMulti ? "In Multiview" : "Add to Multiview",
                               systemImage: inMulti ? "checkmark" : "rectangle.grid.2x2")
                     }
+                    .buttonStyle(ActionButtonStyle())
                 }
                 .padding(.top, 6)
             }
