@@ -154,29 +154,11 @@ body {
   transition: border-color 0.15s, transform 0.15s;
 }
 .profile-picker-tile-btn:hover .profile-avatar,
-.profile-picker-tile.active .profile-avatar {
+.profile-picker-tile-btn:focus-visible .profile-avatar {
   border-color: #f4f6f8;
   transform: scale(1.04);
 }
 
-.profile-picker-delete-btn {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2px solid #0b0d12;
-  background: #3a3a3a;
-  color: #ddd;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  z-index: 1;
-}
-.profile-picker-delete-btn:hover { background: #c0392b; color: #fff; }
 
 .profile-picker-avatar {
   width: 96px;
