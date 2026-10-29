@@ -33,8 +33,8 @@ import {
   buildMediaGenreFacets,
   filterBooksCatalog,
   loadFallbackBooks,
-} from '../catalogFallback';
-import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
+} from '../utils/catalogFallback';
+import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../utils/genreGroups';
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import BookReader from '../components/BookReader';
