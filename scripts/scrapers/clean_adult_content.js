@@ -9,7 +9,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 
 // ── Exact title blocklist (case-insensitive) ──────────────────────────────────
 // Only block titles we KNOW are adult content

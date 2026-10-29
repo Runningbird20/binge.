@@ -6,15 +6,15 @@
  * No API key needed — Open Library is free and open.
  *
  * Usage:
- *   node openlibrary_scraper.js                    # 5 pages per subject
- *   node openlibrary_scraper.js --pages 20         # more books
- *   node openlibrary_scraper.js --resume           # continue interrupted run
+ *   node scripts/scrapers/openlibrary_scraper.js                    # 5 pages per subject
+ *   node scripts/scrapers/openlibrary_scraper.js --pages 20         # more books
+ *   node scripts/scrapers/openlibrary_scraper.js --resume           # continue interrupted run
  */
 
 const fs   = require('fs');
 const path = require('path');
 
-const DATA_DIR  = path.join(__dirname, 'data');
+const DATA_DIR  = path.join(__dirname, '..', '..', 'data');
 const OUT_FILE  = path.join(DATA_DIR, 'internet_archive_books.bulk.jsonl');
 const CKPT_FILE = path.join(DATA_DIR, 'openlibrary.checkpoint.json');
 const OL_BASE   = 'https://openlibrary.org';

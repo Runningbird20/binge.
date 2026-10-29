@@ -7,11 +7,11 @@
  *   npx playwright install chromium
  *
  * Usage:
- *   node goodreads_scraper.js                   # scrape all lists, 5 pages each, with details
- *   node goodreads_scraper.js --pages 3         # fewer pages per list
- *   node goodreads_scraper.js --quick           # skip book detail pages (faster, no synopsis)
- *   node goodreads_scraper.js --resume          # continue from checkpoint
- *   node goodreads_scraper.js --list-id 1       # scrape only one list (for testing)
+ *   node scripts/scrapers/goodreads_scraper.js                   # scrape all lists, 5 pages each, with details
+ *   node scripts/scrapers/goodreads_scraper.js --pages 3         # fewer pages per list
+ *   node scripts/scrapers/goodreads_scraper.js --quick           # skip book detail pages (faster, no synopsis)
+ *   node scripts/scrapers/goodreads_scraper.js --resume          # continue from checkpoint
+ *   node scripts/scrapers/goodreads_scraper.js --list-id 1       # scrape only one list (for testing)
  */
 
 'use strict';
@@ -20,7 +20,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR  = path.join(__dirname, 'data');
+const DATA_DIR  = path.join(__dirname, '..', '..', 'data');
 const OUT_FILE  = path.join(DATA_DIR, 'goodreads_books.bulk.jsonl');
 const CKPT_FILE = path.join(DATA_DIR, 'goodreads.checkpoint.json');
 const BASE_URL  = 'https://www.goodreads.com';

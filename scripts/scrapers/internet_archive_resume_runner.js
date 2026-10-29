@@ -2,10 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const { collectInternetArchiveBooksBulk } = require('./internet_archive_scraper');
 
-const DEFAULT_CHECKPOINT = path.join(__dirname, 'data', 'internet_archive_books.bulk.checkpoint.json');
-const DEFAULT_OUTPUT = path.join(__dirname, 'data', 'internet_archive_books.bulk.jsonl');
-const DEFAULT_PID_FILE = path.join(__dirname, 'data', 'internet_archive_books.runner.pid');
-const DEFAULT_LOG_FILE = path.join(__dirname, 'data', 'internet_archive_books.runner.log');
+const DEFAULT_CHECKPOINT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.bulk.checkpoint.json');
+const DEFAULT_OUTPUT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.bulk.jsonl');
+const DEFAULT_PID_FILE = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.runner.pid');
+const DEFAULT_LOG_FILE = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.runner.log');
 const DEFAULT_DELAY_MS = 1500;
 const MAX_BACKOFF_MS = 60000;
 

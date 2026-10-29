@@ -22,7 +22,15 @@ There is no separate lint script; ESLint runs as part of `react-scripts build`/`
 
 ### Data import / seeding scripts
 
-The repo also owns the pipeline that populates the catalog tables (movies/tv_shows/books, **in Neon**) from external sources. These are standalone Node scripts, not part of the app runtime — see `npm run` entries prefixed `import:*`, `generate:supabase:*`, and `supabase:*` in `package.json` (Goodreads, TMDB, Plex, Internet Archive, Open Library scrapers/importers, and `scripts/run-supabase-sql.js` for applying `supabase/repeatable_schema.sql` + seed files). Only touch these when the task is specifically about catalog data, not app features. The bulk sync (`scripts/sync-tmdb-to-neon.js`, `sync-tmdb.yml`; shared TMDB helpers in `scripts/tmdb-records.js`) works through TMDB's export by popularity and misses small new regional releases; `scripts/sync-language-to-supabase.js` (`npm run import:malayalam`, `:preview` = TMDB-only dry run; daily `sync-languages.yml`, `LANGUAGES=ml`) adds every title of a language from the last 3 years + 30 days ahead plus the all-time popular ones, and re-fetches anything released in the last 120 days.
+The repo also owns the pipeline that populates the catalog tables (movies/tv_shows/books, **in Neon**) from external sources. These are standalone Node scripts, not part of the app runtime — see `npm run` entries prefixed `import:*`, `generate:supabase:*`, and `supabase:*` in `package.json` (Goodreads, TMDB, Plex, Internet Archive, Open Library scrapers/importers in `scripts/scrapers/`, writing to the root `data/` folder, and `scripts/run-supabase-sql.js` for applying `supabase/repeatable_schema.sql` + seed files). Only touch these when the task is specifically about catalog data, not app features. The bulk sync (`scripts/sync-tmdb-to-neon.js`, `sync-tmdb.yml`; shared TMDB helpers in `scripts/tmdb-records.js`) works through TMDB's export by popularity and misses small new regional releases; `scripts/sync-language-to-supabase.js` (`npm run import:malayalam`, `:preview` = TMDB-only dry run; daily `sync-languages.yml`, `LANGUAGES=ml`) adds every title of a language from the last 3 years + 30 days ahead plus the all-time popular ones, and re-fetches anything released in the last 120 days.
+
+## Repo layout
+
+- `src/` — the web app: `pages/`, `components/` (player hooks in `components/player/`), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`).
+- `server/` + `api/` — the Express backend and its Vercel function entry points.
+- `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
+- `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`, seed `chunks*/`); `neon/` — catalog SQL, plus `neon/functions/` for `neon.ts`.
+- `tv-apple/`, `tv-android/` — the TV apps; `e2e/` — Playwright; `docs/` — longer write-ups; `backups/`, `data/` — catalog exports and scraper output.
 
 ## Architecture
 
@@ -51,7 +59,7 @@ Supabase Auth (email/password) is the identity system. A Postgres trigger, `hand
 
 ### Title / book detail modals
 
-`MediaDetailsModal.js` (movies/TV) and `BookDetailsModal` in `Books.js` are single responsive components (`td-*` classes in `src/streaming.css`) — the separate `MobileMediaDetail`/`MobileBookDetail` forks were removed. The movie/TV modal pulls backdrop, logo art, cast, certification, trailer and season/episode lists from TMDB (`src/hooks/useTitleDetails.js`). Image sizing goes through `src/utils/imageQuality.js` (TMDB srcsets, full-size Goodreads/Open Library covers).
+`MediaDetailsModal.js` (movies/TV) and `BookDetailsModal` in `Books.js` are single responsive components (`td-*` classes in `src/styles/streaming.css`) — the separate `MobileMediaDetail`/`MobileBookDetail` forks were removed. The movie/TV modal pulls backdrop, logo art, cast, certification, trailer and season/episode lists from TMDB (`src/hooks/useTitleDetails.js`). Image sizing goes through `src/utils/imageQuality.js` (TMDB srcsets, full-size Goodreads/Open Library covers).
 
 ### Book ids must stay below 2^53
 
@@ -243,7 +251,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **No identical icon-card grids.** The TV Me tab is a native `List`.
 - **Gold only marks actions, selection or state** (never taglines, section icons or captions).
 - **No purple/blue gradients or frosted glass as decoration.**
-- **Text fields are pills, like the search box**, with what goes in them as the placeholder plus a matching `aria-label` (no label above). One global rule at the end of `src/streaming.css` styles every text-type input/textarea; inputs inside their own pill wrapper opt out with `.field-bare`. Checkboxes are one global custom style there too (white fill + dark tick when checked); never restyle them per page.
+- **Text fields are pills, like the search box**, with what goes in them as the placeholder plus a matching `aria-label` (no label above). One global rule at the end of `src/styles/streaming.css` styles every text-type input/textarea; inputs inside their own pill wrapper opt out with `.field-bare`. Checkboxes are one global custom style there too (white fill + dark tick when checked); never restyle them per page.
 - **Every control has its states.** Loading uses skeletons, not page-centered spinners. Empty states explain what to do next.
 - **Verify in one batched screenshot round:** desktop plus a phone on the web, the simulator on tvOS.
 

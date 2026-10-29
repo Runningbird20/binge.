@@ -1,4 +1,4 @@
-const { isReleasedPlexMovie, shouldKeepPlexRecord } = require('../scrapers/plex_importer');
+const { isReleasedPlexMovie, shouldKeepPlexRecord } = require('../scripts/scrapers/plex_importer');
 const {
   hasArchiveCoverArt,
   hasCoherentArchiveTitle,
@@ -6,7 +6,7 @@ const {
   normalizeArchiveBook,
   normalizeArchiveTitle,
   shouldKeepArchiveBook,
-} = require('../scrapers/internet_archive_scraper');
+} = require('../scripts/scrapers/internet_archive_scraper');
 
 describe('Plex importer filters', () => {
   const referenceDate = new Date('2026-04-08T12:00:00Z');
