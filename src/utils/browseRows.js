@@ -2,6 +2,7 @@
 // Each row has a TMDB source (live, correctly sorted) and a catalog-table
 // fallback with the same intent, so rows still fill when TMDB is down.
 import { fetchDiscover, fetchTrending } from './tmdb';
+import { isChildLevel } from './kidsMode';
 import { fetchCatalogBrowseRow } from './supabaseMovieCatalog';
 import { prepareCatalogItems, resolveTmdbItems } from './catalogLookup';
 import { comingSoonCutoffIso, daysAgoIso, todayIso } from './releaseWindow';
@@ -163,7 +164,7 @@ export const KIDS_TV_ROWS = [
 ];
 
 export function rowsFor(mediaType, { kidsSafe = false } = {}) {
-  if (kidsSafe) return mediaType === 'tv_show' ? KIDS_TV_ROWS : KIDS_MOVIE_ROWS;
+  if (isChildLevel(kidsSafe)) return mediaType === 'tv_show' ? KIDS_TV_ROWS : KIDS_MOVIE_ROWS;
   return mediaType === 'tv_show' ? TV_ROWS : MOVIE_ROWS;
 }
 

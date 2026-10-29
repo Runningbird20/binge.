@@ -35,6 +35,7 @@ export default function ExpandableSearch({ value, onChange, label }) {
         ref={inputRef}
         id={inputId}
         type="search"
+        className="field-bare"
         aria-label={label}
         placeholder={`${label}…`}
         value={value}

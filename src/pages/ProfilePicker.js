@@ -1,72 +1,44 @@
 import LoadingBar from '../components/LoadingBar';
 import { useEffect, useState } from 'react';
-import { Plus, Baby, Check, LockSimple, PencilSimple } from '@phosphor-icons/react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, Baby, Check, LockSimple, PencilSimple, Smiley, Student } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
-import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
 import ProfileSecurityDialog from '../components/ProfileSecurityDialog';
 import { fetchProfileLocks } from '../utils/profileLocks';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileCreationWizard from '../components/ProfileCreationWizard';
+import { MATURITY_LEVELS, profileMaturity } from '../utils/kidsMode';
 
-function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+// Each restricted maturity level has its own pill above the avatar.
+const AGE_ICONS = { toddler: Baby, kids: Smiley, teens: Student };
 
-  async function handleConfirm(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      // Re-authenticating with the typed password is the verification check —
-      // it throws if the password is wrong, and just re-confirms the same
-      // session (harmless) if it's right.
-      await signInWithSupabase({ email: userEmail, password });
-      await deleteAccountProfile(profile.id);
-      onDeleted();
-    } catch (err) {
-      setError(err.message || 'Unable to delete that profile.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function AgeBadge({ level }) {
+  const Icon = AGE_ICONS[level];
+  // The slot is always there so avatars line up whether or not a tile has a pill.
   return (
-    <div className="profile-delete-overlay" onClick={onCancel}>
-      <form className="profile-delete-card" onClick={(event) => event.stopPropagation()} onSubmit={handleConfirm}>
-        <h3>Delete "{profile.name}"?</h3>
-        <p>This permanently removes this profile and everything saved under it — watchlist, ratings, and watch history. Enter your account password to confirm.</p>
-        <input
-          type="password"
-          className="profile-picker-add-input"
-          placeholder="Account password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoFocus
-        />
-        {error && <p className="profile-picker-add-error">{error}</p>}
-        <div className="profile-picker-add-actions">
-          <button type="submit" className="btn-danger btn-sm" disabled={busy || !password}>
-            {busy ? 'Deleting…' : 'Delete Profile'}
-          </button>
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>
-            Cancel
-          </button>
-        </div>
-      </form>
-    </div>
+    <span className="profile-picker-age-slot" aria-hidden="true">
+      {Icon && (
+        <span className={`profile-picker-age profile-picker-age--${level}`}>
+          <Icon size={15} weight="bold" /> {MATURITY_LEVELS.find((entry) => entry.value === level).label}
+        </span>
+      )}
+    </span>
   );
 }
 
 // One profile. In manage mode the avatar dims under a pencil and a click
-// edits it (Netflix's "Manage Profiles"); otherwise a click picks it. A
+// opens its Edit Profile page (Netflix's "Manage Profiles"); otherwise a
+// click picks it. A
 // profile with a PIN shows a lock in the avatar's corner. Only hover (or
 // keyboard focus) highlights a tile, not the profile currently in use.
 function ProfileTile({ profile, managing, locked, onClick }) {
-  const label = managing ? `Edit ${profile.name}` : `${profile.name}${locked ? ', locked with a PIN' : ''}`;
+  const level = profileMaturity(profile);
+  const age = level === 'all' ? '' : `, ${MATURITY_LEVELS.find((entry) => entry.value === level).label} profile`;
+  const label = managing ? `Edit ${profile.name}` : `${profile.name}${age}${locked ? ', locked with a PIN' : ''}`;
   return (
     <div className={`profile-picker-tile${managing ? ' managing' : ''}`}>
       <button type="button" className="profile-picker-tile-btn" onClick={onClick} aria-label={label}>
+        <AgeBadge level={level} />
         <span className="profile-picker-avatar-wrap">
           <ProfileAvatar profile={profile} size={96} />
           {locked && !managing && <LockSimple className="profile-picker-lock" size={16} weight="bold" aria-hidden="true" />}
@@ -77,44 +49,36 @@ function ProfileTile({ profile, managing, locked, onClick }) {
           )}
         </span>
         <span className="profile-picker-name">{profile.name}</span>
-        {profile.is_kids && (
-          <span className="profile-picker-kids-badge"><Baby size={12} weight="bold" /> Kids</span>
-        )}
       </button>
     </div>
   );
 }
 
 export default function ProfilePicker() {
-  const { user, profiles, activeProfile, switchProfile, addProfile, profilesLoading, refreshProfiles } = useAuth();
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const { profiles, switchProfile, addProfile, profilesLoading } = useAuth();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [securityTarget, setSecurityTarget] = useState(null);
-  const [managing, setManaging] = useState(false);
+  // Edit Profile returns here with ?manage=1, still managing.
+  const [managing, setManaging] = useState(() => params.get('manage') === '1');
   const [locks, setLocks] = useState(null);
   const [lockError, setLockError] = useState('');
-  const [locksAvailable, setLocksAvailable] = useState(false);
   async function loadLocks() {
     try {
       const result = await fetchProfileLocks();
       setLocks(result.ids);
-      setLocksAvailable(result.available);
       setLockError('');
     } catch { setLocks(null); setLockError('Unable to load profile locks. Please try again.'); }
   }
   useEffect(() => { loadLocks(); }, []);
-  // Esc leaves manage mode (unless a dialog is open; it handles Esc itself).
+  // Esc leaves manage mode.
   useEffect(() => {
     if (!managing) return undefined;
-    function onKey(event) { if (event.key === 'Escape' && !securityTarget && !deleteTarget) setManaging(false); }
+    function onKey(event) { if (event.key === 'Escape') setManaging(false); }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [managing, securityTarget, deleteTarget]);
-
-  // Only the default profile can delete other profiles — matches the
-  // "main account holder" framing (the default profile is the one
-  // auto-created for whoever signed up the account).
-  const canManage = Boolean(activeProfile?.is_default);
+  }, [managing]);
 
   return (
     <div
@@ -137,8 +101,8 @@ export default function ProfilePicker() {
                 managing={managing}
                 locked={locks.has(profile.id)}
                 onClick={() => {
-                  if (managing) setSecurityTarget({ profile, editing: true });
-                  else if (locks.has(profile.id)) setSecurityTarget({ profile, editing: false });
+                  if (managing) navigate(`/profiles/${profile.id}/edit`);
+                  else if (locks.has(profile.id)) setSecurityTarget(profile);
                   else switchProfile(profile.id);
                 }}
               />
@@ -146,6 +110,7 @@ export default function ProfilePicker() {
             {/* Adding a profile is part of managing them, as on Netflix. */}
             {managing && (
               <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
+                <AgeBadge level="all" />
                 <span className="profile-picker-avatar profile-picker-avatar--add">
                   <Plus size={32} weight="bold" aria-hidden="true" />
                 </span>
@@ -167,22 +132,8 @@ export default function ProfilePicker() {
 
       </div>
 
-      {securityTarget && <ProfileSecurityDialog
-        profile={securityTarget.profile} email={user?.email} editing={securityTarget.editing} locksAvailable={locksAvailable}
-        locked={locks?.has(securityTarget.profile.id)} onCancel={() => setSecurityTarget(null)}
-        onSaved={async () => { await refreshProfiles(); await loadLocks(); setSecurityTarget(null); }}
-        onUnlock={() => switchProfile(securityTarget.profile.id)}
-        onDelete={canManage && !securityTarget.profile.is_default
-          ? () => { setDeleteTarget(securityTarget.profile); setSecurityTarget(null); }
-          : null}
-      />}
-      {deleteTarget && (
-        <DeleteProfileConfirm
-          profile={deleteTarget}
-          userEmail={user?.email}
-          onCancel={() => setDeleteTarget(null)}
-          onDeleted={() => { setDeleteTarget(null); refreshProfiles(); }}
-        />
+      {securityTarget && (
+        <ProfileSecurityDialog profile={securityTarget} onCancel={() => setSecurityTarget(null)} onUnlock={() => switchProfile(securityTarget.id)} />
       )}
 
       {wizardOpen && (

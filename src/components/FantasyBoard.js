@@ -52,8 +52,7 @@ export function FantasyTeamForm({ presetGame, login, signedIn, askLogin, onDone 
         </div>
       )}
       <label className="fb-field">
-        <span>ESPN league link or id</span>
-        <input value={leagueText} onChange={(e) => { setLeagueText(e.target.value); setError(''); }} placeholder="https://fantasy.espn.com/…?leagueId=…&teamId=…" autoComplete="off" spellCheck="false" />
+        <input aria-label="ESPN league link or id" placeholder="ESPN league link or id" value={leagueText} onChange={(e) => { setLeagueText(e.target.value); setError(''); }} autoComplete="off" spellCheck="false" />
       </label>
       <p className="fb-hint">Paste the link from your team page (it includes your team) or just the league id; you can pick your team after.</p>
       <details className="fb-private" open={askLogin || undefined}>
@@ -73,8 +72,8 @@ export function FantasyTeamForm({ presetGame, login, signedIn, askLogin, onDone 
                 ? ' They act like your ESPN password: they’re saved encrypted to your binge. account and only ever sent to ESPN.'
                 : ' They act like your ESPN password, so they stay on this device. Sign in to keep them on every device.'}
             </p>
-            <label className="fb-field"><span>espn_s2</span><input value={s2} onChange={(e) => { setS2(e.target.value); setError(''); }} autoComplete="off" spellCheck="false" /></label>
-            <label className="fb-field"><span>SWID</span><input value={swid} onChange={(e) => { setSwid(e.target.value); setError(''); }} placeholder="{XXXXXXXX-XXXX-…}" autoComplete="off" spellCheck="false" /></label>
+            <label className="fb-field"><input aria-label="espn_s2" placeholder="espn_s2" value={s2} onChange={(e) => { setS2(e.target.value); setError(''); }} autoComplete="off" spellCheck="false" /></label>
+            <label className="fb-field"><input aria-label="SWID" placeholder="SWID" value={swid} onChange={(e) => { setSwid(e.target.value); setError(''); }} autoComplete="off" spellCheck="false" /></label>
           </>
         )}
       </details>

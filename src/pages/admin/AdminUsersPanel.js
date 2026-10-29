@@ -45,20 +45,16 @@ function CreateUser({ onCreated, onCancel }) {
   return (
     <form className="adm-form adm-user-form" onSubmit={submit}>
       <label className="adm-field">
-        <span>Username</span>
-        <input type="text" value={form.username} onChange={update('username')} required autoComplete="off" />
+        <input aria-label="Username" placeholder="Username" type="text" value={form.username} onChange={update('username')} required autoComplete="off" />
       </label>
       <label className="adm-field">
-        <span>Email</span>
-        <input type="email" value={form.email} onChange={update('email')} required autoComplete="off" />
+        <input aria-label="Email" placeholder="Email" type="email" value={form.email} onChange={update('email')} required autoComplete="off" />
       </label>
       <label className="adm-field">
-        <span>Password</span>
-        <input type="password" value={form.password} onChange={update('password')} required minLength={6} placeholder="At least 6 characters" autoComplete="new-password" />
+        <input aria-label="Password (at least 6 characters)" placeholder="Password (at least 6 characters)" type="password" value={form.password} onChange={update('password')} required minLength={6} autoComplete="new-password" />
       </label>
       <label className="adm-field">
-        <span>Bio (optional)</span>
-        <input type="text" value={form.bio} onChange={update('bio')} />
+        <input aria-label="Bio (optional)" placeholder="Bio (optional)" type="text" value={form.bio} onChange={update('bio')} />
       </label>
       <label className="adm-check adm-field--wide">
         <input type="checkbox" checked={form.isAdmin} onChange={update('isAdmin')} /> Make this account an admin
@@ -158,7 +154,7 @@ export default function AdminUsersPanel() {
       <div className="adm-users-toolbar">
         <label className="adm-search">
           <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by username or email" aria-label="Search users" />
+          <input type="search" className="field-bare" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by username or email" aria-label="Search users" />
         </label>
         <SlidingTabs className="st-tabs st-tabs--sm" role="group" aria-label="Filter users">
           {FILTERS.map((entry) => (

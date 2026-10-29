@@ -320,23 +320,23 @@ export default function AccountSettings() {
 
             <form className="auth-form settings-form" onSubmit={handleProfileSubmit}>
               <label>
-                Username
                 <input
+                  aria-label="Username"
+                  placeholder="Username"
                   type="text"
                   value={profileForm.username}
                   onChange={(e) => updateProfileForm('username', e.target.value)}
-                  placeholder="johndoe"
                   required
                 />
               </label>
 
               <label>
-                Email
                 <input
+                  aria-label="Email"
+                  placeholder="Email"
                   type="email"
                   value={profileForm.email}
                   onChange={(e) => updateProfileForm('email', e.target.value)}
-                  placeholder="you@example.com"
                   required
                 />
               </label>
@@ -358,24 +358,24 @@ export default function AccountSettings() {
 
             <form className="auth-form settings-form" onSubmit={handlePasswordSubmit}>
               <label>
-                New password
                 <input
+                  aria-label="New password (at least 6 characters)"
+                  placeholder="New password (at least 6 characters)"
                   type="password"
                   value={passwordForm.newPassword}
                   onChange={(e) => updatePasswordForm('newPassword', e.target.value)}
-                  placeholder="At least 6 characters"
                   autoComplete="new-password"
                   required
                 />
               </label>
 
               <label>
-                Confirm new password
                 <input
+                  aria-label="Confirm new password"
+                  placeholder="Confirm new password"
                   type="password"
                   value={passwordForm.confirmPassword}
                   onChange={(e) => updatePasswordForm('confirmPassword', e.target.value)}
-                  placeholder="Re-enter new password"
                   autoComplete="new-password"
                   required
                 />

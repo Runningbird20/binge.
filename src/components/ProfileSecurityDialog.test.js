@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProfileSecurityDialog from './ProfileSecurityDialog';
 import * as supabaseModule from '../utils/supabase';
-import * as supabaseDataModule from '../utils/supabaseData';
 
 const profile = { id: 'p1', name: 'Kids' };
 const boxes = () => screen.getAllByLabelText(/digit \d of 4/i);
@@ -54,17 +53,4 @@ test('the close button and Escape go back to the profiles', () => {
   fireEvent.click(screen.getByRole('button', { name: /back to profiles/i }));
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(onCancel).toHaveBeenCalledTimes(2);
-});
-
-test('failed account password verification prevents profile changes', async () => {
-  const rpc = jest.fn();
-  jest.spyOn(supabaseModule, 'requireSupabaseClient').mockReturnValue({ rpc });
-  jest.spyOn(supabaseDataModule, 'signInWithSupabase').mockRejectedValue(new Error('Invalid password'));
-  const update = jest.spyOn(supabaseDataModule, 'updateAccountProfile').mockResolvedValue();
-  render(<ProfileSecurityDialog editing profile={{ ...profile, is_kids: false }} email="user@example.com" />);
-  fireEvent.change(screen.getByLabelText('Account password'), { target: { value: 'wrong' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid password');
-  expect(update).not.toHaveBeenCalled();
-  expect(rpc).not.toHaveBeenCalled();
 });

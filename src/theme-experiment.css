@@ -873,16 +873,6 @@ body {
   box-shadow: var(--exp-shadow);
 }
 
-.profile-hover-user-link {
-  background: var(--exp-surface);
-  border: 1px solid var(--exp-border);
-}
-.profile-hover-user-link:hover {
-  background: var(--exp-surface-2);
-  border-color: var(--exp-border-strong);
-}
-.profile-hover-user-name { color: var(--exp-text); }
-.profile-hover-user-sub { color: var(--exp-text-faint); }
 
 .profile-hover-section-label { color: var(--exp-text-faint); }
 
@@ -893,7 +883,8 @@ body {
 .profile-hover-logout {
   background: rgba(220, 60, 60, 0.16);
   border: 1px solid rgba(220, 60, 60, 0.4);
-  border-radius: 8px;
+  border-radius: 999px; /* a pill, like Delete profile on Edit Profile */
+  min-height: 44px;
   color: #f08080;
 }
 .profile-hover-logout:hover {

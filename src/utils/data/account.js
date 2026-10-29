@@ -166,7 +166,10 @@ export async function createAccountProfile({ name, isKids = false, avatarUrl = n
   return data;
 }
 
-export async function updateAccountProfile(profileId, { name, isKids, avatarUrl, avatarColor } = {}) {
+// `maturity` ('toddler' | 'kids' | 'teens' | 'all', see kidsMode.js) sets
+// is_kids and settings.maturity together; it wins over `isKids`.
+export async function updateAccountProfile(profileId, { name, isKids, maturity, avatarUrl, avatarColor } = {}) {
+  if (maturity !== undefined) isKids = maturity !== 'all';
   if (!isSupabaseConfigured || !supabase) {
     const list = await fetchAccountProfiles();
     const updated = list.map((p) => {
@@ -175,6 +178,7 @@ export async function updateAccountProfile(profileId, { name, isKids, avatarUrl,
         ...p,
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(isKids !== undefined ? { is_kids: Boolean(isKids) } : {}),
+        ...(maturity !== undefined ? { settings: { ...(p.settings || {}), maturity } } : {}),
         ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
         ...(avatarColor !== undefined ? { avatar_color: avatarColor } : {}),
       };
@@ -190,6 +194,13 @@ export async function updateAccountProfile(profileId, { name, isKids, avatarUrl,
   if (isKids !== undefined) update.is_kids = Boolean(isKids);
   if (avatarUrl !== undefined) update.avatar_url = avatarUrl;
   if (avatarColor !== undefined) update.avatar_color = avatarColor;
+  if (maturity !== undefined) {
+    // settings also holds the profile's playback switches: merge, don't replace.
+    const { data: current, error: readError } = await client
+      .from('account_profiles').select('settings').eq('id', profileId).single();
+    if (readError) throw new Error(toFriendlyError(readError, 'Unable to update that profile.'));
+    update.settings = { ...(current?.settings || {}), maturity };
+  }
 
   const { error } = await client
     .from('account_profiles')

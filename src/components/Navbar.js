@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowRight, BookOpen, CalendarBlank, FilmSlate, Gear, House, MonitorPlay, ShieldCheck, SlidersHorizontal, Trophy, UsersFour } from '@phosphor-icons/react';
+import { BookOpen, CalendarBlank, FilmSlate, Gear, House, MonitorPlay, ShieldCheck, SlidersHorizontal, Trophy, UsersFour } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import ProfileAvatar from './ProfileAvatar';
-import EditProfileModal from './EditProfileModal';
 import GlobalSearch from './GlobalSearch';
 
 const NAV_LINKS = [
@@ -16,10 +14,9 @@ const NAV_LINKS = [
 ];
 
 export default function Navbar() {
-  const { user, logout, activeProfile, profiles, canUseAdminFeatures, refreshProfiles } = useAuth();
+  const { user, logout, activeProfile, profiles, canUseAdminFeatures } = useAuth();
   const navigate = useNavigate();
   const isAdmin = canUseAdminFeatures;
-  const [editingProfile, setEditingProfile] = useState(null);
 
   async function handleLogout() {
     try {
@@ -55,27 +52,6 @@ export default function Navbar() {
 
                 <div className="profile-hover-drawer">
                   <div className="profile-hover-card">
-                    {/* On a non-default (sub-)profile, the account owner's
-                        name/page must not surface anywhere in this menu —
-                        only the active profile's own identity shows. */}
-                    {activeProfile && !activeProfile.is_default ? (
-                      <div className="profile-hover-active-profile">
-                        <ProfileAvatar profile={activeProfile} size={40} />
-                        <div className="profile-hover-user-text">
-                          <span className="profile-hover-user-name">{activeProfile.name}</span>
-                          {activeProfile.is_kids && <span className="profile-hover-user-sub">Kids Profile</span>}
-                        </div>
-                      </div>
-                    ) : (
-                      <Link to="/profile" className="profile-hover-user-link">
-                        <UserAvatar avatarUrl={user.avatarUrl} name={user.username} size="md" />
-                        <div className="profile-hover-user-text">
-                          <span className="profile-hover-user-name">{user.username}</span>
-                          <span className="profile-hover-user-sub">View profile <ArrowRight size={12} weight="bold" aria-hidden="true" /></span>
-                        </div>
-                      </Link>
-                    )}
-
                     {activeProfile && (
                       <div className="profile-hover-section">
                         <p className="profile-hover-section-label">Profile</p>
@@ -96,7 +72,7 @@ export default function Navbar() {
                             password, admin/dev role) stay behind the default
                             profile only. */}
                         {activeProfile && !activeProfile.is_default ? (
-                          <button type="button" className={profileDrawerLink({ isActive: false })} onClick={() => setEditingProfile(activeProfile)}>
+                          <button type="button" className={profileDrawerLink({ isActive: false })} onClick={() => navigate(`/profiles/${activeProfile.id}/edit`)}>
                             <Gear size={17} weight="bold" aria-hidden="true" /> Edit Profile
                           </button>
                         ) : (
@@ -161,13 +137,6 @@ export default function Navbar() {
         )}
       </nav>
 
-      {editingProfile && (
-        <EditProfileModal
-          profile={editingProfile}
-          onClose={() => setEditingProfile(null)}
-          onSaved={() => { setEditingProfile(null); refreshProfiles(); }}
-        />
-      )}
     </>
   );
 }

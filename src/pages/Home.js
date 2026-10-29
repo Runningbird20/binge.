@@ -20,6 +20,7 @@ import {
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
+import { isChildLevel, maturityRestriction } from '../utils/kidsMode';
 import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
@@ -130,7 +131,7 @@ function ContinueWatchingCard({ item, onRemove, priority, note }) {
 // Home's mixed (movies + series) taste rows: the first two language/genre
 // rows this profile leans toward for each type.
 function tasteRowDefinitions(taste, kidsSafe) {
-  if (kidsSafe) return [];
+  if (isChildLevel(kidsSafe)) return [];
   const pick = (mediaType) => orderRowsForTaste(rowsFor(mediaType), taste)
     .filter((definition) => definition.kind)
     .slice(0, 2)
@@ -252,7 +253,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [userId, profilesLoading, profiles, refreshKey]);
 
-  const kidsSafe = Boolean(activeProfile?.is_kids);
+  const kidsSafe = maturityRestriction(activeProfile);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -505,9 +506,9 @@ export default function Home() {
 
           <TitleRow
             key={`top10-tv-${refreshKey}`}
-            title={kidsSafe ? 'Popular Kids Series' : 'Top 10 Series This Week'}
-            ranked={!kidsSafe}
-            load={() => loadRowItems(headlineRows.tv_show, 'tv_show', { kidsSafe }).then((items) => items.slice(0, kidsSafe ? 30 : 10))}
+            title={isChildLevel(kidsSafe) ? 'Popular Kids Series' : 'Top 10 Series This Week'}
+            ranked={!isChildLevel(kidsSafe)}
+            load={() => loadRowItems(headlineRows.tv_show, 'tv_show', { kidsSafe }).then((items) => items.slice(0, isChildLevel(kidsSafe) ? 30 : 10))}
           />
 
           {myList.length > 0 && <TitleRow title="My List" items={myList} />}
@@ -518,9 +519,9 @@ export default function Home() {
 
           <TitleRow
             key={`top10-movie-${refreshKey}`}
-            title={kidsSafe ? 'Popular Kids Movies' : 'Top 10 Movies This Week'}
-            ranked={!kidsSafe}
-            load={() => loadRowItems(headlineRows.movie, 'movie', { kidsSafe }).then((items) => items.slice(0, kidsSafe ? 30 : 10))}
+            title={isChildLevel(kidsSafe) ? 'Popular Kids Movies' : 'Top 10 Movies This Week'}
+            ranked={!isChildLevel(kidsSafe)}
+            load={() => loadRowItems(headlineRows.movie, 'movie', { kidsSafe }).then((items) => items.slice(0, isChildLevel(kidsSafe) ? 30 : 10))}
           />
 
           {tasteRows.map((definition) => (

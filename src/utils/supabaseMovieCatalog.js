@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from './supabase';
 import { api } from '../api';
-import { KIDS_SAFE_RATINGS } from './kidsMode';
+import { ratingsFor } from './kidsMode';
 import { comingSoonCutoffIso } from './releaseWindow';
 
 const MOVIE_COLUMNS = [
@@ -471,7 +471,7 @@ export async function fetchSupabaseMovieCatalogSegment({
   }
   moviesQuery = moviesQuery.or(`release_date.is.null,release_date.lte.${comingSoonCutoffIso()}`);
   if (kidsSafe) {
-    moviesQuery = moviesQuery.in('age_rating', KIDS_SAFE_RATINGS);
+    moviesQuery = moviesQuery.in('age_rating', ratingsFor(kidsSafe));
   }
   // The popularity index is partial on poster_url (see the streaming
   // redesign migration); filtering the same way lets the sort use it.
@@ -776,7 +776,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
     showsQuery = showsQuery.lte('year', THIS_YEAR);
   }
   if (kidsSafe) {
-    showsQuery = showsQuery.in('age_rating', KIDS_SAFE_RATINGS);
+    showsQuery = showsQuery.in('age_rating', ratingsFor(kidsSafe));
   }
   if (effectiveSort === 'popularity-desc') {
     showsQuery = showsQuery.not('poster_url', 'is', null).or(QUALITY_GATE);
@@ -1048,7 +1048,7 @@ export async function sampleSupabaseCatalogForRecommendations(mediaType, { genre
     if (source.filterReleased) {
       nextQuery = nextQuery.lte('year', THIS_YEAR);
       if (kidsSafe) {
-        nextQuery = nextQuery.in('age_rating', KIDS_SAFE_RATINGS);
+        nextQuery = nextQuery.in('age_rating', ratingsFor(kidsSafe));
       }
     }
     return nextQuery;
@@ -1174,7 +1174,7 @@ export async function fetchCatalogBrowseRow(mediaType, {
 
   query = applyGenreFilter(query, genre);
   if (language) query = query.eq('original_language', language);
-  if (kidsSafe) query = query.in('age_rating', KIDS_SAFE_RATINGS);
+  if (kidsSafe) query = query.in('age_rating', ratingsFor(kidsSafe));
   else query = query.or(QUALITY_GATE);
 
   if (mediaType === 'movie') {

@@ -30,6 +30,7 @@ import { MOVIE_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGro
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';
+import { maturityRestriction } from '../utils/kidsMode';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 import { identityKey } from '../utils/mediaIdentity';
 import { isBrowseable } from '../utils/releaseWindow';
@@ -118,7 +119,7 @@ function CatalogView({
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
   const [sortMode, setSortMode] = useState('popular');
   const { activeProfile } = useAuth();
-  const kidsSafe = Boolean(activeProfile?.is_kids);
+  const kidsSafe = maturityRestriction(activeProfile);
   const requestTokenRef = useRef(0);
   const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
