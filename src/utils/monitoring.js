@@ -13,7 +13,17 @@ const IGNORE = [
   /AbortError|TimeoutError|The operation was aborted/i,
   /^Script error\.?$/i,
   /ChunkLoadError|Loading chunk \d+ failed/i, // stale tab after a deploy
+  /ethereum|MetaMask|web3|solana|phantom/i, // crypto-wallet browser extensions
+  /The lock request is aborted|lock.*was released because another request stole it/i, // Supabase auth's tab lock, harmless
 ];
+
+// Only the real site reports: a dev server or a production build run on this
+// machine (localhost) used to fill the production log with its own errors.
+function shouldReport() {
+  if (process.env.NODE_ENV !== 'production' || typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return !(host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.local') || /^192\.168\./.test(host));
+}
 const recent = new Map(); // fingerprint -> last sent ms
 let installed = false;
 
@@ -23,7 +33,7 @@ function fingerprintOf(message, stack) {
 }
 
 export function reportError(error, context = {}) {
-  if (process.env.NODE_ENV === 'test') return;
+  if (!shouldReport()) return;
   const message = String(error?.message || error || 'Unknown error').slice(0, 1000);
   if (IGNORE.some((pattern) => pattern.test(message))) return;
   const stack = String(error?.stack || context.componentStack || '').slice(0, 4000);
@@ -39,7 +49,7 @@ export function reportError(error, context = {}) {
 }
 
 export function initMonitoring() {
-  if (installed || typeof window === 'undefined' || process.env.NODE_ENV !== 'production') return;
+  if (installed || !shouldReport()) return;
   installed = true;
   window.addEventListener('error', (event) => {
     // Errors from other origins (embeds) arrive as an opaque "Script error."
