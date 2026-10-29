@@ -30,6 +30,14 @@ enum BingeError: LocalizedError {
 actor Supabase {
     static let shared = Supabase()
 
+    /// The media catalog lives in Neon and is read through the site's
+    /// /api/neon-data (read-only, public). Accounts and user data stay here.
+    static let mediaTables: Set<String> = ["movies", "tv_shows", "books", "movie_genres", "tv_show_genres", "book_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache"]
+
+    static func isMediaRead(_ method: String, table: String) -> Bool {
+        method == "GET" && mediaTables.contains(table)
+    }
+
     enum Auth { case required, optional }
 
     private(set) var session: AuthSession?
@@ -156,21 +164,28 @@ actor Supabase {
 
     private func send(_ method: String, table: String, query: [URLQueryItem], body: Any?, auth: Auth, prefer: String? = nil) async throws -> Data {
         guard Config.isConfigured, let base = Config.supabaseURL else { throw BingeError.notConfigured }
-        var components = URLComponents(url: base.appending(path: "rest/v1/\(table)"), resolvingAgainstBaseURL: false)!
+        let mediaRead = Self.isMediaRead(method, table: table)
+        let endpoint = mediaRead
+            ? Config.siteURL.appending(path: "api/neon-data/rest/\(table)")
+            : base.appending(path: "rest/v1/\(table)")
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
         // URLComponents leaves "+" alone, which PostgREST would read as a space.
         components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
-        request.setValue(Config.supabaseKey, forHTTPHeaderField: "apikey")
-        switch auth {
-        case .required:
-            request.setValue("Bearer \(try await validSession().accessToken)", forHTTPHeaderField: "Authorization")
-        case .optional:
-            // Catalog tables are public; use the session when there is one.
-            if let token = try? await validSession().accessToken {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // Catalog reads go to our own API, which needs no Supabase credentials.
+        if !mediaRead {
+            request.setValue(Config.supabaseKey, forHTTPHeaderField: "apikey")
+            switch auth {
+            case .required:
+                request.setValue("Bearer \(try await validSession().accessToken)", forHTTPHeaderField: "Authorization")
+            case .optional:
+                // Public tables; use the session when there is one.
+                if let token = try? await validSession().accessToken {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
             }
         }
         if let body {

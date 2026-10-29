@@ -1,10 +1,9 @@
 const express = require('express');
 const router  = express.Router();
-const db      = require('../db');
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
-    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    try { _sbCreateClient = require('../data-access/client').createHybridClient; }
     catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
   }
   return _sbCreateClient;
@@ -12,7 +11,7 @@ function getCreateClient() {
 
 function getSb() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
   return getCreateClient()(url, key);
 }
 
@@ -21,12 +20,12 @@ async function getUser(req) {
   if (!token) return null;
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) return null;
     let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
-    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    try { _sbCreateClient = require('../data-access/client').createHybridClient; }
     catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
   }
   return _sbCreateClient;
@@ -58,9 +57,9 @@ router.get('/:username', async (req, res) => {
       { data: watchlist },
       { count: followers }, { count: following },
     ] = await Promise.all([
-      sb.from('movie_ratings').select('media_id, created_at, review, acting, writing, originality, pacing, cinematography').eq('user_id', profile.id).limit(50),
-      sb.from('tv_show_ratings').select('media_id, created_at, review, premise, originality, acting, cinematography, writing, pacing, resonance').eq('user_id', profile.id).limit(50),
-      sb.from('book_ratings').select('media_id, created_at, review, prose, plot, characters, originality, pacing, resonance').eq('user_id', profile.id).limit(50),
+      sb.from('movie_ratings').select('media_id, created_at, acting, writing, originality, pacing, cinematography').eq('user_id', profile.id).limit(50),
+      sb.from('tv_show_ratings').select('media_id, created_at, premise, originality, acting, cinematography, writing, pacing, resonance').eq('user_id', profile.id).limit(50),
+      sb.from('book_ratings').select('media_id, created_at, prose, plot, characters, originality, pacing, resonance').eq('user_id', profile.id).limit(50),
       sb.from('watchlist').select('id, media_type, media_id, status, added_at, current_season, current_episode, current_page, current_chapter').eq('user_id', profile.id).order('added_at', { ascending: false }),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id),
       sb.from('user_follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id),
@@ -94,15 +93,7 @@ router.get('/:username', async (req, res) => {
 
     function sbMeta(mediaType, mediaId) {
       const map = mediaType === 'movie' ? movieMap : mediaType === 'tv_show' ? tvMap : bookMap;
-      if (map.has(mediaId)) return map.get(mediaId);
-      // SQLite fallback for items only in local DB
-      try {
-        let row = null;
-        if (mediaType === 'movie')   row = db.prepare('SELECT title, year, poster_url as image_url FROM movies WHERE id = ?').get(mediaId);
-        if (mediaType === 'tv_show') row = db.prepare('SELECT title, year, poster_url as image_url FROM tv_shows WHERE id = ?').get(mediaId);
-        if (mediaType === 'book')    row = db.prepare('SELECT title, year, cover_url  as image_url FROM books  WHERE id = ?').get(mediaId);
-        return row || null;
-      } catch { return null; }
+      return map.get(mediaId) || null;
     }
 
     // Enrich ratings

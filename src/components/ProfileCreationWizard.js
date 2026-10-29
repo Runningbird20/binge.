@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Check } from '@phosphor-icons/react';
 import { AVATAR_COLORS, AVATAR_EMOJI } from './ProfileAvatar';
+import './ProfileCreationWizard.css';
 
 function ProgressDots({ current, total }) {
   return (
@@ -41,7 +42,7 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
 
   return (
     <div className="onboarding-overlay" onClick={onCancel}>
-      <div className="onboarding-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="onboarding-modal profile-wizard" onClick={(e) => e.stopPropagation()}>
         <ProgressDots current={step} total={TOTAL_STEPS} />
 
         {step === 0 && (
@@ -89,6 +90,7 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
             <input
               type="text"
               className="profile-picker-add-input profile-wizard-name-input"
+              aria-label="Profile name"
               placeholder="Profile name"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -106,10 +108,24 @@ export default function ProfileCreationWizard({ onCreate, onFinish, onCancel }) 
         {step === 2 && (
           <>
             <h2>Set permissions</h2>
-            <label className="profile-picker-kids-toggle profile-wizard-kids-toggle">
-              <input type="checkbox" checked={isKids} onChange={(event) => setIsKids(event.target.checked)} />
-              Kids profile — only shows titles rated G / PG / TV-Y / TV-Y7 / TV-G / TV-PG
-            </label>
+            <div className={`profile-wizard-permission${isKids ? ' is-enabled' : ''}`}>
+              <div className="profile-wizard-permission-copy">
+                <span id="profile-wizard-kids-label" className="profile-wizard-permission-title">Kids profile</span>
+                <span id="profile-wizard-kids-description" className="profile-wizard-permission-description">Only shows titles rated G, PG, TV-Y, TV-Y7, TV-G or TV-PG.</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isKids}
+                aria-labelledby="profile-wizard-kids-label"
+                aria-describedby="profile-wizard-kids-description"
+                className="profile-wizard-switch"
+                onClick={() => setIsKids((value) => !value)}
+                disabled={creating}
+              >
+                <span className="profile-wizard-switch-track"><span className="profile-wizard-switch-thumb" /></span>
+              </button>
+            </div>
             {createError && <p className="profile-picker-add-error">{createError}</p>}
             <div className="onboarding-actions">
               <button className="btn-primary" type="button" onClick={handleCreate} disabled={creating}>

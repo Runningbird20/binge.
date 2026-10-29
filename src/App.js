@@ -1,3 +1,4 @@
+import LoadingBar from './components/LoadingBar';
 import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -17,15 +18,16 @@ import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import PasswordReset from './pages/PasswordReset';
 import Signup from './pages/Signup';
-import './App.css';
-import './theme-experiment.css';
+import './styles/App.css';
+import './styles/theme-experiment.css';
 // mobile.css loads last: it adapts the theme-experiment design language to
 // small screens, so its overrides must win over both stylesheets above.
-import './mobile.css';
+import './styles/mobile.css';
 // streaming.css (Netflix-style rows/hero/sports/player bar) builds on the
 // theme-experiment tokens, so it loads after everything else.
-import './streaming.css';
+import './styles/streaming.css';
 
 // Every page's code, fetched in the background once the first screen is up,
 // so moving between pages never waits on a download (no loading skeleton
@@ -64,6 +66,7 @@ const TVShows        = lazy(() => import('./pages/TVShows'));
 const Books          = lazy(() => import('./pages/Books'));
 const SearchResults  = lazy(() => import('./pages/SearchResults'));
 const ProfilePicker  = lazy(() => import('./pages/ProfilePicker'));
+const EditProfile    = lazy(() => import('./pages/EditProfile'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings'));
 const AdminHome      = lazy(() => import('./pages/AdminHome'));
 const Sports         = lazy(() => import('./pages/Sports'));
@@ -79,7 +82,7 @@ const MediaOverlay   = lazy(() => import('./components/MediaOverlay'));
 const UIPreview      = lazy(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
-const NO_NAV_PATHS = ['/', '/login', '/signup'];
+const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];
 
 function AppShell({ children }) {
   const { isMobile } = useDeviceType();
@@ -143,12 +146,15 @@ function AppRoutes() {
         <Route path="/"          element={<Landing />} />
         <Route path="/login"     element={<Login />} />
         <Route path="/signup"    element={<Signup />} />
+        <Route path="/forgot-password" element={<PasswordReset />} />
+        <Route path="/reset-password" element={<PasswordReset recovery />} />
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
         <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
         <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
         <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
+        <Route path="/profiles/:profileId/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/profile"   element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/history"   element={<ProtectedRoute><History /></ProtectedRoute>} />
         <Route path="/wrapped"   element={<ProtectedRoute><Wrapped /></ProtectedRoute>} />
@@ -185,29 +191,8 @@ function AppRoutes() {
   );
 }
 
-// Shaped like a browse page (billboard + rows) so the real page drops in
-// without everything shifting.
 function AppRouteFallback() {
-  return (
-    <div className="app-layout">
-      <div className="page-content st-route-skel" aria-busy="true" aria-label="Loading">
-        <div className="st-route-skel-hero skeleton-block" />
-        {[0, 1].map((row) => (
-          <div key={row} className="st-route-skel-row">
-            <div className="st-route-skel-title skeleton-block" />
-            <div className="st-route-skel-cards">
-              {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} className="st-skel">
-                  <div className="st-skel-art skeleton-block" />
-                  <div className="st-skel-line skeleton-block" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  return <div className="app-layout"><main className="page-content"><LoadingBar /></main></div>;
 }
 
 export default function App() {

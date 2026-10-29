@@ -1,56 +1,23 @@
 const express = require('express');
 const router  = express.Router();
-const db      = require('../db');
-const neonAuth = require('../neonAuth');
-const neonDb   = require('../neonDb');
 
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
-    try { _sbCreateClient = require('@supabase/supabase-js').createClient; }
+    try { _sbCreateClient = require('../data-access/client').createHybridClient; }
     catch (e) { throw new Error('supabase-js not installed. Run: npm install'); }
   }
   return _sbCreateClient;
 }
 
-// ── Ensure error_logs table exists ───────────────────────────
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS error_logs (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id       INTEGER,
-      error_type    TEXT NOT NULL DEFAULT 'unknown',
-      error_message TEXT,
-      context       TEXT,
-      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at DESC);
-  `);
-} catch { /* already exists */ }
-
-// ── Admin check (Neon Auth & Supabase) ─────────────────────────────
+// ── Admin check (Supabase) ─────────────────────────────────────────
 async function requireAdmin(req, res) {
   const token = req.headers.authorization?.replace('Bearer ', '').trim();
   if (!token) { res.status(401).json({ error: 'Not signed in' }); return null; }
 
-  // 1. Neon Auth admin check
-  if (neonAuth.isConfigured()) {
-    try {
-      const neonUser = await neonAuth.validateNeonSessionToken(token);
-      if (neonUser) {
-        const isAdmin = neonUser.role === 'admin' || neonUser.isAdmin === true;
-        if (!isAdmin) {
-          res.status(403).json({ error: 'Admin access required' });
-          return null;
-        }
-        return neonUser;
-      }
-    } catch {}
-  }
-
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) { res.status(503).json({ error: 'Admin auth not configured' }); return null; }
     const sb = getCreateClient()(url, key, { global: { headers: { Authorization: `Bearer ${token}` } } });
     const { data: { user }, error } = await sb.auth.getUser(token);
@@ -63,19 +30,13 @@ async function requireAdmin(req, res) {
   } catch (err) { res.status(500).json({ error: err.message }); return null; }
 }
 
-// ── Helper: safe integer ──────────────────────────────────────
-function safeInt(val, fallback = 0) {
-  const n = parseInt(val, 10);
-  return isNaN(n) ? fallback : n;
-}
-
 // ── Service-role client — required for auth.admin.* calls (create/delete
 // users, read last sign-in). The anon/publishable key cannot do these; it
 // intentionally lacks the privilege so a leaked browser key can't be used
 // to delete accounts. ──────────────────────────────────────────
 function requireServiceRoleClient(res) {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!url || !key) {
     res.status(503).json({
       error: 'Account creation and deletion require SUPABASE_SERVICE_ROLE_KEY to be set on the server (Supabase project settings → API → service_role key).',
@@ -86,55 +47,14 @@ function requireServiceRoleClient(res) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GET /admin/errors — error log
-// ─────────────────────────────────────────────────────────────
-router.get('/errors', async (req, res) => {
-  const user = await requireAdmin(req, res); if (!user) return;
-  const limit = Math.min(200, Math.max(10, safeInt(req.query.limit, 50)));
-  try {
-    const rows  = db.prepare('SELECT * FROM error_logs ORDER BY created_at DESC LIMIT ?').all(limit);
-    const total = db.prepare('SELECT COUNT(*) as c FROM error_logs').get().c;
-    res.json({ rows, total });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ─────────────────────────────────────────────────────────────
-// POST /admin/errors — log an error (called internally)
-// ─────────────────────────────────────────────────────────────
-router.post('/errors', (req, res) => {
-  const { user_id, error_type, error_message, context } = req.body;
-  try {
-    db.prepare('INSERT INTO error_logs (user_id, error_type, error_message, context) VALUES (?, ?, ?, ?)')
-      .run(user_id || null, error_type || 'unknown', error_message || '', context || null);
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ─────────────────────────────────────────────────────────────
-// GET /admin/users — user list overview (Neon / Supabase)
+// GET /admin/users — user list overview
 // ─────────────────────────────────────────────────────────────
 router.get('/users', async (req, res) => {
   const user = await requireAdmin(req, res); if (!user) return;
 
-  if (neonDb.isConfigured()) {
-    try {
-      const result = await neonDb.query(`
-        SELECT id, name AS username, email, created_at,
-               CASE WHEN role = 'admin' THEN true ELSE false END AS is_admin,
-               true AS is_public
-        FROM neon_auth.user
-        ORDER BY created_at DESC
-        LIMIT 200
-      `);
-      return res.json(result.rows);
-    } catch (err) {
-      console.warn('[admin] Neon users query fallback:', err.message);
-    }
-  }
-
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) return res.json([]);
     const sb  = getCreateClient()(url, key);
     const { data, error } = await sb.from('profiles')
@@ -147,7 +67,7 @@ router.get('/users', async (req, res) => {
     // the service-role admin API. Best-effort: if the service role isn't
     // configured, the list still renders, just without this column.
     let lastSignInById = {};
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if ((process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) {
       try {
         const { data: authList } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
         lastSignInById = Object.fromEntries(
@@ -175,21 +95,9 @@ router.get('/users', async (req, res) => {
 router.patch('/users/:id/toggle-admin', async (req, res) => {
   const user = await requireAdmin(req, res); if (!user) return;
 
-  if (neonDb.isConfigured()) {
-    try {
-      const current = await neonDb.query('SELECT id, role FROM neon_auth.user WHERE id = $1', [req.params.id]);
-      if (!current.rows.length) return res.status(404).json({ error: 'User not found' });
-      const nextRole = current.rows[0].role === 'admin' ? 'user' : 'admin';
-      await neonDb.query('UPDATE neon_auth.user SET role = $1 WHERE id = $2', [nextRole, req.params.id]);
-      return res.json({ id: req.params.id, is_admin: nextRole === 'admin' });
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
-  }
-
   try {
     const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
+    const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || process.env.REACT_APP_SUPABASE_PUBLISHABLE_KEY;
     const sb  = getCreateClient()(url, key);
     const { data: profile } = await sb.from('profiles').select('is_admin').eq('id', req.params.id).single();
     if (!profile) return res.status(404).json({ error: 'User not found' });
@@ -207,15 +115,6 @@ router.delete('/users/:id', async (req, res) => {
   const admin = await requireAdmin(req, res); if (!admin) return;
   if (req.params.id === admin.id) {
     return res.status(400).json({ error: "You can't delete your own account." });
-  }
-
-  if (neonDb.isConfigured()) {
-    try {
-      await neonDb.query('DELETE FROM neon_auth.user WHERE id = $1', [req.params.id]);
-      return res.json({ success: true });
-    } catch (err) {
-      return res.status(400).json({ error: err.message || 'Unable to delete the account.' });
-    }
   }
 
   const sb = requireServiceRoleClient(res); if (!sb) return;

@@ -325,7 +325,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
         Column(
             Modifier.align(Alignment.CenterEnd).width(380.dp).fillMaxHeight().background(Palette.raised.copy(alpha = 0.97f))
-                .focusGroup().focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup().focusProperties { this.exit = { FocusRequester.Cancel } }
                 .padding(top = 28.dp, bottom = 18.dp),
         ) {
             Text(pane.title, style = Type.section.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(horizontal = 22.dp))

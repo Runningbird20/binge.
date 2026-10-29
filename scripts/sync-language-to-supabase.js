@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * sync-language-to-supabase.js
+ * sync-language-to-supabase.js (legacy filename; writes the Neon catalog)
  *
  * Keeps one original language (Malayalam by default) complete and current in
- * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-supabase.js)
+ * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-neon.js)
  * works through TMDB's whole export by popularity and skips anything below
  * MIN_POPULARITY, so a small new regional release can wait weeks. This asks
  * TMDB discover directly:
@@ -17,7 +17,7 @@
  * ratings and popularity fill in during a film's first weeks.
  *
  * Env vars (same as the bulk sync, minus TMDB_READ_TOKEN):
- *   TMDB_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ *   TMDB_API_KEY, Neon DATABASE_URL
  *   LANGUAGES      comma-separated ISO 639-1 codes (default "ml")
  *   TYPE           "movie" | "tv" | "both" (default "both")
  *   YEARS          how far back the recent pass goes (default 3)
@@ -29,10 +29,13 @@
 
 'use strict';
 
-try { require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }); } catch {}
+try {
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env.local') });
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+} catch {}
 
-const { createClient } = require('@supabase/supabase-js');
-const { movieRecord, tvRecord, tmdbFetch } = require('./sync-tmdb-to-supabase');
+const { createCatalogClient } = require('./neon-catalog-client');
+const { movieRecord, tvRecord, tmdbFetch } = require('./tmdb-records');
 
 const LANGUAGES     = (process.env.LANGUAGES || 'ml').split(',').map(s => s.trim()).filter(Boolean);
 const TYPE          = process.env.TYPE || 'both';
@@ -139,12 +142,12 @@ async function syncKind(supabase, kind, language) {
 }
 
 async function main() {
-  const { TMDB_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
-  if (!TMDB_API_KEY || (!DRY_RUN && (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY))) {
-    console.error('❌  Missing env vars: TMDB_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+  const { TMDB_API_KEY } = process.env;
+  if (!TMDB_API_KEY || (!DRY_RUN && !(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED))) {
+    console.error('❌  Missing env vars: TMDB_API_KEY, Neon DATABASE_URL');
     process.exit(1);
   }
-  const supabase = DRY_RUN ? null : createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const supabase = DRY_RUN ? null : createCatalogClient();
   console.log(`binge. language sync: ${LANGUAGES.join(', ')} · type ${TYPE} · last ${YEARS} years + ${POPULAR_PAGES} popular pages${DRY_RUN ? ' · DRY RUN' : ''}`);
   try {
     for (const language of LANGUAGES) {

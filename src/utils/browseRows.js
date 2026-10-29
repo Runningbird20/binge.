@@ -2,6 +2,7 @@
 // Each row has a TMDB source (live, correctly sorted) and a catalog-table
 // fallback with the same intent, so rows still fill when TMDB is down.
 import { fetchDiscover, fetchTrending } from './tmdb';
+import { isChildLevel } from './kidsMode';
 import { fetchCatalogBrowseRow } from './supabaseMovieCatalog';
 import { prepareCatalogItems, resolveTmdbItems } from './catalogLookup';
 import { comingSoonCutoffIso, daysAgoIso, todayIso } from './releaseWindow';
@@ -163,7 +164,7 @@ export const KIDS_TV_ROWS = [
 ];
 
 export function rowsFor(mediaType, { kidsSafe = false } = {}) {
-  if (kidsSafe) return mediaType === 'tv_show' ? KIDS_TV_ROWS : KIDS_MOVIE_ROWS;
+  if (isChildLevel(kidsSafe)) return mediaType === 'tv_show' ? KIDS_TV_ROWS : KIDS_MOVIE_ROWS;
   return mediaType === 'tv_show' ? TV_ROWS : MOVIE_ROWS;
 }
 
@@ -200,7 +201,7 @@ export function orderRowsForTaste(rows, taste) {
   return [...rest, ...tasteOrdered.slice(0, 3), ...comingSoon, ...tasteOrdered.slice(3)];
 }
 
-export async function loadRowItems(definition, mediaType, { kidsSafe = false } = {}) {
+async function fetchRowItems(definition, mediaType, { kidsSafe = false } = {}) {
   let items = [];
 
   if (definition.tmdb) {
@@ -222,4 +223,25 @@ export async function loadRowItems(definition, mediaType, { kidsSafe = false } =
   }
 
   return items;
+}
+
+// Share in-flight requests and briefly reuse public rows across navigation.
+// Kids rows use a separate key; this cache contains no account history.
+const rowCache = new Map();
+const rowInflight = new Map();
+const ROW_CACHE_TTL = 2 * 60 * 1000;
+export function loadRowItems(definition, mediaType, { kidsSafe = false } = {}) {
+  const key = JSON.stringify([mediaType, definition.id, definition.fallback, kidsSafe]);
+  const cached = rowCache.get(key);
+  if (cached && Date.now() - cached.time < ROW_CACHE_TTL) return Promise.resolve(cached.items);
+  if (rowInflight.has(key)) return rowInflight.get(key);
+  const request = fetchRowItems(definition, mediaType, { kidsSafe }).then((items) => {
+    if (items.length) {
+      if (rowCache.size >= 100) rowCache.delete(rowCache.keys().next().value);
+      rowCache.set(key, { time: Date.now(), items });
+    }
+    return items;
+  }).finally(() => rowInflight.delete(key));
+  rowInflight.set(key, request);
+  return request;
 }

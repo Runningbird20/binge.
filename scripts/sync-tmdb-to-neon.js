@@ -342,5 +342,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { movieRecord, tvRecord };
+module.exports = { movieRecord, tvRecord, main };
 

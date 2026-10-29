@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -363,6 +364,7 @@ private fun SignInScreen() {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ProfilePicker() {
+    AppModel.pinProfile?.let { PinEntryScreen(it); return }
     val scope = rememberCoroutineScope()
     val first = remember { FocusRequester() }
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -374,14 +376,15 @@ private fun ProfilePicker() {
             val initial = AppModel.profiles.indexOfFirst { it.id == AppModel.lastProfileId }.coerceAtLeast(0)
             AppModel.profiles.forEachIndexed { index, profile ->
                 Surface(
-                    onClick = { AppModel.choose(profile) },
+                    onClick = { scope.launch { AppModel.pick(profile) } },
                     modifier = if (index == initial) Modifier.focusRequester(first) else Modifier,
                     shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = Color.Transparent),
                     scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
-                ) { ProfileAvatar(profile, 110.dp) }
+                ) { ProfileAvatar(profile, 110.dp, locked = profile.id in AppModel.lockedProfileIds) }
             }
         }
+        AppModel.lockCheckError?.let { Text(it, style = Type.callout, color = Palette.muted, modifier = Modifier.padding(top = 14.dp)) }
         Spacer(Modifier.height(30.dp))
         Pill("Sign out") { scope.launch { AppModel.signOut() } }
     }
@@ -389,7 +392,7 @@ private fun ProfilePicker() {
 }
 
 @Composable
-fun ProfileAvatar(profile: AccountProfile, size: androidx.compose.ui.unit.Dp) {
+fun ProfileAvatar(profile: AccountProfile, size: androidx.compose.ui.unit.Dp, locked: Boolean = false) {
     val color = profile.avatarColor?.removePrefix("#")?.toLongOrNull(16)?.let { Color(0xFF000000 or it) } ?: Color(0xFF3B4A7A)
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(6.dp)) {
         Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.16f)).background(color), contentAlignment = Alignment.Center) {
@@ -398,6 +401,7 @@ fun ProfileAvatar(profile: AccountProfile, size: androidx.compose.ui.unit.Dp) {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(profile.name, style = Type.headline)
+            if (locked) androidx.tv.material3.Icon(Icons.Rounded.Lock, contentDescription = "Locked with a PIN", tint = Palette.muted, modifier = Modifier.size(14.dp))
             if (profile.isKids) Badge("Kids")
         }
     }

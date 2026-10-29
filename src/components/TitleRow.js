@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useEffect, useRef, useState } from 'react';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import useRowScroll from '../hooks/useRowScroll';
@@ -95,13 +96,7 @@ function TitleRowInner({
 
         <div className="st-row-track" ref={trackRef}>
           {showSkeleton
-            ? Array.from({ length: 8 }, (_, index) => (
-              // Same box as a loaded card (art + title line), so nothing jumps.
-              <div key={index} className="st-row-cell st-skel" aria-hidden="true">
-                <div className="st-skel-art skeleton-block" />
-                <div className="st-skel-line skeleton-block" />
-              </div>
-            ))
+            ? <LoadingBar compact label={`Loading ${title}…`} />
             : items.map((item, index) => (
               <div className="st-row-cell" key={`${item.media_type || ''}:${item.id}:${index}`}>
                 {renderItem

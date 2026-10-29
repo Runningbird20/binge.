@@ -1,96 +1,84 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Baby, X } from '@phosphor-icons/react';
+import LoadingBar from '../components/LoadingBar';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Plus, Baby, Check, LockSimple, PencilSimple, Smiley, Student } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
-import { deleteAccountProfile, signInWithSupabase } from '../utils/supabaseData';
+import ProfileSecurityDialog from '../components/ProfileSecurityDialog';
+import { fetchProfileLocks } from '../utils/profileLocks';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileCreationWizard from '../components/ProfileCreationWizard';
+import { MATURITY_LEVELS, profileMaturity } from '../utils/kidsMode';
 
-function DeleteProfileConfirm({ profile, userEmail, onCancel, onDeleted }) {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+// Each restricted maturity level has its own pill above the avatar.
+const AGE_ICONS = { toddler: Baby, kids: Smiley, teens: Student };
 
-  async function handleConfirm(event) {
-    event.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      // Re-authenticating with the typed password is the verification check —
-      // it throws if the password is wrong, and just re-confirms the same
-      // session (harmless) if it's right.
-      await signInWithSupabase({ email: userEmail, password });
-      await deleteAccountProfile(profile.id);
-      onDeleted();
-    } catch (err) {
-      setError(err.message || 'Unable to delete that profile.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function AgeBadge({ level }) {
+  const Icon = AGE_ICONS[level];
+  // The slot is always there so avatars line up whether or not a tile has a pill.
   return (
-    <div className="profile-delete-overlay" onClick={onCancel}>
-      <form className="profile-delete-card" onClick={(event) => event.stopPropagation()} onSubmit={handleConfirm}>
-        <h3>Delete "{profile.name}"?</h3>
-        <p>This permanently removes this profile and everything saved under it — watchlist, ratings, and watch history. Enter your account password to confirm.</p>
-        <input
-          type="password"
-          className="profile-picker-add-input"
-          placeholder="Account password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoFocus
-        />
-        {error && <p className="profile-picker-add-error">{error}</p>}
-        <div className="profile-picker-add-actions">
-          <button type="submit" className="btn-danger btn-sm" disabled={busy || !password}>
-            {busy ? 'Deleting…' : 'Delete Profile'}
-          </button>
-          <button type="button" className="btn-ghost btn-sm" onClick={onCancel} disabled={busy}>
-            Cancel
-          </button>
-        </div>
-      </form>
-    </div>
+    <span className="profile-picker-age-slot" aria-hidden="true">
+      {Icon && (
+        <span className={`profile-picker-age profile-picker-age--${level}`}>
+          <Icon size={15} weight="bold" /> {MATURITY_LEVELS.find((entry) => entry.value === level).label}
+        </span>
+      )}
+    </span>
   );
 }
 
-function ProfileTile({ profile, active, canDelete, onClick, onRequestDelete }) {
+// One profile. In manage mode the avatar dims under a pencil and a click
+// opens its Edit Profile page (Netflix's "Manage Profiles"); otherwise a
+// click picks it. A
+// profile with a PIN shows a lock in the avatar's corner. Only hover (or
+// keyboard focus) highlights a tile, not the profile currently in use.
+function ProfileTile({ profile, managing, locked, onClick }) {
+  const level = profileMaturity(profile);
+  const age = level === 'all' ? '' : `, ${MATURITY_LEVELS.find((entry) => entry.value === level).label} profile`;
+  const label = managing ? `Edit ${profile.name}` : `${profile.name}${age}${locked ? ', locked with a PIN' : ''}`;
   return (
-    <div className={`profile-picker-tile${active ? ' active' : ''}`}>
-      <button type="button" className="profile-picker-tile-btn" onClick={onClick}>
-        <ProfileAvatar profile={profile} size={96} />
+    <div className={`profile-picker-tile${managing ? ' managing' : ''}`}>
+      <button type="button" className="profile-picker-tile-btn" onClick={onClick} aria-label={label}>
+        <AgeBadge level={level} />
+        <span className="profile-picker-avatar-wrap">
+          <ProfileAvatar profile={profile} size={96} />
+          {locked && !managing && <LockSimple className="profile-picker-lock" size={16} weight="bold" aria-hidden="true" />}
+          {managing && (
+            <span className="profile-picker-edit-mark" aria-hidden="true">
+              <PencilSimple size={30} />
+            </span>
+          )}
+        </span>
         <span className="profile-picker-name">{profile.name}</span>
-        {profile.is_kids && (
-          <span className="profile-picker-kids-badge"><Baby size={12} weight="bold" /> Kids</span>
-        )}
       </button>
-      {canDelete && (
-        <button
-          type="button"
-          className="profile-picker-delete-btn"
-          title={`Delete ${profile.name}`}
-          aria-label={`Delete ${profile.name}`}
-          onClick={(event) => { event.stopPropagation(); onRequestDelete(profile); }}
-        >
-          <X size={14} weight="bold" />
-        </button>
-      )}
     </div>
   );
 }
 
 export default function ProfilePicker() {
-  const { user, profiles, activeProfile, switchProfile, addProfile, profilesLoading, refreshProfiles } = useAuth();
+  const { profiles, switchProfile, addProfile, profilesLoading } = useAuth();
   const navigate = useNavigate();
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [params] = useSearchParams();
   const [wizardOpen, setWizardOpen] = useState(false);
-
-  // Only the default profile can delete other profiles — matches the
-  // "main account holder" framing (the default profile is the one
-  // auto-created for whoever signed up the account).
-  const canManage = Boolean(activeProfile?.is_default);
+  const [securityTarget, setSecurityTarget] = useState(null);
+  // Edit Profile returns here with ?manage=1, still managing.
+  const [managing, setManaging] = useState(() => params.get('manage') === '1');
+  const [locks, setLocks] = useState(null);
+  const [lockError, setLockError] = useState('');
+  async function loadLocks() {
+    try {
+      const result = await fetchProfileLocks();
+      setLocks(result.ids);
+      setLockError('');
+    } catch { setLocks(null); setLockError('Unable to load profile locks. Please try again.'); }
+  }
+  useEffect(() => { loadLocks(); }, []);
+  // Esc leaves manage mode.
+  useEffect(() => {
+    if (!managing) return undefined;
+    function onKey(event) { if (event.key === 'Escape') setManaging(false); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [managing]);
 
   return (
     <div
@@ -101,41 +89,51 @@ export default function ProfilePicker() {
       <div className="profile-picker-content">
         <h1 className="profile-picker-title">Who's watching?</h1>
 
-        {profilesLoading ? (
-          <p className="profile-picker-loading">Loading profiles…</p>
-        ) : (
+        {lockError && <p className="profile-picker-error" role="alert">{lockError} <button type="button" className="btn-ghost" onClick={loadLocks}>Retry</button></p>}
+        {profilesLoading || (!locks && !lockError) ? (
+          <LoadingBar label="Loading profiles…" />
+        ) : locks ? (
           <div className="profile-picker-grid">
             {profiles.map((profile) => (
               <ProfileTile
                 key={profile.id}
                 profile={profile}
-                active={activeProfile?.id === profile.id}
-                canDelete={canManage && !profile.is_default}
-                onClick={() => switchProfile(profile.id)}
-                onRequestDelete={setDeleteTarget}
+                managing={managing}
+                locked={locks.has(profile.id)}
+                onClick={() => {
+                  if (managing) navigate(`/profiles/${profile.id}/edit`);
+                  else if (locks.has(profile.id)) setSecurityTarget(profile);
+                  else switchProfile(profile.id);
+                }}
               />
             ))}
-            <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
-              <span className="profile-picker-avatar profile-picker-avatar--add">
-                <Plus size={32} weight="bold" aria-hidden="true" />
-              </span>
-              <span className="profile-picker-name">Add Profile</span>
-            </button>
+            {/* Adding a profile is part of managing them, as on Netflix. */}
+            {managing && (
+              <button type="button" className="profile-picker-tile profile-picker-tile--add" onClick={() => setWizardOpen(true)}>
+                <AgeBadge level="all" />
+                <span className="profile-picker-avatar profile-picker-avatar--add">
+                  <Plus size={32} weight="bold" aria-hidden="true" />
+                </span>
+                <span className="profile-picker-name">Add Profile</span>
+              </button>
+            )}
           </div>
-        )}
+        ) : null}
 
-        <button type="button" className="btn-secondary profile-picker-back" onClick={() => navigate(-1)}>
-          Back
-        </button>
+        {locks && !profilesLoading && (managing ? (
+          <button type="button" className="profile-picker-manage profile-picker-manage--done" onClick={() => setManaging(false)}>
+            <Check size={18} weight="bold" aria-hidden="true" /> Done
+          </button>
+        ) : (
+          <button type="button" className="profile-picker-manage" onClick={() => setManaging(true)}>
+            <PencilSimple size={18} aria-hidden="true" /> Manage Profiles
+          </button>
+        ))}
+
       </div>
 
-      {deleteTarget && (
-        <DeleteProfileConfirm
-          profile={deleteTarget}
-          userEmail={user?.email}
-          onCancel={() => setDeleteTarget(null)}
-          onDeleted={() => { setDeleteTarget(null); refreshProfiles(); }}
-        />
+      {securityTarget && (
+        <ProfileSecurityDialog profile={securityTarget} onCancel={() => setSecurityTarget(null)} onUnlock={() => switchProfile(securityTarget.id)} />
       )}
 
       {wizardOpen && (

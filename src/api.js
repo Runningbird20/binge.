@@ -1,3 +1,4 @@
+import { trackedFetch } from './utils/loadingProgress';
 import { executeSupabaseRoute } from './utils/supabaseApi';
 import { isSupabaseConfigured } from './utils/supabase';
 
@@ -47,12 +48,8 @@ async function fetchSupabaseToken() {
   }
 }
 
+// The API only accepts Supabase access tokens.
 async function getAuthToken() {
-  const token = window.localStorage.getItem('token') || window.localStorage.getItem('neon_auth_token');
-  if (token) {
-    return token;
-  }
-
   if (cachedToken) {
     return cachedToken;
   }
@@ -145,7 +142,7 @@ async function requestLegacyApi(method, path, body) {
   // A dropped connection (common in an installed app on mobile data, or just
   // after the phone wakes it) gets one retry for requests that are safe to
   // repeat; the message shown is for people, not developers.
-  const send = () => fetch(`${LEGACY_BASE}${path}`, {
+  const send = () => trackedFetch(`${LEGACY_BASE}${path}`, {
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

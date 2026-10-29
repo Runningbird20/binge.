@@ -4,6 +4,7 @@ import { SquaresFour } from '@phosphor-icons/react';
 import BrowseHero from './BrowseHero';
 import TitleRow from './TitleRow';
 import { useAuth } from '../contexts/AuthContext';
+import { maturityRestriction } from '../utils/kidsMode';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
 
@@ -17,7 +18,7 @@ const TYPE_COPY = {
 // the filterable grid (CatalogView) for people who do want to dig.
 export default function BrowseView({ mediaType, refreshKey = 0 }) {
   const { activeProfile, profilesLoading } = useAuth();
-  const kidsSafe = Boolean(activeProfile?.is_kids);
+  const kidsSafe = maturityRestriction(activeProfile);
   const copy = TYPE_COPY[mediaType];
   const [personal, setPersonal] = useState(null);
   const [trending, setTrending] = useState(null);
@@ -49,11 +50,10 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
     return () => { cancelled = true; };
   }, [headline, mediaType, kidsSafe, refreshKey]);
 
-  // Wait for both, so the spotlight doesn't show trending and then swap
-  // to your picks a second later (null = loading placeholder).
-  const heroItems = personal === null || trending === null
-    ? null
-    : (personal?.hasHistory && personal.topPicks.length >= 3 ? personal.topPicks : trending || []);
+  // Trending can paint while the more expensive personalized rows finish.
+  const heroItems = personal?.hasHistory && personal.topPicks.length >= 3
+    ? personal.topPicks
+    : trending;
 
   const loaders = useMemo(() => {
     const map = new Map();
@@ -73,7 +73,7 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
       />
 
       <div className="st-browse-toolbar">
-        <Link className="st-btn st-btn--ghost" to={`${copy.path}?view=all`}>
+        <Link className="genre-chip st-pill-link" to={`${copy.path}?view=all`}>
           <SquaresFour size={18} weight="bold" /> Browse all {copy.noun.toLowerCase()}
         </Link>
       </div>

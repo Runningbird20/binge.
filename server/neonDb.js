@@ -1,6 +1,20 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 
 let pool = null;
+
+// PostgREST returns bigint and numeric as JSON numbers; pg returns strings.
+// Match it so catalog ids decode the same for the web and both TV apps
+// (ids stay below 2^53; anything larger is left as a string).
+const toNumber = (value) => {
+  const n = Number(value);
+  return Number.isSafeInteger(n) || (Number.isFinite(n) && !/^-?\d+$/.test(value)) ? n : value;
+};
+const pgTypes = {
+  getTypeParser(oid, format) {
+    if (oid === types.builtins.INT8 || oid === types.builtins.NUMERIC) return toNumber;
+    return types.getTypeParser(oid, format);
+  },
+};
 
 function isConfigured() {
   return Boolean(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED);
@@ -16,6 +30,7 @@ function getPool() {
     pool = new Pool({
       connectionString,
       max: 10,
+      types: pgTypes,
       ssl: {
         rejectUnauthorized: false,
       },
@@ -83,57 +98,10 @@ async function healthCheck() {
   }
 }
 
-async function initAppTables() {
-  const p = getPool();
-  if (!p) return;
-
-  const schemaSql = `
-    CREATE TABLE IF NOT EXISTS error_events (
-      id SERIAL PRIMARY KEY,
-      source VARCHAR(50) DEFAULT 'server',
-      message TEXT NOT NULL,
-      stack TEXT,
-      url TEXT,
-      user_agent TEXT,
-      user_id VARCHAR(100),
-      fingerprint VARCHAR(32),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS app_media (
-      id SERIAL PRIMARY KEY,
-      media_type VARCHAR(20) NOT NULL,
-      title VARCHAR(255) NOT NULL,
-      year INT,
-      genre VARCHAR(100),
-      poster_url TEXT,
-      source_key VARCHAR(100),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS app_watchlist (
-      id SERIAL PRIMARY KEY,
-      user_id VARCHAR(100) NOT NULL,
-      media_type VARCHAR(20) NOT NULL,
-      media_id INT NOT NULL,
-      status VARCHAR(50) DEFAULT 'plan_to_watch',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, media_type, media_id)
-    );
-  `;
-
-  try {
-    await p.query(schemaSql);
-  } catch (err) {
-    console.error('[Neon Postgres] Schema init error:', err.message);
-  }
-}
-
 module.exports = {
   isConfigured,
   getPool,
   query,
   healthCheck,
-  initAppTables,
 };
 

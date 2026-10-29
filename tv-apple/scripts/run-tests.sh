@@ -28,4 +28,6 @@ esac
 mkdir -p build
 xcodebuild test -project BingeTV.xcodeproj -scheme BingeTV -destination "id=$SIM" -derivedDataPath "build/tests-$SIM" \
   -collect-test-diagnostics never -resultBundlePath "build/results-$(date +%s).xcresult" "${ONLY[@]}" 2>&1 | tee build/test.log \
-  | grep -E "^(✘|✔ Test run|✘ Test run)|error:|\[live\]|\[matrix\]|\*\* TEST" || true
+  | { grep -E "^(✘|✔ Test run|✘ Test run)|error:|\[live\]|\[matrix\]|\*\* TEST" || true; }
+# Exit with xcodebuild's status (not grep's), so a failing test fails CI.
+exit ${pipestatus[1]}

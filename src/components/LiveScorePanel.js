@@ -1,3 +1,4 @@
+import LoadingBar from './LoadingBar';
 import { useEffect, useState } from 'react';
 import { Star } from '@phosphor-icons/react';
 import { followTeam, listFollowedTeams, TEAMS_EVENT, unfollowTeam } from '../utils/teams';
@@ -73,7 +74,7 @@ export default function LiveScorePanel({ stream, hideScores = false }) {
   }, [event]);
 
   if (event === null || (event && !summary)) {
-    return event === null ? null : <aside className="st-ls st-ls--loading skeleton-block" aria-hidden="true" />;
+    return event === null ? null : <aside className="st-ls st-ls--loading"><LoadingBar compact label="Loading score…" /></aside>;
   }
   if (!summary) return null;
 

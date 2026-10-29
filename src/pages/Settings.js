@@ -1,3 +1,5 @@
+import LoadingBar from '../components/LoadingBar';
+import ThemedSelect from '../components/ThemedSelect';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BellSimple, Keyboard, Star, Trash } from '@phosphor-icons/react';
@@ -45,9 +47,7 @@ function SelectRow({ label, description, value, options, onChange }) {
         <span className="set-row-label">{label}</span>
         {description && <span className="set-row-desc">{description}</span>}
       </span>
-      <select className="set-select" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
+      <ThemedSelect className="set-select" aria-label={label} value={value} options={options} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -107,14 +107,11 @@ function TeamsSettings() {
           <span className="set-row-label">Add a team</span>
           <span className="set-row-desc">Alerts: 30 minutes before start, close games late, overtime, and no-hitters.</span>
         </span>
-        <select className="set-select" value={league} onChange={(event) => setLeague(event.target.value)}>
-          <option value="">Choose a league…</option>
-          {FOLLOWABLE_LEAGUES.map(([path, label]) => <option key={path} value={path}>{label}</option>)}
-        </select>
+        <ThemedSelect className="set-select" aria-label="Choose a league" value={league} onChange={(event) => setLeague(event.target.value)} options={[{ value: '', label: 'Choose a league…' }, ...FOLLOWABLE_LEAGUES.map(([value, label]) => ({ value, label }))]} />
       </label>
       {league && (
         <div className="set-team-grid">
-          {!options && <div className="hm-skeleton skeleton-block" aria-hidden="true" />}
+          {!options && <LoadingBar compact label="Loading teams…" />}
           {options?.map((team) => {
             const on = followedIds.has(String(team.id));
             return (
@@ -179,7 +176,7 @@ export default function Settings() {
     // Turning kids mode off needs the account password, so a child can't
     // just flip it back.
     if (!next) { setKidsPrompt(true); return; }
-    await updateAccountProfile(activeProfile.id, { isKids: true });
+    await updateAccountProfile(activeProfile.id, { maturity: 'kids' });
     await refreshProfiles?.();
     flash('Kids mode on');
   }
@@ -190,7 +187,7 @@ export default function Settings() {
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.auth.signInWithPassword({ email: user.email, password });
       if (error) throw new Error('That password isn’t right.');
-      await updateAccountProfile(activeProfile.id, { isKids: false });
+      await updateAccountProfile(activeProfile.id, { maturity: 'all' });
       await refreshProfiles?.();
       setKidsPrompt(false);
       setPassword('');
@@ -267,9 +264,8 @@ export default function Settings() {
           />
           {kidsPrompt && (
             <form className="set-kids-form" onSubmit={confirmKidsOff}>
-              <label htmlFor="set-kids-password">Account password</label>
               <div>
-                <input id="set-kids-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
+                <input aria-label="Account password" placeholder="Account password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
                 <button type="submit" className="st-btn st-btn--primary">Turn off</button>
                 <button type="button" className="st-btn st-btn--ghost" onClick={() => { setKidsPrompt(false); setPassword(''); }}>Cancel</button>
               </div>

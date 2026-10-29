@@ -1,3 +1,4 @@
+import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { EyeSlash, Eye, Star, Trash, ClockCounterClockwise } from '@phosphor-icons/react';
@@ -123,7 +124,7 @@ export default function History() {
 
         {message && <p className="hist-message" role="status">{message}</p>}
 
-        {!entries && <div className="hist-skeleton skeleton-block" aria-hidden="true" />}
+        {!entries && <LoadingBar />}
         {entries && entries.length === 0 && (
           <div className="pf-empty">
             <ClockCounterClockwise size={32} weight="duotone" />
@@ -168,7 +169,7 @@ export default function History() {
                       {entry.kind !== 'rated' && (
                         <button
                           type="button"
-                          className="pf-icon-btn"
+                          className="pf-icon-btn pf-icon-btn--danger"
                           onClick={() => remove(entry)}
                           disabled={busy === key}
                           title="Remove from history"

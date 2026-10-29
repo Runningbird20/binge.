@@ -3,7 +3,7 @@
  * backfill-catalog-fields.js
  *
  * Fills original_language and age_rating on catalog rows that were imported
- * without them (sync-tmdb-to-supabase.js only enriches TMDB ids it hasn't
+ * without them (sync-tmdb-to-neon.js only enriches TMDB ids it hasn't
  * seen, so older rows never got these). Only empty columns are written;
  * most popular titles go first.
  *
@@ -11,20 +11,21 @@
  *   TYPE=movie MAX_ROWS=500 node scripts/backfill-catalog-fields.js
  *   DRY_RUN=1 node scripts/backfill-catalog-fields.js  # print what would change
  *
- * Needs TMDB_API_KEY, SUPABASE_URL (or REACT_APP_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY.
+ * Needs TMDB_API_KEY and Neon DATABASE_URL.
  * A title with no US certification keeps age_rating empty (kids profiles
  * leave unrated titles out, which is the safe side).
  */
 
 'use strict';
 
-try { require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }); } catch {}
+try {
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env.local') });
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+} catch {}
 
-const { createClient } = require('@supabase/supabase-js');
-const { tmdbFetch } = require('./sync-tmdb-to-supabase');
+const { createCatalogClient } = require('./neon-catalog-client');
+const { tmdbFetch } = require('./tmdb-records');
 
-const SUP_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-const SUP_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TYPE = process.env.TYPE || 'both';
 const MAX_ROWS = parseInt(process.env.MAX_ROWS || '3000', 10);
 const DRY_RUN = process.env.DRY_RUN === '1';
@@ -103,11 +104,11 @@ async function fill(supabase, table, column) {
 }
 
 async function main() {
-  if (!process.env.TMDB_API_KEY || !SUP_URL || !SUP_KEY) {
-    console.error('Needs TMDB_API_KEY, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+  if (!process.env.TMDB_API_KEY || !(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED)) {
+    console.error('Needs TMDB_API_KEY and Neon DATABASE_URL.');
     process.exit(1);
   }
-  const supabase = createClient(SUP_URL, SUP_KEY, { auth: { persistSession: false } });
+  const supabase = createCatalogClient();
   for (const column of ['original_language', 'age_rating']) {
     if (TYPE !== 'tv') await fill(supabase, 'movies', column);
     if (TYPE !== 'movie') await fill(supabase, 'tv_shows', column);

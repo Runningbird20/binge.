@@ -1,3 +1,4 @@
+import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
@@ -86,16 +87,7 @@ function ResultRow({ heading, items, loading }) {
 }
 
 function GridSkeleton() {
-  return (
-    <div className="st-grid" aria-busy="true" aria-label="Loading results">
-      {Array.from({ length: 12 }, (_, index) => (
-        <div key={index} className="st-grid-cell st-skel">
-          <div className="st-skel-art skeleton-block" />
-          <div className="st-skel-line skeleton-block" />
-        </div>
-      ))}
-    </div>
-  );
+  return <LoadingBar label="Loading results…" />;
 }
 
 const TYPE_LABELS = { movie: 'Movies', tv: 'TV Shows', book: 'Books' };

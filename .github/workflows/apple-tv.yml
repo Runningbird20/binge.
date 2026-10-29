@@ -1,0 +1,77 @@
+name: Apple TV build and tests
+
+# Builds the Apple TV app (tv-apple/) and runs its unit suites (no network)
+# in a tvOS simulator, on every change under tv-apple/.
+#
+# The app needs the same public keys as the website (SmokeTests checks they
+# load). They come from the repo variables tv-apk.yml already uses:
+#   REACT_APP_SUPABASE_URL, REACT_APP_SUPABASE_PUBLISHABLE_KEY (or _ANON_KEY),
+#   REACT_APP_TMDB_API_KEY, and optionally BINGE_URL.
+
+on:
+  pull_request:
+    paths:
+      - 'tv-apple/**'
+      - '.github/workflows/apple-tv.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tv-apple/**'
+      - '.github/workflows/apple-tv.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: apple-tv-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and unit tests
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: tv-apple
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use the newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Using $xcode"
+
+      - name: Write Config/Secrets.xcconfig
+        env:
+          REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
+          REACT_APP_SUPABASE_PUBLISHABLE_KEY: ${{ vars.REACT_APP_SUPABASE_PUBLISHABLE_KEY || vars.REACT_APP_SUPABASE_ANON_KEY }}
+          REACT_APP_TMDB_API_KEY: ${{ vars.REACT_APP_TMDB_API_KEY }}
+          BINGE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
+        run: |
+          printf 'REACT_APP_SUPABASE_URL=%s\nREACT_APP_SUPABASE_PUBLISHABLE_KEY=%s\nREACT_APP_TMDB_API_KEY=%s\n' \
+            "$REACT_APP_SUPABASE_URL" "$REACT_APP_SUPABASE_PUBLISHABLE_KEY" "$REACT_APP_TMDB_API_KEY" > ../.env
+          scripts/make-secrets.sh "$BINGE_URL"
+
+      - name: Boot an Apple TV simulator
+        run: echo "BINGE_SIM=$(scripts/ci-simulator.sh)" >> "$GITHUB_ENV"
+
+      - name: Build for testing
+        run: |
+          xcodebuild build-for-testing -project BingeTV.xcodeproj -scheme BingeTV \
+            -destination "id=$BINGE_SIM" -derivedDataPath "build/tests-$BINGE_SIM" -quiet
+
+      - name: Unit tests
+        run: scripts/run-tests.sh
+
+      - name: Upload the test log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-tv-tests
+          path: |
+            tv-apple/build/test.log
+            tv-apple/build/*.xcresult
+          retention-days: 14

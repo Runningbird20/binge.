@@ -27,9 +27,9 @@ function remember(key, ttl, compute) {
 
 function adminDb() {
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!url || !key) return null;
-  return require('@supabase/supabase-js').createClient(url, key, { auth: { persistSession: false } });
+  return require('../data-access/client').createHybridClient(url, key, { auth: { persistSession: false } });
 }
 
 async function getJson(url, init) {

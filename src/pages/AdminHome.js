@@ -1,3 +1,4 @@
+import SlidingTabs from '../components/SlidingTabs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Bell, ChartLineUp, HardDrives, Megaphone, Bug, Users } from '@phosphor-icons/react';
@@ -50,7 +51,7 @@ export default function AdminHome() {
           </div>
         </header>
 
-        <nav className="st-tabs adm-tabs" aria-label="Admin sections">
+        <SlidingTabs as="nav" className="st-tabs adm-tabs" aria-label="Admin sections">
           {TABS.map(({ id, label, Icon }) => {
             const count = id === 'errors' ? badges.errors : id === 'servers' ? badges.servers : 0;
             return (
@@ -60,7 +61,7 @@ export default function AdminHome() {
               </button>
             );
           })}
-        </nav>
+        </SlidingTabs>
 
         {tab === 'overview' && <AdminOverview onOpenTab={open} />}
         {tab === 'servers' && <><AdminServers /><AdminSportsServers /></>}

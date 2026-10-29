@@ -27,16 +27,13 @@ export default function AdminBroadcast({ deviceCount }) {
       <p className="adm-muted">Goes to every device with binge. notifications on ({deviceCount ?? '…'} right now). Use sparingly.</p>
       <form className="adm-form" onSubmit={(event) => { event.preventDefault(); setConfirming(true); }}>
         <label className="adm-field adm-field--wide">
-          <span>Title</span>
-          <input type="text" value={form.title} onChange={update('title')} maxLength={80} required placeholder="New on binge.: Wrapped is here" />
+          <input aria-label="Title" placeholder="Title" type="text" value={form.title} onChange={update('title')} maxLength={80} required />
         </label>
         <label className="adm-field adm-field--wide">
-          <span>Message</span>
-          <textarea value={form.body} onChange={update('body')} maxLength={200} rows={2} required placeholder="See your year in movies, shows and books." />
+          <textarea aria-label="Message" placeholder="Message" value={form.body} onChange={update('body')} maxLength={200} rows={2} required />
         </label>
         <label className="adm-field">
-          <span>Opens</span>
-          <input type="text" value={form.url} onChange={update('url')} pattern="/.*" title="A path on binge., like /wrapped" />
+          <input aria-label="Opens (a path, like /wrapped)" placeholder="Opens (a path, like /wrapped)" type="text" value={form.url} onChange={update('url')} pattern="/.*" title="A path on binge., like /wrapped" />
         </label>
         <div className="adm-push-preview" aria-label="Preview">
           <strong>{form.title || 'Title'}</strong>

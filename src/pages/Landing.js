@@ -37,7 +37,7 @@ export default function Landing() {
     <div className="App lp">
       <header className="lp-bar">
         <span className="landing-logo lp-logo">binge.</span>
-        <Link to="/login" className="st-btn st-btn--secondary lp-signin">Sign In</Link>
+        <Link to="/login" className="genre-chip st-pill-link lp-signin">Sign In</Link>
       </header>
 
       <section
@@ -51,7 +51,7 @@ export default function Landing() {
             Movies, series, books and live sports — with picks made for you, not for everyone.
           </p>
           <div className="lp-actions">
-            <Link to="/signup" className="st-btn st-btn--primary lp-cta">Create Account</Link>
+            <Link to="/signup" className="genre-chip st-pill-link lp-cta btn-text-action">Create Account</Link>
           </div>
         </div>
       </section>

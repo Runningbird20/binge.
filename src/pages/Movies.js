@@ -1,6 +1,6 @@
+import ExpandableSearch from '../components/ExpandableSearch';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import GridTitleTile from '../components/GridTitleTile';
 import BrowseView from '../components/BrowseView';
@@ -25,11 +25,12 @@ import {
   buildMediaGenreFacets,
   filterMediaItems,
   loadFallbackMovies,
-} from '../catalogFallback';
-import { MOVIE_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../genreGroups';
+} from '../utils/catalogFallback';
+import { MOVIE_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../utils/genreGroups';
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
 import { useAuth } from '../contexts/AuthContext';
+import { maturityRestriction } from '../utils/kidsMode';
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 import { identityKey } from '../utils/mediaIdentity';
 import { isBrowseable } from '../utils/releaseWindow';
@@ -118,7 +119,7 @@ function CatalogView({
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
   const [sortMode, setSortMode] = useState('popular');
   const { activeProfile } = useAuth();
-  const kidsSafe = Boolean(activeProfile?.is_kids);
+  const kidsSafe = maturityRestriction(activeProfile);
   const requestTokenRef = useRef(0);
   const sourceRef = useRef({ mode: 'supabase', totalPages: 1, nextPage: 2 });
   const emptyBatchesRef = useRef(0);
@@ -147,10 +148,10 @@ function CatalogView({
   }, [genreGroups]);
 
   const genreValues = useMemo(() => {
-    if (!activeLabel) return [];
+    if (searchTerm || !activeLabel) return [];
     const activeGroup = genreGroups.find((group) => group.label === activeLabel);
     return activeGroup ? activeGroup.values : [activeLabel];
-  }, [genreGroups, activeLabel]);
+  }, [genreGroups, activeLabel, searchTerm]);
 
   const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
@@ -487,27 +488,7 @@ function CatalogView({
   return (
     <div className="catalog-view">
       <div className="catalog-search-row">
-        <div className="catalog-search-bar">
-          <MagnifyingGlass size={18} weight="bold" className="catalog-search-icon" aria-hidden="true" />
-          <input
-            type="text"
-            className="catalog-search-input"
-            placeholder="Search movies…"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            aria-label="Search movies"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              className="catalog-search-clear"
-              onClick={() => setSearchInput('')}
-              aria-label="Clear search"
-            >
-              <X size={14} weight="bold" />
-            </button>
-          )}
-        </div>
+        <ExpandableSearch label="Search movies" value={searchInput} onChange={setSearchInput} />
         <ThemedSelect
           className="catalog-sort-select"
           aria-label="Sort movies by"
@@ -517,7 +498,7 @@ function CatalogView({
         />
       </div>
 
-      <GenreScrollBar ariaLabel="Movie genres">
+      <GenreScrollBar collapsed={Boolean(searchInput.trim())} ariaLabel="Movie genres">
         <button
           type="button"
           className={`genre-chip${activeLabel === '' ? ' active' : ''}`}
@@ -722,18 +703,17 @@ export default function Movies() {
     }
   }
 
-  async function handleRate(item, categories, review) {
+  async function handleRate(item, categories) {
     try {
       await saveSupabaseRating({
         mediaType: 'movie',
         mediaId: item.id,
         categories,
         media: item,
-        review,
       });
       setUserRatings((current) => ({
         ...current,
-        [item.id]: { ...categories, media_id: item.id, review },
+        [item.id]: { ...categories, media_id: item.id },
       }));
       setDetailMessage('Rating saved!');
     } catch (error) {
@@ -760,7 +740,7 @@ export default function Movies() {
             <div>
               <h1 className="st-page-title">Movies</h1>
             </div>
-            <Link className="st-btn st-btn--ghost" to="/movies">Back to highlights</Link>
+            <Link className="genre-chip st-pill-link" to="/movies">Back to highlights</Link>
           </header>
 
           <CatalogView

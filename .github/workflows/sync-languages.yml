@@ -12,18 +12,18 @@ on:
 
 jobs:
   sync:
-    name: TMDB discover → Supabase
-    runs-on: ubuntu-latest
+    name: TMDB discover → Neon
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: scripts/package.json
 
@@ -34,7 +34,7 @@ jobs:
       - name: Run language sync
         run: node scripts/sync-language-to-supabase.js
         env:
+          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
+          NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
-          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LANGUAGES:                 ml

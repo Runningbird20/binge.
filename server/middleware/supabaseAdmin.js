@@ -1,6 +1,6 @@
-// Shared Supabase/Neon helpers for server routes: a service-role client, the
-// signed-in user from a request's Bearer token, and an admin gate.
-const neonAuth = require('../neonAuth');
+// Shared Supabase helpers for server routes: a service-role client (media
+// tables go to Neon through the hybrid client), the signed-in user from a
+// request's Bearer token, and an admin gate.
 
 let service = null;
 let _sbCreateClient = null;
@@ -8,7 +8,7 @@ let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
     try {
-      _sbCreateClient = require('@supabase/supabase-js').createClient;
+      _sbCreateClient = require('../data-access/client').createHybridClient;
     } catch {
       _sbCreateClient = null;
     }
@@ -19,7 +19,7 @@ function getCreateClient() {
 function serviceClient() {
   if (service) return service;
   const url = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!url || !key) return null;
   const cc = getCreateClient();
   if (!cc) return null;
@@ -30,13 +30,6 @@ function serviceClient() {
 async function userFromRequest(req) {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
-
-  if (neonAuth.isConfigured()) {
-    try {
-      const neonUser = await neonAuth.validateNeonSessionToken(token);
-      if (neonUser) return neonUser;
-    } catch {}
-  }
 
   const db = serviceClient();
   if (!db) return null;
@@ -53,18 +46,6 @@ function adminOnly(handler) {
   return async (req, res) => {
     const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
     if (!token) return res.status(401).json({ error: 'Not signed in' });
-
-    if (neonAuth.isConfigured()) {
-      try {
-        const neonUser = await neonAuth.validateNeonSessionToken(token);
-        if (neonUser) {
-          const isAdmin = neonUser.role === 'admin' || neonUser.isAdmin === true;
-          if (!isAdmin) return res.status(403).json({ error: 'Admin access required' });
-          req.adminUser = neonUser;
-          return handler(req, res, null);
-        }
-      } catch {}
-    }
 
     const db = serviceClient();
     if (!db) return res.status(503).json({ error: 'Admin auth service is not configured.' });

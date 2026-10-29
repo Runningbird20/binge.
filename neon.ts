@@ -4,7 +4,7 @@ export default defineConfig({
   // Declare your Neon services here
   auth: true,
   functions: {
-    hello: { name: "Hello World", source: "./hello.ts" },
+    hello: { name: "Hello World", source: "./neon/functions/hello.ts" },
   },
   // Branch policy: per-branch tuning
   branch: (branch) => {

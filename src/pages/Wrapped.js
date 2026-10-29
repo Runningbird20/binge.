@@ -11,6 +11,7 @@ import {
 import { languageName } from '../utils/tmdb';
 import { posterSrc } from '../utils/imageQuality';
 import { buildWrapped } from '../utils/wrapped';
+import { isTvMode } from '../utils/tvMode';
 import TicketBook from './TicketBook';
 
 // Wrapped is the one place binge. dresses up: your year as a run of movie
@@ -308,7 +309,9 @@ export default function Wrapped() {
   }
 
   const empty = data && data.titleCount === 0;
-  if (view === 'book') {
+  // The ticket book is for phones and computers only; on a TV it's Wrapped.
+  const onTv = isTvMode();
+  if (view === 'book' && !onTv) {
     const demo = process.env.NODE_ENV !== 'production' && new URLSearchParams(window.location.search).get('demo') ? DEMO_ACTIVITY(year) : null;
     return <TicketBook year={year} name={name} demo={demo} />;
   }
@@ -325,7 +328,7 @@ export default function Wrapped() {
       onPointerCancel={() => setHeld(false)}
     >
       <Link to="/profile" className="wp-close" aria-label="Close Wrapped"><X size={20} weight="bold" /></Link>
-      <Link to="/wrapped?view=book" className="wp-booklink">Ticket book</Link>
+      {!onTv && <Link to="/wrapped?view=book" className="wp-booklink">Ticket book</Link>}
 
       {!empty && tickets.length > 0 && (
         <div className="wp-progress" aria-hidden="true">

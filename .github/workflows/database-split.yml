@@ -1,0 +1,173 @@
+name: Database split (Neon media, Supabase accounts)
+
+# Removes everything duplicated between the two databases (docs/database-split.md):
+#   Neon     keeps movies, tv_shows, books, their genre views, title_ratings,
+#            episode_ratings_cache, subtitle_cache and catalog search.
+#   Supabase keeps Auth and every user-owned table.
+#
+# Run "audit" any time: it checks the deployed site already reads media from
+# Neon and that every Supabase catalog id exists in Neon. It also runs every
+# Monday, with a drift check (scripts/check-database-split.js: Neon holds only
+# the catalog, Supabase serves none of it); a failed weekly run opens an issue. "apply" repeats the
+# audit (copying any rows Neon is missing first), branches Neon as a backup,
+# then runs neon/media_only.sql and the Supabase migration
+# 20261028160000_media_moves_to_neon.sql. Both are safe to re-run.
+#
+# Deploy the web app first, and ship the TV apps that read media through
+# /api/neon-data: older builds read the Supabase catalog directly.
+#
+# Secrets: DATABASE_URL (Neon), NEON_API_KEY, SUPABASE_URL, SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY),
+#          SUPABASE_DB_URL (Supabase → Connect → Session pooler URI; needed for DDL)
+# Variables (optional): NEON_PROJECT_ID, NEON_PARENT_BRANCH, BINGE_URL
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'   # Mondays, audit + drift check only
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'audit = check only; apply = delete the duplicates'
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      confirm:
+        description: 'For apply, type: delete duplicates'
+        required: false
+        default: ''
+
+concurrency:
+  group: database-split
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: scripts/package.json
+
+      - name: Install script dependencies
+        run: npm install
+        working-directory: scripts
+
+      - name: Deployed site serves media from Neon
+        run: |
+          body=$(curl -fsS "$SITE_URL/api/neon-data/rest/movies?select=id&limit=1")
+          echo "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const rows=JSON.parse(s);if(!Array.isArray(rows)||!rows.length){console.error("Expected catalog rows from /api/neon-data");process.exit(1)}console.log("ok:",s)})'
+
+      - name: Copy catalog rows Neon is missing
+        run: node scripts/migrate-media-to-neon.js ${{ inputs.mode == 'apply' && '--apply' || '' }}
+
+      - name: Every Supabase catalog id exists in Neon
+        run: node scripts/verify-media-migration.js
+
+  drift:
+    name: No drift between the databases
+    if: github.event_name == 'schedule' || inputs.mode == 'audit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: scripts/package.json
+
+      - name: Install script dependencies
+        run: npm install
+        working-directory: scripts
+
+      - name: Neon holds only the catalog; Supabase serves none of it
+        run: node scripts/check-database-split.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  report:
+    name: Open an issue
+    needs: [audit, drift]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Weekly database-split audit failed"
+          body="The weekly audit found drift between Neon (catalog) and Supabase (accounts). Details: $RUN_URL"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+
+  cleanup:
+    name: Delete duplicates
+    needs: audit
+    if: inputs.mode == 'apply' && inputs.confirm == 'delete duplicates'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Back up Neon as a branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID || 'jolly-haze-89978844' }}
+          parent_branch: ${{ vars.NEON_PARENT_BRANCH || 'production' }}
+          branch_name: before-database-split-${{ github.run_id }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      - name: Neon keeps media only
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f neon/media_only.sql
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Supabase keeps accounts and user data only
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "SUPABASE_DB_URL secret is missing"; exit 1; fi
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -1 -f supabase/migrations/20261028160000_media_moves_to_neon.sql
+          psql "$SUPABASE_DB_URL" -c "notify pgrst, 'reload schema'"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Check the result
+        run: |
+          leftover=$(psql "$DATABASE_URL" -Atc "select string_agg(table_name, ', ') from information_schema.tables where table_schema = 'public' and table_name not in ('movies','tv_shows','books','movie_genres','tv_show_genres','book_genres','title_ratings','episode_ratings_cache','subtitle_cache')")
+          if [ -n "$leftover" ]; then echo "Neon still has: $leftover"; exit 1; fi
+          for t in movies tv_shows books title_ratings episode_ratings_cache subtitle_cache; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SUPABASE_URL/rest/v1/$t?limit=0" -H "apikey: $SUPABASE_SECRET_KEY" -H "Authorization: Bearer $SUPABASE_SECRET_KEY")
+            if [ "$code" != 404 ]; then echo "Supabase still serves $t ($code)"; exit 1; fi
+          done
+          curl -fsS "$SITE_URL/api/neon-data/rest/movies?select=id&limit=1" > /dev/null
+          echo "Neon: media only. Supabase: accounts and user data only."
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
