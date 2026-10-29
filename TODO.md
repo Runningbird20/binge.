@@ -14,7 +14,7 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **Retire the SQLite fallback server.** `server/db.js` (better-sqlite3, ~800 lines) still backs 8 routes as a fallback that writes to `/tmp` on Vercel and loses data on every cold start. Media now comes from Neon and user data from Supabase, so these fallbacks can go, along with `bcryptjs`/`jsonwebtoken` if the legacy `/api/auth` goes too.
 - [x] **Split the giant files.** `server/routes/media.js` (2,144 lines), `src/components/EmbedPlayer.js` (1,738) and `src/utils/supabaseData.js` (1,715) would be easier to change in smaller pieces, e.g. one module per server or per table.
 - [x] **Trim the CSS.** `src/App.css` is 10,211 lines, much of it from pages that no longer exist (e.g. the old Watch Room `wr-*` rules). Search for selectors no component uses and delete them. Also drop the global `h1 { white-space: nowrap; }` (App.css): it stops headings wrapping on phones, and the PIN screen already has to override it.
-- [ ] **Bump the GitHub Actions** (`actions/checkout`, `actions/setup-node`) to versions on Node 24 before GitHub's Node 20 removal, and pin `ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26.
+- [x] **Bump the GitHub Actions** (`actions/checkout`, `actions/setup-node`) to versions on Node 24 before GitHub's Node 20 removal, and pin `ubuntu-24.04` before `ubuntu-latest` moves to Ubuntu 26.
 
 ## Catalog data
 
