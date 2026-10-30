@@ -18,9 +18,9 @@ import {
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
-  fetchSupabaseMovieById,
-  fetchSupabaseMovieCatalogSegment,
-} from '../utils/supabaseMovieCatalog';
+  fetchMovieById,
+  fetchMovieCatalogSegment,
+} from '../utils/catalogQueries';
 import {
   buildMediaGenreFacets,
   filterMediaItems,
@@ -161,7 +161,7 @@ function CatalogView({
     ));
 
     const results = await Promise.all(offsets.map((offset) => (
-      fetchSupabaseMovieCatalogSegment({
+      fetchMovieCatalogSegment({
         offset,
         limit: windowSize,
         search: searchTerm,
@@ -182,7 +182,7 @@ function CatalogView({
   // the whole point is a deterministic order (newest/oldest/A–Z/Z–A).
   const fetchSupabaseSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
     const { sortOrder, includeUpcoming } = sortModeToQuery(sortMode);
-    const result = await fetchSupabaseMovieCatalogSegment({
+    const result = await fetchMovieCatalogSegment({
       offset,
       limit: PAGE_SIZE,
       search: searchTerm,
@@ -291,7 +291,7 @@ function CatalogView({
         }
       } else {
       try {
-        const probe = await fetchSupabaseMovieCatalogSegment({
+        const probe = await fetchMovieCatalogSegment({
           offset: 0,
           limit: 1,
           search: searchTerm,
@@ -632,7 +632,7 @@ export default function Movies() {
 
     async function loadOpenItem() {
       try {
-        const item = await fetchSupabaseMovieById(openId);
+        const item = await fetchMovieById(openId);
         if (!cancelled && item?.id) {
           setSelectedItem(item);
           setSelectedItemBrowseOnly(false);
@@ -684,7 +684,7 @@ export default function Movies() {
     }
 
     try {
-      const detailedItem = await fetchSupabaseMovieById(item.id);
+      const detailedItem = await fetchMovieById(item.id);
       if (detailedItem?.id) {
         setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
         return;

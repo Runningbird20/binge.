@@ -40,6 +40,7 @@ export default function usePositionSync({
       }
     });
     return () => { cancelled = true; };
+    // Once per title/episode; the provider read here is the one this episode opened on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, season, episode]);
 

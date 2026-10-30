@@ -369,7 +369,9 @@ function useServerRotation(stream, status) {
       setServerIndex(Math.max(0, firstOk));
     })();
     return () => { cancelled = true; };
-  }, [stream.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The schedule refreshes with new objects for the same game; only a new game resets its servers.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.id]);
 
   // Auto-advance past a server that failed, unless every server has.
   const advance = useCallback(() => {
@@ -408,6 +410,7 @@ function useServerRotation(stream, status) {
       else advance();
     });
     return () => { cancelled = true; };
+    // servers is derived from list; advance() is recreated every render and only moves serverIndex.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.id, list, serverIndex, retryNonce, upcoming]);
 
@@ -424,7 +427,9 @@ function useServerRotation(stream, status) {
     }, WORKED_AFTER_MS);
     workedRef.current = false;
     return () => { clearTimeout(timer); clearTimeout(worked); };
-  }, [embedUrl, advance]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Per loaded embed; servers and stream.id belong to the same game as embedUrl.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedUrl, advance]);
 
   const preparing = list === null;
   const unavailable = new Set([...failed, ...blocked]);

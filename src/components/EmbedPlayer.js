@@ -43,6 +43,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     setSeason(normalizeStartAt(initialSeason));
     setEpisode(normalizeStartAt(initialEpisode));
     setEpPopoverOpen(false);
+    // Re-seed from the props only when another title/episode opens (resetKey); later prop echoes of our own state must not reset it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
@@ -108,6 +109,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   // player always wins over whatever the mini-player widget was doing.
   useEffect(() => {
     closeMini();
+    // Once on mount: opening the full player closes the mini-player.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   usePlayerKeyboard({

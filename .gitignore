@@ -60,8 +60,12 @@ e2e-report/
 test-results/
 
 # Local PostgreSQL data from the old standalone server (may contain user data)
-backups/standalone-local/
 .neon
 
 # Supabase CLI cache (project ref, pooler URL)
 supabase/.temp/
+
+# Generated data, kept out of git: scraper output/checkpoints (scripts/scrapers/)
+# and catalog exports (the catalog lives in Neon, with backup branches).
+/data/
+/backups/

@@ -25,10 +25,10 @@ import {
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
-  fetchSupabaseBookById,
-  fetchSupabaseBooksPage,
-  sampleSupabaseCatalogForRecommendations,
-} from '../utils/supabaseMovieCatalog';
+  fetchBookById,
+  fetchBooksPage,
+  sampleCatalogForRecommendations,
+} from '../utils/catalogQueries';
 import {
   buildMediaGenreFacets,
   filterBooksCatalog,
@@ -139,6 +139,7 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
       if (!cancelled) setFreeEdition(isFreeToRead(access));
     });
     return () => { cancelled = true; };
+    // The same book arrives as a new object on every catalog refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book.title, book.author]);
 
@@ -428,7 +429,7 @@ async function fetchBooksByAuthor(book) {
 async function fetchSimilarBooks(book) {
   const genre = String(book.genre || '').split(',')[0].trim();
   if (!genre) return [];
-  const rows = await sampleSupabaseCatalogForRecommendations('book', { genre, limit: 16 });
+  const rows = await sampleCatalogForRecommendations('book', { genre, limit: 16 });
   return rows.filter((row) => row.id !== book.id && row.cover_url).slice(0, 12);
 }
 
@@ -441,6 +442,7 @@ function BookShelfSection({ title, load }) {
     let cancelled = false;
     load().then((rows) => { if (!cancelled) setItems(rows); }).catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
+    // load is a new function every render; the row reloads when its title changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
 
@@ -531,7 +533,7 @@ export default function Books() {
     ));
 
     const results = await Promise.all(pages.map((page) => (
-      fetchSupabaseBooksPage({
+      fetchBooksPage({
         page,
         pageSize: windowSize,
         search: searchTerm,
@@ -546,7 +548,7 @@ export default function Books() {
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
   const fetchSupabaseSortedPage = useCallback(async (page) => {
     const { sortOrder } = sortModeToQuery(sortMode);
-    const result = await fetchSupabaseBooksPage({
+    const result = await fetchBooksPage({
       page,
       pageSize: API_PAGE_SIZE,
       search: searchTerm,
@@ -655,7 +657,7 @@ export default function Books() {
         }
       } else {
       try {
-        const probe = await fetchSupabaseBooksPage({
+        const probe = await fetchBooksPage({
           page: 1,
           pageSize: 1,
           search: searchTerm,
@@ -851,7 +853,7 @@ export default function Books() {
 
     async function loadOpenBook() {
       try {
-        const book = await fetchSupabaseBookById(openId);
+        const book = await fetchBookById(openId);
         if (!cancelled && book?.id) {
           setSelectedBook(book);
           setSelectedBookBrowseOnly(false);

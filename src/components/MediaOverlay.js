@@ -13,15 +13,15 @@ import {
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
-  fetchSupabaseBookById,
-  fetchSupabaseMovieById,
-  fetchSupabaseTvShowById,
-} from '../utils/supabaseMovieCatalog';
+  fetchBookById,
+  fetchMovieById,
+  fetchTvShowById,
+} from '../utils/catalogQueries';
 
 const CONFIG = {
-  movie:    { fetchById: fetchSupabaseMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },
-  tv_show:  { fetchById: fetchSupabaseTvShowById, apiPath: 'tv-shows', loadFallback: loadFallbackTvShows, homePath: '/tv-shows' },
-  book:     { fetchById: fetchSupabaseBookById,   apiPath: 'books',    loadFallback: loadFallbackBooks,   homePath: '/books' },
+  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },
+  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', loadFallback: loadFallbackTvShows, homePath: '/tv-shows' },
+  book:     { fetchById: fetchBookById,   apiPath: 'books',    loadFallback: loadFallbackBooks,   homePath: '/books' },
 };
 
 // Renders a movie/TV/book details modal as an overlay on top of whatever

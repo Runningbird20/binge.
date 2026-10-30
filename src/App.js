@@ -21,13 +21,11 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import PasswordReset from './pages/PasswordReset';
 import Signup from './pages/Signup';
+// Stylesheets, in cascade order: App.css (base + design tokens), then
+// mobile.css (small-screen adaptations), then streaming.css (rows, hero,
+// sports, player), whose rules win over both.
 import './styles/App.css';
-import './styles/theme-experiment.css';
-// mobile.css loads last: it adapts the theme-experiment design language to
-// small screens, so its overrides must win over both stylesheets above.
 import './styles/mobile.css';
-// streaming.css (Netflix-style rows/hero/sports/player bar) builds on the
-// theme-experiment tokens, so it loads after everything else.
 import './styles/streaming.css';
 
 // Every page's code, fetched in the background once the first screen is up,
