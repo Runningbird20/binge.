@@ -16,7 +16,7 @@ import {
   fetchSupabaseTvShowCuratedRows,
   fetchSupabaseTvShowsPage,
   fetchCatalogByTmdbIds,
-} from './supabaseMovieCatalog';
+} from './catalogQueries';
 import { searchTmdbMulti } from './tmdb';
 import { identityKey } from './mediaIdentity';
 import { isBrowseable } from './releaseWindow';

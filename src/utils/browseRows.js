@@ -3,7 +3,7 @@
 // fallback with the same intent, so rows still fill when TMDB is down.
 import { fetchDiscover, fetchTrending } from './tmdb';
 import { isChildLevel } from './kidsMode';
-import { fetchCatalogBrowseRow } from './supabaseMovieCatalog';
+import { fetchCatalogBrowseRow } from './catalogQueries';
 import { prepareCatalogItems, resolveTmdbItems } from './catalogLookup';
 import { comingSoonCutoffIso, daysAgoIso, todayIso } from './releaseWindow';
 

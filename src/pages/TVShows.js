@@ -20,7 +20,7 @@ import {
 import {
   fetchSupabaseTvShowById,
   fetchSupabaseTvShowCatalogSegment,
-} from '../utils/supabaseMovieCatalog';
+} from '../utils/catalogQueries';
 import {
   buildMediaGenreFacets,
   filterMediaItems,

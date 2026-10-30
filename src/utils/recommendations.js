@@ -3,7 +3,7 @@ import {
   fetchSupabaseRatings,
   fetchSupabaseWatchlist,
 } from './supabaseData';
-import { sampleSupabaseCatalogForRecommendations } from './supabaseMovieCatalog';
+import { sampleSupabaseCatalogForRecommendations } from './catalogQueries';
 
 const THIS_YEAR = new Date().getFullYear();
 

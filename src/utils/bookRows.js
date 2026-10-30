@@ -3,7 +3,7 @@
 // weekly trending list matched back to catalog rows; genre rows are random
 // windows within a genre (sampleSupabaseCatalogForRecommendations).
 import { supabase, isSupabaseConfigured } from './supabase';
-import { sampleSupabaseCatalogForRecommendations } from './supabaseMovieCatalog';
+import { sampleSupabaseCatalogForRecommendations } from './catalogQueries';
 import { identityKey } from './mediaIdentity';
 
 const CACHE_TTL_MS = 60 * 60 * 1000;

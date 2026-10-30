@@ -74,8 +74,8 @@
     "import:openlibrary:large": "node scripts/scrapers/openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node scripts/scrapers/openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node scripts/scrapers/tmdb_scraper.js --type both --pages 500",
-    "import:malayalam": "node scripts/sync-language-to-supabase.js",
-    "import:malayalam:preview": "node scripts/sync-language-to-supabase.js --dry-run",
+    "import:language": "node scripts/sync-language-to-neon.js",
+    "import:language:preview": "node scripts/sync-language-to-neon.js --dry-run",
     "clean:adult": "node scripts/scrapers/clean_adult_content.js",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report e2e-report"

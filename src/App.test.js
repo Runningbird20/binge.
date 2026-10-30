@@ -9,7 +9,7 @@ import TVShows from './pages/TVShows';
 import * as AuthContextModule from './contexts/AuthContext';
 import { AuthProvider } from './contexts/AuthContext';
 import * as supabaseDataModule from './utils/supabaseData';
-import * as supabaseCatalogModule from './utils/supabaseMovieCatalog';
+import * as supabaseCatalogModule from './utils/catalogQueries';
 import { invalidateCachedPrefix } from './utils/sessionCache';
 
 const mockNavigate = jest.fn();

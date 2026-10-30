@@ -16,7 +16,7 @@ import {
   fetchSupabaseBookById,
   fetchSupabaseMovieById,
   fetchSupabaseTvShowById,
-} from '../utils/supabaseMovieCatalog';
+} from '../utils/catalogQueries';
 
 const CONFIG = {
   movie:    { fetchById: fetchSupabaseMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },

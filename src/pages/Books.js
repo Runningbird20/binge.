@@ -28,7 +28,7 @@ import {
   fetchSupabaseBookById,
   fetchSupabaseBooksPage,
   sampleSupabaseCatalogForRecommendations,
-} from '../utils/supabaseMovieCatalog';
+} from '../utils/catalogQueries';
 import {
   buildMediaGenreFacets,
   filterBooksCatalog,
