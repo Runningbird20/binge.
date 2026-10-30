@@ -64,12 +64,14 @@ jobs:
           MAX_DETAILS_PER_RUN:       '5000'
           MIN_POPULARITY:            '1'
 
-      # Older rows were imported without original_language / age_rating;
-      # fill a batch of them each run (only empty columns are written).
-      - name: Backfill missing language and age ratings
+      # Rows imported without popularity / vote_average / original_language /
+      # age_rating: one TMDB lookup per row fills every empty column (nothing
+      # already set is overwritten). The backlog was cleared on 2026-10-29, so
+      # this only catches rows that arrive incomplete.
+      - name: Backfill missing catalog fields
         run: node scripts/backfill-catalog-fields.js
         env:
           DATABASE_URL:              ${{ secrets.DATABASE_URL }}
           NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
-          MAX_ROWS:                  '1000'      # ~4000 lookups at ~3/s, inside the job's 90 min with the sync
+          MAX_ROWS:                  '3000'      # per table; ~3000 lookups at ~15/s ≈ 3-4 min
