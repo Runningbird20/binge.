@@ -18,9 +18,9 @@ import {
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
-  fetchSupabaseTvShowById,
-  fetchSupabaseTvShowCatalogSegment,
-} from '../utils/supabaseMovieCatalog';
+  fetchTvShowById,
+  fetchTvShowCatalogSegment,
+} from '../utils/catalogQueries';
 import {
   buildMediaGenreFacets,
   filterMediaItems,
@@ -161,7 +161,7 @@ function CatalogView({
     ));
 
     const results = await Promise.all(offsets.map((offset) => (
-      fetchSupabaseTvShowCatalogSegment({
+      fetchTvShowCatalogSegment({
         offset,
         limit: windowSize,
         search: searchTerm,
@@ -180,7 +180,7 @@ function CatalogView({
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
   const fetchSupabaseSortedPage = useCallback(async (offset, { includeCount = false, includeFacets = false } = {}) => {
     const { sortOrder, includeUpcoming } = sortModeToQuery(sortMode);
-    const result = await fetchSupabaseTvShowCatalogSegment({
+    const result = await fetchTvShowCatalogSegment({
       offset,
       limit: PAGE_SIZE,
       search: searchTerm,
@@ -289,7 +289,7 @@ function CatalogView({
         }
       } else {
       try {
-        const probe = await fetchSupabaseTvShowCatalogSegment({
+        const probe = await fetchTvShowCatalogSegment({
           offset: 0,
           limit: 1,
           search: searchTerm,
@@ -627,7 +627,7 @@ export default function TVShows() {
 
     async function loadOpenItem() {
       try {
-        const item = await fetchSupabaseTvShowById(openId);
+        const item = await fetchTvShowById(openId);
         if (!cancelled && item?.id) {
           setSelectedItem(item);
           setSelectedItemBrowseOnly(false);
@@ -679,7 +679,7 @@ export default function TVShows() {
     }
 
     try {
-      const detailedItem = await fetchSupabaseTvShowById(item.id);
+      const detailedItem = await fetchTvShowById(item.id);
       if (detailedItem?.id) {
         setSelectedItem((current) => (current?.id === item.id ? detailedItem : current));
         return;

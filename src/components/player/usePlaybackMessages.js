@@ -60,6 +60,9 @@ export default function usePlaybackMessages({
         if (state.time > 30) syncPosition(state.time, state.duration);
       }
     };
+    // failover, intro and syncPosition are new objects every render but only use refs,
+    // setters and the ids/episode listed here; item?.id is listed so a new title never
+    // saves its position under the previous one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, confirmServer, season, episode]);
+  }, [provider, confirmServer, season, episode, item?.id, mediaType]);
 }

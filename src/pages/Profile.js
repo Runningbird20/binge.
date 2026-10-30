@@ -185,7 +185,6 @@ function WatchlistTab({
     clampedPage * WATCHLIST_PAGE_SIZE + WATCHLIST_PAGE_SIZE,
   );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0); }, [typeFilter, statusFilter]);
 
   return (

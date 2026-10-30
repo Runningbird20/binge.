@@ -3,7 +3,7 @@ import {
   fetchSupabaseRatings,
   fetchSupabaseWatchlist,
 } from './supabaseData';
-import { sampleSupabaseCatalogForRecommendations } from './supabaseMovieCatalog';
+import { sampleCatalogForRecommendations } from './catalogQueries';
 
 const THIS_YEAR = new Date().getFullYear();
 
@@ -227,8 +227,8 @@ function dedupeById(items) {
 // genre, so every call can reach the full catalog rather than the same first page.
 async function sampleTypePool(mediaType, genres, limit, kidsSafe = false) {
   const results = await Promise.all([
-    sampleSupabaseCatalogForRecommendations(mediaType, { limit, kidsSafe }),
-    ...genres.map((genre) => sampleSupabaseCatalogForRecommendations(mediaType, { genre, limit, kidsSafe })),
+    sampleCatalogForRecommendations(mediaType, { limit, kidsSafe }),
+    ...genres.map((genre) => sampleCatalogForRecommendations(mediaType, { genre, limit, kidsSafe })),
   ]);
   return dedupeById(results.flat());
 }
@@ -247,20 +247,20 @@ function qualityScore(item) {
 // releases for TV/books.
 async function fetchPopularForType(mediaType, limit, kidsSafe = false) {
   if (mediaType === 'movie') {
-    const pool = await sampleSupabaseCatalogForRecommendations('movie', { limit: 80, kidsSafe });
+    const pool = await sampleCatalogForRecommendations('movie', { limit: 80, kidsSafe });
     return pool
       .map((item) => ({ ...item, media_type: 'movie' }))
       .sort((a, b) => qualityScore(b) - qualityScore(a))
       .slice(0, limit);
   }
   if (mediaType === 'tv_show') {
-    const pool = await sampleSupabaseCatalogForRecommendations('tv_show', { limit: 80, kidsSafe });
+    const pool = await sampleCatalogForRecommendations('tv_show', { limit: 80, kidsSafe });
     return pool
       .map((item) => ({ ...item, media_type: 'tv_show' }))
       .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))
       .slice(0, limit);
   }
-  const pool = await sampleSupabaseCatalogForRecommendations('book', { limit: 60 });
+  const pool = await sampleCatalogForRecommendations('book', { limit: 60 });
   return pool
     .map((item) => ({ ...item, media_type: 'book' }))
     .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0))

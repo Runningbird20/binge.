@@ -39,7 +39,7 @@ async function main() {
   if (sqlFiles.length === 0) {
     throw new Error(
       'Usage: npm run supabase:sql -- <sql-file> [more-sql-files]\n' +
-      'Example: npm run supabase:sql -- supabase/repeatable_schema.sql supabase/repeatable_movies_seed.sql'
+      'Example: npm run supabase:sql -- supabase/repeatable_schema.sql'
     );
   }
 

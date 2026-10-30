@@ -29,6 +29,7 @@ export default function useServerChoice({ item, mediaType, externalId, resetKey 
     setServerMemory(getServerMemory(mediaType === 'tv_show' ? 'tv_show' : 'movie', item?.id));
     setOriginalLanguage(item?.original_language || null);
     setReportSummary([]);
+    // Reset only when another title/episode opens (resetKey covers item and mediaType).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
@@ -81,6 +82,7 @@ export default function useServerChoice({ item, mediaType, externalId, resetKey 
     if (serverLockedRef.current) return;
     const best = rankedServers[0]?.id;
     if (best && best !== provider) setProvider(best);
+    // Follows the ranking only: reacting to provider would undo a server the viewer just picked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedServers]);
 

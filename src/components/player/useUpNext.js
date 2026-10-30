@@ -66,6 +66,7 @@ export default function useUpNext({
     if (upNext.secondsLeft <= 0) { playNextEpisode(); return undefined; }
     const timer = setTimeout(() => setUpNext((current) => (current ? { secondsLeft: current.secondsLeft - 1 } : current)), 1000);
     return () => clearTimeout(timer);
+    // Every tick re-renders, so playNextEpisode is always this render's (the current episode).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upNext]);
 

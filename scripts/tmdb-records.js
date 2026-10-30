@@ -1,5 +1,5 @@
 /**
- * TMDB helpers shared by the Neon catalog scripts (sync-language-to-supabase.js,
+ * TMDB helpers shared by the Neon catalog scripts (sync-language-to-neon.js,
  * backfill-catalog-fields.js): a rate-limit-aware fetch and the row formatters
  * for the movies / tv_shows tables. Moved unchanged from the retired
  * sync-tmdb-to-supabase.js; the catalog lives in Neon only.

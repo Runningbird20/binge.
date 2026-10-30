@@ -1,9 +1,9 @@
 // Row sources for the Books landing page. The books table (Goodreads
 // import) has no popularity column, so "Trending" comes from Open Library's
 // weekly trending list matched back to catalog rows; genre rows are random
-// windows within a genre (sampleSupabaseCatalogForRecommendations).
+// windows within a genre (sampleCatalogForRecommendations).
 import { supabase, isSupabaseConfigured } from './supabase';
-import { sampleSupabaseCatalogForRecommendations } from './supabaseMovieCatalog';
+import { sampleCatalogForRecommendations } from './catalogQueries';
 import { identityKey } from './mediaIdentity';
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
@@ -98,7 +98,7 @@ export async function fetchTrendingBooks(limit = 24) {
 }
 
 export async function fetchBookGenreRow(genre, limit = 30) {
-  const rows = await sampleSupabaseCatalogForRecommendations('book', { genre, limit: limit + 10 });
+  const rows = await sampleCatalogForRecommendations('book', { genre, limit: limit + 10 });
   return dedupe(rows.filter((row) => row.cover_url).map(asBook)).slice(0, limit);
 }
 

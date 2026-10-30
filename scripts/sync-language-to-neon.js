@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * sync-language-to-supabase.js (legacy filename; writes the Neon catalog)
+ * sync-language-to-neon.js
  *
  * Keeps one original language (Malayalam by default) complete and current in
  * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-neon.js)

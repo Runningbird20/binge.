@@ -716,7 +716,9 @@ export default function MangaTab() {
       .filter((entry) => entry && (entry.status === 'reading' || entry.status === 'plan_to_read'))
       .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))
       .map((entry) => ({ ...entry, _progressLabel: entry.status === 'reading' ? 'Reading' : null }));
-  }, [reader, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Reads localStorage; recomputed when the reader closes or the selection changes (both save progress).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reader, selected]);
 
   const loaders = useMemo(() => {
     const map = new Map();

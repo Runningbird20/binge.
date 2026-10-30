@@ -2,7 +2,7 @@
 // into catalog items the app can open: matched by TMDB id, filtered by the
 // release-window rule, de-duplicated, and tagged with the TMDB data the
 // cards and scorers use (`_tmdb`, `_comingSoon`).
-import { fetchCatalogByTmdbIds } from './supabaseMovieCatalog';
+import { fetchCatalogByTmdbIds } from './catalogQueries';
 import { tmdbImage } from './tmdb';
 import { identityKey } from './mediaIdentity';
 import { isBrowseable, isComingSoon } from './releaseWindow';

@@ -41,8 +41,10 @@ export default function useFailover({
       }
     }, 2000);
     return () => clearInterval(timer);
+    // switchServer only uses refs, setters and provider; item?.id is listed so a slow
+    // server is never remembered against the previous title.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, availableIds, prefs, originalLanguage, reportSummary]);
+  }, [provider, availableIds, prefs, originalLanguage, reportSummary, item?.id, memoryType]);
 
   // Automatic failover. Servers can load fine and still not have a given
   // episode (their catalogs differ), which looks identical from outside —
@@ -79,6 +81,7 @@ export default function useFailover({
     setServerMemory(memory);
     setFailoverNotice({ from: provider, to: next.id, reason: 'wrong' });
     setProvider(next.id);
+    // Runs once per wrong-video report; the report re-renders first, so the ranking inputs read here are current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wrongVideo, provider]);
 
@@ -98,6 +101,7 @@ export default function useFailover({
       setProvider(next.id);
     }, FAILOVER_SECONDS * 1000);
     return () => clearTimeout(timer);
+    // A countdown per server/episode: restarting it whenever ranking inputs refresh would keep postponing failover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, season, episode, externalId, item?.id]);
 

@@ -66,6 +66,7 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
       }).catch(() => {});
     }, TRAILER_DELAY_MS);
     return () => { cancelled = true; clearTimeout(timer); };
+    // Only when the slide changes; activeSlide is derived from activeKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey]);
   const trailerPlaying = Boolean(trailer?.ready && trailer.slideKey === activeKey);

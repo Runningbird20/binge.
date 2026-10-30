@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════
    BINGE — MOBILE STYLESHEET
-   Adapts the streaming design language (theme-experiment.css: navy
-   canvas, glass panels, white CTAs, --exp-* tokens) to ≤ 768 px.
-   Loaded LAST — after App.css and theme-experiment.css — so every
-   rule here wins over the desktop styling it adapts.
+   Adapts the streaming design language (the theme section of App.css:
+   navy canvas, glass panels, white CTAs, --exp-* tokens) to ≤ 768 px.
+   Loaded after App.css, so every rule here wins over the desktop
+   styling it adapts (streaming.css still loads after it).
 ═══════════════════════════════════════════════════════════════ */
 
 /* Bottom nav is a mobile-only shell component */
 .bottom-nav {
-  display: none; /* shown only inside the mobile media query below */
+  display: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -57,7 +57,7 @@
   .navbar-logo {
     display: block;
     font-size: 1.3rem;
-    margin-right: auto; /* pushes avatar + search to the right edge */
+    margin-right: auto;
   }
 
   /* Desktop-only navbar pieces */
@@ -67,7 +67,7 @@
     display: none !important;
   }
 
-  /* Avatar chip: shown again (theme-experiment hides it on mobile),
+  /* Avatar chip: shown again (the App.css theme hides it on mobile),
      but avatar-only — the name and hover drawer are desktop ideas.
      On mobile, tapping it goes to Account Settings (see Navbar.js). */
   .navbar-left { display: flex; align-items: center; min-width: 0; }
@@ -122,7 +122,6 @@
   }
 
   .page-header h1 { font-size: 1.5rem; }
-  .mr-heading { font-size: 1.05rem; }
 
   /* ── Bottom navigation — the desktop nav links, thumb-reach ── */
   .bottom-nav {
@@ -202,8 +201,6 @@
 
   .home-sections { gap: 1.5rem; }
 
-  /* Profile strip: avatar + name left, stats wrap below full-width */
-
   /* Profile tabs: filter row + count/sort control stack instead of
      fighting for space in the desktop 3-column grid. */
 
@@ -214,20 +211,14 @@
   /* Horizontal card rows bleed to the screen edges — content peeks
      past the viewport to signal scrollability, like the poster rows
      on streaming apps. Padding keeps the ring/active scale unclipped. */
-  .foryou-grid,
-  .mr-track {
+  .foryou-grid {
     margin-left: -1rem;
     margin-right: -1rem;
     padding-left: 1rem;
     padding-right: 1rem;
     scrollbar-width: none;
   }
-  .foryou-grid::-webkit-scrollbar,
-  .mr-track::-webkit-scrollbar { display: none; }
-
-  .mr-track-wrap { overflow: visible; }
-  .mr-fade { display: none; }   /* edge fades fight the full-bleed rows */
-  .mr-arrow { display: none; }  /* hover arrows are meaningless on touch */
+  .foryou-grid::-webkit-scrollbar { display: none; }
   .foryou-card { flex: 0 0 138px; width: 138px; }
 
   /* ── Catalog pages (Movies / TV / Books) ────────────────── */
@@ -254,25 +245,6 @@
     -webkit-overflow-scrolling: touch;
   }
   .books-tab-bar::-webkit-scrollbar { display: none; }
-
-  /* ── Mobile media cards (mob-card) — glass panels ────────── */
-  .mob-card {
-    background: var(--exp-surface, rgba(255, 255, 255, 0.045));
-    border: 1px solid var(--exp-border, rgba(255, 255, 255, 0.09));
-    border-radius: var(--exp-radius-lg, 16px);
-  }
-  .mob-card-action-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--exp-border, rgba(255, 255, 255, 0.09));
-    border-radius: 8px;
-    color: var(--exp-text-dim, #a9b1bd);
-  }
-  .mob-card-action-btn--watch {
-    background: #f4f6f8;
-    border-color: #f4f6f8;
-    color: #0c0e13;
-    font-weight: 700;
-  }
 
   /* ── Rate tab: larger tap targets for category rating buttons ── */
   .rating-input-row {
@@ -438,9 +410,6 @@
   border: 1px solid var(--exp-border, rgba(255, 255, 255, 0.09));
   color: var(--exp-text, #f4f6f8);
   font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -456,7 +425,7 @@
   flex-shrink: 0;
   height: 45dvh;
   background: #000;
-  position: relative; /* anchors .mp-ls-overlay */
+  position: relative;
 }
 
 .mp-iframe {
@@ -782,7 +751,6 @@
 
   /* The shared poster-card hover (scale-up + ring) never fires on
      touch — replace it with a subtle press-down on the same frames. */
-  .mr-card:active .mr-poster,
   .foryou-card:active {
     transform: scale(0.96);
     transition: transform 0.1s ease;

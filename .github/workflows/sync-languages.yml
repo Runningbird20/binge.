@@ -32,7 +32,7 @@ jobs:
         working-directory: scripts
 
       - name: Run language sync
-        run: node scripts/sync-language-to-supabase.js
+        run: node scripts/sync-language-to-neon.js
         env:
           DATABASE_URL:              ${{ secrets.DATABASE_URL }}
           NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
