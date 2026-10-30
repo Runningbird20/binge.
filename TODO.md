@@ -24,7 +24,7 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Catalog data
 
-- [ ] **Fill in missing catalog fields.** In Neon, 44% of movies have no `vote_average`/`popularity` and 43% no `original_language`. `backfill-catalog-fields.js` does 1,000 rows per twice-weekly run, so it would take months to catch up. Run a one-off large backfill (or a nightly job with a higher `MAX_ROWS`), then rely on the twice-weekly run.
+- [x] **Fill in missing catalog fields.** Done 2026-10-29. `backfill-catalog-fields.js` only ever filled language and age rating (never `vote_average`/`popularity`); it now fills all four with one TMDB lookup per row. The one-off run filled 77,287 movies and 21,434 shows (0 failures): movies missing `vote_average`/`popularity` went from 44% to 1%, `original_language` from 43% to 1%. What's left is the 883 non-TMDB rows (Plex/other imports) and titles TMDB has no votes for or has deleted. The twice-weekly run (`sync-tmdb.yml`, 3,000 rows per table) keeps up with new incomplete rows.
 
 ## Features
 
