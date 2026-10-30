@@ -2,7 +2,7 @@
    BINGE — STREAMING LAYOUT (st-*)
    Spotlight hero, poster rows, title cards, sports rails and the
    player's audio/subtitle bar. Loaded last; uses the --exp-* tokens
-   from theme-experiment.css. Grid tracks use minmax(0, 1fr) (see the
+   from the theme section of App.css. Grid tracks use minmax(0, 1fr) (see the
    mobile overflow sweep notes) and every scroller has real buttons, so
    nothing depends on a trackpad, touch swipe or remote.
 ═══════════════════════════════════════════════════════════════ */
@@ -212,14 +212,11 @@
 }
 .st-hero-dot {
   width: 26px;
-  height: 6px;
   padding: 0;
   border: none;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.3);
   cursor: pointer;
 }
-.st-hero-dot.active { background: #fff; }
 .st-hero-dot:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
 /* ── Browse page ──────────────────────────────────────────────── */
@@ -259,7 +256,6 @@
   display: flex;
   gap: 0.6rem;
   overflow-x: auto;
-  overflow-y: visible;
   scroll-snap-type: x proximity;
   scroll-behavior: smooth;
   padding: 0.6rem 0.15rem 0.4rem;
@@ -274,8 +270,6 @@
    mouse, no hover discovery or horizontal scroll wheel needed. */
 .st-row-arrow {
   position: absolute;
-  top: 0.6rem;
-  bottom: 2.1rem;
   width: 44px;
   z-index: 5;
   display: flex;
@@ -403,7 +397,6 @@
 .st-card-rank {
   flex: 1 1 auto;
   font-size: calc(var(--st-card-w) * 0.95);
-  line-height: 0.78;
   font-weight: 900;
   letter-spacing: -0.08em;
   color: var(--exp-bg-0);
@@ -899,7 +892,6 @@
   width: 100%;
   max-height: none;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  padding: 0.9rem 0;
   border: none;
   background: none;
   box-shadow: none;
@@ -1061,13 +1053,11 @@
 .td-status {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
   padding-left: 0.85rem;
   height: 44px;
   border-radius: 22px;
   border: 2px solid rgba(255, 255, 255, 0.55);
   background: rgba(30, 33, 42, 0.6);
-  color: var(--st-match);
 }
 .td-status .themed-select,
 .td-status-select { border: none !important; background: transparent !important; color: #fff !important; min-height: 40px; }
@@ -2148,7 +2138,6 @@
   padding-bottom: 14px;
 }
 .st-row-arrow { top: 14px; bottom: calc(14px + 1.8rem); }
-.st-row--ranked .st-row-arrow { bottom: 14px; }
 /* Top 10 numerals hang slightly below the posters — give them room. */
 .st-row--ranked .st-row-track { padding-bottom: 30px; }
 .st-row--ranked .st-row-arrow { bottom: 30px; }
@@ -2436,7 +2425,6 @@
   width: 124%;
   height: 124%;
   border: 0;
-  pointer-events: none;
   opacity: 0;
   transition: opacity 0.4s;
 }
@@ -2581,10 +2569,6 @@
 .pf-icon-btn:disabled { opacity: 0.4; cursor: default; background: transparent; }
 
 /* ── binge. Wrapped ──────────────────────────────────────────── */
-
-/* The fact in each sentence carries the weight, not a giant number. */
-@media (max-width: 768px) {
-}
 
 /* ── Sports Multiview ─────────────────────────────────────────── */
 .sr-only {
@@ -3296,7 +3280,7 @@ kbd {
 .fr-progress { display: flex; align-items: center; gap: 0.6rem; margin: 0.25rem 0 0; font-size: 0.85rem; }
 .fr-bar { width: 120px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
 .fr-bar span { display: block; height: 100%; background: var(--st-match); }
-.fr-next { display: inline-flex; align-items: center; gap: 0.45rem; margin: -0.25rem 0 1rem; padding: 0.55rem 0.9rem; border-radius: 10px; background: rgba(255, 255, 255, 0.08); color: #fff; text-decoration: none; font-size: 0.9rem; }
+.fr-next { display: inline-flex; gap: 0.45rem; margin: -0.25rem 0 1rem; padding: 0.55rem 0.9rem; border-radius: 10px; background: rgba(255, 255, 255, 0.08); color: #fff; text-decoration: none; font-size: 0.9rem; }
 .fr-next:hover { background: rgba(255, 255, 255, 0.14); }
 .fr-list { list-style: none; margin: 0; padding: 0 0 0.5rem; display: flex; gap: 0.75rem; overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
 .fr-list li { flex: 0 0 120px; scroll-snap-align: start; }
@@ -3728,7 +3712,7 @@ kbd {
 }
 .wp-close:hover { background: rgba(244, 239, 230, 0.2); }
 .wp-progress {
-  position: absolute; top: 1.6rem; left: clamp(1.25rem, 5vw, 3rem); right: 5rem; z-index: 4;
+  position: absolute; top: 1.6rem; left: clamp(1.25rem, 5vw, 3rem); z-index: 4;
   display: flex; gap: 6px;
 }
 .wp-progress span { position: relative; flex: 1; height: 3px; border-radius: 2px; overflow: hidden; background: rgba(244, 239, 230, 0.2); }
@@ -4000,7 +3984,7 @@ kbd {
 .fb-title { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.35rem; font-weight: 700; color: var(--exp-text); }
 .fb-sub { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--exp-text-faint); }
 
-.fb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.9rem; }
+.fb-cards { display: grid; gap: 0.9rem; }
 .fb-card {
   display: flex; flex-direction: column; gap: 0.75rem; min-height: 158px; padding: 1rem 1.05rem 0.9rem;
   border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.09); background: #151922; color: var(--exp-text);
@@ -4062,7 +4046,6 @@ kbd {
 
 @media (max-width: 600px) {
   .fb-head { flex-direction: column; }
-  .fb-cards { grid-template-columns: 1fr; }
   .fb-players { grid-template-columns: 1fr; }
 }
 

@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════
    BINGE — MOBILE STYLESHEET
-   Adapts the streaming design language (theme-experiment.css: navy
-   canvas, glass panels, white CTAs, --exp-* tokens) to ≤ 768 px.
-   Loaded LAST — after App.css and theme-experiment.css — so every
-   rule here wins over the desktop styling it adapts.
+   Adapts the streaming design language (the theme section of App.css:
+   navy canvas, glass panels, white CTAs, --exp-* tokens) to ≤ 768 px.
+   Loaded after App.css, so every rule here wins over the desktop
+   styling it adapts (streaming.css still loads after it).
 ═══════════════════════════════════════════════════════════════ */
 
 /* Bottom nav is a mobile-only shell component */
@@ -67,7 +67,7 @@
     display: none !important;
   }
 
-  /* Avatar chip: shown again (theme-experiment hides it on mobile),
+  /* Avatar chip: shown again (the App.css theme hides it on mobile),
      but avatar-only — the name and hover drawer are desktop ideas.
      On mobile, tapping it goes to Account Settings (see Navbar.js). */
   .navbar-left { display: flex; align-items: center; min-width: 0; }
@@ -410,9 +410,6 @@
   border: 1px solid var(--exp-border, rgba(255, 255, 255, 0.09));
   color: var(--exp-text, #f4f6f8);
   font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
