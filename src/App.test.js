@@ -24,7 +24,7 @@ function mockBookCatalog(books) {
   // by id when it merges its probe + window batches, so returning the same
   // items each time is safe — and unlike counting calls, it doesn't break
   // when a genre click cancels a load cycle part-way through.
-  return jest.spyOn(supabaseCatalogModule, 'fetchSupabaseBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
+  return jest.spyOn(supabaseCatalogModule, 'fetchBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
     const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
     const filtered = genreValues.length === 0
       ? books
@@ -57,11 +57,11 @@ function mockSegment(fnName, items, { matchesGenre } = {}) {
 }
 
 function mockMovieCatalog(items, options) {
-  return mockSegment('fetchSupabaseMovieCatalogSegment', items, options);
+  return mockSegment('fetchMovieCatalogSegment', items, options);
 }
 
 function mockTvCatalog(items, options) {
-  return mockSegment('fetchSupabaseTvShowCatalogSegment', items, options);
+  return mockSegment('fetchTvShowCatalogSegment', items, options);
 }
 
 jest.mock(

@@ -7,14 +7,14 @@ import {
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './supabaseData';
 import { generateSupabaseRecommendations } from './recommendations';
 import {
-  fetchSupabaseBookById,
-  fetchSupabaseBooksPage,
-  fetchSupabaseMovieById,
-  fetchSupabaseMovieCuratedRows,
-  fetchSupabaseMoviesPage,
-  fetchSupabaseTvShowById,
-  fetchSupabaseTvShowCuratedRows,
-  fetchSupabaseTvShowsPage,
+  fetchBookById,
+  fetchBooksPage,
+  fetchMovieById,
+  fetchMovieCuratedRows,
+  fetchMoviesPage,
+  fetchTvShowById,
+  fetchTvShowCuratedRows,
+  fetchTvShowsPage,
   fetchCatalogByTmdbIds,
 } from './catalogQueries';
 import { searchTmdbMulti } from './tmdb';
@@ -227,7 +227,7 @@ async function handleMediaGet(pathname, searchParams) {
 
   if (pathname === '/media/movies') {
     const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
-    return fetchSupabaseMoviesPage({
+    return fetchMoviesPage({
       page: Number(searchParams.get('page') || 1),
       pageSize,
       search: searchParams.get('search') || '',
@@ -237,19 +237,19 @@ async function handleMediaGet(pathname, searchParams) {
   }
 
   if (pathname === '/media/movies/curated') {
-    return { rows: await fetchSupabaseMovieCuratedRows() };
+    return { rows: await fetchMovieCuratedRows() };
   }
 
   const movieMatch = pathname.match(/^\/media\/movies\/([^/]+)$/);
   if (movieMatch) {
-    const movie = await fetchSupabaseMovieById(decodeURIComponent(movieMatch[1]));
+    const movie = await fetchMovieById(decodeURIComponent(movieMatch[1]));
     if (!movie) throw new Error('Movie not found.');
     return movie;
   }
 
   if (pathname === '/media/tv-shows') {
     const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
-    return fetchSupabaseTvShowsPage({
+    return fetchTvShowsPage({
       page: Number(searchParams.get('page') || 1),
       pageSize,
       search: searchParams.get('search') || '',
@@ -259,19 +259,19 @@ async function handleMediaGet(pathname, searchParams) {
   }
 
   if (pathname === '/media/tv-shows/curated') {
-    return { rows: await fetchSupabaseTvShowCuratedRows() };
+    return { rows: await fetchTvShowCuratedRows() };
   }
 
   const tvMatch = pathname.match(/^\/media\/tv-shows\/([^/]+)$/);
   if (tvMatch) {
-    const show = await fetchSupabaseTvShowById(decodeURIComponent(tvMatch[1]));
+    const show = await fetchTvShowById(decodeURIComponent(tvMatch[1]));
     if (!show) throw new Error('TV show not found.');
     return show;
   }
 
   if (pathname === '/media/books') {
     const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 24);
-    return fetchSupabaseBooksPage({
+    return fetchBooksPage({
       page: Number(searchParams.get('page') || 1),
       pageSize,
       search: searchParams.get('search') || '',
@@ -282,7 +282,7 @@ async function handleMediaGet(pathname, searchParams) {
 
   const bookMatch = pathname.match(/^\/media\/books\/([^/]+)$/);
   if (bookMatch) {
-    const book = await fetchSupabaseBookById(decodeURIComponent(bookMatch[1]));
+    const book = await fetchBookById(decodeURIComponent(bookMatch[1]));
     if (!book) throw new Error('Book not found.');
     return book;
   }

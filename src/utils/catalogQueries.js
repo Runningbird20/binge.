@@ -225,16 +225,6 @@ function normalizeSearchValue(value) {
     .trim();
 }
 
-function clampPositiveInteger(value, fallback) {
-  const nextValue = Number(value);
-
-  if (!Number.isFinite(nextValue) || nextValue <= 0) {
-    return fallback;
-  }
-
-  return Math.floor(nextValue);
-}
-
 function shuffleItems(items) {
   const nextItems = [...items];
 
@@ -388,7 +378,7 @@ async function fetchGenreValues(viewName) {
     .filter(Boolean);
 }
 
-export async function fetchSupabaseMovieGenres() {
+export async function fetchMovieGenres() {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const data = await api.get('/media/movies/genres');
@@ -400,7 +390,7 @@ export async function fetchSupabaseMovieGenres() {
   return fetchGenreValues('movie_genres');
 }
 
-export async function fetchSupabaseTvShowGenres() {
+export async function fetchTvShowGenres() {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const data = await api.get('/media/tv-shows/genres');
@@ -412,7 +402,7 @@ export async function fetchSupabaseTvShowGenres() {
   return fetchGenreValues('tv_show_genres');
 }
 
-export async function fetchSupabaseBookGenres() {
+export async function fetchBookGenres() {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const data = await api.get('/media/books/genres');
@@ -424,7 +414,7 @@ export async function fetchSupabaseBookGenres() {
   return fetchGenreValues('book_genres');
 }
 
-export async function fetchSupabaseMovieCatalogSegment({
+export async function fetchMovieCatalogSegment({
   offset = 0,
   limit = 48,
   search = '',
@@ -485,7 +475,7 @@ export async function fetchSupabaseMovieCatalogSegment({
   ];
 
   if (includeFacets) {
-    tasks.push(fetchSupabaseMovieGenres().catch(() => []));
+    tasks.push(fetchMovieGenres().catch(() => []));
   }
 
   const [movieResult, genres = []] = await Promise.all(tasks);
@@ -501,7 +491,7 @@ export async function fetchSupabaseMovieCatalogSegment({
   };
 }
 
-export async function fetchSupabaseMoviesPage({
+export async function fetchMoviesPage({
   page = 1,
   pageSize = 48,
   search = '',
@@ -509,7 +499,7 @@ export async function fetchSupabaseMoviesPage({
   sortOrder = 'title-asc',
 } = {}) {
   const offset = Math.max(0, (page - 1) * pageSize);
-  const segment = await fetchSupabaseMovieCatalogSegment({
+  const segment = await fetchMovieCatalogSegment({
     offset,
     limit: pageSize,
     search,
@@ -531,7 +521,7 @@ export async function fetchSupabaseMoviesPage({
   };
 }
 
-export async function fetchSupabaseMovieById(movieId) {
+export async function fetchMovieById(movieId) {
   if (!isSupabaseConfigured || !supabase) {
     const data = await api.get(`/media/movies/${movieId}`);
     return normalizeMovie(data);
@@ -551,56 +541,7 @@ export async function fetchSupabaseMovieById(movieId) {
   return normalizeMovie(data);
 }
 
-export async function fetchSupabaseRandomMoviePosters({
-  count = 4,
-  sampleWindow = 32,
-} = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    return [];
-  }
-
-  const client = requireSupabaseCatalog();
-  const desiredCount = clampPositiveInteger(count, 4);
-  const desiredSampleWindow = clampPositiveInteger(sampleWindow, 32);
-
-  const { count: totalWithPosters, error: countError } = await client
-    .from('movies')
-    .select('id', { count: 'exact', head: true })
-    .not('poster_url', 'is', null)
-    .neq('poster_url', '');
-
-  if (countError) {
-    throw countError;
-  }
-
-  const total = Number(totalWithPosters) || 0;
-  if (total === 0) {
-    return [];
-  }
-
-  const rangeSize = Math.max(desiredCount, Math.min(desiredSampleWindow, total));
-  const maxOffset = Math.max(0, total - rangeSize);
-  const offset = maxOffset > 0
-    ? Math.floor(Math.random() * (maxOffset + 1))
-    : 0;
-
-  const { data, error } = await client
-    .from('movies')
-    .select(MOVIE_BROWSE_COLUMNS)
-    .not('poster_url', 'is', null)
-    .neq('poster_url', '')
-    .order('title', { ascending: true })
-    .range(offset, offset + rangeSize - 1);
-
-  if (error) {
-    throw error;
-  }
-
-  return shuffleItems((data || []).map((movie) => normalizeMovieBrowseEntry(movie)))
-    .slice(0, desiredCount);
-}
-
-export async function fetchSupabaseMovieCuratedRows() {
+export async function fetchMovieCuratedRows() {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const data = await api.get('/media/movies/curated');
@@ -622,7 +563,7 @@ export async function fetchSupabaseMovieCuratedRows() {
 
   const client = requireSupabaseCatalog();
   const [genres, popularTitles] = await Promise.all([
-    fetchSupabaseMovieGenres(),
+    fetchMovieGenres(),
     fetchPopularTitles('movie'),
   ]);
   const curatedGenres = pickCuratedGenres(genres, CURATED_MOVIE_GENRE_PREFERENCES);
@@ -700,7 +641,7 @@ export async function fetchSupabaseMovieCuratedRows() {
   return rows.filter((row) => row.items.length > 0);
 }
 
-export async function fetchSupabaseTvShowsPage({
+export async function fetchTvShowsPage({
   page = 1,
   pageSize = 48,
   search = '',
@@ -708,7 +649,7 @@ export async function fetchSupabaseTvShowsPage({
   sortOrder = 'title-asc',
 } = {}) {
   const offset = Math.max(0, (page - 1) * pageSize);
-  const segment = await fetchSupabaseTvShowCatalogSegment({
+  const segment = await fetchTvShowCatalogSegment({
     offset,
     limit: pageSize,
     search,
@@ -730,7 +671,7 @@ export async function fetchSupabaseTvShowsPage({
   };
 }
 
-export async function fetchSupabaseTvShowCatalogSegment({
+export async function fetchTvShowCatalogSegment({
   offset = 0,
   limit = 48,
   search = '',
@@ -788,7 +729,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
   ];
 
   if (includeFacets) {
-    tasks.push(fetchSupabaseTvShowGenres().catch(() => []));
+    tasks.push(fetchTvShowGenres().catch(() => []));
   }
 
   const [showResult, genres = []] = await Promise.all(tasks);
@@ -804,7 +745,7 @@ export async function fetchSupabaseTvShowCatalogSegment({
   };
 }
 
-export async function fetchSupabaseTvShowById(showId) {
+export async function fetchTvShowById(showId) {
   if (!isSupabaseConfigured || !supabase) {
     const data = await api.get(`/media/tv-shows/${showId}`);
     return normalizeTvShow(data);
@@ -824,7 +765,7 @@ export async function fetchSupabaseTvShowById(showId) {
   return normalizeTvShow(data);
 }
 
-export async function fetchSupabaseTvShowCuratedRows() {
+export async function fetchTvShowCuratedRows() {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const data = await api.get('/media/tv-shows/curated');
@@ -846,7 +787,7 @@ export async function fetchSupabaseTvShowCuratedRows() {
 
   const client = requireSupabaseCatalog();
   const [genres, popularTitles] = await Promise.all([
-    fetchSupabaseTvShowGenres(),
+    fetchTvShowGenres(),
     fetchPopularTitles('tv'),
   ]);
   const curatedGenres = pickCuratedGenres(genres, CURATED_TV_GENRE_PREFERENCES);
@@ -923,7 +864,7 @@ export async function fetchSupabaseTvShowCuratedRows() {
   return rows.filter((row) => row.items.length > 0);
 }
 
-export async function fetchSupabaseBooksPage({
+export async function fetchBooksPage({
   page = 1,
   pageSize = 24,
   search = '',
@@ -965,7 +906,7 @@ export async function fetchSupabaseBooksPage({
 
   const [bookResult, genres] = await Promise.all([
     booksQuery.range(offset, offset + pageSize - 1),
-    fetchSupabaseBookGenres().catch(() => []),
+    fetchBookGenres().catch(() => []),
   ]);
 
   if (bookResult.error) {
@@ -985,7 +926,7 @@ export async function fetchSupabaseBooksPage({
   };
 }
 
-export async function fetchSupabaseBookById(bookId) {
+export async function fetchBookById(bookId) {
   if (!isSupabaseConfigured || !supabase) {
     const data = await api.get(`/media/books/${bookId}`);
     return normalizeBook(data);
@@ -1024,7 +965,7 @@ const SAMPLE_MAX_OFFSET = 20000;
 // (times out on every table) and no ORDER BY (a sorted genre-filtered scan
 // also times out). The browse fetchers above need both, so they can't be
 // reused here. Never throws — a failed sample just contributes no candidates.
-export async function sampleSupabaseCatalogForRecommendations(mediaType, { genre = '', limit = 60, kidsSafe = false } = {}) {
+export async function sampleCatalogForRecommendations(mediaType, { genre = '', limit = 60, kidsSafe = false } = {}) {
   const source = RECOMMENDATION_SAMPLE_SOURCES[mediaType];
   if (!source) return [];
 
