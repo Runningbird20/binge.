@@ -22,7 +22,7 @@
     "dotenv": "^17.4.0",
     "express": "^5.2.1",
     "fflate": "^0.8.3",
-    "framer-motion": "^12.38.0",
+    "framer-motion": "^14.6.0",
     "helmet": "^8.1.0",
     "pg": "^8.20.0",
     "playwright": "1.59.1",
