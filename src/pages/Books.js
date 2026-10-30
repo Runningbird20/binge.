@@ -139,6 +139,7 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
       if (!cancelled) setFreeEdition(isFreeToRead(access));
     });
     return () => { cancelled = true; };
+    // The same book arrives as a new object on every catalog refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book.title, book.author]);
 
@@ -441,6 +442,7 @@ function BookShelfSection({ title, load }) {
     let cancelled = false;
     load().then((rows) => { if (!cancelled) setItems(rows); }).catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
+    // load is a new function every render; the row reloads when its title changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
 

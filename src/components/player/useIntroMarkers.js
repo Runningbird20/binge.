@@ -24,6 +24,7 @@ export default function useIntroMarkers({ isTV, item, season, episode, provider,
     let cancelled = false;
     fetchEpisodeMarkers(item, season, episode).then((found) => { if (!cancelled) setMarkers(found || {}); });
     return () => { cancelled = true; };
+    // item is a new object for the same title on re-render; only its id matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTV, item?.id, season, episode]);
 

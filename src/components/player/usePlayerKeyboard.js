@@ -63,5 +63,7 @@ export default function usePlayerKeyboard({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isTV, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Season/episode/counts are read through refs (kbSeason, kbEpisode, ...), so the listener never goes stale.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTV, onClose]);
 }

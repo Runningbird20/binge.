@@ -111,7 +111,9 @@ function useLeague(entry, live) {
     }
     load(false);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [entry.game, entry.leagueId, entry.teamId, live]); // eslint-disable-line react-hooks/exhaustive-deps
+  // entry is a new object every render; fetchFantasyLeague only uses these ids.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry.game, entry.leagueId, entry.teamId, live]);
   return { data, error };
 }
 
