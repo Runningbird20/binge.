@@ -67,7 +67,7 @@ Book ids were SHA-1-derived 60-bit numbers that JavaScript silently rounds (open
 
 ### Desktop / mobile component pairs
 
-Cards and title/book details are single responsive components (`TitleCard`, `MediaDetailsModal`, `BookDetailsModal`); the old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone. The one remaining split is the player: `EmbedPlayer.js` renders `components/player/MobilePlayer.js` or `DesktopPlayer.js` (chosen by `useIsMobile()` / `useDeviceType()` in `src/hooks/`). When changing a player control, change both layouts — they don't share markup.
+Cards and title/book details are single responsive components (`TitleCard`, `MediaDetailsModal`, `BookDetailsModal`); the old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone. The one remaining split is the player: `EmbedPlayer.js` renders `components/player/MobilePlayer.js` or `DesktopPlayer.js` (chosen by `useDeviceType().isMobile` in `src/hooks/useDeviceType.js`: the screen's short side ≤ 768 px, so a landscape phone counts, a tablet doesn't, and TV mode never does). When changing a player control, change both layouts — they don't share markup.
 
 ### Routing & lazy loading
 
@@ -216,7 +216,7 @@ Book reading goes through `src/utils/bookAccess.js`: one Open Library search (~0
 
 - **Fantasy roster** (`FantasyRoster` under the line score in `LiveScorePanel`, `utils/fantasy.js`): the game's ESPN path picks the ESPN Fantasy game (`football/nfl`→`ffl`, `baseball/mlb`→`flb`, `basketball/nba`→`fba`, `hockey/nhl`→`fhl`), so each league shows only during its sport. Players on either team in the game are listed first. Signed in, leagues are per profile in `fantasy_leagues` (owner RLS) and the private-league cookies (`espn_s2`, `SWID`) go once to `PUT /api/sports/fantasy/credentials`, which AES-256-GCM-encrypts them (`FANTASY_CREDENTIALS_KEY`, else derived from the service-role key) into `espn_credentials` (RLS on, no policies: service role only; the browser can only ask whether a login is saved). `GET /api/sports/fantasy/:game/:leagueId` uses the saved login for the Bearer user + `profileId`. Signed out, both stay in localStorage and go as `x-espn-*` headers; the first signed-in load moves them to the account. Migration `20261018120000_fantasy_leagues.sql` (applied). ESPN's API is unofficial (`lm-api-reads.fantasy.espn.com`). Fantasy `proTeamId` equals the ESPN scores team id.
 
-The TV does the same, interleaving feeds so its 4-page race (`StreamRace.maxLiveContenders`) spans different feeds; the rest are backups that recovery tries first. `src/components/ChatBot.js` has its own separate, inline recommendation-card UI that reuses some of the same CSS classes as other recommendation surfaces without importing their components — check CSS class usage across files before assuming a class is scoped to one component.
+The TV does the same, interleaving feeds so its 4-page race (`StreamRace.maxLiveContenders`) spans different feeds; the rest are backups that recovery tries first.
 
 ### Caching & load performance
 
@@ -231,7 +231,7 @@ Two independent cache layers exist to cut catalog/image load times. Neither is a
 
 A rated title is treated as watched and belongs in the "Ratings & Reviews" section, **not** the watchlist/library:
 - `saveSupabaseRating` (`src/utils/data/library.js`) deletes the matching watchlist row after saving a rating (best-effort — a delete failure must not fail the save).
-- `src/utils/libraryStats.js` centralizes the dashboard math shared by Home (`ProfileStatsHeader` / `LibrarySection`) and Profile: `excludeRated` hides rated titles from the library view, `computeWatchMinutes` counts both watchlist progress and rated titles toward watch time (deduped, since rating a title you'd already tracked must not double-count), and `countCompleted` counts watched/read + rated titles. If you change what "counts" as watched or completed, do it here so both dashboards stay in sync.
+- `src/utils/libraryStats.js` centralizes the dashboard math shared by Home (`ProfileStatsHeader`) and Profile: `excludeRated` hides rated titles from the library view, `computeWatchMinutes` counts both watchlist progress and rated titles toward watch time (deduped, since rating a title you'd already tracked must not double-count), and `countCompleted` counts watched/read + rated titles. If you change what "counts" as watched or completed, do it here so both dashboards stay in sync.
 
 ### Design rules (web, mobile, TV)
 
