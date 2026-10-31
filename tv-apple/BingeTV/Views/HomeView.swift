@@ -64,7 +64,7 @@ struct HomeView: View {
                 if loading && rows.isEmpty {
                     ForEach(0..<3, id: \.self) { _ in RowSkeleton() }
                 } else if !loading && rows.isEmpty && continueItems.isEmpty {
-                    ProblemView(message: "Couldn't load your rows. Check the Apple TV's internet connection.") {
+                    ProblemView(message: Connectivity.problemMessage("your rows")) {
                         Task { await load() }
                     }
                 }
