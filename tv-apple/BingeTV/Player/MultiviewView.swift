@@ -685,12 +685,9 @@ enum MultiviewCapacity {
     private static var key: String { MultiviewEngine.current == .page ? "binge.multiviewCapacity.page" : "binge.multiviewCapacity" }
 
     static var deviceLimit: Int {
-        var info = utsname()
-        uname(&info)
-        let machine = withUnsafePointer(to: &info.machine) { $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) } }
-        // AppleTV5,3 is the Apple TV HD (A8, 2GB). Separate pages: 1 there,
-        // 2 on the 4K models. One shared page costs far less memory: 2 and 4.
-        let hd = machine.hasPrefix("AppleTV5,")
+        // The Apple TV HD (A8, 2GB): separate pages: 1 there, 2 on the 4K
+        // models. One shared page costs far less memory: 2 and 4.
+        let hd = Device.isLowMemory
         if MultiviewEngine.current == .page { return hd ? 2 : 4 }
         return hd ? 1 : 2
     }

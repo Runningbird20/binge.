@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
+import com.binge.tv.data.HomeSnapshot
 import com.binge.tv.data.AppModel
 import com.binge.tv.data.Catalog
 import com.binge.tv.data.ContinueItem
@@ -47,6 +48,7 @@ import com.binge.tv.data.LoadedRow
 import com.binge.tv.data.MediaKind
 import com.binge.tv.data.Personal
 import com.binge.tv.data.Rows
+import com.binge.tv.data.Seasonal
 import com.binge.tv.data.Title
 import com.binge.tv.data.Tmdb
 import com.binge.tv.player.PlayRequest
@@ -98,9 +100,23 @@ fun HomeScreen() {
     ReportTop(listState)
     val name = AppModel.profile?.name ?: "you"
 
+    // A new spotlight most visits: one of your picks or something trending.
+    fun pickSpotlight() {
+        if (spotlight != null) return
+        val pool = personal.topPicks?.items.orEmpty().take(10).filter { it.backdrop != null } +
+            rows.take(2).flatMap { it.items.take(6) }.filter { it.backdrop != null }
+        spotlight = pool.randomOrNull(); HomeCache.spotlight = spotlight
+    }
+
     suspend fun load() {
-        loading = rows.isEmpty()
         val kids = AppModel.isKids
+        // Cold start: the last Home from disk first, then the fresh one.
+        if (rows.isEmpty()) HomeSnapshot.read(profileId, kids)?.let { saved ->
+            continueItems = saved.continueItems; myList = saved.myList; personal = saved.personal
+            shared = saved.shared; rows = saved.rows
+            pickSpotlight()
+        }
+        loading = rows.isEmpty()
         kotlinx.coroutines.coroutineScope {
             val general = async { Catalog.loadAll(Rows.home(kids), kids) }
             val cw = async { runCatching { AppModel.continueWatching() }.getOrDefault(emptyList()) }
@@ -114,16 +130,12 @@ fun HomeScreen() {
             loading = false
             val exclude = rated.await() + continueItems.map { it.id } + myList.map { it.id }
             personal = Personal.build(continueItems, loved.await(), exclude, kids, AppModel.profile?.name); HomeCache.personal = personal
-            // A different spotlight most visits: one of your picks or something trending.
-            if (spotlight == null) {
-                val pool = personal.topPicks?.items.orEmpty().take(10).filter { it.backdrop != null } +
-                    rows.take(2).flatMap { it.items.take(6) }.filter { it.backdrop != null }
-                spotlight = pool.randomOrNull(); HomeCache.spotlight = spotlight
-            }
+            pickSpotlight()
             Ambient.titles = (continueItems.map { it.title } + personal.topPicks?.items.orEmpty() + myList + rows.firstOrNull()?.items.orEmpty())
                 .filter { it.backdrop != null }.distinctBy { it.id }.take(20)
             Ambient.resume = continueItems.firstOrNull()
             shared = AppModel.sharedWithMe(); HomeCache.shared = shared
+            HomeSnapshot.write(profileId, kids, HomeSnapshot(System.currentTimeMillis(), continueItems, myList, personal, shared, rows))
         }
     }
 
@@ -178,9 +190,16 @@ fun BrowseScreen(kind: MediaKind) {
     ReportTop(listState)
     suspend fun load() {
         loading = true
-        rows = Catalog.loadAll(Rows.browse(kind, AppModel.isKids), AppModel.isKids)
-        BrowseCache.rows[kind] = rows
-        loading = false
+        kotlinx.coroutines.coroutineScope {
+            val watched = async { runCatching { AppModel.continueWatching() }.getOrDefault(emptyList()) }
+            val loved = async { AppModel.lovedTitles() }
+            rows = Catalog.loadAll(Rows.browse(kind, AppModel.isKids), AppModel.isKids)
+            loading = false
+            // The seasonal row leads with what this profile likes.
+            val taste = Seasonal.Taste.of(watched.await().map { it.title } + loved.await())
+            rows = rows.map { if (it.id.startsWith("seasonal-")) it.copy(items = Seasonal.sorted(it.items, taste)) else it }
+            BrowseCache.rows[kind] = rows
+        }
     }
     LaunchedEffect(kind, AppModel.profile?.id) { if (rows.isEmpty()) load() }
     PivotScroll(fraction = 0.22f) {

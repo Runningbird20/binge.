@@ -262,8 +262,16 @@ struct BrowseView: View {
 
     private func load() async {
         loading = true
+        async let watched: [ContinueItem] = (try? await app.continueWatching()) ?? []
+        async let loved = app.lovedTitles()
         rows = await Catalog.loadAll(Rows.browse(kind, kids: app.isKids), kids: app.isKids)
         loading = false
+        // The seasonal row leads with what this profile likes.
+        let taste = Seasonal.Taste(history: await watched.map(\.title) + loved)
+        if let index = rows.firstIndex(where: { $0.id.hasPrefix("seasonal-") }), !taste.isEmpty {
+            let row = rows[index]
+            rows[index] = LoadedRow(id: row.id, title: row.title, items: Seasonal.sorted(row.items, for: taste))
+        }
     }
 }
 
@@ -275,7 +283,7 @@ struct HeroView: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             ZStack {
-                AsyncImage(url: TMDB.resized(title.backdrop, TMDB.fullScreen)) { image in
+                RemoteImage(url: TMDB.resized(title.backdrop, TMDB.fullScreen)) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
                     Theme.surface

@@ -181,6 +181,46 @@ object Seasonal {
         return null
     }
 
+    // What a profile watches, as the website's taste summary: genres ranked
+    // (top 8, lowercase) and each language's share of their history.
+    data class Taste(val genres: List<String> = emptyList(), val languageShare: Map<String, Double> = emptyMap()) {
+        val isEmpty get() = genres.isEmpty() && languageShare.isEmpty()
+
+        companion object {
+            // Recent titles count more (history arrives newest first).
+            fun of(history: List<Title>): Taste {
+                val genreScore = HashMap<String, Double>()
+                val languageScore = HashMap<String, Double>()
+                var total = 0.0
+                history.take(40).forEachIndexed { index, title ->
+                    val weight = maxOf(0.25, Math.pow(0.9, index.toDouble()))
+                    total += weight
+                    title.genre.orEmpty().split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+                        .forEach { genreScore[it] = (genreScore[it] ?: 0.0) + weight }
+                    title.originalLanguage?.takeIf { it.isNotEmpty() }?.let { languageScore[it] = (languageScore[it] ?: 0.0) + weight }
+                }
+                val genres = genreScore.entries.sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+                    .take(8).map { it.key }
+                return Taste(genres, if (total > 0) languageScore.mapValues { it.value / total } else emptyMap())
+            }
+        }
+    }
+
+    // The seasonal row in the profile's taste order: a title in a genre or
+    // language they watch moves up; popularity (TMDB's order) breaks ties.
+    // Same scoring as the website's sortForTaste.
+    fun sorted(items: List<Title>, taste: Taste): List<Title> {
+        if (items.isEmpty() || taste.isEmpty) return items
+        val weight = taste.genres.mapIndexed { index, genre -> genre.lowercase() to 1 - index.toDouble() / taste.genres.size }.toMap()
+        return items.mapIndexed { index, title ->
+            val match = title.genre.orEmpty().split(",").maxOfOrNull { weight[it.trim().lowercase()] ?: 0.0 } ?: 0.0
+            val language = title.originalLanguage ?: "en"
+            val languageBonus = if (language == "en") 0.0 else taste.languageShare[language] ?: 0.0
+            val popularity = 1 - index.toDouble() / items.size
+            title to match + languageBonus + popularity * 0.75
+        }.sortedByDescending { it.second }.map { it.first } // stable: ties keep TMDB's order
+    }
+
     // The tab's row: TMDB discover with the season's query (the catalog match
     // drops anything outside the release window).
     fun row(kind: MediaKind, kids: Boolean, today: Day = Day.today()): RowSpec? {

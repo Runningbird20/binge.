@@ -92,3 +92,25 @@ describe('seasonal browse row', () => {
     expect(row.kind).toBeUndefined(); // a headline row, not reordered by taste
   });
 });
+
+describe('sortForTaste', () => {
+  const { sortForTaste } = require('./browseRows');
+  const items = [
+    { id: 1, genre: 'Comedy', original_language: 'en' },
+    { id: 2, genre: 'Horror, Thriller', original_language: 'en' },
+    { id: 3, genre: 'Drama', original_language: 'ko' },
+    { id: 4, genre: 'Family', original_language: 'en' },
+  ];
+
+  test('keeps popularity order without a taste', () => {
+    expect(sortForTaste(items, null)).toBe(items);
+    expect(sortForTaste(items, { genres: [], languages: [] })).toBe(items);
+  });
+
+  test('moves genres and languages the profile watches up', () => {
+    const order = sortForTaste(items, { genres: ['Horror', 'Drama'], languages: ['ko'], languageShare: { ko: 0.6 } }).map((item) => item.id);
+    // Horror (top genre) first, then the Korean drama (second genre + their
+    // language) ahead of more popular titles; the rest keep their order.
+    expect(order).toEqual([2, 3, 1, 4]);
+  });
+});

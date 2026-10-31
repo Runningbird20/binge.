@@ -14,7 +14,10 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
+import coil.imageLoader
 import coil.memory.MemoryCache
+import com.binge.tv.data.HomeSnapshot
+import com.binge.tv.data.Performance
 import com.binge.tv.data.Prefs
 import com.binge.tv.data.PlaybackPrefs
 import com.binge.tv.data.Supabase
@@ -31,17 +34,32 @@ class BingeApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         Prefs.init(this)
+        Performance.init(this)
+        HomeSnapshot.init(this)
         Supabase.init(this)
     }
 
-    // A Fire TV stick has 1–2 GB for everything: a modest memory cache, a
-    // generous disk cache (posters come back instantly), fades on load.
+    // A Fire TV stick has 1–2 GB for everything, and the WebView's video
+    // pages need most of it: a small memory cache (8% of the app's share),
+    // a generous disk cache (posters come back instantly), fades on load.
     override fun newImageLoader() = ImageLoader.Builder(this)
-        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }
+        .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.08).build() }
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(300L * 1024 * 1024).build() }
         .crossfade(180)
         .respectCacheHeaders(false)
         .build()
+
+    // Android is short of memory: pictures are the cheapest thing to give
+    // back (the disk cache brings them back quickly).
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) imageLoader.memoryCache?.clear()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        imageLoader.memoryCache?.clear()
+    }
 }
 
 /**
