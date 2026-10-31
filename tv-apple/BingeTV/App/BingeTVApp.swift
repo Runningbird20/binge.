@@ -7,6 +7,7 @@ struct BingeTVApp: App {
     init() {
         // Posters and backdrops go through URLSession.shared; give it room.
         URLCache.shared = URLCache(memoryCapacity: 96 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
+        _ = Connectivity.shared // knows whether we're online before anything fails
         #if DEBUG
         if UserDefaults.standard.bool(forKey: "BingeCheckEngines") { EngineCheck.run() }
         #endif
