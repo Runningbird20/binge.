@@ -6,6 +6,7 @@ import { isChildLevel } from './kidsMode';
 import { fetchCatalogBrowseRow } from './catalogQueries';
 import { prepareCatalogItems, resolveTmdbItems } from './catalogLookup';
 import { comingSoonCutoffIso, daysAgoIso, todayIso } from './releaseWindow';
+import { seasonFor } from './seasonal';
 
 const MIN_ROW_ITEMS = 6;
 
@@ -163,9 +164,35 @@ export const KIDS_TV_ROWS = [
   kidsRow('tv_show', 'kids-new', 'New Episodes for Kids', dateParams('tv_show', daysAgoIso(365), todayIso()), { sort: 'newest' }),
 ];
 
+// This time of year's row (Halloween, Christmas, Valentine's…), from
+// today's date, so the row and its title change by themselves.
+export function seasonalRow(mediaType, { kidsSafe = false, date = new Date() } = {}) {
+  const kids = isChildLevel(kidsSafe);
+  const season = seasonFor(mediaType, { date, kids });
+  if (!season) return null;
+  // Kids series get few TMDB votes, so any vote counts for them; a season
+  // with too few kids titles simply shows no row (TitleRow's minimum).
+  const params = kids
+    ? { ...kidsParams(mediaType), 'vote_count.gte': mediaType === 'tv_show' ? '1' : '30', ...season.params }
+    : season.params;
+  return row(
+    `seasonal-${season.id}`,
+    season.title,
+    () => fetchDiscover(mediaType, { ...dateParams(mediaType, null, todayIso()), ...params }),
+    season.fallback,
+    { subtitle: season.subtitle, seasonal: true }
+  );
+}
+
+// The seasonal row sits second, after the first headline row.
+function withSeasonal(rows, mediaType, kidsSafe) {
+  const seasonal = seasonalRow(mediaType, { kidsSafe });
+  return seasonal ? [rows[0], seasonal, ...rows.slice(1)] : rows;
+}
+
 export function rowsFor(mediaType, { kidsSafe = false } = {}) {
-  if (isChildLevel(kidsSafe)) return mediaType === 'tv_show' ? KIDS_TV_ROWS : KIDS_MOVIE_ROWS;
-  return mediaType === 'tv_show' ? TV_ROWS : MOVIE_ROWS;
+  if (isChildLevel(kidsSafe)) return withSeasonal(mediaType === 'tv_show' ? KIDS_TV_ROWS : KIDS_MOVIE_ROWS, mediaType, kidsSafe);
+  return withSeasonal(mediaType === 'tv_show' ? TV_ROWS : MOVIE_ROWS, mediaType, kidsSafe);
 }
 
 // Order rows for a profile's taste: fixed headline rows first, then the

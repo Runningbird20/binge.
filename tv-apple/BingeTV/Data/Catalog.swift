@@ -127,7 +127,14 @@ enum Rows {
         ]
     }
 
-    static func browse(_ kind: MediaKind, kids: Bool) -> [RowSpec] {
+    // The tab's rows, with this time of year's row (Seasonal) second.
+    static func browse(_ kind: MediaKind, kids: Bool, on date: Date = Date()) -> [RowSpec] {
+        let rows = baseBrowse(kind, kids: kids)
+        guard let seasonal = Seasonal.row(kind, kids: kids, on: date), !rows.isEmpty else { return rows }
+        return [rows[0], seasonal] + rows.dropFirst()
+    }
+
+    private static func baseBrowse(_ kind: MediaKind, kids: Bool) -> [RowSpec] {
         if kids { return kidsRows.filter { $0.kind == kind } }
         if kind == .movie {
             return [

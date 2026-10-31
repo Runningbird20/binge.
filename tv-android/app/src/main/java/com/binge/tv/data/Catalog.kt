@@ -93,7 +93,14 @@ object Rows {
         RowSpec("top-tv", "Top Rated Series", MediaKind.TV, "tv/top_rated"),
     )
 
+    // The tab's rows, with this time of year's row (Seasonal) second.
     fun browse(kind: MediaKind, kids: Boolean): List<RowSpec> {
+        val rows = baseBrowse(kind, kids)
+        val seasonal = Seasonal.row(kind, kids) ?: return rows
+        return if (rows.isEmpty()) rows else listOf(rows[0], seasonal) + rows.drop(1)
+    }
+
+    private fun baseBrowse(kind: MediaKind, kids: Boolean): List<RowSpec> {
         if (kids) return kidsRows.filter { it.kind == kind }
         return if (kind == MediaKind.MOVIE) listOf(
             RowSpec("m-popular", "Popular Now", MediaKind.MOVIE, "movie/popular"),
