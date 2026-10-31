@@ -4,9 +4,10 @@ name: Apple TV build and tests
 # in a tvOS simulator, on every change under tv-apple/.
 #
 # The app needs the same public keys as the website (SmokeTests checks they
-# load). They come from the repo variables tv-apk.yml already uses:
-#   REACT_APP_SUPABASE_URL, REACT_APP_SUPABASE_PUBLISHABLE_KEY (or _ANON_KEY),
-#   REACT_APP_TMDB_API_KEY, and optionally BINGE_URL.
+# load). They come from the repo variables tv-apk.yml already uses
+#   (REACT_APP_SUPABASE_URL, REACT_APP_SUPABASE_PUBLISHABLE_KEY or _ANON_KEY,
+#   REACT_APP_TMDB_API_KEY, optionally BINGE_URL), else from vercel.json, which
+#   holds the same public values.
 
 on:
   pull_request:
@@ -50,9 +51,14 @@ jobs:
           REACT_APP_SUPABASE_PUBLISHABLE_KEY: ${{ vars.REACT_APP_SUPABASE_PUBLISHABLE_KEY || vars.REACT_APP_SUPABASE_ANON_KEY }}
           REACT_APP_TMDB_API_KEY: ${{ vars.REACT_APP_TMDB_API_KEY }}
           BINGE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
+        # Repo variables win; without them, the same public values the website
+        # ships (vercel.json "env"), so the job doesn't depend on them being set.
         run: |
-          printf 'REACT_APP_SUPABASE_URL=%s\nREACT_APP_SUPABASE_PUBLISHABLE_KEY=%s\nREACT_APP_TMDB_API_KEY=%s\n' \
-            "$REACT_APP_SUPABASE_URL" "$REACT_APP_SUPABASE_PUBLISHABLE_KEY" "$REACT_APP_TMDB_API_KEY" > ../.env
+          public() { python3 -c "import json,sys; print(json.load(open('../vercel.json')).get('env', {}).get(sys.argv[1], ''))" "$1"; }
+          url="${REACT_APP_SUPABASE_URL:-$(public REACT_APP_SUPABASE_URL)}"
+          key="${REACT_APP_SUPABASE_PUBLISHABLE_KEY:-$(public REACT_APP_SUPABASE_PUBLISHABLE_KEY)}"
+          tmdb="${REACT_APP_TMDB_API_KEY:-$(public REACT_APP_TMDB_API_KEY)}"
+          printf 'REACT_APP_SUPABASE_URL=%s\nREACT_APP_SUPABASE_PUBLISHABLE_KEY=%s\nREACT_APP_TMDB_API_KEY=%s\n' "$url" "$key" "$tmdb" > ../.env
           scripts/make-secrets.sh "$BINGE_URL"
 
       - name: Boot an Apple TV simulator
