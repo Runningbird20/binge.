@@ -184,6 +184,26 @@ export function seasonalRow(mediaType, { kidsSafe = false, date = new Date() } =
   );
 }
 
+// The seasonal row in this profile's taste order: a title in a genre or
+// language they watch moves up, while popularity (TMDB's order) still breaks
+// ties, so a horror fan's October row leads with horror and a K-drama fan's
+// Christmas row with Korean titles. `taste` is buildPersonalizedRows' summary.
+export function sortForTaste(items, taste) {
+  const genres = taste?.genres || [];
+  if (!items?.length || (!genres.length && !taste?.languages?.length)) return items;
+  const genreWeight = new Map(genres.map((genre, index) => [genre.toLowerCase(), 1 - index / genres.length]));
+  const shares = taste?.languageShare || {};
+  const scored = items.map((item, index) => {
+    const itemGenres = String(item.genre || '').split(',').map((genre) => genre.trim().toLowerCase()).filter(Boolean);
+    const match = itemGenres.reduce((best, genre) => Math.max(best, genreWeight.get(genre) || 0), 0);
+    const language = item.original_language || item._tmdb?.originalLanguage;
+    const languageBonus = language && language !== 'en' ? (shares[language] || 0) : 0;
+    const popularity = 1 - index / items.length;
+    return { item, score: match + languageBonus + popularity * 0.75 };
+  });
+  return scored.sort((a, b) => b.score - a.score).map(({ item }) => item);
+}
+
 // The seasonal row sits second, after the first headline row.
 function withSeasonal(rows, mediaType, kidsSafe) {
   const seasonal = seasonalRow(mediaType, { kidsSafe });

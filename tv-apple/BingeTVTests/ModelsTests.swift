@@ -438,6 +438,21 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
         }
     }
 
+    @Test func tasteSortMatchesTheWebsite() {
+        func t(_ id: Int, _ genre: String, _ language: String) -> Title {
+            var title = Title(kind: .movie, dbId: id, name: "T\(id)", year: 2020, overview: nil, genre: genre, ageRating: nil)
+            title.originalLanguage = language
+            return title
+        }
+        let items = [t(1, "Comedy", "en"), t(2, "Horror, Thriller", "en"), t(3, "Drama", "ko"), t(4, "Family", "en")]
+        let taste = Seasonal.Taste(genres: ["Horror", "Drama"], languageShare: ["ko": 0.6])
+        #expect(Seasonal.sorted(items, for: taste).map(\.dbId) == [2, 3, 1, 4]) // same as seasonal.test.js
+        #expect(Seasonal.sorted(items, for: Seasonal.Taste(history: [])).map(\.dbId) == [1, 2, 3, 4])
+        let learned = Seasonal.Taste(history: [t(9, "Horror", "ko"), t(8, "Horror, Drama", "ko"), t(7, "Comedy", "en")])
+        #expect(learned.genres.first == "horror")
+        #expect((learned.languageShare["ko"] ?? 0) > 0.6)
+    }
+
     @Test func rowSitsSecondOnTheTabs() {
         let rows = Rows.browse(.movie, kids: false, on: on(2026, 10, 31))
         #expect(rows[1].id == "seasonal-halloween-night")

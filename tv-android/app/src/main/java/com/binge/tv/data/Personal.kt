@@ -8,6 +8,7 @@ import kotlinx.coroutines.coroutineScope
 // your titles score highest), "Because you watched/liked X", New Episodes.
 // Same rules as the Apple TV app's Personal.build.
 object Personal {
+    @kotlinx.serialization.Serializable
     data class Rows(val topPicks: LoadedRow? = null, val because: List<LoadedRow> = emptyList(), val newEpisodes: LoadedRow? = null)
 
     private data class Seed(val title: Title, val verb: String, val weight: Double)

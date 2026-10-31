@@ -103,6 +103,15 @@ enum WebEngines {
         ModernWebView.isAvailable || LegacyWebView.isAvailable
     }
 
+    // A page that's done: ends its WebKit process now (WKWebView's `_close`)
+    // instead of when the web view is finally released, so leaving the
+    // player hands its memory back straight away.
+    @MainActor
+    static func close(_ web: WebEngine) {
+        let selector = NSSelectorFromString("_close")
+        if web.view.responds(to: selector) { _ = web.view.perform(selector) }
+    }
+
     // Runs in every frame. Each frame with a video reports it to the app;
     // commands arrive at the top frame and are relayed down to every child
     // frame (cross-origin included) with postMessage.

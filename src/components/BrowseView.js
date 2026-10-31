@@ -6,7 +6,7 @@ import TitleRow from './TitleRow';
 import { useAuth } from '../contexts/AuthContext';
 import { maturityRestriction } from '../utils/kidsMode';
 import { buildPersonalizedRows } from '../utils/personalization';
-import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
+import { loadRowItems, orderRowsForTaste, rowsFor, sortForTaste } from '../utils/browseRows';
 
 const TYPE_COPY = {
   movie: { noun: 'Movies', path: '/movies' },
@@ -58,12 +58,13 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
   const loaders = useMemo(() => {
     const map = new Map();
     definitions.slice(1).forEach((definition) => {
-      map.set(definition.id, () => loadRowItems(definition, mediaType, { kidsSafe }));
+      const load = () => loadRowItems(definition, mediaType, { kidsSafe });
+      map.set(definition.id, definition.seasonal ? () => load().then((items) => sortForTaste(items, personal?.taste)) : load);
     });
     return map;
     // refreshKey recreates the loaders so pull-to-refresh refetches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [definitions, mediaType, kidsSafe, refreshKey]);
+  }, [definitions, mediaType, kidsSafe, refreshKey, personal?.taste]);
 
   return (
     <div className="st-browse">
@@ -103,7 +104,8 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
 
         {definitions.slice(1).map((definition) => (
           <TitleRow
-            key={`${definition.id}-${refreshKey}`}
+            // The seasonal row re-sorts (from the row cache) once taste arrives.
+            key={`${definition.id}-${refreshKey}${definition.seasonal && personal?.taste ? '-taste' : ''}`}
             title={definition.title}
             subtitle={definition.subtitle}
             load={loaders.get(definition.id)}

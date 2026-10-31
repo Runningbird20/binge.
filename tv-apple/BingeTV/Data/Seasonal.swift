@@ -185,6 +185,55 @@ enum Seasonal {
         return nil
     }
 
+    // What a profile watches, as the website's taste summary: genres ranked
+    // (top 8) and each language's share of their history.
+    struct Taste: Equatable {
+        var genres: [String] = []
+        var languageShare: [String: Double] = [:]
+
+        // Recent titles count more (history arrives newest first).
+        init(history: [Title]) {
+            var genreScore: [String: Double] = [:]
+            var languageScore: [String: Double] = [:]
+            var total = 0.0
+            for (index, title) in history.prefix(40).enumerated() {
+                let weight = max(0.25, pow(0.9, Double(index)))
+                total += weight
+                for genre in (title.genre ?? "").split(separator: ",") {
+                    let name = genre.trimmingCharacters(in: .whitespaces).lowercased()
+                    if !name.isEmpty { genreScore[name, default: 0] += weight }
+                }
+                if let language = title.originalLanguage, !language.isEmpty { languageScore[language, default: 0] += weight }
+            }
+            genres = genreScore.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }.prefix(8).map(\.key)
+            if total > 0 { languageShare = languageScore.mapValues { $0 / total } }
+        }
+
+        init(genres: [String], languageShare: [String: Double]) {
+            self.genres = genres.map { $0.lowercased() }
+            self.languageShare = languageShare
+        }
+
+        var isEmpty: Bool { genres.isEmpty && languageShare.isEmpty }
+    }
+
+    // The seasonal row in the profile's taste order: a title in a genre or
+    // language they watch moves up; popularity (TMDB's order) breaks ties.
+    // Same scoring as the website's sortForTaste.
+    static func sorted(_ items: [Title], for taste: Taste) -> [Title] {
+        guard !items.isEmpty, !taste.isEmpty else { return items }
+        let weight = Dictionary(uniqueKeysWithValues: taste.genres.enumerated().map { ($1, 1 - Double($0) / Double(taste.genres.count)) })
+        let scored = items.enumerated().map { index, title -> (Title, Double) in
+            let match = (title.genre ?? "").split(separator: ",")
+                .map { weight[$0.trimmingCharacters(in: .whitespaces).lowercased()] ?? 0 }.max() ?? 0
+            let language = title.originalLanguage ?? "en"
+            let languageBonus = language == "en" ? 0 : taste.languageShare[language] ?? 0
+            let popularity = 1 - Double(index) / Double(items.count)
+            return (title, match + languageBonus + popularity * 0.75)
+        }
+        return scored.enumerated().sorted { $0.element.1 == $1.element.1 ? $0.offset < $1.offset : $0.element.1 > $1.element.1 }.map(\.element.0)
+    }
+
     // The tab's row: TMDB discover with the season's query, released titles
     // only (the catalog match drops anything outside the release window too).
     static func row(_ kind: MediaKind, kids: Bool, on date: Date = Date()) -> RowSpec? {

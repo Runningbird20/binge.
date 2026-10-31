@@ -164,7 +164,7 @@ struct WrappedView: View {
             VStack(alignment: .leading, spacing: 30) {
                 HStack(alignment: .bottom, spacing: 36) {
                     if let poster = ticket.poster {
-                        AsyncImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Self.ink.opacity(0.1) }
+                        RemoteImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Self.ink.opacity(0.1) }
                             .frame(width: 170, height: 255)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }

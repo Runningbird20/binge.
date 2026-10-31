@@ -6,6 +6,7 @@ import kotlinx.coroutines.coroutineScope
 
 data class RowSpec(val id: String, val title: String, val kind: MediaKind, val path: String, val params: Map<String, String> = emptyMap())
 
+@kotlinx.serialization.Serializable
 data class LoadedRow(val id: String, val title: String, val items: List<Title>)
 
 // TMDB lists matched back to catalog rows through

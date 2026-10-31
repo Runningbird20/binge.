@@ -56,6 +56,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil.compose.SubcomposeAsyncImage
+import com.binge.tv.data.Performance
 import com.binge.tv.data.LoadedRow
 import com.binge.tv.data.Title
 import com.google.zxing.BarcodeFormat
@@ -108,7 +109,7 @@ fun FocusCard(
         modifier = modifier.rememberFocus().onFocusChanged { if (it.isFocused) onFocus?.invoke() },
         shape = CardDefaults.shape(shape),
         colors = CardDefaults.colors(containerColor = Palette.surface),
-        scale = CardDefaults.scale(focusedScale = 1.08f),
+        scale = CardDefaults.scale(focusedScale = Performance.focusScale(1.08f)),
         border = CardDefaults.border(focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = shape)),
         glow = CardDefaults.glow(),
     ) { Box(Modifier.fillMaxSize(), content = content) }
@@ -179,7 +180,7 @@ fun Pill(
     Button(
         onClick = onClick, onLongClick = onLongClick, enabled = enabled, modifier = modifier.rememberFocus(),
         shape = ButtonDefaults.shape(CircleShape),
-        scale = ButtonDefaults.scale(focusedScale = 1.06f),
+        scale = ButtonDefaults.scale(focusedScale = Performance.focusScale(1.06f)),
         colors = ButtonDefaults.colors(
             containerColor = if (selected) Palette.gold.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.08f),
             contentColor = if (selected) Palette.gold else Color.White,
@@ -201,7 +202,7 @@ fun ActionButton(label: String, icon: ImageVector?, modifier: Modifier = Modifie
     Button(
         onClick = onClick, enabled = enabled, modifier = modifier.rememberFocus(),
         shape = ButtonDefaults.shape(RoundedCornerShape(8.dp)),
-        scale = ButtonDefaults.scale(focusedScale = 1.06f),
+        scale = ButtonDefaults.scale(focusedScale = Performance.focusScale(1.06f)),
         colors = ButtonDefaults.colors(
             // Unfocused buttons are translucent; the focused one is solid white,
             // so where the remote is never needs a second look.

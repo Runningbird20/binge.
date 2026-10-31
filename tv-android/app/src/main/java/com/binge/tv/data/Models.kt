@@ -14,6 +14,7 @@ enum class MediaKind(val raw: String, val table: String, val tmdbPath: String) {
 
 // A title from binge.'s catalog (the site's movies / tv_shows tables),
 // optionally decorated with TMDB art.
+@Serializable
 data class Title(
     val kind: MediaKind,
     val dbId: Long,
@@ -108,6 +109,7 @@ object IsoDate {
     }
 }
 
+@Serializable
 data class ContinueItem(
     val title: Title,
     val season: Int?,

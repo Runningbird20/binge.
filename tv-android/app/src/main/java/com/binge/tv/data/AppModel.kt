@@ -62,6 +62,7 @@ object AppModel {
 
     suspend fun signOut() {
         Supabase.signOut()
+        HomeSnapshot.clear()
         session = null; profiles = emptyList(); profile = null; listIds = emptyMap()
         lockedProfileIds = emptySet(); pinProfile = null
         phase = Phase.SIGNED_OUT

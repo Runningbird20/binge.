@@ -165,7 +165,7 @@ private fun KeypadKey(modifier: Modifier, label: String?, onClick: () -> Unit) {
             contentColor = Color.White,
             focusedContentColor = Palette.background,
         ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.08f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = com.binge.tv.data.Performance.focusScale(1.08f)),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (label != null) Text(label, style = Type.section.copy(fontSize = 20.sp))

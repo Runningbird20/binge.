@@ -135,7 +135,7 @@ struct ProfileAvatar: View {
                     .font(.system(size: size * 0.42, weight: .heavy))
                     .foregroundStyle(.white)
                 if let url = profile.avatarImageURL {
-                    AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                    RemoteImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
                 }
             }
             .frame(width: size, height: size)

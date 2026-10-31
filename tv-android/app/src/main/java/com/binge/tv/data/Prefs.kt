@@ -53,7 +53,8 @@ object PlaybackPrefs {
     val audioDescription get() = Prefs.bool("audioDescription")
     val skipIntroButton get() = Prefs.bool("skipIntroButton", true)
     val fillScreen get() = Prefs.bool("fillScreen", true)
-    val ambient get() = Prefs.bool("ambient", true)
+    // Off by default where effects are lightened (its slow zoom costs frames).
+    val ambient get() = Prefs.bool("ambient", !Performance.light)
     val trailers get() = Prefs.bool("trailers", true)
     val largeText get() = Prefs.bool("largeText")
     val multiviewLayout get() = Prefs.string("multiviewLayout", "grid")!!

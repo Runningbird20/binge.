@@ -41,6 +41,12 @@ final class StreamRace {
 
     static let giveUpSeconds: TimeInterval = 45
     static let maxLiveContenders = 4
+    // Pages raced at once. Each is a WebKit process (~100–300 MB); the Apple
+    // TV HD affords two, and the rest wait as backups for recovery.
+    static func contenderLimit(live: Bool) -> Int {
+        if Device.isLowMemory { return 2 }
+        return live ? maxLiveContenders : .max
+    }
 
     var key: String { Self.key(for: request) }
     static func key(for request: PlayRequest) -> String {
@@ -79,9 +85,9 @@ final class StreamRace {
         self.keepMuted = keepMuted
         container.backgroundColor = .black
         guard let tmdbId = request.title.tmdbId ?? (request.isLive ? 0 : nil) else { failed = true; return }
-        // A live race opens at most 4 pages at once (Apple TV memory); the
-        // player keeps the rest as backups for recovery.
-        for server in request.isLive ? Array(servers.prefix(Self.maxLiveContenders)) : servers {
+        // A live race opens at most 4 pages at once (2 on the Apple TV HD,
+        // movies too); the player keeps the rest as backups for recovery.
+        for server in servers.prefix(Self.contenderLimit(live: request.isLive)) {
             let url = server.build(tmdbId, request.title.kind, request.season ?? 1, request.episode ?? 1)
             guard let web = makeEngine?(url) ?? WebEngines.make(allowedHost: url.host) else { continue }
             web.view.frame = container.bounds
@@ -133,6 +139,7 @@ final class StreamRace {
         web.send(.stop)
         web.load(URL(string: "about:blank")!)
         web.view.removeFromSuperview()
+        WebEngines.close(web)
     }
 
     private func tick() {
@@ -438,7 +445,7 @@ final class Warmup {
         guard !suspended, WebEngines.isAvailable, request.title.tmdbId != nil || request.isLive else { return }
         // A preload is optional: skip it when several video pages are already
         // open (Multiview, a corner game), rather than risk running out of memory.
-        if race == nil, WebEngines.liveCount >= 5 { return }
+        if race == nil, WebEngines.liveCount >= (Device.isLowMemory ? 2 : 5) { return }
         let key = StreamRace.key(for: request)
         if race?.key == key || pendingKey == key { return }
         race?.stop()
@@ -450,7 +457,10 @@ final class Warmup {
                 : await ServerPlan.servers(for: request.title, originalLanguage: request.title.originalLanguage)
             guard self.pendingKey == key, !self.suspended else { return }
             self.pendingKey = nil
-            let fresh = StreamRace(request: request, servers: servers.isEmpty ? StreamServer.all : servers, mode: .warm)
+            // The Apple TV HD preloads only the first-ranked server (one page
+            // instead of three); the player races the others if it doesn't start.
+            let ranked = servers.isEmpty ? StreamServer.all : servers
+            let fresh = StreamRace(request: request, servers: Device.isLowMemory ? Array(ranked.prefix(1)) : ranked, mode: .warm)
             Task { fresh.expectedDuration = await ExpectedRuntime.seconds(for: request) }
             fresh.container.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
             self.host.addSubview(fresh.container)

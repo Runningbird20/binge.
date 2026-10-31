@@ -469,7 +469,7 @@ struct SportArt: View {
                 .padding(.trailing, large ? 220 : 0)
             }
         } else if let poster = game.poster {
-            AsyncImage(url: poster) { image in
+            RemoteImage(url: poster) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
                 iconArt
@@ -480,7 +480,7 @@ struct SportArt: View {
     }
 
     private func logo(_ url: URL) -> some View {
-        AsyncImage(url: url) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
+        RemoteImage(url: url) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
             .frame(width: large ? 200 : 96, height: large ? 200 : 96)
             .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
     }
@@ -600,10 +600,10 @@ struct SportsSpotlight: View {
                     // Provider thumbnails are small: a blurred copy fills
                     // the backdrop, the real one sits at a size it stays sharp.
                     ZStack(alignment: .trailing) {
-                        AsyncImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Theme.surface }
+                        RemoteImage(url: poster) { $0.resizable().aspectRatio(contentMode: .fill) } placeholder: { Theme.surface }
                             .blur(radius: 40)
                             .opacity(0.6)
-                        AsyncImage(url: poster) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
+                        RemoteImage(url: poster) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
                             .frame(maxWidth: 900, maxHeight: 480)
                             .clipShape(RoundedRectangle(cornerRadius: 20))
                             .padding(.trailing, Theme.edge)
@@ -669,7 +669,7 @@ struct TeamScore: View {
     var body: some View {
         HStack(spacing: 16) {
             if let logo {
-                AsyncImage(url: logo) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
+                RemoteImage(url: logo) { $0.resizable().scaledToFit() } placeholder: { Color.clear }
                     .frame(width: 44, height: 44)
             }
             Text(name).font(.headline).lineLimit(1)
