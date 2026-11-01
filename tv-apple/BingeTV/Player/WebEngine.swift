@@ -28,6 +28,9 @@ struct MediaState: Decodable, Equatable {
     var dropped: Int = -1
     // The bridge is holding the video while it refills its buffer (live cushion).
     var cushion = false
+    // The element's own mute/volume says no sound, and seconds buffered ahead.
+    var muted = false
+    var ahead: Double = 0
     var audio: [MediaTrack] = []
     var text: [MediaTrack] = []
     // The subtitle line on screen right now (drawn by the app, not WebKit).
@@ -142,7 +145,7 @@ enum WebEngines {
         var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')); }
         return parts.join('\\n').trim(); }
       // The line first: it may adopt a track the server switched on, which the track list should then show.
-      function state(v){ var line=cueText(v); var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, cb:cush.hold?1:0, at:tr.a, tt:tr.x, cue:line}; }
+      function state(v){ var line=cueText(v); var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, cb:cush.hold?1:0, mu:(v.muted||v.volume===0)?1:0, ba:Math.round(ahead(v)*10)/10, at:tr.a, tt:tr.x, cue:line}; }
       // Fill: pin this frame's video to the viewport, then ask each parent
       // frame to pin the iframe it lives in, all the way up, so the video
       // covers the whole screen instead of the server's page layout.
@@ -251,6 +254,8 @@ final class BridgeProxy: NSObject {
             frames: (body["fr"] as? NSNumber)?.intValue ?? -1,
             dropped: (body["dr"] as? NSNumber)?.intValue ?? -1,
             cushion: (body["cb"] as? NSNumber)?.intValue == 1,
+            muted: (body["mu"] as? NSNumber)?.intValue == 1,
+            ahead: (body["ba"] as? NSNumber)?.doubleValue ?? 0,
             audio: Self.tracks(body["at"]),
             text: Self.tracks(body["tt"]),
             cue: body["cue"] as? String ?? ""
