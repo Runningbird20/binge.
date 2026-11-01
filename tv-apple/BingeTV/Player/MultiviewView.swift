@@ -44,6 +44,19 @@ final class MultiviewTile: ObservableObject, Identifiable {
     // How long the clock has run without a new picture (decoder starved).
     private(set) var frozenFor: TimeInterval = 0
     var isHeld: Bool { held }
+    // The winner's last report (debug stats).
+    private(set) var latest: MediaState?
+
+    #if DEBUG
+    // One line per tile for the Multiview check (grep "[mvstat]").
+    var statLine: String {
+        let s = latest
+        let name = game.title.split(separator: " ").prefix(3).joined(separator: " ")
+        return "\(name) | \(streamName ?? "-") started=\(started) t=\(String(format: "%.1f", s?.t ?? 0)) paused=\(s?.paused ?? true) cushion=\(s?.cushion ?? false) "
+            + "ahead=\(s?.ahead ?? 0) muted=\(s?.muted ?? true) audible=\(audible) h=\(s?.height ?? 0) drop=\(Int(dropRate * 100))% "
+            + "frozen=\(Int(frozenFor)) held=\(held) throttled=\(throttled) restarts=\(restarts) status=\(started ? "playing" : status)"
+    }
+    #endif
     private var samples: [(at: Date, frames: Int, dropped: Int)] = []
     private var lastFrames = -1
     private var lastFramesAt = Date()
@@ -135,6 +148,7 @@ final class MultiviewTile: ObservableObject, Identifiable {
             }
             let now = Date()
             self.lastStateAt = now
+            self.latest = state
             self.paused = state.paused
             if !self.started, state.t > 0.4, !state.paused {
                 self.started = true
@@ -152,7 +166,11 @@ final class MultiviewTile: ObservableObject, Identifiable {
             // A playing tile whose clock stops is buffering: jump to the live
             // edge, and if that doesn't help, move it to another server.
             self.measure(state, now: now)
-            if state.paused || self.userPaused { self.lastMoveAt = now; return }
+            // Paused (by the viewer, or by the live cushion while it refills):
+            // no new pictures is expected, so the frozen-picture clock starts
+            // over. Otherwise a cushion hold looked like an overloaded decoder
+            // when the game resumed, and Multiview paused it for good.
+            if state.paused || self.userPaused { self.lastMoveAt = now; self.lastFramesAt = now; self.frozenFor = 0; return }
             // Clock running without a new picture: Multiview decides
             // (starved by the other games → pause one; alone → another server).
             self.frozenFor = self.lastFrames >= 0 && now.timeIntervalSince(self.lastMoveAt) < 2 ? now.timeIntervalSince(self.lastFramesAt) : 0
@@ -310,12 +328,11 @@ struct MultiviewView: View {
     // One shared page for every game (default), or a web view per game.
     @State private var page: MultiviewPage?
 
+    // SwiftUI may build this view many times while it's on screen (each
+    // time the Sports page behind it redraws); the shared page (a whole web
+    // view) is made once, when Multiview starts, not here.
     init(games: [SportGame]) {
-        let tiles = games.prefix(4).map { MultiviewTile(game: $0) }
-        let page = MultiviewEngine.current == .page ? MultiviewPage() : nil
-        tiles.forEach { $0.page = page }
-        _tiles = State(initialValue: tiles)
-        _page = State(initialValue: page)
+        _tiles = State(initialValue: games.prefix(4).map { MultiviewTile(game: $0) })
     }
 
     var body: some View {
@@ -390,6 +407,11 @@ struct MultiviewView: View {
             print("[mv] web views alive before cancel: \(WebEngines.liveCount)")
             #endif
             Warmup.shared.suspended = true
+            if MultiviewEngine.current == .page, page == nil {
+                let shared = MultiviewPage()
+                tiles.forEach { $0.page = shared }
+                page = shared
+            }
             #if DEBUG
             DispatchQueue.main.asyncAfter(deadline: .now() + 8) { print("[mv] web views alive 8s later: \(WebEngines.liveCount)") }
             #endif
@@ -449,6 +471,33 @@ struct MultiviewView: View {
                 MultiviewCapacity.lower(to: playing.count - 1)
             }
         }
+        #if DEBUG
+        .task {
+            let opened = Date()
+            print("[mvstat] engine=\(MultiviewEngine.current) capacity=\(MultiviewCapacity.games) device=\(Device.machine)")
+            // -BingeMultiSwap N: move focus (and sound) to the next game every N seconds.
+            let swap = UserDefaults.standard.integer(forKey: "BingeMultiSwap")
+            // -BingeMultiExpand N: the focused game full screen at N seconds, back to the grid 30s later.
+            let expandAt = UserDefaults.standard.integer(forKey: "BingeMultiExpand")
+            var lastSwap = Date()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                let elapsed = Int(Date().timeIntervalSince(opened))
+                if expandAt > 0, expanded == nil, elapsed >= expandAt, elapsed < expandAt + 2 {
+                    expanded = focused; print("[mvstat] expand \(focused ?? "-")")
+                } else if expandAt > 0, expanded != nil, elapsed >= expandAt + 30, elapsed < expandAt + 32 {
+                    expanded = nil; print("[mvstat] back to the grid")
+                }
+                if swap > 0, expanded == nil, Date().timeIntervalSince(lastSwap) >= Double(swap), let current = tiles.firstIndex(where: { $0.id == focused }) {
+                    lastSwap = Date()
+                    focused = tiles[(current + 1) % tiles.count].id
+                    print("[mvstat] swap focus -> \(tiles[(current + 1) % tiles.count].game.title)")
+                }
+                let at = Int(Date().timeIntervalSince(opened))
+                for tile in tiles { print("[mvstat] \(at)s focused=\(focused == tile.id) \(tile.statLine)") }
+            }
+        }
+        #endif
         // New slots (a game starting or changing server) get positioned.
         .task {
             while !Task.isCancelled {
@@ -680,9 +729,11 @@ enum MultiviewLayout: String, CaseIterable, Identifiable {
 // How many games this Apple TV plays at once in Multiview. More than two
 // overloaded a real Apple TV (memory and video decoding) badly enough to
 // restart it, so two is the most, and the older Apple TV HD gets one. A
-// session that has to pause a game lowers it for next time.
+// session that has to pause a game lowers it for the next day: one bad
+// stream (or one bad evening) must not keep a game paused for good.
 enum MultiviewCapacity {
     private static var key: String { MultiviewEngine.current == .page ? "binge.multiviewCapacity.page" : "binge.multiviewCapacity" }
+    private static let lowerFor: TimeInterval = 24 * 60 * 60
 
     static var deviceLimit: Int {
         // The Apple TV HD (A8, 2GB): separate pages: 1 there, 2 on the 4K
@@ -693,12 +744,17 @@ enum MultiviewCapacity {
     }
 
     static var games: Int {
-        let saved = UserDefaults.standard.integer(forKey: key)
-        return max(1, min(deviceLimit, saved == 0 ? deviceLimit : saved))
+        let defaults = UserDefaults.standard
+        let saved = defaults.integer(forKey: key)
+        let at = defaults.double(forKey: key + ".at")
+        // Older builds saved no date: those limits expire now too.
+        guard saved > 0, at > 0, Date().timeIntervalSince1970 - at < lowerFor else { return deviceLimit }
+        return max(1, min(deviceLimit, saved))
     }
 
     static func lower(to count: Int) {
         guard count >= 1, count < games else { return }
         UserDefaults.standard.set(count, forKey: key)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key + ".at")
     }
 }
