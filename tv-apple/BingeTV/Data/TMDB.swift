@@ -112,10 +112,11 @@ actor TMDB {
 
     // Sizes for an Apple TV 4K (1920×1080 points drawn at 2×): full-screen
     // art needs TMDB's original (up to 3840 wide), wide cards w1280,
-    // posters w780.
-    nonisolated static let fullScreen = "original"
-    nonisolated static let wide = "w1280"
-    nonisolated static let poster = "w780"
+    // posters w780. The Apple TV HD draws at 1× (1080p), so half of that
+    // looks the same there and downloads/decodes a quarter of the pixels.
+    nonisolated static let fullScreen = Device.isLowMemory ? "w1280" : "original"
+    nonisolated static let wide = Device.isLowMemory ? "w780" : "w1280"
+    nonisolated static let poster = Device.isLowMemory ? "w500" : "w780"
 
     // Same image at another size ("…/w780/abc.jpg" → "…/original/abc.jpg").
     nonisolated static func resized(_ url: URL?, _ size: String) -> URL? {

@@ -214,8 +214,9 @@ final class PlayerModel: ObservableObject {
             server = winner.server
             notice = nil
         } else if race.failed {
-            // Live: nothing in this race played, but there are backups.
-            if request.isLive, !handPicked, recoveries < 3, servers.contains(where: { !raced.contains($0.id) }) {
+            // Nothing in this race played, but there are backups (live
+            // batches, or the servers a low-memory Apple TV didn't race).
+            if !handPicked, recoveries < 3, servers.contains(where: { !raced.contains($0.id) }) {
                 recoveries += 1
                 notice = "Trying more streams…"
                 startRace(servers)

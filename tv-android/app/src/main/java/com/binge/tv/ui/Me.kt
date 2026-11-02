@@ -57,6 +57,7 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.Text
 import com.binge.tv.BuildConfig
+import com.binge.tv.data.Performance
 import com.binge.tv.data.AppModel
 import com.binge.tv.data.Catalog
 import com.binge.tv.data.Config
@@ -312,6 +313,7 @@ fun SettingsScreen() {
             item { OnOff("Audio description", "Picks a described audio track automatically when a server has one.", PlaybackPrefs.audioDescription) { Prefs.set("audioDescription", it) } }
             item { OnOff("Larger text", "Bigger text across the whole app.", PlaybackPrefs.largeText) { Prefs.set("largeText", it) } }
             item { OnOff("Ambient mode", "Artwork from your rows after a few idle minutes, or a long pause.", PlaybackPrefs.ambient) { Prefs.set("ambient", it) } }
+            item { OnOff("Lighter effects", "No zoom on focused cards and buttons, and ambient mode off unless you turn it on. Smoother on Fire TV sticks; on by default when this TV has little memory.", Performance.light) { Prefs.set("lightEffects", it) } }
         }
     }
 }

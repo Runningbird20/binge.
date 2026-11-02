@@ -391,3 +391,74 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
         #expect(entry.digits.isEmpty)
     }
 }
+
+// The seasonal row on the Movies / Series tabs, same calendar as the website.
+@Suite struct SeasonalTests {
+    private func on(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        Calendar(identifier: .gregorian).date(from: DateComponents(year: y, month: m, day: d, hour: 15))!
+    }
+
+    @Test func holidayDates() {
+        #expect(Seasonal.easter(2026) == Seasonal.day(2026, 4, 5))
+        #expect(Seasonal.easter(2027) == Seasonal.day(2027, 3, 28))
+        #expect(Seasonal.thanksgiving(2026) == Seasonal.day(2026, 11, 26))
+        #expect(Seasonal.memorialDay(2027) == Seasonal.day(2027, 5, 31))
+        #expect(Seasonal.nthWeekday(2027, 5, weekday: 1, 2) == Seasonal.day(2027, 5, 9))
+    }
+
+    @Test(arguments: [
+        (2026, 10, 10, MediaKind.movie, "Spooky Season"),
+        (2026, 10, 31, .tvShow, "Happy Halloween"),
+        (2026, 11, 22, .movie, "Thanksgiving Week"),
+        (2026, 11, 22, .tvShow, "Comfort TV for Thanksgiving"),
+        (2026, 11, 26, .movie, "Happy Thanksgiving"),
+        (2026, 11, 27, .movie, "The Holidays Start Now"),
+        (2026, 12, 5, .tvShow, "Christmas Shows"),
+        (2026, 12, 20, .movie, "Countdown to Christmas"),
+        (2026, 12, 28, .tvShow, "Binge a Limited Series"),
+        (2027, 1, 1, .movie, "Happy New Year"),
+        (2027, 2, 5, .movie, "Valentine's Day Romance"),
+        (2028, 2, 29, .movie, "Celebrating Black History Month"),
+        (2027, 3, 28, .movie, "Happy Easter"),
+        (2027, 3, 28, .tvShow, "March Madness"),
+        (2027, 5, 9, .movie, "Mother's Day Movies"),
+        (2027, 6, 20, .movie, "Father's Day Movies"),
+        (2027, 7, 4, .tvShow, "Summer Binge"),
+        (2027, 9, 15, .movie, "Cozy Fall Mysteries"),
+    ])
+    func titleFollowsTheCalendar(_ y: Int, _ m: Int, _ d: Int, _ kind: MediaKind, _ title: String) {
+        #expect(Seasonal.pick(kind, on: on(y, m, d))?.title == title)
+    }
+
+    @Test func everyDayHasARow() {
+        var date = on(2026, 1, 1)
+        while Calendar(identifier: .gregorian).component(.year, from: date) < 2029 {
+            for kind in [MediaKind.movie, .tvShow] { #expect(Seasonal.pick(kind, on: date) != nil, "\(date) \(kind)") }
+            date = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: date)!
+        }
+    }
+
+    @Test func tasteSortMatchesTheWebsite() {
+        func t(_ id: Int, _ genre: String, _ language: String) -> Title {
+            var title = Title(kind: .movie, dbId: id, name: "T\(id)", year: 2020, overview: nil, genre: genre, ageRating: nil)
+            title.originalLanguage = language
+            return title
+        }
+        let items = [t(1, "Comedy", "en"), t(2, "Horror, Thriller", "en"), t(3, "Drama", "ko"), t(4, "Family", "en")]
+        let taste = Seasonal.Taste(genres: ["Horror", "Drama"], languageShare: ["ko": 0.6])
+        #expect(Seasonal.sorted(items, for: taste).map(\.dbId) == [2, 3, 1, 4]) // same as seasonal.test.js
+        #expect(Seasonal.sorted(items, for: Seasonal.Taste(history: [])).map(\.dbId) == [1, 2, 3, 4])
+        let learned = Seasonal.Taste(history: [t(9, "Horror", "ko"), t(8, "Horror, Drama", "ko"), t(7, "Comedy", "en")])
+        #expect(learned.genres.first == "horror")
+        #expect((learned.languageShare["ko"] ?? 0) > 0.6)
+    }
+
+    @Test func rowSitsSecondOnTheTabs() {
+        let rows = Rows.browse(.movie, kids: false, on: on(2026, 10, 31))
+        #expect(rows[1].id == "seasonal-halloween-night")
+        #expect(rows[1].path == "discover/movie")
+        let kids = Rows.browse(.tvShow, kids: true, on: on(2026, 12, 10))
+        #expect(kids[1].params["with_genres"] == "10762|10751")
+        #expect(kids[1].params["with_keywords"] == "207317|1991")
+    }
+}

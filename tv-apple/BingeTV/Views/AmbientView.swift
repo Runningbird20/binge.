@@ -66,7 +66,7 @@ struct AmbientView: View {
         ZStack(alignment: .bottomLeading) {
             Color.black.ignoresSafeArea()
             if let current, let art = TMDB.resized(current.backdrop, TMDB.fullScreen) ?? TMDB.resized(current.poster, TMDB.fullScreen) {
-                AsyncImage(url: art) { image in
+                RemoteImage(url: art) { image in
                     image.resizable().scaledToFill()
                 } placeholder: { Color.black }
                 .scaleEffect(zoom && !reduceMotion ? 1.12 : 1.0)
