@@ -380,7 +380,7 @@ private fun ProfilePicker() {
                     modifier = if (index == initial) Modifier.focusRequester(first) else Modifier,
                     shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp)),
                     colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = Color.Transparent),
-                    scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+                    scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = com.binge.tv.data.Performance.focusScale(1.1f)),
                 ) { ProfileAvatar(profile, 110.dp, locked = profile.id in AppModel.lockedProfileIds) }
             }
         }

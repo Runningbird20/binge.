@@ -78,7 +78,7 @@ struct TitleDetailView: View {
     // MARK: Header
 
     private var backdrop: some View {
-        AsyncImage(url: TMDB.image(details?.backdropPath, TMDB.fullScreen) ?? TMDB.resized(title.backdrop, TMDB.fullScreen)) { image in
+        RemoteImage(url: TMDB.image(details?.backdropPath, TMDB.fullScreen) ?? TMDB.resized(title.backdrop, TMDB.fullScreen)) { image in
             image.resizable().aspectRatio(contentMode: .fill)
         } placeholder: {
             Theme.background
@@ -99,7 +99,7 @@ struct TitleDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 24) {
             if let logo = TMDB.image(details?.logoPath, TMDB.fullScreen) {
-                AsyncImage(url: logo) { image in
+                RemoteImage(url: logo) { image in
                     image.resizable().scaledToFit()
                 } placeholder: {
                     titleText.hidden()

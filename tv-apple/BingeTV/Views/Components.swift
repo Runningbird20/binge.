@@ -45,18 +45,16 @@ struct PosterImage: View {
     let name: String
 
     var body: some View {
-        AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.2))) { phase in
-            if let image = phase.image {
-                image.resizable().aspectRatio(contentMode: .fill)
-            } else {
-                ZStack {
-                    LinearGradient(colors: [Theme.raised, Theme.surface], startPoint: .top, endPoint: .bottom)
-                    Text(name)
-                        .font(.callout.weight(.semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Theme.muted)
-                        .padding(16)
-                }
+        RemoteImage(url: url) { image in
+            image.resizable().aspectRatio(contentMode: .fill)
+        } placeholder: {
+            ZStack {
+                LinearGradient(colors: [Theme.raised, Theme.surface], startPoint: .top, endPoint: .bottom)
+                Text(name)
+                    .font(.callout.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Theme.muted)
+                    .padding(16)
             }
         }
     }
