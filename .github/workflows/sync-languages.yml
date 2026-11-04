@@ -1,13 +1,13 @@
 name: Sync regional new releases
 
-# Daily: adds new and upcoming titles in the listed original languages
+# Monthly (the 1st): adds new and upcoming titles in the listed original languages
 # (Malayalam by default) and refreshes ones released in the last 120 days.
 # The twice-weekly bulk sync (sync-tmdb.yml) misses small new releases because
 # it works by popularity. Uses the same repo secrets as sync-tmdb.yml.
 
 on:
   schedule:
-    - cron: '30 10 * * *'   # every day at 10:30 UTC
+    - cron: '30 10 1 * *'   # the 1st of every month at 10:30 UTC
   workflow_dispatch:
 
 jobs:

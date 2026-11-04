@@ -29,31 +29,31 @@ Catalog ids are shared: Supabase user rows refer to Neon ids (`media_id`), so
 anything that needs a title name next to user data (e.g. the admin overview's
 top titles) looks the ids up in Neon.
 
-## Removing the duplicates
+## Keeping it split
 
-`.github/workflows/database-split.yml` (Actions → Database split → Run workflow):
+`.github/workflows/database-split.yml` runs every Monday (or Actions → Database
+split → Run workflow). It checks that the deployed site answers
+`/api/neon-data/rest/movies`, then runs `scripts/check-database-split.js`
+(Neon holds only the catalog, Supabase exposes none of it). A failed scheduled
+run opens or updates an issue. Secrets: `DATABASE_URL`, `SUPABASE_URL`,
+`SUPABASE_SECRET_KEY`. Catalog sync workflows (`sync-tmdb.yml`,
+`sync-languages.yml`) write to Neon with `DATABASE_URL` only.
 
-1. **audit** (any time): checks the deployed site answers
-   `/api/neon-data/rest/movies`, copies any catalog rows Neon is missing
-   (`scripts/migrate-media-to-neon.js`), and checks every Supabase catalog id
-   exists in Neon (`scripts/verify-media-migration.js`).
-2. **apply** with confirm `delete duplicates`: the audit, then a Neon backup
-   branch (`before-database-split-<run id>`), then
-   - `neon/media_only.sql`: drops Neon's copies of user tables, user functions
-     and the copied `auth`/`storage`/`realtime`/… schemas plus `neon_auth`;
-     aborts if any catalog count changes;
-   - `supabase/migrations/20261028160000_media_moves_to_neon.sql`: rewrites
-     `admin_stats` without the media join, drops the catalog tables, genre views
-     and search RPCs from Supabase.
+## How the duplicates were removed (done, Oct 2026)
 
-Both are idempotent. **Order matters:** deploy the web app first and ship TV
-builds that read `/api/neon-data` (older TV builds read the Supabase catalog
-directly and will show empty rows once it is gone).
+One-time migration, run from that workflow's former "apply" mode (removed
+2026-11-04, see git history): copy any catalog rows Neon was missing
+(`scripts/migrate-media-to-neon.js`), check every Supabase catalog id exists in
+Neon (`scripts/verify-media-migration.js`), back Neon up as a branch, then
+- `neon/media_only.sql`: drops Neon's copies of user tables, user functions
+  and the copied `auth`/`storage`/`realtime`/… schemas plus `neon_auth`;
+  aborts if any catalog count changes;
+- `supabase/migrations/20261028160000_media_moves_to_neon.sql`: rewrites
+  `admin_stats` without the media join, drops the catalog tables, genre views
+  and search RPCs from Supabase.
 
-Secrets: `DATABASE_URL`, `NEON_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`,
-`SUPABASE_DB_URL` (Supabase → Connect → Session pooler; the REST secret key
-cannot run DDL). Catalog sync workflows (`sync-tmdb.yml`, `sync-languages.yml`)
-write to Neon with `DATABASE_URL` only.
+Both SQL files are idempotent. TV builds from before the split read the
+Supabase catalog directly and show empty rows; they need updating.
 
 `supabase/repeatable_schema.sql` no longer creates catalog tables, and
 `npm run supabase:seed:catalogs` is gone. Supabase Auth is the only sign-in:
