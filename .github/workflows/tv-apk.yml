@@ -1,6 +1,6 @@
 # Builds the Fire TV / Android TV app (tv-android/) and attaches the APK to
-# the run. Runs on pushes and PRs that touch tv-android/, or from the Actions
-# tab ("Build TV app" → Run workflow).
+# the run. Runs on PRs and pushes to main that touch tv-android/, or from the
+# Actions tab ("Build TV app" → Run workflow).
 #
 # Releases: push a tag like tv-v1.4 and the APK is attached to a GitHub
 # Release of that name. The stick can always install the newest one from
@@ -19,10 +19,10 @@ name: Build TV app
 on:
   workflow_dispatch:
   push:
-    # Branch pushes build when tv-android/ changes; tag pushes always build
-    # (GitHub doesn't apply path filters to tags). Listing tags without
-    # branches would stop branch pushes, hence '**'.
-    branches: ['**']
+    # Pushes to main build when tv-android/ changes (other branches are
+    # covered by their PR, so they don't build twice); tag pushes always
+    # build (GitHub doesn't apply path filters to tags).
+    branches: [main]
     paths:
       - 'tv-android/**'
       - '.github/workflows/tv-apk.yml'
