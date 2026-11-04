@@ -9,7 +9,7 @@ require('dotenv').config({ path: '.env', quiet: true });
 const fs = require('fs');
 const { Client } = require('pg');
 
-// Keep in sync with neon/media_only.sql and database-split.yml.
+// Keep in sync with neon/media_only.sql.
 const MEDIA = [
   'movies', 'tv_shows', 'books',
   'movie_genres', 'tv_show_genres', 'book_genres',
