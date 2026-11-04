@@ -3,7 +3,7 @@ name: Supabase has every migration
 # Fails when Supabase is missing a table, view or function that a migration
 # creates (scripts/check-supabase-migrations.js), so an unapplied migration
 # shows up here instead of as a broken feature. Runs on PRs that touch
-# migrations and every Monday.
+# migrations and on the 1st of every month.
 #
 # Secrets: SUPABASE_URL, SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY).
 # Read-only: it only fetches the REST API's list of tables and functions.
@@ -15,7 +15,7 @@ on:
       - 'scripts/check-supabase-migrations.js'
       - '.github/workflows/supabase-migrations.yml'
   schedule:
-    - cron: '17 7 * * 1'   # Mondays
+    - cron: '17 7 1 * *'   # the 1st of every month at 07:17 UTC
   workflow_dispatch:
 
 permissions:
