@@ -6,7 +6,6 @@ name: CI
 #   - Jest (the whole web suite, once)
 #   - the server tests (node --test)
 #   - CI=true npm run build, which fails on any ESLint warning, like Vercel
-# neon.yml only manages the Neon preview database branch.
 
 on:
   pull_request:
