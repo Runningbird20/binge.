@@ -57,7 +57,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.7'
+          gradle-version: '9.8.2'   # AGP 9.5 needs Gradle 9.6+
       - name: Use the shared signing key
         env:
           TV_DEBUG_KEYSTORE: ${{ secrets.TV_DEBUG_KEYSTORE }}
