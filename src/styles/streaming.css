@@ -3250,6 +3250,11 @@ kbd {
 
 /* ── Search ───────────────────────────────────────────────────── */
 .sr-box { margin: 0 0 1.5rem; }
+/* Type / decade / language chips (only on this page). They scroll with
+   the page, unlike the browse pages' sticky genre bar. */
+.sr-filters { display: flex; flex-direction: column; gap: 0.1rem; margin: -0.75rem 0 1.25rem; }
+.sr-filters .genre-bar-outer { position: static; }
+.sr-filters .genre-bar-wrap { padding: 0.3rem 0; }
 .sr-box form {
   display: flex; align-items: center; gap: 0.6rem; min-height: 52px; padding: 0 0.6rem 0 1rem; border-radius: 12px;
   background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.7);
@@ -3497,8 +3502,6 @@ kbd {
 .sr-ai-error { margin: 0.75rem 0; color: rgba(255, 255, 255, 0.7); }
 .sr-ai-error-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 0.6rem; }
 .sr-ai-error-row .sr-ai-error { margin: 0; }
-.sr-ai-reasons { margin: 0.25rem 0 0.6rem; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.86rem; color: rgba(255, 255, 255, 0.75); }
-.sr-ai-reasons strong { color: #fff; }
 .gs-ask .global-search-dropdown-item-icon { color: #fff; }
 
 /* Horizontal scrollers with buttons (franchise strip, heatmap) */
