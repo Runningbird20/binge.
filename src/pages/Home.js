@@ -29,6 +29,7 @@ import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { findNewEpisodes } from '../utils/newEpisodes';
 import { seasonStatus } from '../utils/seasonStatus';
 import { precacheUpNext } from '../utils/smartPrecache';
+import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 import { fetchSharedWithMe, markSharesSeen } from '../utils/profileShares';
 import { enableNewEpisodeAlerts, isSubscribed, pushSupported } from '../utils/pushNotifications';
 import { Bell, BellRinging } from '@phosphor-icons/react';
@@ -305,7 +306,7 @@ export default function Home() {
       const pick = (result) => (result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []);
       const nextRatings = pick(ratingsResult);
       const nextWatchlist = pick(watchlistResult);
-      const nextContinueWatching = pick(continueWatchingResult);
+      const nextContinueWatching = pick(continueWatchingResult).filter((item) => !isRemovalPending(`continue:${item.id}`));
       setWatchlistItems(nextWatchlist);
       setRatingsItems(nextRatings);
       setContinueWatchingItems(nextContinueWatching);
@@ -331,7 +332,7 @@ export default function Home() {
     if (cached) {
       setWatchlistItems(cached.watchlistItems);
       setRatingsItems(cached.ratingsItems);
-      setContinueWatchingItems(cached.continueWatchingItems);
+      setContinueWatchingItems(cached.continueWatchingItems.filter((item) => !isRemovalPending(`continue:${item.id}`)));
       setDataLoading(false);
     }
     fetchStats();
@@ -422,13 +423,20 @@ export default function Home() {
     return () => window.removeEventListener('binge:ratingSaved', onRatingSaved);
   }, []);
 
-  async function handleRemoveContinueWatching(id) {
-    setContinueWatchingItems(prev => prev.filter(item => item.id !== id));
-    try {
-      await removeSupabaseContinueWatching(id);
-    } catch {
-      // Re-fetching on next visit will reconcile if the delete failed.
-    }
+  // Off the row at once; deleted when the Undo popup runs out.
+  function handleRemoveContinueWatching(id) {
+    const index = continueWatchingItems.findIndex((item) => item.id === id);
+    const removed = continueWatchingItems[index];
+    if (!removed) return;
+    setContinueWatchingItems((prev) => prev.filter((item) => item.id !== id));
+    removeWithUndo({
+      key: `continue:${id}`,
+      message: `Removed “${removed.title || 'that'}” from Continue Watching.`,
+      onUndo: () => setContinueWatchingItems((prev) => (prev.some((item) => item.id === id)
+        ? prev
+        : [...prev.slice(0, index), removed, ...prev.slice(index)])),
+      onCommit: () => removeSupabaseContinueWatching(id),
+    });
   }
 
   // Bottom-nav "For You" tab links to /home#for-you.

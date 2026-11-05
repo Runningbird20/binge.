@@ -16,7 +16,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## UI and UX
 
-- [ ] **Undo after removing something.** Removing a title from My List, Continue Watching or History happens instantly with no way back. `sonner` is already a dependency: show "Removed · Undo" for a few seconds and only then delete (`Home.js`, `Profile.js`, `History.js`).
 - [ ] **Spoiler-safe episode lists.** Episode stills and summaries further ahead than your next episode give plot away. Blur those stills and hide those summaries until tapped, with a switch in Settings (`MediaDetailsModal.js`, `profileSettings.js`).
 - [ ] **"Install binge." prompt.** The site is a PWA (manifest, service worker, shortcuts), but nothing handles `beforeinstallprompt`, so most people never install it. Offer Install in the Me sheet / Settings on Chrome and Android, and an "Add to Home Screen" how-to sheet on iPhone.
 - [ ] **Link previews for shared titles.** `/movie/:id`, `/tv-show/:id` and `/book/:id` are rendered in the browser, so iMessage, Discord and Slack show the generic site card. Serve `og:title` / `og:description` / `og:image` (the TMDB backdrop) for those paths from a small Vercel function before the app loads.

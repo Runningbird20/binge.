@@ -474,7 +474,10 @@ export async function fetchEpisodeHistory(limit = 300) {
 
 // Remove a title from watch history: its Continue Watching row and, for
 // shows, its watched-episode records. Ratings and My List are untouched.
-export async function removeTitleFromHistory({ mediaType, mediaId }) {
+// profileId: the profile it was removed from (the Undo popup carries out
+// the removal 10 seconds later, maybe after a profile switch); the active
+// profile when left out.
+export async function removeTitleFromHistory({ mediaType, mediaId, profileId: forProfile }) {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const stored = window.localStorage.getItem('continue_watching');
@@ -490,7 +493,7 @@ export async function removeTitleFromHistory({ mediaType, mediaId }) {
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
-  const profileId = getActiveProfileId();
+  const profileId = forProfile !== undefined ? forProfile : getActiveProfileId();
   const scope = (query) => (profileId ? query.eq('profile_id', profileId) : query);
   const tasks = [
     scope(client.from('continue_watching').delete().eq('user_id', authUser.id).eq('media_type', mediaType).eq('media_id', Number(mediaId))),
