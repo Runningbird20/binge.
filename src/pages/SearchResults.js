@@ -1,25 +1,33 @@
 import LoadingBar from '../components/LoadingBar';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, ClockCounterClockwise, MagnifyingGlass, Sparkle, Trophy, X } from '@phosphor-icons/react';
 import { askBinge } from '../utils/aiSearch';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
 import TitleRow from '../components/TitleRow';
+import GenreScrollBar from '../components/GenreScrollBar';
+import { filterItems, filterOptions, hasFilters, readFilters } from '../utils/searchFilters';
 import TitleCard from '../components/TitleCard';
 import { fetchTmdbRecommendations, tmdbIdFromItem } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
-import { titleUrl } from '../components/TitleCard';
-import { backdropSrc, posterSrc } from '../utils/imageQuality';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, isGameLive, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
 
 // "Ask binge." picks for a natural-language request, with reasons.
-function AiPicks({ query, auto }) {
+// filters: the page's chips (applied to the picks too); onItems hears every
+// pick (before filtering) so the chips can offer their languages and decades.
+function AiPicks({ query, auto, filters, onItems }) {
   const [state, setState] = useState(auto ? 'loading' : 'idle');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const shown = filterItems(result?.items, filters);
+  // The latest callback, without re-asking the AI when it changes.
+  const onItemsRef = useRef(onItems);
+  onItemsRef.current = onItems;
 
   useEffect(() => {
     setResult(null);
@@ -31,8 +39,8 @@ function AiPicks({ query, auto }) {
     if (state !== 'loading') return undefined;
     let cancelled = false;
     askBinge(query)
-      .then((next) => { if (!cancelled) { setResult(next); setState('done'); } })
-      .catch((err) => { if (!cancelled) { setError(err.message || 'The AI search didn’t respond.'); setState('error'); } });
+      .then((next) => { if (!cancelled) { setResult(next); setState('done'); onItemsRef.current?.(next.items || []); } })
+      .catch((err) => { if (!cancelled) { setError(err.message || 'The AI search didn’t respond.'); setState('error'); onItemsRef.current?.([]); } });
     return () => { cancelled = true; };
   }, [state, query]);
 
@@ -59,13 +67,9 @@ function AiPicks({ query, auto }) {
         </div>
       )}
       {state === 'done' && result.items.length === 0 && <p className="sr-ai-error">Nothing in the binge. catalog fit that — try wording it differently.</p>}
-      {(state === 'loading' || result?.items?.length > 0) && (
-        <TitleRow title="binge. picks" loading={state === 'loading'} items={state === 'done' ? result.items : undefined} />
-      )}
-      {state === 'done' && result.items.length > 0 && (
-        <ul className="sr-ai-reasons">
-          {result.items.slice(0, 6).map((item) => <li key={`${item.media_type}:${item.id}`}><strong>{item.title}</strong> — {item._reason}</li>)}
-        </ul>
+      {state === 'done' && result.items.length > 0 && shown.length === 0 && <p className="sr-ai-error">None of these picks match your filters.</p>}
+      {(state === 'loading' || shown.length > 0) && (
+        <TitleRow title="binge. picks" loading={state === 'loading'} items={state === 'done' ? shown : undefined} />
       )}
     </section>
   );
@@ -91,35 +95,6 @@ function GridSkeleton() {
 }
 
 const TYPE_LABELS = { movie: 'Movies', tv: 'TV Shows', book: 'Books' };
-const KIND = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
-
-// The single best match, shown big with Play / Details.
-function TopResult({ item }) {
-  const location = useLocation();
-  const art = item.media_type === 'book' ? null : backdropSrc(item.backdrop_url, 'w1280');
-  const poster = posterSrc(item.poster_url || item.cover_url);
-  return (
-    <section className="sr-top" aria-label="Top result">
-      <div className="sr-top-art" aria-hidden="true">
-        {art ? <img src={art} alt="" referrerPolicy="no-referrer" /> : poster && <img src={poster} alt="" className="sr-top-blur" referrerPolicy="no-referrer" />}
-      </div>
-      <div className="sr-top-body">
-        {poster && <img className="sr-top-poster" src={poster} alt="" referrerPolicy="no-referrer" />}
-        <div className="sr-top-text">
-          <h2>{item.title}</h2>
-          <p className="sr-top-meta">{[KIND[item.media_type], item.year, item.media_type === 'book' ? item.author : String(item.genre || '').split(',')[0]].filter(Boolean).join(' · ')}</p>
-          <div className="sr-top-actions">
-            {item.media_type !== 'book' && (
-              <Link to={titleUrl(item, { play: true })} state={{ backgroundLocation: location }} className="st-btn st-btn--primary"><Play size={18} weight="fill" /> Play</Link>
-            )}
-            <Link to={titleUrl(item)} state={{ backgroundLocation: location }} className="st-btn st-btn--secondary"><Info size={18} weight="bold" /> Details</Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function GameTile({ game }) {
   const live = isGameLive(game);
   return (
@@ -149,6 +124,43 @@ function ResultGrid({ title, items }) {
         ))}
       </div>
     </section>
+  );
+}
+
+// One chip bar (the genre chips' bar): an "any" chip, then each value.
+// Choosing the chosen chip again clears it.
+function FilterBar({ name, label, anyLabel, options, value, onChange }) {
+  if (!options.length) return null;
+  return (
+    <GenreScrollBar ariaLabel={label}>
+      <button type="button" className={`genre-chip${!value ? ' active' : ''}`} aria-pressed={!value} onClick={() => onChange(name, '')}>
+        {anyLabel}
+      </button>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`genre-chip${value === option.value ? ' active' : ''}`}
+          aria-pressed={value === option.value}
+          onClick={() => onChange(name, value === option.value ? '' : option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </GenreScrollBar>
+  );
+}
+
+// Type, decade and language. Only on this page (not the header's dropdown,
+// not the Movies / Series pages).
+function SearchFilters({ options, filters, onChange }) {
+  if (!options.type.length && !options.decade.length && !options.lang.length) return null;
+  return (
+    <div className="sr-filters">
+      <FilterBar name="type" label="Filter by type" anyLabel="All types" options={options.type} value={filters.type} onChange={onChange} />
+      <FilterBar name="decade" label="Filter by decade" anyLabel="Any decade" options={options.decade} value={filters.decade} onChange={onChange} />
+      <FilterBar name="lang" label="Filter by language" anyLabel="Any language" options={options.lang} value={filters.lang} onChange={onChange} />
+    </div>
   );
 }
 
@@ -212,8 +224,23 @@ function SearchBox({ query }) {
 const tagType = (list, type) => (list || []).map((item) => ({ ...item, _type: type }));
 
 export default function SearchResults() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const query = searchParams.get('q') || '';
+  const filterKey = ['type', 'decade', 'lang'].map((key) => searchParams.get(key) || '').join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filters = useMemo(() => readFilters(searchParams), [filterKey]);
+  const setFilter = useCallback((key, value) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set(key, value); else next.delete(key);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const clearFilters = () => ['type', 'decade', 'lang'].forEach((key) => setFilter(key, ''));
+  // Ask binge.'s picks (every one, before the filters): null while it thinks.
+  const [aiItems, setAiItems] = useState(null);
+  useEffect(() => { setAiItems(null); }, [query]);
 
   // Primary (title match) and related (theme/synopsis match) are fetched as
   // two fully independent requests — related scans the overview/synopsis
@@ -273,9 +300,14 @@ export default function SearchResults() {
   const primaryMovieIds = new Set(primaryMovies.map((r) => r.id));
   const primaryTvIds = new Set(primaryTv.map((r) => r.id));
   const primaryBookIds = new Set(primaryBooks.map((r) => r.id));
-  const relatedMovies = tagType(related?.moviesRelated, 'movie').filter((r) => !primaryMovieIds.has(r.id));
-  const relatedTv = tagType(related?.tvRelated, 'tv').filter((r) => !primaryTvIds.has(r.id));
-  const relatedBooks = tagType(related?.booksRelated, 'book').filter((r) => !primaryBookIds.has(r.id));
+  const allRelatedMovies = tagType(related?.moviesRelated, 'movie').filter((r) => !primaryMovieIds.has(r.id));
+  const allRelatedTv = tagType(related?.tvRelated, 'tv').filter((r) => !primaryTvIds.has(r.id));
+  const allRelatedBooks = tagType(related?.booksRelated, 'book').filter((r) => !primaryBookIds.has(r.id));
+  const relatedMovies = filterItems(allRelatedMovies, filters);
+  const relatedTv = filterItems(allRelatedTv, filters);
+  const relatedBooks = filterItems(allRelatedBooks, filters);
+  const personItems = filterItems(person?.items, filters);
+  const filtering = hasFilters(filters);
 
   // The single best video match drives a "More like X" row — searching
   // for a show you like should also answer "what else is like this?".
@@ -287,14 +319,37 @@ export default function SearchResults() {
   const loadMoreLike = useCallback(async () => {
     if (!topMatchTmdbId) return [];
     const list = await fetchTmdbRecommendations(topMatchType, topMatchTmdbId);
-    return resolveTmdbItems(list || [], topMatchType);
-  }, [topMatchType, topMatchTmdbId]);
+    return filterItems(await resolveTmdbItems(list || [], topMatchType, { kidsSafe }), filters);
+  }, [topMatchType, topMatchTmdbId, filters, kidsSafe]);
 
-  const grouped = groupResults(primary);
+  // The grids come from the filtered title matches, the best match first in
+  // its own section (the page has no separate "top result" card).
+  const best = groupResults({
+    movies: filterItems(primaryMovies, filters),
+    tv: filterItems(primaryTv, filters),
+    books: filterItems(primaryBooks, filters),
+  });
+  const leadWithBest = (list, mediaType) => (best.top?.media_type === mediaType ? [best.top, ...list] : list);
+  const grouped = {
+    movies: leadWithBest(best.movies, 'movie'),
+    series: leadWithBest(best.series, 'tv_show'),
+    books: leadWithBest(best.books, 'book'),
+  };
+
+  // The chips offer what's in the results (every section, before filtering).
+  const options = filterOptions([
+    ...primaryMovies, ...primaryTv, ...primaryBooks,
+    ...allRelatedMovies, ...allRelatedTv, ...allRelatedBooks,
+    ...(person?.items || []), ...(aiItems || []),
+  ], filters);
 
   const primaryTotal = primaryMovies.length + primaryTv.length + primaryBooks.length;
-  const relatedTotal = relatedMovies.length + relatedTv.length + relatedBooks.length;
+  const relatedTotal = allRelatedMovies.length + allRelatedTv.length + allRelatedBooks.length;
   const nothingFound = primaryState === 'done' && relatedState === 'done' && primaryTotal === 0 && relatedTotal === 0 && !games.length && !person?.items?.length;
+  // Filters set and, once everything has arrived, nothing left to show.
+  const shownCount = grouped.movies.length + grouped.series.length + grouped.books.length
+    + personItems.length + relatedMovies.length + relatedTv.length + relatedBooks.length + filterItems(aiItems, filters).length;
+  const filteredAway = filtering && !nothingFound && primaryState === 'done' && relatedState !== 'loading' && aiItems !== null && shownCount === 0;
 
   return (
     <div className="app-layout">
@@ -306,10 +361,18 @@ export default function SearchResults() {
           </div>
         </header>
         <SearchBox query={query} />
+        <SearchFilters options={options} filters={filters} onChange={setFilter} />
         {/* Every search goes through Ask binge. (it puts exact title matches first,
             and understands requests like "new Malayalam movies"); the plain
             title results below show instantly while it thinks. */}
-        {query.trim().length >= 2 && <AiPicks key={query} query={query} auto />}
+        {query.trim().length >= 2 && <AiPicks key={query} query={query} auto filters={filters} onItems={setAiItems} />}
+
+        {filteredAway && (
+          <div className="empty-state">
+            <p>Nothing matches these filters.</p>
+            <button type="button" className="st-btn st-btn--ghost" onClick={clearFilters}>Clear filters</button>
+          </div>
+        )}
 
         {primaryState === 'loading' && <GridSkeleton />}
 
@@ -329,46 +392,46 @@ export default function SearchResults() {
 
         {primaryState === 'done' && (
           <div className="home-sections">
-            {grouped.top && !(person && person.items.length >= 3) && <TopResult item={grouped.top} />}
-            {person && person.items.length > 0 && (
+            {person && personItems.length > 0 && (
               <section className="st-search-section sr-person" aria-label={`Titles with ${person.person.name}`}>
-                <div className="sr-person-head">
+                <Link to={`/person/${person.person.id}`} className="sr-person-head">
                   {person.person.photo && <img src={person.person.photo} alt="" referrerPolicy="no-referrer" />}
                   <div>
                     <h2 className="st-row-title">{person.person.department === 'Director' ? `Directed by ${person.person.name}` : `Starring ${person.person.name}`}</h2>
+                    <p className="sr-person-more">See all of {person.person.name}’s work <ArrowRight size={14} weight="bold" aria-hidden="true" /></p>
                   </div>
-                </div>
-                <TitleRow title={`${person.person.name} on binge.`} items={person.items} />
+                </Link>
+                <TitleRow title={`${person.person.name} on binge.`} items={personItems} />
               </section>
             )}
-            {grouped.top && person && person.items.length >= 3 && <TopResult item={grouped.top} />}
             <ResultGrid title="Movies" items={grouped.movies} />
             <ResultGrid title="Series" items={grouped.series} />
             {grouped.books.length > 0 && <TitleRow title={TYPE_LABELS.book} items={grouped.books} />}
-            {games.length > 0 && (
+            {games.length > 0 && !filtering && (
               <section className="st-search-section" aria-label="Live games">
                 <h2 className="st-row-title">Live games</h2>
                 <div className="sr-games">{games.map((game) => <GameTile key={game.id} game={game} />)}</div>
               </section>
             )}
 
-            {topMatch && !person?.items?.length && (
+            {topMatch && !personItems.length && (
               <TitleRow
-                key={`${topMatchType}:${topMatchTmdbId}`}
+                key={`${topMatchType}:${topMatchTmdbId}:${filterKey}`}
                 title={`More like ${topMatch.title}`}
                 subtitle="Titles people who watched it went on to watch"
                 load={loadMoreLike}
                 minItems={3}
+                hideWatched
               />
             )}
 
-            {(relatedState === 'loading' || relatedMovies.length > 0) && (
+            {((relatedState === 'loading' && filters.type !== 'tv_show' && filters.type !== 'book') || relatedMovies.length > 0) && (
               <ResultRow heading={`More movies like "${query}"`} items={relatedMovies} loading={relatedState === 'loading'} />
             )}
-            {(relatedState === 'loading' || relatedTv.length > 0) && (
+            {((relatedState === 'loading' && filters.type !== 'movie' && filters.type !== 'book') || relatedTv.length > 0) && (
               <ResultRow heading={`More TV shows like "${query}"`} items={relatedTv} loading={relatedState === 'loading'} />
             )}
-            {(relatedState === 'loading' || relatedBooks.length > 0) && (
+            {((relatedState === 'loading' && (!filters.type || filters.type === 'book')) || relatedBooks.length > 0) && (
               <ResultRow heading={`More books like "${query}"`} items={relatedBooks} loading={relatedState === 'loading'} />
             )}
           </div>

@@ -109,16 +109,16 @@ fun HomeScreen() {
     }
 
     suspend fun load() {
-        val kids = AppModel.isKids
+        val maturity = AppModel.maturity
         // Cold start: the last Home from disk first, then the fresh one.
-        if (rows.isEmpty()) HomeSnapshot.read(profileId, kids)?.let { saved ->
+        if (rows.isEmpty()) HomeSnapshot.read(profileId, maturity)?.let { saved ->
             continueItems = saved.continueItems; myList = saved.myList; personal = saved.personal
             shared = saved.shared; rows = saved.rows
             pickSpotlight()
         }
         loading = rows.isEmpty()
         kotlinx.coroutines.coroutineScope {
-            val general = async { Catalog.loadAll(Rows.home(kids), kids) }
+            val general = async { Catalog.loadAll(Rows.home(maturity.isChild), maturity) }
             val cw = async { runCatching { AppModel.continueWatching() }.getOrDefault(emptyList()) }
             val list = async { runCatching { AppModel.myList() }.getOrDefault(emptyList()) }
             val loved = async { AppModel.lovedTitles() }
@@ -129,13 +129,13 @@ fun HomeScreen() {
             rows = general.await(); HomeCache.rows = rows
             loading = false
             val exclude = rated.await() + continueItems.map { it.id } + myList.map { it.id }
-            personal = Personal.build(continueItems, loved.await(), exclude, kids, AppModel.profile?.name); HomeCache.personal = personal
+            personal = Personal.build(continueItems, loved.await(), exclude, maturity, AppModel.profile?.name); HomeCache.personal = personal
             pickSpotlight()
             Ambient.titles = (continueItems.map { it.title } + personal.topPicks?.items.orEmpty() + myList + rows.firstOrNull()?.items.orEmpty())
                 .filter { it.backdrop != null }.distinctBy { it.id }.take(20)
             Ambient.resume = continueItems.firstOrNull()
             shared = AppModel.sharedWithMe(); HomeCache.shared = shared
-            HomeSnapshot.write(profileId, kids, HomeSnapshot(System.currentTimeMillis(), continueItems, myList, personal, shared, rows))
+            HomeSnapshot.write(profileId, maturity, HomeSnapshot(System.currentTimeMillis(), continueItems, myList, personal, shared, rows))
         }
     }
 
@@ -193,7 +193,7 @@ fun BrowseScreen(kind: MediaKind) {
         kotlinx.coroutines.coroutineScope {
             val watched = async { runCatching { AppModel.continueWatching() }.getOrDefault(emptyList()) }
             val loved = async { AppModel.lovedTitles() }
-            rows = Catalog.loadAll(Rows.browse(kind, AppModel.isKids), AppModel.isKids)
+            rows = Catalog.loadAll(Rows.browse(kind, AppModel.isKids), AppModel.maturity)
             loading = false
             // The seasonal row leads with what this profile likes.
             val taste = Seasonal.Taste.of(watched.await().map { it.title } + loved.await())

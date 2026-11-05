@@ -196,7 +196,7 @@ extension AppModel {
         let movies = (try? await Catalog.titles(.movie, ids: m.map(\.mediaId))) ?? [:]
         let shows = (try? await Catalog.titles(.tvShow, ids: t.map(\.mediaId))) ?? [:]
         let all = t.compactMap { r in shows[r.mediaId].map { ($0, r.average) } } + m.compactMap { r in movies[r.mediaId].map { ($0, r.average) } }
-        return all.filter { !isKids || KidsFilter.allows($0.0.ageRating) }
+        return all.filter { maturity.allows($0.0.ageRating) }
     }
 
     // Saves the same row the website writes; a rated title counts as watched,
@@ -301,7 +301,7 @@ enum AskBinge {
         return words.joined()
     }
 
-    static func ask(_ query: String, kids: Bool) async throws -> (summary: String?, titles: [(Title, String?)]) {
+    static func ask(_ query: String, maturity: Maturity) async throws -> (summary: String?, titles: [(Title, String?)]) {
         var request = URLRequest(url: Config.siteURL.appending(path: "api/extras/ai/picks"), timeoutInterval: 30)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -311,8 +311,8 @@ enum AskBinge {
         if let error = response.error { throw BingeError.http(0, error) }
         let picks = response.picks ?? []
         let keys = picks.map { pick in (pick.mediaType == "tv_show" ? MediaKind.tvShow : .movie, pick) }
-        async let movies = Catalog.match(keys.filter { $0.0 == .movie }.map { stub($0.1) }, kind: .movie, kids: kids)
-        async let shows = Catalog.match(keys.filter { $0.0 == .tvShow }.map { stub($0.1) }, kind: .tvShow, kids: kids)
+        async let movies = Catalog.match(keys.filter { $0.0 == .movie }.map { stub($0.1) }, kind: .movie, maturity: maturity)
+        async let shows = Catalog.match(keys.filter { $0.0 == .tvShow }.map { stub($0.1) }, kind: .tvShow, maturity: maturity)
         let found = try await movies + shows
         let byKey = Dictionary(found.map { ("\($0.kind.rawValue):\($0.tmdbId ?? 0)", $0) }, uniquingKeysWith: { a, _ in a })
         let titles = picks.compactMap { pick -> (Title, String?)? in
@@ -351,14 +351,14 @@ enum Franchises {
 
     struct Order { let name: String; let release: [Title]; let story: [Title]? }
 
-    static func find(for title: Title, kids: Bool) async -> Order? {
+    static func find(for title: Title, maturity: Maturity) async -> Order? {
         guard title.kind == .movie, let tmdbId = title.tmdbId else { return nil }
         if let franchise = curated.first(where: { $0.release.contains(tmdbId) }) {
             let items = franchise.release.map { id in
                 TMDBItem(id: id, title: nil, name: nil, overview: nil, posterPath: nil, backdropPath: nil, releaseDate: nil,
                          firstAirDate: nil, voteAverage: nil, mediaType: nil, genreIds: nil, knownFor: nil)
             }
-            let matched = (try? await Catalog.match(items, kind: .movie, kids: kids)) ?? []
+            let matched = (try? await Catalog.match(items, kind: .movie, maturity: maturity)) ?? []
             let byId = Dictionary(matched.map { ($0.tmdbId ?? 0, $0) }, uniquingKeysWith: { a, _ in a })
             let posters = await withTaskGroup(of: (Int, URL?).self) { group in
                 for id in byId.keys { group.addTask {
@@ -380,7 +380,7 @@ enum Franchises {
               let id = details.belongsToCollection?.id,
               let collection: CollectionInfo = try? await TMDB.shared.get("collection/\(id)") else { return nil }
         let parts = collection.parts.filter { $0.releaseDate?.isEmpty == false }.sorted { ($0.releaseDate ?? "") < ($1.releaseDate ?? "") }
-        let titles = (try? await Catalog.match(parts, kind: .movie, kids: kids)) ?? []
+        let titles = (try? await Catalog.match(parts, kind: .movie, maturity: maturity)) ?? []
         guard titles.count >= 2 else { return nil }
         let name = collection.name.replacingOccurrences(of: " Collection", with: "")
         return Order(name: name, release: titles, story: nil)

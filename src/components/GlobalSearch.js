@@ -212,7 +212,7 @@ export default function GlobalSearch() {
               {person && person.items.length > 0 && (
                 <div className="global-search-dropdown-section">
                   <p className="global-search-dropdown-label">People</p>
-                  <button type="button" className="global-search-dropdown-item" onClick={() => searchFor(person.person.name)}>
+                  <button type="button" className="global-search-dropdown-item" onClick={() => { addRecentSearch(person.person.name); navigate(`/person/${person.person.id}`); close(); }}>
                     {person.person.photo
                       ? <img src={person.person.photo} alt="" className="gs-person-photo" referrerPolicy="no-referrer" />
                       : <span className="global-search-dropdown-item-icon"><User size={16} weight="bold" /></span>}
