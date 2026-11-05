@@ -1137,6 +1137,15 @@
 }
 .td-facts dt { color: var(--exp-text-faint); }
 .td-facts dd { margin: 0; color: var(--exp-text); }
+/* The side column: the facts, then (movies) your rating under them. */
+.td-aside { display: flex; flex-direction: column; min-width: 0; }
+/* Lined up with the facts (.td-section's own padding comes later in this file). */
+.td-section.td-rate--aside { margin-top: 1.25rem; padding: 1.1rem 0 0; }
+.td-rate--aside .td-section-head { flex-wrap: wrap; gap: 0.35rem 1rem; }
+/* "Rate in detail" in the narrow column: the 1–5 buttons line up on the right. */
+.td-rate--aside .rating-input-row { flex-wrap: nowrap; }
+.td-rate--aside .rating-input-label-group { flex: 1 1 0; min-width: 0; }
+.td-rate--aside .rating-input-buttons { flex: none; }
 
 .td-muted { color: var(--exp-text-faint); font-size: 0.88rem; }
 
@@ -3055,7 +3064,7 @@ button.bottom-nav-item { font: inherit; cursor: pointer; }
   }
   .td-split--tv > .td-body { display: contents; }
   .td-split--tv .td-main { grid-column: 1; grid-row: 1; padding: 0.5rem 0 1.25rem clamp(20px, 4vw, 48px); }
-  .td-split--tv .td-facts { grid-column: 2; grid-row: 1; padding: 0.75rem 0 1.25rem; }
+  .td-split--tv .td-aside { grid-column: 2; grid-row: 1; padding: 0.75rem 0 1.25rem; }
   .td-split--tv > .td-episodes-section { grid-column: 1; grid-row: 2; padding-right: 0; }
   .td-split--tv > .td-rate { grid-column: 2; grid-row: 2; align-self: start; padding-left: 0; padding-right: 0; }
   .td-split--tv > :not(.td-body):not(.td-episodes-section):not(.td-rate) { grid-column: 1 / -1; margin-right: calc(-1 * clamp(20px, 4vw, 48px)); }
