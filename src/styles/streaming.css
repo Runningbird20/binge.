@@ -1152,6 +1152,63 @@
 .td-section-head h3 { margin: 0; font-size: 1.3rem; font-weight: 700; }
 .td-season-select { min-width: 200px; }
 
+/* Marking episodes: "Mark season watched" beside the season picker (same
+   pill), a check per episode ("Watched up to here"), and a note with Undo. */
+.td-episodes-tools { display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+.td-mark-season {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.td-mark-season:hover:not(:disabled) { border-color: #fff; background: rgba(255, 255, 255, 0.12); }
+.td-mark-season.on svg { color: var(--st-match); }
+.td-mark-season:disabled { cursor: default; opacity: 0.6; }
+.td-mark-status { margin: 0; font-size: 0.9rem; color: var(--exp-text-dim); }
+.td-mark-status:not(:empty) { margin: -0.4rem 0 0.75rem; }
+.td-mark-undo {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  background: none;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.td-episode-item { display: flex; align-items: center; gap: 0.25rem; }
+.td-episode-item > .td-episode { flex: 1 1 auto; min-width: 0; }
+.td-episode-mark {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--exp-text-dim);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+.td-episode-mark:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.td-episode-mark.on { color: var(--st-match); }
+.td-episode-mark:disabled { cursor: default; opacity: 0.5; }
+
 /* Episodes */
 .td-episodes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .td-episode {
@@ -1286,6 +1343,11 @@
   .td-episode-num { display: none; }
   .td-episode-overview { -webkit-line-clamp: 2; }
   .td-season-select { min-width: 0; }
+  .td-episodes-head { flex-wrap: wrap; }
+  /* Two full-width pills, the button first: side by side they don't fit. */
+  .td-episodes-tools { width: 100%; }
+  .td-episodes-tools > * { flex: 1 1 100%; }
+  .td-mark-season { justify-content: center; }
 }
 
 /* ═══════════════════════════════════════════════════════════════

@@ -112,6 +112,81 @@ export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
   if (error) throw toFriendlyError(error, 'Failed to unmark episode');
 }
 
+// Several episodes at once, from the episode list ("Mark season watched",
+// "Watched up to here"). They were watched somewhere else at a time we don't
+// know, so watched_at stays empty unless given (Undo puts back the original
+// times): History and Wrapped only count what was watched here. Episodes
+// already marked are left as they are (their watch times are kept).
+// episodes: [{ season, episode, watchedAt? }]
+export async function markEpisodesWatched({ mediaId, episodes }) {
+  if (!episodes?.length) return;
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const key = `ep_progress_${mediaId}`;
+      const stored = window.localStorage.getItem(key);
+      const list = stored ? JSON.parse(stored) : [];
+      episodes.forEach(({ season, episode, watchedAt }) => {
+        if (!list.some((e) => e.season === season && e.episode === episode)) list.push({ season, episode, watched_at: watchedAt || null });
+      });
+      window.localStorage.setItem(key, JSON.stringify(list));
+    } catch {}
+    return;
+  }
+
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) throw new Error('Sign in to keep track of episodes.');
+  const profileId = getActiveProfileId();
+  const rows = episodes.map(({ season, episode, watchedAt }) => ({
+    user_id: user.id,
+    profile_id: profileId,
+    media_id: mediaId,
+    season,
+    episode,
+    watched_at: watchedAt || null,
+  }));
+  const { error } = await client
+    .from('episode_progress')
+    .upsert(rows, { onConflict: 'user_id,media_id,season,episode,profile_id', ignoreDuplicates: true });
+  if (error) throw new Error(toFriendlyError(error, 'Couldn\'t save those episodes.'));
+}
+
+// The opposite, for several episodes (also the profile's older rows saved
+// without a profile, which it shows as its own).
+export async function unmarkEpisodesWatched({ mediaId, episodes }) {
+  if (!episodes?.length) return;
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const key = `ep_progress_${mediaId}`;
+      const stored = window.localStorage.getItem(key);
+      const list = stored ? JSON.parse(stored) : [];
+      const drop = new Set(episodes.map(({ season, episode }) => `${season}:${episode}`));
+      window.localStorage.setItem(key, JSON.stringify(list.filter((e) => !drop.has(`${e.season}:${e.episode}`))));
+    } catch {}
+    return;
+  }
+
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) throw new Error('Sign in to keep track of episodes.');
+  const profileId = getActiveProfileId();
+  const bySeason = new Map();
+  episodes.forEach(({ season, episode }) => bySeason.set(season, [...(bySeason.get(season) || []), episode]));
+  const results = await Promise.all([...bySeason].map(([season, numbers]) => {
+    let query = client
+      .from('episode_progress')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('media_id', mediaId)
+      .eq('season', season)
+      .in('episode', numbers);
+    if (profileId) query = scopeToProfile(query, profileId);
+    return query;
+  }));
+  const failed = results.find((result) => result.error);
+  if (failed) throw new Error(toFriendlyError(failed.error, 'Couldn\'t update those episodes.'));
+}
+
 // ─── Watchlist Progress Update ─────────────────────────────────────────────────
 
 export async function updateWatchlistProgress({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, status, notes }) {
@@ -304,9 +379,39 @@ export async function removeSupabaseContinueWatching(id) {
   }
 }
 
+// One title's Continue Watching row, by title (Undo after marking episodes
+// put a show there that wasn't before).
+export async function removeContinueWatchingFor({ mediaType, mediaId }) {
+  if (!isSupabaseConfigured || !supabase) {
+    try {
+      const stored = window.localStorage.getItem('continue_watching');
+      if (stored) {
+        const list = JSON.parse(stored).filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
+        window.localStorage.setItem('continue_watching', JSON.stringify(list));
+      }
+    } catch {}
+    return;
+  }
+
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+  let query = client
+    .from('continue_watching')
+    .delete()
+    .eq('user_id', authUser.id)
+    .eq('media_type', mediaType)
+    .eq('media_id', Number(mediaId));
+  if (profileId) query = scopeToProfile(query, profileId);
+  const { error } = await query;
+  if (error) throw new Error(toFriendlyError(error, 'Unable to remove that from continue watching.'));
+}
+
 // ─── Watch history & hidden recommendations ───────────────────────────
 
 // Recently watched episodes (episode_progress), newest first, with titles.
+// Episodes marked by hand from the episode list have no watch time and
+// aren't part of the history.
 export async function fetchEpisodeHistory(limit = 300) {
   if (!isSupabaseConfigured || !supabase) {
     return [];
@@ -319,6 +424,7 @@ export async function fetchEpisodeHistory(limit = 300) {
     .from('episode_progress')
     .select('media_id, season, episode, watched_at')
     .eq('user_id', authUser.id)
+    .not('watched_at', 'is', null)
     .order('watched_at', { ascending: false })
     .limit(limit);
   if (profileId) query = scopeToProfile(query, profileId);
