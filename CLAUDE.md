@@ -61,7 +61,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `turso/schema.sql` — the media catalog schema.
-- `tv-apple/`, `tv-android/` — the TV apps; `e2e/` — Playwright; `backups/`, `data/` — local-only (gitignored): catalog exports and scraper output/checkpoints.
+- `tv-apple/`, `tv-android/` — the TV apps; `mobile-ios/`, `mobile-android/` — the phone apps (the website in a native shell); `e2e/` — Playwright; `backups/`, `data/` — local-only (gitignored): catalog exports and scraper output/checkpoints. Built app files go to `dist/mobile/` (gitignored).
 - `docs/` — longer write-ups: `database-split.md` (the split and its measured costs), `profile-locks.md`, `password-reset.md`, and the TV app notes `tv-apps.md`, `apple-tv.md`, `fire-tv.md`.
 - `DIFF.md` — which features exist on the website (computer / phone), Apple TV and Fire TV but not the others. **Update it whenever a feature ships on only some of them** (and delete a row once every app has it).
 - `TODO.md` — the feature backlog, each item naming the files to start from. Remove an item when it ships.
@@ -551,6 +551,25 @@ Rules that apply every time:
   - **Keep heavy work off the main thread:** a Fire Stick ANRs after 5s.
   - **`/api/extras/*` answers in camelCase.** Decode it with `plainJson`, never the snake_case `json`.
   - **Focus.** A tab page must never request focus while `TabChrome.tabsFocused`. Screens that are one focusable `Box` handle Back in `onKeyEvent`.
+
+## Phone apps (`mobile-android/`, `mobile-ios/`)
+
+Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `scripts/build-apk.sh` and `scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`.
+- **What they add over the browser:**
+  - **Every pop-up and tab redirect from the players is refused.** Players' frames may load anything inside themselves, but only binge.'s own top-level page may open windows or leave the site. Its links to other sites open in the phone's browser.
+  - **Alerts from other origins' frames (ad traps) are dropped.**
+  - **Files saved through `<a download>` blob links reach the phone.** Android saves them to Downloads; iOS opens the share sheet via `WKDownload`.
+  - **The web views present as plain Chrome / Safari** (Android drops `; wv` and `X-Requested-With`, as Fire TV does). The UA ends in `BingeApp/1.0`, which must never contain `BingeTV`, the website's TV-mode trigger.
+- **What they don't have:** web push (web views don't get it), and a sign-in shared with the browser.
+- **Android** (`MainActivity.kt`, plain `Activity`, the only dependency `androidx.webkit`; same AGP/Kotlin versions as `tv-android/`):
+  - **`PageScript.kt`** runs only in the site's origin. It's injected with `addDocumentStartJavaScript` and talks over the `bingeApp` `addWebMessageListener` channel, accepting the top-level frame only. It sends outside links and `window.open` to the browser and reads blob downloads (Android WebViews can't download `blob:` themselves).
+  - **Every other main-frame exit is refused, even on a tap**, because a player's ad can redirect the tab on a click. The origin rules need `scheme://host[:port]`.
+  - **Tested on the emulator against a local test page:** ad alert, pop-up and tab redirect refused; outside link to the browser; download in Downloads.
+- **iOS** (SwiftUI + `WKWebView`; hand-written project with a folder-synced group, like `tv-apple/`; iOS 16+):
+  - **Leaving the site.** A main-frame navigation off the site opens Safari only when it's a tapped link whose `sourceFrame` is binge.'s top-level page. New windows likewise.
+  - **Layout.** The web view sits below the status bar (the site's headers don't leave room for it) and runs under the home indicator (the site pads for `env(safe-area-inset-bottom)`).
+  - **Signing.** There's no signing identity on this Mac, so the `.ipa` is unsigned and gets signed when it's installed (Sideloadly/AltStore with an Apple ID, or Xcode with a team).
+  - **Tested in the simulator:** ad alert, pop-up and tab redirect refused; download in the share sheet.
 
 ## Design rules (web, mobile, TV)
 
