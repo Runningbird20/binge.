@@ -3270,16 +3270,6 @@ kbd {
 .sr-recent li { display: flex; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
 .sr-recent-term { flex: 1; display: flex; align-items: center; gap: 0.6rem; min-height: 48px; border: 0; background: none; color: #fff; font: inherit; text-align: left; cursor: pointer; }
 .sr-recent-remove { flex: none; width: 36px; height: 36px; border: 0; background: none; color: rgba(255, 255, 255, 0.55); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.sr-top { position: relative; overflow: hidden; margin: 0 0 2rem; border-radius: 16px; min-height: 260px; display: flex; align-items: flex-end; background: #12151d; isolation: isolate; }
-.sr-top-art { position: absolute; inset: 0; z-index: -1; }
-.sr-top-art img { width: 100%; height: 100%; object-fit: cover; }
-.sr-top-art .sr-top-blur { filter: blur(30px) brightness(0.5); transform: scale(1.2); }
-.sr-top-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11, 13, 18, 0.95) 0%, rgba(11, 13, 18, 0.6) 55%, rgba(11, 13, 18, 0.2) 100%); }
-.sr-top-body { display: flex; align-items: flex-end; gap: 1.25rem; padding: 1.5rem; }
-.sr-top-poster { width: 120px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
-.sr-top-text h2 { margin: 0.2rem 0; font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 900; line-height: 1.05; }
-.sr-top-meta { margin: 0 0 0.9rem; color: rgba(255, 255, 255, 0.7); }
-.sr-top-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .sr-person-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.25rem; }
 .sr-person-head img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }
 .sr-person .st-row { margin-top: 0.5rem; }
@@ -3292,9 +3282,6 @@ kbd {
 .sr-game-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sr-game-meta { display: flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: rgba(255, 255, 255, 0.6); }
 @media (max-width: 600px) {
-  .sr-top-body { padding: 1rem; }
-  .sr-top-poster { width: 84px; }
-  .sr-top { min-height: 200px; }
 }
 .gs-recent-head { display: flex; justify-content: space-between; align-items: center; }
 .gs-recent { display: flex; align-items: center; }
