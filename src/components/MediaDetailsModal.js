@@ -7,6 +7,7 @@ import RemindButton from './RemindButton';
 import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
 import WhereToWatch from './WhereToWatch';
+import CastRow from './CastRow';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
@@ -416,8 +417,6 @@ export default function MediaDetailsModal({
   const facts = useMemo(() => {
     if (!item) return {};
     return {
-      cast: details?.cast?.length ? details.cast : splitList(item.cast_members).slice(0, 8),
-      creators: details?.creators?.length ? details.creators : splitList(item.director || item.creator),
       genres: details?.genres?.length ? details.genres : splitList(item.genre),
       language: languageName(details?.originalLanguage || item.original_language),
     };
@@ -739,8 +738,6 @@ export default function MediaDetailsModal({
 
             <div className="td-aside">
             <dl className="td-facts">
-              {facts.cast?.length > 0 && (<><dt>Cast</dt><dd>{facts.cast.slice(0, 5).join(', ')}</dd></>)}
-              {facts.creators?.length > 0 && (<><dt>{isTV ? 'Created by' : 'Director'}</dt><dd>{facts.creators.join(', ')}</dd></>)}
               {facts.genres?.length > 0 && (<><dt>Genres</dt><dd>{facts.genres.join(', ')}</dd></>)}
               {facts.language && (<><dt>Original language</dt><dd>{facts.language}</dd></>)}
               {details?.networks?.length > 0 && (<><dt>{isTV ? 'Network' : 'Studio'}</dt><dd>{details.networks.join(', ')}</dd></>)}
@@ -751,6 +748,9 @@ export default function MediaDetailsModal({
                 beside their episodes). */}
             {!isTV && ratingSection}
             </div>
+            {/* The whole width under the description (on phones straight
+                after it, before the facts). */}
+            <CastRow people={details?.people} />
           </div>
 
           {isTV && details?.seasons?.length > 0 && (

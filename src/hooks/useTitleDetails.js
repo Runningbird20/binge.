@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { pickWatchProviders } from '../utils/watchProviders';
+import { titlePeople } from '../utils/people';
 
 function usCertification(data, mediaType) {
   if (mediaType === 'tv_show') {
@@ -91,6 +92,8 @@ export default function useTitleDetails(item, mediaType) {
         voteAverage: Number(data.vote_average) || 0,
         voteCount: Number(data.vote_count) || 0,
         cast: (data.credits?.cast || []).slice(0, 8).map((person) => person.name),
+        // The photo row under the description (director/creators, then cast).
+        people: titlePeople(data, mediaType),
         creators: mediaType === 'tv_show'
           ? (data.created_by || []).map((person) => person.name)
           : (data.credits?.crew || []).filter((person) => person.job === 'Director').map((person) => person.name),

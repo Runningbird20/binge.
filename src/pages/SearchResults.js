@@ -1,7 +1,7 @@
 import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
+import { ArrowRight, ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
 import { askBinge } from '../utils/aiSearch';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
@@ -332,12 +332,13 @@ export default function SearchResults() {
             {grouped.top && !(person && person.items.length >= 3) && <TopResult item={grouped.top} />}
             {person && person.items.length > 0 && (
               <section className="st-search-section sr-person" aria-label={`Titles with ${person.person.name}`}>
-                <div className="sr-person-head">
+                <Link to={`/person/${person.person.id}`} className="sr-person-head">
                   {person.person.photo && <img src={person.person.photo} alt="" referrerPolicy="no-referrer" />}
                   <div>
                     <h2 className="st-row-title">{person.person.department === 'Director' ? `Directed by ${person.person.name}` : `Starring ${person.person.name}`}</h2>
+                    <p className="sr-person-more">See all of {person.person.name}’s work <ArrowRight size={14} weight="bold" aria-hidden="true" /></p>
                   </div>
-                </div>
+                </Link>
                 <TitleRow title={`${person.person.name} on binge.`} items={person.items} />
               </section>
             )}
