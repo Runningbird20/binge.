@@ -124,52 +124,167 @@ export function removeCaptions(px, width, height) {
   return removed;
 }
 
-// Leftovers of a tile's glow or vignette (the smudge above Starz): separate,
-// mostly see-through blobs. The biggest piece is the mark and always stays;
-// any other piece whose average opacity is under half goes, and so does the
-// faint haze no piece owns.
-export function removeResidue(px, width, height) {
-  const seen = new Uint8Array(width * height);
+// Pieces of the mark: 4-connected runs of pixels that pass `inside(index)`.
+// → { pieces: [{ members, opacity }], owner: piece index per pixel (-1 none) }.
+function findPieces(px, width, height, inside) {
+  const owner = new Int32Array(width * height).fill(-1);
   const pieces = [];
   for (let start = 0; start < width * height; start += 1) {
-    if (seen[start] || px[start * 4 + 3] < SOLID) continue;
+    if (owner[start] >= 0 || !inside(start)) continue;
+    const id = pieces.length;
     const members = [start];
-    seen[start] = 1;
+    owner[start] = id;
     let alpha = 0;
     for (let k = 0; k < members.length; k += 1) {
       const idx = members[k];
       alpha += px[idx * 4 + 3] / 255;
       const x = idx % width; const y = (idx - x) / width;
-      for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-        const n = ny * width + nx;
-        if (!seen[n] && px[n * 4 + 3] >= SOLID) { seen[n] = 1; members.push(n); }
-      }
+      if (x + 1 < width && owner[idx + 1] < 0 && inside(idx + 1)) { owner[idx + 1] = id; members.push(idx + 1); }
+      if (x > 0 && owner[idx - 1] < 0 && inside(idx - 1)) { owner[idx - 1] = id; members.push(idx - 1); }
+      if (y + 1 < height && owner[idx + width] < 0 && inside(idx + width)) { owner[idx + width] = id; members.push(idx + width); }
+      if (y > 0 && owner[idx - width] < 0 && inside(idx - width)) { owner[idx - width] = id; members.push(idx - width); }
     }
     pieces.push({ members, opacity: alpha / members.length });
   }
+  return { pieces, owner };
+}
+
+// Leftovers of a tile's glow or vignette (the smudge above Starz): separate,
+// mostly see-through blobs, and specks with nothing else near them. The
+// biggest piece is the mark and always stays; so do small parts that sit
+// close to the rest (Peacock's dots, an i's dot, a ®). The faint haze no
+// piece owns goes too.
+export function removeResidue(px, width, height) {
+  const { pieces, owner } = findPieces(px, width, height, (idx) => px[idx * 4 + 3] >= SOLID);
   const biggest = pieces.reduce((best, p) => (!best || p.members.length > best.members.length ? p : best), null);
+  const near = 6;
+  const isolated = (p, id) => p.members.every((idx) => {
+    const x = idx % width; const y = (idx - x) / width;
+    for (let ny = Math.max(0, y - near); ny <= Math.min(height - 1, y + near); ny += 1) {
+      for (let nx = Math.max(0, x - near); nx <= Math.min(width - 1, x + near); nx += 1) {
+        const other = owner[ny * width + nx];
+        if (other >= 0 && other !== id) return false;
+      }
+    }
+    return true;
+  });
   let removed = 0;
-  pieces.forEach((p) => {
-    if (p === biggest || p.opacity >= 0.5) return;
+  pieces.forEach((p, id) => {
+    if (p === biggest) return;
+    const speck = p.members.length < Math.max(6, biggest.members.length * 0.01) && isolated(p, id);
+    if (p.opacity >= 0.5 && !speck) return;
     p.members.forEach((idx) => { px[idx * 4 + 3] = 0; });
     removed += 1;
   });
-  // Haze too faint to be part of any piece (it would also widen the bounds).
-  for (let i = 3; i < px.length; i += 4) if (px[i] < 40) px[i] = 0;
+  // See-through haze that isn't part of any piece (it would also widen the
+  // bounds); the soft edge right around the mark stays.
+  for (let idx = 0; idx < width * height; idx += 1) {
+    const i = idx * 4 + 3;
+    if (px[i] === 0 || px[i] >= SOLID) continue;
+    const x = idx % width; const y = (idx - x) / width;
+    let touches = false;
+    for (let ny = Math.max(0, y - 1); ny <= Math.min(height - 1, y + 1) && !touches; ny += 1) {
+      for (let nx = Math.max(0, x - 1); nx <= Math.min(width - 1, x + 1); nx += 1) {
+        if (px[(ny * width + nx) * 4 + 3] >= SOLID) { touches = true; break; }
+      }
+    }
+    if (!touches) px[i] = 0;
+  }
   return removed;
 }
 
-// A colour lightened toward white, hue kept, until it reaches minContrast
-// against the background (Roku's dark purple on the navy popup).
-function lightenFor(rgb, background, minContrast) {
-  if (contrast(rgb, background) >= minContrast) return rgb;
-  let lo = 0; let hi = 1;
-  for (let k = 0; k < 10; k += 1) {
-    const t = (lo + hi) / 2;
-    if (contrast(rgb.map((c) => c + (255 - c) * t), background) >= minContrast) hi = t; else lo = t;
+// Shapes cut out of a solid plate show the tile through them: YouTube's
+// triangle, the letters in Cinemax's bar and TBS's badge. On the popup they'd
+// turn into holes, so they get their original pixels back. A plate is a big,
+// filled piece (most of the mark, its outline mostly solid, more plate than
+// cut-out); letter counters (the inside of an O or B) aren't, and stay
+// see-through. Returns a mask of the pixels put back.
+export function restoreCutouts(px, original, width, height) {
+  const restored = new Uint8Array(width * height);
+  const { pieces, owner } = findPieces(px, width, height, (idx) => px[idx * 4 + 3] >= SOLID);
+  if (!pieces.length) return restored;
+  let minX = width; let minY = height; let maxX = -1; let maxY = -1;
+  pieces.forEach((p) => p.members.forEach((idx) => {
+    const x = idx % width; const y = (idx - x) / width;
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }));
+  const markW = maxX - minX + 1; const markH = maxY - minY + 1;
+  pieces.forEach((p, id) => {
+    let x0 = width; let y0 = height; let x1 = -1; let y1 = -1;
+    p.members.forEach((idx) => {
+      const x = idx % width; const y = (idx - x) / width;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    });
+    const w = x1 - x0 + 1; const h = y1 - y0 + 1;
+    if (w < markW * 0.5 || h < markH * 0.5 || p.members.length < 200) return;
+    // Everything the plate encloses: not reachable from outside its box
+    // without crossing it.
+    const bw = w + 2; const bh = h + 2;
+    const outside = new Uint8Array(bw * bh);
+    const stack = [0];
+    outside[0] = 1;
+    while (stack.length) {
+      const k = stack.pop();
+      const bx = k % bw; const by = (k - bx) / bw;
+      for (const [nx, ny] of [[bx + 1, by], [bx - 1, by], [bx, by + 1], [bx, by - 1]]) {
+        if (nx < 0 || nx >= bw || ny < 0 || ny >= bh) continue;
+        const n = ny * bw + nx;
+        if (outside[n]) continue;
+        const x = x0 + nx - 1; const y = y0 + ny - 1;
+        const inPlate = x >= 0 && y >= 0 && x < width && y < height && owner[y * width + x] === id;
+        if (!inPlate) { outside[n] = 1; stack.push(n); }
+      }
+    }
+    const enclosed = [];
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        const idx = y * width + x;
+        if (owner[idx] !== id && !outside[(y - y0 + 1) * bw + (x - x0 + 1)]) enclosed.push(idx);
+      }
+    }
+    const solid = p.members.length;
+    const filled = (solid + enclosed.length) / (w * h);
+    if (filled < 0.8 || enclosed.length < (solid + enclosed.length) * 0.04 || solid < enclosed.length * 1.2) return;
+    const put = (idx) => {
+      restored[idx] = 1;
+      for (let c = 0; c < 4; c += 1) px[idx * 4 + c] = original[idx * 4 + c];
+    };
+    enclosed.forEach(put);
+    // The plate itself, as it was drawn (cut-outs that touch it, like TBS's
+    // t, are part of it), except its outer edge, which stays un-mixed from
+    // the tile.
+    const onEdge = (x, y) => {
+      for (let ny = y - 1; ny <= y + 1; ny += 1) {
+        for (let nx = x - 1; nx <= x + 1; nx += 1) if (outside[(ny - y0 + 1) * bw + (nx - x0 + 1)]) return true;
+      }
+      return false;
+    };
+    p.members.forEach((idx) => {
+      const x = idx % width; const y = (idx - x) / width;
+      if (!onEdge(x, y)) put(idx);
+    });
+  });
+  return restored;
+}
+
+// Channel tiles ("Lionsgate+ Amazon Channel", "Starz Roku Premium Channel")
+// end in a footer band of another colour carrying the reseller's name. The
+// row where both side edges change colour at once is its top; null if none.
+export function footerTop(px, width, height) {
+  const inset = Math.max(1, Math.round(Math.min(width, height) * 0.015));
+  const at = (x, y) => { const i = (y * width + x) * 4; return px[i + 3] >= 200 ? [px[i], px[i + 1], px[i + 2]] : null; };
+  const jump = (x, y) => {
+    const above = at(x, y - 2); const below = at(x, y + 2);
+    return above && below ? Math.hypot(above[0] - below[0], above[1] - below[1], above[2] - below[2]) : 0;
+  };
+  let best = null;
+  for (let y = Math.round(height * 0.55); y < Math.round(height * 0.92); y += 1) {
+    const strength = Math.min(jump(inset, y), jump(width - 1 - inset, y));
+    if (strength >= 80 && (!best || strength > best.strength)) best = { y, strength };
   }
-  return rgb.map((c) => Math.round(c + (255 - c) * hi));
+  return best ? best.y : null;
 }
 
 // In place on RGBA pixels: removes the tile (and caption text), returns the
@@ -177,31 +292,98 @@ function lightenFor(rgb, background, minContrast) {
 // recoloured light.
 export function removeTile(px, width, height, { lo = 38, hi = 110, background = POPUP_BG } = {}) {
   const tileAt = tileBackground(px, width, height);
+  const original = px.slice();
+  const keep = new Float32Array(width * height);
+  const tiles = tileAt ? new Float32Array(width * height * 3) : null;
   let keptAlpha = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const i = (y * width + x) * 4;
-      let a = px[i + 3] / 255;
-      if (tileAt && a > 0) {
-        const tile = tileAt(x, y);
-        const d = Math.hypot(px[i] - tile[0], px[i + 1] - tile[1], px[i + 2] - tile[2]);
-        const keep = Math.min(1, Math.max(0, (d - lo) / (hi - lo)));
-        if (keep > 0 && keep < 1) {
-          // Un-mix the tile colour from anti-aliased edge pixels.
-          for (let c = 0; c < 3; c += 1) px[i + c] = Math.min(255, Math.max(0, (px[i + c] - tile[c] * (1 - keep)) / keep));
-        }
-        a *= keep;
-        px[i + 3] = Math.round(a * 255);
-      }
-      keptAlpha += a;
+      const idx = y * width + x;
+      const i = idx * 4;
+      if (!tileAt) { keep[idx] = 1; keptAlpha += px[i + 3] / 255; continue; }
+      const tile = tileAt(x, y);
+      tiles.set(tile, idx * 3);
+      const d = Math.hypot(px[i] - tile[0], px[i + 1] - tile[1], px[i + 2] - tile[2]);
+      keep[idx] = px[i + 3] < 128 ? 0 : Math.min(1, Math.max(0, (d - lo) / (hi - lo)));
+      keptAlpha += (px[i + 3] / 255) * keep[idx];
     }
   }
   // Most of a tile left over means its background wasn't found: show the
   // original tile rather than a block of colour.
   if (tileAt && keptAlpha > width * height * 0.8) return { bounds: null, recoloured: false };
 
+  if (tileAt) {
+    // Pixels well inside the mark (they and all their neighbours fully kept).
+    const kept = (x, y) => x < 0 || y < 0 || x >= width || y >= height || keep[y * width + x] === 1;
+    const interior = new Uint8Array(width * height);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        let all = true;
+        for (let ny = y - 1; ny <= y + 1 && all; ny += 1) for (let nx = x - 1; nx <= x + 1; nx += 1) if (!kept(nx, ny)) { all = false; break; }
+        interior[y * width + x] = all ? 1 : 0;
+      }
+    }
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = y * width + x;
+        const i = idx * 4;
+        const k = keep[idx];
+        if (k === 0) { px[i + 3] = 0; continue; }
+        if (interior[idx]) continue;
+        // The mark's rim is anti-aliased: a mix of the mark and the tile.
+        // Where a pixel is that mix, it takes the mark's colour (from the
+        // nearest pixel inside the mark) and keeps only its share as
+        // opacity, so no tile colour fringes the mark (Fawesome's white
+        // letters had a red rim). A real outline in another colour isn't a
+        // mix and stays as drawn.
+        const tile = tiles.subarray(idx * 3, idx * 3 + 3);
+        let mark = null;
+        for (let r = 1; r <= 3 && !mark; r += 1) {
+          for (let ny = Math.max(0, y - r); ny <= Math.min(height - 1, y + r) && !mark; ny += 1) {
+            for (let nx = Math.max(0, x - r); nx <= Math.min(width - 1, x + r); nx += 1) {
+              if (interior[ny * width + nx]) { mark = original.subarray((ny * width + nx) * 4, (ny * width + nx) * 4 + 3); break; }
+            }
+          }
+        }
+        const span = mark ? Math.hypot(mark[0] - tile[0], mark[1] - tile[1], mark[2] - tile[2]) : 0;
+        if (span >= hi) {
+          let dot = 0;
+          for (let c = 0; c < 3; c += 1) dot += (px[i + c] - tile[c]) * (mark[c] - tile[c]);
+          const share = Math.min(1, Math.max(0, dot / (span * span)));
+          const off = Math.hypot(...[0, 1, 2].map((c) => px[i + c] - (tile[c] + share * (mark[c] - tile[c]))));
+          if (off <= 40) {
+            for (let c = 0; c < 3; c += 1) px[i + c] = mark[c];
+            px[i + 3] = Math.round(px[i + 3] * share);
+            continue;
+          }
+        }
+        if (k < 1) {
+          for (let c = 0; c < 3; c += 1) px[i + c] = Math.min(255, Math.max(0, (px[i + c] - tile[c] * (1 - k)) / k));
+          px[i + 3] = Math.round(px[i + 3] * k);
+        }
+      }
+    }
+    // The outermost pixels, outside where the tile colour was read, are the
+    // tile's own border (Lionsgate+ kept a thin line down each side).
+    const inset = Math.max(1, Math.round(Math.min(width, height) * 0.015));
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (x < inset || y < inset || x >= width - inset || y >= height - inset) px[(y * width + x) * 4 + 3] = 0;
+      }
+    }
+    // A reseller's footer band goes, as long as the mark is above it.
+    const footer = footerTop(original, width, height);
+    if (footer !== null) {
+      const cut = Math.max(0, footer - 3);
+      let above = 0; let below = 0;
+      for (let i = 3; i < px.length; i += 4) { if ((i >> 2) < cut * width) above += px[i]; else below += px[i]; }
+      if (above > below) for (let i = cut * width * 4 + 3; i < px.length; i += 4) px[i] = 0;
+    }
+  }
+
   removeCaptions(px, width, height);
   removeResidue(px, width, height);
+  const restored = tileAt ? restoreCutouts(px, original, width, height) : new Uint8Array(width * height);
 
   let minX = width; let minY = height; let maxX = -1; let maxY = -1;
   let alphaSum = 0;
@@ -218,24 +400,40 @@ export function removeTile(px, width, height, { lo = 38, hi = 110, background = 
   if (maxX < 0) return { bounds: null, recoloured: false };
   // Black and grey parts too dark to see on the popup (Apple's black apple,
   // YouTube TV's grey lettering) are drawn light, like the brands' own
-  // dark-mode logos. Dark colours keep their hue and are only lightened
-  // enough to read (Roku stays purple); bright ones are left alone.
+  // dark-mode logos.
   let darkAlpha = 0;
-  const lightened = new Map();
+  const coloured = [];
   for (let i = 0; i < px.length; i += 4) {
-    if (px[i + 3] === 0) continue;
+    // Cut-outs put back sit on their plate, not on the popup.
+    if (px[i + 3] === 0 || restored[i >> 2]) continue;
     const rgb = [px[i], px[i + 1], px[i + 2]];
     const chroma = Math.max(...rgb) - Math.min(...rgb);
-    if (chroma < 60) {
-      if (contrast(rgb, background) < 2.2) {
-        darkAlpha += px[i + 3] / 255;
-        px[i] = LIGHT[0]; px[i + 1] = LIGHT[1]; px[i + 2] = LIGHT[2];
-      }
-    } else if (contrast(rgb, background) < 3) {
-      const key = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
-      if (!lightened.has(key)) lightened.set(key, lightenFor(rgb, background, 3));
-      [px[i], px[i + 1], px[i + 2]] = lightened.get(key);
+    if (chroma >= 60) coloured.push(i);
+    else if (contrast(rgb, background) < 2.2) {
+      darkAlpha += px[i + 3] / 255;
+      px[i] = LIGHT[0]; px[i + 1] = LIGHT[1]; px[i + 2] = LIGHT[2];
     }
+  }
+  // A coloured mark that is dark as a whole (Roku's purple) is lightened
+  // evenly, so it keeps its own shading (Netflix's darker stems stay).
+  const meanLuminance = (t) => {
+    let sum = 0; let weight = 0;
+    coloured.forEach((i) => {
+      const a = px[i + 3];
+      sum += a * luminance([px[i], px[i + 1], px[i + 2]].map((c) => c + (255 - c) * t));
+      weight += a;
+    });
+    return weight ? sum / weight : 1;
+  };
+  // The luminance that has this contrast ratio with the (darker) popup.
+  const luminanceFor = (ratio) => ratio * (luminance(background) + 0.05) - 0.05;
+  if (coloured.length && meanLuminance(0) < luminanceFor(2.6)) {
+    let low = 0; let high = 1;
+    for (let k = 0; k < 10; k += 1) {
+      const t = (low + high) / 2;
+      if (meanLuminance(t) >= luminanceFor(3)) high = t; else low = t;
+    }
+    coloured.forEach((i) => { for (let c = 0; c < 3; c += 1) px[i + c] = Math.round(px[i + c] + (255 - px[i + c]) * high); });
   }
   return { bounds: { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }, ink: alphaSum, recoloured: darkAlpha > alphaSum * 0.1 };
 }
