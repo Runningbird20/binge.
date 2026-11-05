@@ -7,8 +7,12 @@ import ErrorBoundary from './ErrorBoundary';
 import { languageName } from '../utils/tmdb';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
 import { canAutoplayPreviews, getTrailerKey, setTrailerMuted, trailerEmbedUrl, whenTrailerPlaying } from '../utils/trailers';
+import { fetchTitleLogo, mayHaveTitleLogo } from '../hooks/useTitleDetails';
 
 const TRAILER_DELAY_MS = 2500;
+// How long the headline waits for a title's logo art before showing the
+// title as text.
+const LOGO_WAIT_MS = 900;
 
 const ROTATE_MS = 9000;
 // With a trailer playing, a slide still moves on after this long.
@@ -71,6 +75,40 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
   }, [activeKey]);
   const trailerPlaying = Boolean(trailer?.ready && trailer.slideKey === activeKey);
 
+  // The headline is the title's logo art, the same one its popup shows.
+  // Looked up for the slide on screen and the next one (its image preloaded),
+  // so rotating swaps straight to the next logo.
+  const [logos, setLogos] = useState({}); // slide key -> URL | null (none)
+  const [logoWaited, setLogoWaited] = useState(false);
+  const requestedLogos = useRef(new Set());
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const nextSlide = slides.length > 1 ? slides[(index + 1) % slides.length] : null;
+  const nextKey = nextSlide ? `${nextSlide.media_type}:${nextSlide.id}` : '';
+  useEffect(() => {
+    [activeSlide, nextSlide].forEach((slide) => {
+      if (!slide || !mayHaveTitleLogo(slide)) return;
+      const key = `${slide.media_type}:${slide.id}`;
+      if (requestedLogos.current.has(key)) return;
+      requestedLogos.current.add(key);
+      fetchTitleLogo(slide).then((url) => {
+        if (!mounted.current) return;
+        if (url && slide !== activeSlide) new Image().src = url;
+        setLogos((current) => ({ ...current, [key]: url || null }));
+      }).catch(() => {});
+    });
+    // Only when the slides on and after the screen change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey, nextKey]);
+  useEffect(() => {
+    setLogoWaited(false);
+    const timer = setTimeout(() => setLogoWaited(true), LOGO_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [activeKey]);
+
   // Rotate on a timer; a playing trailer gets longer, but the spotlight
   // never sits on one title forever. Restarts whenever the slide changes.
   const [manualAt, setManualAt] = useState(0);
@@ -102,6 +140,11 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
   }
 
   const item = slides[Math.min(index, slides.length - 1)];
+  const itemKey = `${item.media_type}:${item.id}`;
+  const logo = logos[itemKey];
+  // Until the logo is known (briefly), the space stays empty rather than
+  // flashing the text title first.
+  const logoPending = logo === undefined && !logoWaited && mayHaveTitleLogo(item);
   const year = item.year || (item.release_date ? String(item.release_date).slice(0, 4) : '');
   const genres = String(item.genre || '').split(',').map((genre) => genre.trim()).filter(Boolean).slice(0, 2);
   const language = item.original_language && item.original_language !== 'en' ? languageName(item.original_language) : '';
@@ -173,7 +216,19 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
       )}
 
       <div className="st-hero-content" aria-live="polite">
-        <h1 className="st-hero-title" title={item.title}>{displayTitle(item.title)}</h1>
+        {logo ? (
+          <h1 className="st-hero-title st-hero-title--logo" title={item.title}>
+            <img
+              key={logo}
+              src={logo}
+              alt={item.title}
+              onLoad={(event) => event.currentTarget.classList.add('loaded')}
+              onError={() => setLogos((current) => ({ ...current, [itemKey]: null }))}
+            />
+          </h1>
+        ) : (
+          <h1 className={`st-hero-title${logoPending ? ' st-hero-title--waiting' : ''}`} title={item.title}>{displayTitle(item.title)}</h1>
+        )}
         <div className="st-hero-meta">
           {kicker && <span className="st-hero-context">{kicker}</span>}
           {item._match && <span className="st-match">{item._match}% match</span>}

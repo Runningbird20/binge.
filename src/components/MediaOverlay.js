@@ -96,6 +96,9 @@ export default function MediaOverlay({ mediaType }) {
     return () => { cancelled = true; };
   }, [mediaType, numericId]);
 
+  // libraryVersion: bumped when the popup changes library rows itself (a
+  // franchise's "Mark all watched" can include this title).
+  const [libraryVersion, setLibraryVersion] = useState(0);
   useEffect(() => {
     if (mediaType === 'book') return undefined;
     let cancelled = false;
@@ -103,7 +106,7 @@ export default function MediaOverlay({ mediaType }) {
       .then((map) => { if (!cancelled) setWatchlistEntry(map[numericId] || null); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [mediaType, numericId]);
+  }, [mediaType, numericId, libraryVersion]);
 
   function goBack() {
     if (backgroundLocation) navigate(-1);
@@ -201,6 +204,7 @@ export default function MediaOverlay({ mediaType }) {
       // Opened from a Play button somewhere (Continue Watching, previews):
       // closing the player returns there instead of to a details page.
       closeOnPlayerExit={playImmediately && Boolean(backgroundLocation)}
+      onLibraryChange={() => setLibraryVersion((version) => version + 1)}
     />
   );
 }

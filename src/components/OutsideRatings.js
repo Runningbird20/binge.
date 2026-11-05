@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { cachedOutsideRatings, fetchOutsideRatings, formatVotes } from '../utils/outsideRatings';
 
 // IMDb ★ 8.1 (1.2M) · Rotten Tomatoes 94% · Metacritic 82 — on the title
-// page. Falls back to the TMDB score when outside ratings aren't available.
-export default function OutsideRatings({ item, tmdbScore = 0, tmdbVotes = 0 }) {
+// page. Nothing when there are none (the TMDB score is already in the info
+// row above, and the where-to-watch row sits here instead).
+export default function OutsideRatings({ item }) {
   const [ratings, setRatings] = useState(null);
 
   useEffect(() => {
@@ -34,13 +35,6 @@ export default function OutsideRatings({ item, tmdbScore = 0, tmdbVotes = 0 }) {
     chips.push(
       <span key="mc" className="or-chip or-chip--mc" title={`Metacritic ${ratings.metacritic}/100`}>
         <b className={`or-mc or-mc--${tier}`}>{ratings.metacritic}</b> Metacritic
-      </span>
-    );
-  }
-  if (!chips.length && tmdbScore > 0) {
-    chips.push(
-      <span key="tmdb" className="or-chip" title={`TMDB ${tmdbScore.toFixed(1)}/10 from ${formatVotes(tmdbVotes)} votes`}>
-        <b>TMDB</b> {tmdbScore.toFixed(1)}{tmdbVotes ? <small>{formatVotes(tmdbVotes)}</small> : null}
       </span>
     );
   }

@@ -1,11 +1,12 @@
 import LoadingBar from './LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
+import { BookOpen, Check, CheckCircle, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
 import RemindButton from './RemindButton';
 import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
+import WhereToWatch from './WhereToWatch';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
@@ -14,7 +15,15 @@ import RateReviewPanel from './RateReviewPanel';
 import ThemedSelect from './ThemedSelect';
 import { computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
 import { getPositionEntry, positionKey } from '../utils/playbackPositions';
-import { fetchEpisodeProgress } from '../utils/supabaseData';
+import {
+  fetchEpisodeProgress,
+  markEpisodesWatched,
+  removeContinueWatchingFor,
+  unmarkEpisodesWatched,
+  updateWatchlistProgress,
+  upsertSupabaseContinueWatching,
+} from '../utils/supabaseData';
+import { episodeKey, episodesUpTo, isAfter, lastOf, nextEpisode, seasonEpisodes, unwatchedOnly } from '../utils/episodeMarking';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import useTitleDetails, { useSeasonEpisodes } from '../hooks/useTitleDetails';
 import useSwipeDismiss from '../hooks/useSwipeDismiss';
@@ -37,7 +46,9 @@ function formatRuntime(minutes) {
   return h ? `${h}h ${m}m` : `${m}m`;
 }
 
-function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
+// onMark / onUnmark are only given when the viewer can keep track (signed
+// in); without them the list just plays episodes.
+function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay, onMark, onUnmark, busy, status }) {
   const [season, setSeason] = useState(currentSeason || seasons[0]?.season_number || 1);
   const episodes = useSeasonEpisodes(tmdbId, season);
 
@@ -45,31 +56,60 @@ function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
     if (currentSeason) setSeason(currentSeason);
   }, [currentSeason]);
 
+  const canMark = Boolean(onMark && onUnmark);
+  const aired = episodes ? seasonEpisodes(season, episodes) : [];
+  const seasonDone = aired.length > 0 && aired.every((entry) => watched.has(episodeKey(entry.season, entry.episode)));
+  const seasonName = seasons.find((entry) => entry.season_number === season)?.name || `Season ${season}`;
+
+  function toggleSeason() {
+    if (seasonDone) onUnmark(aired, `${seasonName} marked unwatched.`);
+    else onMark(unwatchedOnly(aired, watched), { last: lastOf(aired), episodes });
+  }
+
   return (
     <section className="td-section td-episodes-section" aria-label="Episodes">
-      <div className="td-section-head">
+      <div className="td-section-head td-episodes-head">
         <h3>Episodes</h3>
-        {seasons.length > 1 ? (
-          <ThemedSelect
-            className="td-season-select"
-            variant="pill"
-            aria-label="Season"
-            value={String(season)}
-            options={seasons.map((entry) => ({ value: String(entry.season_number), label: `${entry.name || `Season ${entry.season_number}`} (${entry.episode_count} ep)` }))}
-            onChange={(event) => setSeason(Number(event.target.value))}
-          />
-        ) : (
-          <span className="td-muted">{seasons[0]?.name || 'Season 1'}</span>
-        )}
+        <div className="td-episodes-tools">
+          {canMark && aired.length > 0 && (
+            <button
+              type="button"
+              className={`td-mark-season${seasonDone ? ' on' : ''}`}
+              onClick={toggleSeason}
+              disabled={busy}
+              aria-pressed={seasonDone}
+              title={seasonDone ? `Mark ${seasonName} unwatched` : `Mark every aired episode of ${seasonName} watched`}
+            >
+              <CheckCircle size={18} weight={seasonDone ? 'fill' : 'bold'} aria-hidden="true" />
+              {seasonDone ? 'Season watched' : 'Mark season watched'}
+            </button>
+          )}
+          {seasons.length > 1 ? (
+            <ThemedSelect
+              className="td-season-select"
+              variant="pill"
+              aria-label="Season"
+              value={String(season)}
+              options={seasons.map((entry) => ({ value: String(entry.season_number), label: `${entry.name || `Season ${entry.season_number}`} (${entry.episode_count} ep)` }))}
+              onChange={(event) => setSeason(Number(event.target.value))}
+            />
+          ) : (
+            <span className="td-muted">{seasons[0]?.name || 'Season 1'}</span>
+          )}
+        </div>
       </div>
+      <p className="td-mark-status" role="status">
+        {status?.text}
+        {status?.undo && <button type="button" className="td-mark-undo" onClick={status.undo} disabled={busy}>Undo</button>}
+      </p>
 
       <ol className="td-episodes">
         {!episodes && <li style={{ listStyle: 'none' }}><LoadingBar compact label="Loading episodes…" /></li>}
         {episodes?.map((episode) => {
-          const isWatched = watched.has(`${season}:${episode.number}`);
+          const isWatched = watched.has(episodeKey(season, episode.number));
           const upcoming = episode.airDate && new Date(episode.airDate) > new Date();
           return (
-            <li key={episode.number}>
+            <li key={episode.number} className="td-episode-item">
               <button
                 type="button"
                 className={`td-episode${isWatched ? ' watched' : ''}`}
@@ -91,6 +131,20 @@ function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
                   {episode.overview && <span className="td-episode-overview">{episode.overview}</span>}
                 </span>
               </button>
+              {canMark && !upcoming && (
+                <button
+                  type="button"
+                  className={`td-episode-mark${isWatched ? ' on' : ''}`}
+                  onClick={() => (isWatched
+                    ? onUnmark([{ season, episode: episode.number }], `Episode ${episode.number} marked unwatched.`)
+                    : onMark(unwatchedOnly(episodesUpTo(seasons, season, episode.number), watched), { last: { season, episode: episode.number }, episodes }))}
+                  disabled={busy}
+                  aria-label={isWatched ? `Mark episode ${episode.number} unwatched` : `Watched up to episode ${episode.number}`}
+                  title={isWatched ? 'Mark unwatched' : 'Watched up to here'}
+                >
+                  <CheckCircle size={26} weight={isWatched ? 'fill' : 'regular'} aria-hidden="true" />
+                </button>
+              )}
             </li>
           );
         })}
@@ -267,13 +321,24 @@ export default function MediaDetailsModal({
   initialEpisode,
   initialPosition,
   closeOnPlayerExit = false,
+  // Called after this popup changes library rows itself (a franchise's
+  // "Mark all watched"), so the page can reload them.
+  onLibraryChange,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [playerStart, setPlayerStart] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
-  const [watched, setWatched] = useState(new Set());
+  // Watched episodes: "season:episode" -> when (null if marked by hand).
+  const [watched, setWatched] = useState(new Map());
   const [lastWatchedAt, setLastWatchedAt] = useState(0);
   const [showRecap, setShowRecap] = useState(false);
+  // Marking episodes from the list: where the show picks up afterwards (it
+  // moves forward when you catch up), a save in progress, and the last
+  // change's note with its Undo.
+  const [resumeOverride, setResumeOverride] = useState(null);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [markStatus, setMarkStatus] = useState(null);
   const dialogRef = useRef(null);
   const overlayRef = useRef(null);
   const { isMobile } = useDeviceType();
@@ -281,9 +346,13 @@ export default function MediaDetailsModal({
   const isTV = mediaType === 'tv_show';
   const comingSoon = item ? isComingSoon(item) : false;
 
-  const progressBadge = computeProgressBadge({ ...watchlistEntry, media_type: mediaType });
-  const resumeSeason = initialSeason ?? watchlistEntry?.current_season ?? undefined;
-  const resumeEpisode = initialEpisode ?? watchlistEntry?.current_episode ?? undefined;
+  const progressBadge = computeProgressBadge({
+    ...watchlistEntry,
+    ...(resumeOverride ? { current_season: resumeOverride.season, current_episode: resumeOverride.episode } : {}),
+    media_type: mediaType,
+  });
+  const resumeSeason = resumeOverride?.season ?? initialSeason ?? watchlistEntry?.current_season ?? undefined;
+  const resumeEpisode = resumeOverride?.episode ?? initialEpisode ?? watchlistEntry?.current_episode ?? undefined;
 
   useEffect(() => {
     setShowPlayer(Boolean(autoPlay));
@@ -293,15 +362,23 @@ export default function MediaDetailsModal({
   }, [autoPlay, item?.id]);
 
   useEffect(() => {
+    setResumeOverride(null);
+    setMarkStatus(null);
+    setProgressLoaded(false);
+  }, [item?.id]);
+
+  // Marking waits for this, so it never works from a stale list.
+  useEffect(() => {
     if (!isTV || !item?.id) return undefined;
     let cancelled = false;
     fetchEpisodeProgress(item.id)
       .then((rows) => {
         if (cancelled) return;
-        setWatched(new Set(rows.map((row) => `${row.season}:${row.episode}`)));
+        setWatched(new Map(rows.map((row) => [episodeKey(row.season, row.episode), row.watched_at || null])));
         setLastWatchedAt(rows.reduce((max, row) => Math.max(max, new Date(row.watched_at).getTime() || 0), 0));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setProgressLoaded(true); });
     return () => { cancelled = true; };
   }, [isTV, item?.id, showPlayer]);
 
@@ -374,6 +451,7 @@ export default function MediaDetailsModal({
   // Resuming a show after a long break gets a short catch-up first.
   const lastActivity = Math.max(
     lastWatchedAt,
+    resumeOverride?.at || 0,
     new Date(watchlistEntry?.updated_at || 0).getTime() || 0,
     isTV && resumeSeason ? getPositionEntry(positionKey(mediaType, item.id, resumeSeason, resumeEpisode))?.at || 0 : 0,
   );
@@ -385,6 +463,116 @@ export default function MediaDetailsModal({
     haptic();
     if (offerRecap) setShowRecap(true);
     else play();
+  }
+
+  // ── Marking episodes from the list ──
+  const withEpisodes = (list, at) => (current) => {
+    const next = new Map(current);
+    list.forEach((entry) => next.set(episodeKey(entry.season, entry.episode), at === undefined ? entry.watchedAt ?? null : at));
+    return next;
+  };
+  const withoutEpisodes = (list) => (current) => {
+    const next = new Map(current);
+    list.forEach((entry) => next.delete(episodeKey(entry.season, entry.episode)));
+    return next;
+  };
+
+  // Continue Watching and the library row both carry where a show picks up.
+  async function setResumePoint(point) {
+    if (point) {
+      await upsertSupabaseContinueWatching({ mediaType, mediaId: item.id, currentSeason: point.season, currentEpisode: point.episode, positionSeconds: 0 });
+    } else {
+      await removeContinueWatchingFor({ mediaType, mediaId: item.id });
+    }
+    await updateWatchlistProgress({ mediaType, mediaId: item.id, currentSeason: point?.season ?? null, currentEpisode: point?.episode ?? null }).catch(() => {});
+  }
+
+  // Marks `list` watched. When that catches you up past where the show
+  // picked up, it now picks up at the next episode (Resume, Continue
+  // Watching). Undo puts both back.
+  async function markEpisodes(list, { last, episodes: seasonList }) {
+    if (!list.length || marking) return;
+    haptic();
+    // A season without an episode starts at its first (as the player does).
+    const before = resumeSeason ? { season: Number(resumeSeason), episode: Number(resumeEpisode) || 1 } : null;
+    const next = last ? nextEpisode(last, details?.seasons, seasonList) : null;
+    const moveTo = next && isAfter(next, before) ? next : null;
+    setMarking(true);
+    setWatched(withEpisodes(list, null));
+    try {
+      await markEpisodesWatched({ mediaId: item.id, episodes: list });
+      let moved = false;
+      if (moveTo) {
+        try {
+          await setResumePoint(moveTo);
+          setResumeOverride({ ...moveTo, at: Date.now() });
+          moved = true;
+        } catch {
+          // The episodes are saved; only the resume point stayed put.
+        }
+      }
+      const count = list.length === 1 ? '1 episode' : `${list.length} episodes`;
+      setMarkStatus({
+        text: `Marked ${count} watched.${moved ? ` Up next: S${moveTo.season} · E${moveTo.episode}.` : ''}`,
+        undo: () => undoMark(list, moved ? before : undefined),
+      });
+    } catch (error) {
+      setWatched(withoutEpisodes(list));
+      setMarkStatus({ text: error?.message || 'Couldn’t save that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  // previous: the resume point to restore (null = none), undefined = untouched.
+  async function undoMark(list, previous) {
+    setMarking(true);
+    setWatched(withoutEpisodes(list));
+    try {
+      await unmarkEpisodesWatched({ mediaId: item.id, episodes: list });
+      if (previous !== undefined) {
+        await setResumePoint(previous).catch(() => {});
+        setResumeOverride(previous ? { ...previous, at: Date.now() } : null);
+      }
+      setMarkStatus(null);
+    } catch (error) {
+      setWatched(withEpisodes(list, null));
+      setMarkStatus({ text: error?.message || 'Couldn’t undo that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  // Unmarks `list`; Undo puts the episodes back with their original watch times.
+  async function unmarkEpisodes(list, text) {
+    if (!list.length || marking) return;
+    haptic();
+    const saved = list.map((entry) => ({ ...entry, watchedAt: watched.get(episodeKey(entry.season, entry.episode)) ?? null }));
+    setMarking(true);
+    setWatched(withoutEpisodes(list));
+    try {
+      await unmarkEpisodesWatched({ mediaId: item.id, episodes: list });
+      setMarkStatus({ text, undo: () => restoreEpisodes(saved) });
+    } catch (error) {
+      setWatched(withEpisodes(saved));
+      setMarkStatus({ text: error?.message || 'Couldn’t save that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  async function restoreEpisodes(saved) {
+    setMarking(true);
+    setWatched(withEpisodes(saved));
+    try {
+      await markEpisodesWatched({ mediaId: item.id, episodes: saved });
+      setMarkStatus(null);
+    } catch (error) {
+      setWatched(withoutEpisodes(saved));
+      setMarkStatus({ text: error?.message || 'Couldn’t undo that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
   }
 
   async function handleRatingSave(categories) {
@@ -522,7 +710,8 @@ export default function MediaDetailsModal({
                   : (details?.runtime ? <span>{formatRuntime(details.runtime)}</span> : null)}
                 <span className="td-hd">HD</span>
               </div>
-              <OutsideRatings item={item} tmdbScore={score} tmdbVotes={details?.voteCount || 0} />
+              <WhereToWatch watch={details?.watch} mediaType={mediaType} />
+              <OutsideRatings item={item} />
               {details?.tagline && <p className="td-tagline">{details.tagline}</p>}
               {overview && <p className="td-overview">{overview}</p>}
               {item._reason && <p className="td-reason">{item._reason}</p>}
@@ -546,6 +735,10 @@ export default function MediaDetailsModal({
               watched={watched}
               currentSeason={resumeSeason ? Number(resumeSeason) : null}
               onPlay={play}
+              onMark={allowActions ? markEpisodes : undefined}
+              onUnmark={allowActions ? unmarkEpisodes : undefined}
+              busy={marking || !progressLoaded}
+              status={markStatus}
             />
           )}
 
@@ -553,7 +746,7 @@ export default function MediaDetailsModal({
             <EpisodeHeatmap tmdbId={details.tmdbId} seasons={details.seasons} onPlay={play} />
           )}
 
-          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} />}
+          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} canMark={allowActions} onLibraryChange={onLibraryChange} />}
 
           <SourceBooks mediaType={mediaType} tmdbId={details?.tmdbId} title={item.title} />
 
@@ -605,7 +798,7 @@ export default function MediaDetailsModal({
           onClose={() => (closeOnPlayerExit && !playerStart ? onClose() : setShowPlayer(false))}
           initialSeason={playerStart?.season ?? resumeSeason}
           initialEpisode={playerStart?.episode ?? resumeEpisode}
-          initialPosition={playerStart ? undefined : initialPosition}
+          initialPosition={playerStart || resumeOverride ? undefined : initialPosition}
         />
       )}
     </>
