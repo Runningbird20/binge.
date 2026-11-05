@@ -36,9 +36,10 @@
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "start": "concurrently \"npm run start:client\" \"npm run server\"",
+    "prestart": "node scripts/check-branch.js",
+    "start":"concurrently \"npm run start:client\" \"npm run server\"",
     "start:client": "react-scripts start",
-    "server": "node server/index.js",
+    "server": "node --watch --watch-preserve-output server/index.js",
     "dev": "npm start",
     "import:backfill-catalog": "node scripts/backfill-catalog-fields.js",
     "import:goodreads": "node scripts/scrapers/goodreads_scraper.js",

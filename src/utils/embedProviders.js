@@ -24,6 +24,13 @@ import { getServerMemory, rankServers } from './streamPreferences';
 //   subtitles: accepts a default subtitle language parameter
 //   idKinds:   which external ids the URL accepts
 //   types:     media types it actually streams
+//   sandbox:   plays in a sandboxed iframe, which blocks its pop-ups and
+//              redirects (utils/popupSandbox.js). Tested 2026-11-05 in Chrome,
+//              each server sandboxed and not, on a non-provider origin: only
+//              VidRift and CineSrc play sandboxed. The rest show a "sandbox
+//              detected" page (2Embed goes black), so they load unsandboxed.
+//              A server without the flag is tried sandboxed only if it
+//              reports playback (so a refusal can be noticed).
 export const PROVIDERS = [
   {
     // https://vidrift.net/docs — TMDB ids only; posts vidrift:progress
@@ -31,6 +38,7 @@ export const PROVIDERS = [
     // including new K-drama episodes other servers lacked.
     id: 'vidrift',
     label: 'VidRift',
+    sandbox: true, // plays sandboxed
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -46,6 +54,7 @@ export const PROVIDERS = [
     // https://www.vidy.st (#docs) — posts PLAYER_EVENT play/timeupdate.
     id: 'vidy',
     label: 'Vidy',
+    sandbox: false, // "Iframe Sandbox Detected"
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -66,6 +75,7 @@ export const PROVIDERS = [
   {
     id: 'vidlink',
     label: 'VidLink',
+    sandbox: false, // "Please Disable Sandbox"
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -86,6 +96,7 @@ export const PROVIDERS = [
     // shuttletv.su sends; harmless if ignored.
     id: 'cinesrc',
     label: 'CineSrc',
+    sandbox: true, // plays sandboxed
     events: true,
     subtitles: true,
     idKinds: ['tmdb'],
@@ -116,6 +127,7 @@ export const PROVIDERS = [
     // MEDIA_DATA progress messages to the parent window.
     id: 'vidsrc-ru',
     label: 'VidSrc',
+    sandbox: false, // "Restricted Embed Detected"
     events: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
@@ -133,6 +145,7 @@ export const PROVIDERS = [
   {
     id: 'vidsrc-su',
     label: 'VidSrc SU',
+    sandbox: false, // "Restricted Embed Detected"
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -145,6 +158,7 @@ export const PROVIDERS = [
   {
     id: 'videasy',
     label: 'Videasy',
+    sandbox: false, // "Iframe Sandbox Detected"
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -157,6 +171,7 @@ export const PROVIDERS = [
   {
     id: '2embed',
     label: '2Embed',
+    sandbox: false, // black when sandboxed (and redirects the whole tab when not)
     idKinds: ['tmdb', 'imdb'],
     types: ['tv_show', 'movie'],
     buildUrl(id, mediaType, season, episode) {
@@ -168,6 +183,7 @@ export const PROVIDERS = [
   {
     id: 'vidsrc-embed-ru',
     label: 'VidSrc Classic',
+    sandbox: false, // "This content can’t be embedded in a sandboxed frame"
     subtitles: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
@@ -186,6 +202,7 @@ export const PROVIDERS = [
   {
     id: 'vidsrc-rip',
     label: 'VidSrc RIP',
+    sandbox: false, // its domain showed a news site, not a player, on 2026-11-05
     idKinds: ['tmdb'],
     types: ['movie'],
     buildUrl(id) {

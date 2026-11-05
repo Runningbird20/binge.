@@ -521,6 +521,7 @@
   border-color: #f4f6f8;
   color: #0c0e13;
 }
+.mp-chip-safe { margin-left: 0.3rem; vertical-align: -1px; }
 
 .mp-chip-watched { opacity: 0.35; }
 
