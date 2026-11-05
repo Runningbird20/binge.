@@ -22,6 +22,7 @@ import { excludeRated, countCompleted, computeWatchMinutes, describeWatchTime, f
 import { posterSrc, posterSrcSet } from '../utils/imageQuality';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
+import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
 
@@ -351,7 +352,7 @@ export default function Profile() {
     // then always still fetch fresh in the background to self-heal.
     const cached = getCached(cacheKey);
     if (cached) {
-      setWatchlist(cached.watchlist);
+      setWatchlist(cached.watchlist.filter((entry) => !isRemovalPending(`watchlist:${entry.id}`)));
       setRatings(cached.ratings);
       setLoading(false);
     } else {
@@ -364,7 +365,8 @@ export default function Profile() {
         fetchSupabaseRatings(),
       ]);
       if (cancelled) return;
-      const nextWatchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
+      const nextWatchlist = (watchlistResult.status === 'fulfilled' ? watchlistResult.value : [])
+        .filter((entry) => !isRemovalPending(`watchlist:${entry.id}`));
       const nextRatings = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
       setWatchlist(nextWatchlist);
       setRatings(nextRatings);
@@ -388,10 +390,19 @@ export default function Profile() {
     });
   }
 
+  // Off the page at once (no confirm: the popup has Undo); deleted when the
+  // popup runs out.
   function handleRemove(item) {
-    if (!window.confirm(`Remove "${item.title}" from your library?`)) return;
+    const index = watchlist.findIndex((entry) => entry.id === item.id);
     setWatchlist((current) => current.filter((entry) => entry.id !== item.id));
-    removeSupabaseWatchlistItem(item.id).catch((error) => window.alert(error.message));
+    removeWithUndo({
+      key: `watchlist:${item.id}`,
+      message: `Removed “${item.title || 'that'}” from your library.`,
+      onUndo: () => setWatchlist((current) => (current.some((entry) => entry.id === item.id)
+        ? current
+        : [...current.slice(0, Math.max(0, index)), item, ...current.slice(Math.max(0, index))])),
+      onCommit: () => removeSupabaseWatchlistItem(item.id),
+    });
   }
 
   // Rated titles move to the Ratings & Reviews tab, so exclude them from the

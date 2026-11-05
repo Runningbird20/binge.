@@ -4562,3 +4562,63 @@ body textarea:not(.field-bare) { padding: 0.75rem 1.15rem; border-radius: 22px; 
 body :is(input, textarea):not(.field-bare, .profile-lock-box, .global-search-bar-input, .st-search-input, .catalog-search-input):focus { outline: none; border-color: rgba(255, 255, 255, 0.55); background: rgba(255, 255, 255, 0.06); }
 body :is(input, textarea)::placeholder { color: #a8adb8; opacity: 1; }
 body input:is([type='text'], [type='email'], [type='password'], [type='number'], [type='search']):disabled:not(.field-bare) { opacity: 0.5; }
+
+/* ── "Removed · Undo" popup (components/UndoToast.js) ─────────────── */
+.undo-toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: var(--width, 356px);
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem 0.6rem 0.85rem 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: #1c1c1e;
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.undo-toast-text { flex: 1 1 auto; min-width: 0; margin: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.undo-toast-undo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.undo-toast-undo:hover { background: rgba(255, 255, 255, 0.12); border-color: #fff; }
+.undo-toast-close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+.undo-toast-close:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+/* Time left: runs down from full width to nothing (driven by the timer). */
+.undo-toast-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.7);
+  transform-origin: left center;
+}

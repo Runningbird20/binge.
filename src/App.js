@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { UndoToaster } from './components/UndoToast';
 import { MiniPlayerProvider } from './contexts/MiniPlayerContext';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -207,6 +208,8 @@ export default function App() {
               </AppShell>
             </Suspense>
 
+            {/* "Removed · Undo" popups, bottom right. */}
+            <UndoToaster />
             {/* Sonner toasts — positioned above bottom nav on mobile */}
             <Toaster
               theme="dark"
