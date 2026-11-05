@@ -74,10 +74,11 @@ the two `TURSO_*` secrets.
   (`supabase/migrations/20261028160000_media_moves_to_neon.sql`) after a
   one-time copy (scripts and the Neon-side SQL are in git history). TV builds
   from before then read the Supabase catalog directly and show empty rows.
-- **Nov 2026, Neon → Turso:** `node scripts/turso-catalog.js copy-from-neon`
-  copied every row (read-only on the Neon side) and `verify` compared counts
-  and sampled rows; Neon's `search_catalog()` was ported to
-  `server/catalogSearch.js` and benchmarked to the same ranks.
+- **Nov 2026, Neon → Turso:** a one-time copy (read-only on the Neon side)
+  moved every row, a verify step compared counts and sampled rows, and Neon's
+  `search_catalog()` was ported to `server/catalogSearch.js` and benchmarked to
+  the same ranks. The copy and Neon-comparison code were then removed (git
+  history); nothing in the repo reads or syncs with Neon.
 
 `supabase/repeatable_schema.sql` no longer creates catalog tables, and
 `npm run supabase:seed:catalogs` is gone. Supabase Auth is the only sign-in:
