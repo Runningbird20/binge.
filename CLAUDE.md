@@ -57,7 +57,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 
 ## Repo layout
 
-- `src/` — the website: `pages/`, `components/` (player hooks in `components/player/`), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`; nearly everything new goes in `styles/streaming.css`).
+- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `books/` for the book popup, `sports/` for the Sports page, `manga/` for the Manga tab), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`; nearly everything new goes in `styles/streaming.css`).
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `turso/schema.sql` — the media catalog schema.
@@ -253,7 +253,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 
 ### Title popup (movies, series, books)
 
-`MediaDetailsModal.js` (movies/TV) and `BookDetailsModal` in `Books.js` share the `td-*` classes in `src/styles/streaming.css`.
+`MediaDetailsModal.js` (movies/TV; its episode list, Previously on, source books and More Like This are in `components/title/`) and `components/books/BookDetailsModal.js` share the `td-*` classes in `src/styles/streaming.css`.
 - **Layout.** `td-body` is a grid of the main column and `td-aside`.
   - **Main column:** the description, then the full-width **Cast row**. On phones the Cast row comes straight after the description.
   - **`td-aside`:** the facts list (studio etc.), then **Rating & Review** for movies and books (`td-rate--aside`).
