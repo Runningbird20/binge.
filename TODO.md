@@ -9,7 +9,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **Smarter "Because you watched"** (on hold until binge. has enough users with overlapping ratings). Mix in the existing `collaborative_*_candidates` RPCs ("people who liked X also liked") as a lightly weighted extra source next to TMDB `/recommendations` (which already covers this from TMDB's audience) in `src/utils/personalization.js`.
 - [ ] **Reading progress across devices.** `BookReader.js` keeps your place in `localStorage` (`binge:reader-progress`), so it doesn't follow the profile to another device. Save it per profile in Supabase, like `continue_watching.position_seconds`.
 - [ ] **"Surprise me."** A button on Home and Movies/Series that picks one title from the profile's top recommendations (`buildPersonalizedRows`), respecting the release window and maturity level, and opens or plays it.
-- [ ] **Search filters.** `/search` (`SearchResults.js`) has no way to narrow results. Add chips for type, decade and language (`role="group"` + `aria-pressed`, like the genre chips), applied to both catalog results and Ask binge.
 - [ ] **Sleep timer on the website.** The TV apps have one (`PlayerModel.swift`, `PlayerModel.kt`); the web player doesn't. "End of episode / 30 / 60 min" in `PlaybackOptions.js`, pausing via the same position save as closing the player.
 
 ## UI and UX
