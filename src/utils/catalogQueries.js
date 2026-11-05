@@ -926,6 +926,38 @@ export async function fetchBooksPage({
   };
 }
 
+// A random stretch of the catalog that stays cheap on Turso, which bills every
+// row scanned: the next `limit` matching rows after a random id, wrapping to
+// the start when that runs short. A random OFFSET read every skipped row (up
+// to the whole table). Book ids are hash-derived (spread over 0..2^52), so a
+// window of books is a random mix; movie/TV ids are sequential, so it is an
+// arbitrary stretch of the catalog. `buildQuery` returns a fresh filtered query.
+export const BOOK_ID_SPACE = 2 ** 52;
+export async function fetchRandomIdWindow(buildQuery, { idSpace, limit }) {
+  const start = Math.floor(Math.random() * idSpace);
+  const first = await buildQuery().gte('id', start).order('id', { ascending: true }).limit(limit);
+  if (first.error) throw first.error;
+  const items = first.data || [];
+  if (items.length >= limit || start === 0) return items;
+  const rest = await buildQuery().lt('id', start).order('id', { ascending: true }).limit(limit - items.length);
+  if (rest.error) throw rest.error;
+  return items.concat(rest.data || []);
+}
+
+// One window of the Books shelf's shuffled "featured" view.
+export async function fetchRandomBookWindow({ size = 60, search = '', genre = '' } = {}) {
+  if (!isSupabaseConfigured || !supabase) {
+    const result = await fetchBooksPage({ page: 1, pageSize: size, search, genre });
+    return result.items;
+  }
+  const client = requireSupabaseCatalog();
+  const rows = await fetchRandomIdWindow(
+    () => applyBookFilters(client.from('books').select(BOOK_COLUMNS), { search, genre }),
+    { idSpace: BOOK_ID_SPACE, limit: size },
+  );
+  return rows.map((book) => normalizeBook(book));
+}
+
 export async function fetchBookById(bookId) {
   if (!isSupabaseConfigured || !supabase) {
     const data = await api.get(`/media/books/${bookId}`);
@@ -952,19 +984,22 @@ const RECOMMENDATION_SAMPLE_SOURCES = {
   book: { table: 'books', columns: BOOK_COLUMNS, normalize: normalizeBook, filterReleased: false },
 };
 
-// The planner's row estimate for a `genre ilike` filter is unreliable (it
-// reported ~240 Drama movies), so genre-filtered samples pick an offset from
-// this fixed range and step back toward 0 if it overshoots.
-const GENRE_SAMPLE_MAX_OFFSET = 1500;
-// An unsorted OFFSET still scans every skipped row, so very deep offsets into
-// the 100k+ row tables run past the statement timeout.
-const SAMPLE_MAX_OFFSET = 20000;
+// Highest id per table, for random id windows over the sequential movie/TV ids
+// (one row read, kept for the session; new ids only add to the top).
+const maxIdCache = new Map();
+async function maxCatalogId(client, table) {
+  if (!maxIdCache.has(table)) {
+    const { data, error } = await client.from(table).select('id').order('id', { ascending: false }).limit(1);
+    if (error || !data?.length) return null;
+    maxIdCache.set(table, Number(data[0].id));
+  }
+  return maxIdCache.get(table);
+}
 
-// Random catalog window for the recommender, built to stay under the
-// database's statement timeout on the large catalog tables: no `count: 'exact'`
-// (times out on every table) and no ORDER BY (a sorted genre-filtered scan
-// also times out). The browse fetchers above need both, so they can't be
-// reused here. Never throws — a failed sample just contributes no candidates.
+// Random catalog window for the recommender: the rows after a random id
+// (fetchRandomIdWindow), which reads about `limit` rows; the old random OFFSET
+// read every skipped row. Never throws — a failed sample just contributes no
+// candidates.
 export async function sampleCatalogForRecommendations(mediaType, { genre = '', limit = 60, kidsSafe = false } = {}) {
   const source = RECOMMENDATION_SAMPLE_SOURCES[mediaType];
   if (!source) return [];
@@ -995,27 +1030,16 @@ export async function sampleCatalogForRecommendations(mediaType, { genre = '', l
     return nextQuery;
   }
 
-  let maxOffset = GENRE_SAMPLE_MAX_OFFSET;
-  if (!genre) {
-    const { count } = await applyFilters(
-      client.from(source.table).select('id', { count: 'planned', head: true })
-    ).then((result) => result, () => ({ count: null }));
-    maxOffset = Math.min(SAMPLE_MAX_OFFSET, Math.max(0, (Number(count) || 0) - limit));
+  try {
+    const idSpace = source.table === 'books' ? BOOK_ID_SPACE : ((await maxCatalogId(client, source.table)) || 0) + 1;
+    const rows = await fetchRandomIdWindow(
+      () => applyFilters(client.from(source.table).select(source.columns)),
+      { idSpace, limit },
+    );
+    return rows.map((item) => source.normalize(item));
+  } catch {
+    return [];
   }
-
-  const offset = Math.floor(Math.random() * (maxOffset + 1));
-  const offsets = [...new Set([offset, Math.floor(offset / 8), 0])];
-
-  for (const nextOffset of offsets) {
-    const { data, error } = await applyFilters(client.from(source.table).select(source.columns))
-      .range(nextOffset, nextOffset + limit - 1)
-      .then((result) => result, () => ({ data: null, error: true }));
-    if (!error && data?.length) {
-      return data.map((item) => source.normalize(item));
-    }
-  }
-
-  return [];
 }
 
 const BROWSE_SOURCES = {

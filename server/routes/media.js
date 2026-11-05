@@ -1,13 +1,13 @@
 const express = require('express');
-const neonDb = require('../neonDb');
+const catalogDb = require('../catalogDb');
 const { requireAuth } = require('../middleware/auth');
 const { serviceClient } = require('../middleware/supabaseAdmin');
 const { episodes } = require('./supabaseUserData');
 const { fetchPopularTitlesFromTrakt } = require('../utils/traktRelevance');
 const { normalizeEmbedId, lookupImdbId } = require('../utils/imdbLookup');
-const { getCuratedMovieRowsNeon, getCuratedTvRowsNeon, getCuratedBookRowsNeon } = require('../utils/curatedRows');
+const { getCuratedMovieRows, getCuratedTvRows, getCuratedBookRows } = require('../utils/curatedRows');
 
-// Ratings are user data in Supabase; the title itself comes from Neon.
+// Ratings are user data in Supabase; the title itself comes from the Turso catalog.
 // Same scale as the old SQL: average of (sum of categories / max) * 10.
 async function ratingStats(table, columns, max, mediaId) {
   const sb = serviceClient();
@@ -101,7 +101,7 @@ router.get('/movies', async (req, res) => {
     if (isUnfiltered && cachedMovieTotalCount != null && Date.now() - cachedMovieTotalTime < 3600000) {
       totalPromise = Promise.resolve({ rows: [{ total: cachedMovieTotalCount }] });
     } else {
-      totalPromise = neonDb.query(`SELECT COUNT(*) as total FROM movies WHERE ${whereClause}`, queryParams)
+      totalPromise = catalogDb.query(`SELECT COUNT(*) as total FROM movies WHERE ${whereClause}`, queryParams)
         .then((res) => {
           if (isUnfiltered) {
             cachedMovieTotalCount = Number(res.rows[0]?.total || 0);
@@ -121,8 +121,8 @@ router.get('/movies', async (req, res) => {
 
     const [countRes, itemsRes, genresRes] = await Promise.all([
       totalPromise,
-      neonDb.query(itemsQuery, [...queryParams, pageSize, offset]),
-      neonDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
+      catalogDb.query(itemsQuery, [...queryParams, pageSize, offset]),
+      catalogDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
     ]);
 
     const total = Number(countRes.rows[0]?.total || 0);
@@ -142,19 +142,19 @@ router.get('/movies', async (req, res) => {
       facets: { genres },
     });
   } catch (err) {
-    console.error('Neon /movies query error:', err.message);
+    console.error('Catalog /movies query error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/movies/genres', async (_req, res) => {
   try {
-    const result = await neonDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC');
+    const result = await catalogDb.query('SELECT genre FROM movie_genres ORDER BY genre ASC');
     if (result.rows.length > 0) {
       return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
     }
   } catch (err) {
-    console.error('Neon movie genres error:', err.message);
+    console.error('Catalog movie genres error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -183,11 +183,11 @@ router.get('/by-tmdb-ids', async (req, res) => {
       FROM ${table}
       WHERE source_key IN (${placeholders})
     `;
-    const result = await neonDb.query(query, keys);
+    const result = await catalogDb.query(query, keys);
     const items = result.rows.map((r) => ({ ...r, id: Number(r.id) }));
     return res.json({ items });
   } catch (err) {
-    console.error('Neon by-tmdb-ids error:', err.message);
+    console.error('Catalog by-tmdb-ids error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -208,37 +208,37 @@ router.get('/popular-titles', requireAuth, async (req, res) => {
 
 router.get(['/movies/curated', '/movie-rows'], async (req, res) => {
   try {
-    const rows = await getCuratedMovieRowsNeon();
+    const rows = await getCuratedMovieRows();
     return res.json({ rows });
   } catch (err) {
-    console.error('Neon movie curated error:', err.message);
+    console.error('Catalog movie curated error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get(['/tv-shows/curated', '/tv-show-rows'], async (req, res) => {
   try {
-    const rows = await getCuratedTvRowsNeon();
+    const rows = await getCuratedTvRows();
     return res.json({ rows });
   } catch (err) {
-    console.error('Neon tv curated error:', err.message);
+    console.error('Catalog tv curated error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get(['/books/curated', '/book-rows'], async (req, res) => {
   try {
-    const rows = await getCuratedBookRowsNeon();
+    const rows = await getCuratedBookRows();
     return res.json({ rows });
   } catch (err) {
-    console.error('Neon book curated error:', err.message);
+    console.error('Catalog book curated error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/movies/:id', async (req, res) => {
   try {
-    const movieRes = await neonDb.query(
+    const movieRes = await catalogDb.query(
       'SELECT * FROM movies WHERE id = $1 AND source_key IS NOT NULL',
       [req.params.id]
     );
@@ -256,7 +256,7 @@ router.get('/movies/:id', async (req, res) => {
       rating_count: Number(stats.rating_count || 0),
     });
   } catch (err) {
-    console.error('Neon /movies/:id error:', err.message);
+    console.error('Catalog /movies/:id error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -320,7 +320,7 @@ router.get('/tv-shows', async (req, res) => {
     if (isUnfiltered && cachedTvTotalCount != null && Date.now() - cachedTvTotalTime < 3600000) {
       totalPromise = Promise.resolve({ rows: [{ total: cachedTvTotalCount }] });
     } else {
-      totalPromise = neonDb.query(`SELECT COUNT(*) as total FROM tv_shows WHERE ${whereClause}`, queryParams)
+      totalPromise = catalogDb.query(`SELECT COUNT(*) as total FROM tv_shows WHERE ${whereClause}`, queryParams)
         .then((res) => {
           if (isUnfiltered) {
             cachedTvTotalCount = Number(res.rows[0]?.total || 0);
@@ -340,8 +340,8 @@ router.get('/tv-shows', async (req, res) => {
 
     const [countRes, itemsRes, genresRes] = await Promise.all([
       totalPromise,
-      neonDb.query(itemsQuery, [...queryParams, pageSize, offset]),
-      neonDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
+      catalogDb.query(itemsQuery, [...queryParams, pageSize, offset]),
+      catalogDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
     ]);
 
     const total = Number(countRes.rows[0]?.total || 0);
@@ -361,26 +361,26 @@ router.get('/tv-shows', async (req, res) => {
       facets: { genres },
     });
   } catch (err) {
-    console.error('Neon /tv-shows query error:', err.message);
+    console.error('Catalog /tv-shows query error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/tv-shows/genres', async (_req, res) => {
   try {
-    const result = await neonDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC');
+    const result = await catalogDb.query('SELECT genre FROM tv_show_genres ORDER BY genre ASC');
     if (result.rows.length > 0) {
       return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
     }
   } catch (err) {
-    console.error('Neon tv genres error:', err.message);
+    console.error('Catalog tv genres error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/tv-shows/:id', async (req, res) => {
   try {
-    const showRes = await neonDb.query(
+    const showRes = await catalogDb.query(
       'SELECT * FROM tv_shows WHERE id = $1 AND source_key IS NOT NULL',
       [req.params.id]
     );
@@ -398,7 +398,7 @@ router.get('/tv-shows/:id', async (req, res) => {
       rating_count: Number(stats.rating_count || 0),
     });
   } catch (err) {
-    console.error('Neon /tv-shows/:id error:', err.message);
+    console.error('Catalog /tv-shows/:id error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -443,10 +443,10 @@ router.get('/books', async (req, res) => {
     }
 
     const [countRes, itemsRes, facetsRes, genresRes] = await Promise.all([
-      neonDb.query(`SELECT COUNT(*) as total FROM books WHERE ${whereClause}`, queryParams),
-      neonDb.query(`SELECT * FROM books WHERE ${whereClause} ORDER BY ${orderBy} LIMIT $${pIdx} OFFSET $${pIdx + 1}`, [...queryParams, pageSize, offset]),
-      neonDb.query('SELECT MIN(year) AS min_year, MAX(year) AS max_year FROM books WHERE year IS NOT NULL').catch(() => ({ rows: [{}] })),
-      neonDb.query('SELECT genre FROM book_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
+      catalogDb.query(`SELECT COUNT(*) as total FROM books WHERE ${whereClause}`, queryParams),
+      catalogDb.query(`SELECT * FROM books WHERE ${whereClause} ORDER BY ${orderBy} LIMIT $${pIdx} OFFSET $${pIdx + 1}`, [...queryParams, pageSize, offset]),
+      catalogDb.query('SELECT MIN(year) AS min_year, MAX(year) AS max_year FROM books WHERE year IS NOT NULL').catch(() => ({ rows: [{}] })),
+      catalogDb.query('SELECT genre FROM book_genres ORDER BY genre ASC').catch(() => ({ rows: [] })),
     ]);
 
     const total = Number(countRes.rows[0]?.total || 0);
@@ -467,26 +467,26 @@ router.get('/books', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Neon /books query error:', err.message);
+    console.error('Catalog /books query error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/books/genres', async (_req, res) => {
   try {
-    const result = await neonDb.query('SELECT genre FROM book_genres ORDER BY genre ASC');
+    const result = await catalogDb.query('SELECT genre FROM book_genres ORDER BY genre ASC');
     if (result.rows.length > 0) {
       return res.json({ genres: result.rows.map((r) => r.genre).filter(Boolean) });
     }
   } catch (err) {
-    console.error('Neon book genres error:', err.message);
+    console.error('Catalog book genres error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get('/books/:id', async (req, res) => {
   try {
-    const bookRes = await neonDb.query(
+    const bookRes = await catalogDb.query(
       'SELECT * FROM books WHERE id = $1 AND source_key IS NOT NULL',
       [req.params.id]
     );
@@ -504,7 +504,7 @@ router.get('/books/:id', async (req, res) => {
       rating_count: Number(stats.rating_count || 0),
     });
   } catch (err) {
-    console.error('Neon /books/:id error:', err.message);
+    console.error('Catalog /books/:id error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

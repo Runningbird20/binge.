@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * sync-tmdb-to-neon.js
+ * sync-tmdb-to-turso.js
  *
  * Downloads TMDB bulk export files (every movie and TV show on the platform),
- * finds IDs not yet in Neon Postgres, fetches full details from TMDB API,
- * and upserts them directly into the movies / tv_shows tables in Neon.
+ * finds IDs not yet in the Turso catalog, fetches full details from TMDB API,
+ * and upserts them into the movies / tv_shows tables there.
  *
  * Designed to run in GitHub Actions on schedule or manually via workflow_dispatch.
  *
  * Required env vars:
- *   DATABASE_URL — Neon Postgres connection string
+ *   TURSO_DATABASE_URL — the catalog database (+ TURSO_AUTH_TOKEN)
  *   TMDB_API_KEY — v3 API key from themoviedb.org
  *
  * Optional env vars:
@@ -29,9 +29,9 @@ try {
 const zlib = require('zlib');
 const rl = require('readline');
 const { Readable } = require('stream');
-const { Pool } = require('pg');
+const catalogDb = require('../server/catalogDb');
+const { createCatalogClient } = require('./catalog-client');
 
-const DATABASE_URL = process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED;
 const TMDB_KEY = process.env.TMDB_API_KEY;
 const TMDB_READ_TOKEN = process.env.TMDB_READ_TOKEN;
 const TYPE = process.env.TYPE || 'both';
@@ -41,20 +41,11 @@ const API_DELAY = 260; // ms between TMDB requests (under 40 req/10s)
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w500';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 
-let pool;
+let catalog;
 
-function getPool() {
-  if (!pool) {
-    if (!DATABASE_URL) {
-      throw new Error('DATABASE_URL is not configured.');
-    }
-    pool = new Pool({
-      connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 5,
-    });
-  }
-  return pool;
+function getCatalog() {
+  if (!catalog) catalog = createCatalogClient();
+  return catalog;
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,9 +101,8 @@ async function downloadExport(type) {
 }
 
 async function getExistingKeys(table) {
-  const p = getPool();
-  process.stdout.write(`  Fetching existing keys from Neon ${table}… `);
-  const res = await p.query(`SELECT source_key FROM ${table} WHERE source_key LIKE 'tmdb:%'`);
+  process.stdout.write(`  Fetching existing keys from ${table}… `);
+  const res = await catalogDb.query(`SELECT source_key FROM ${table} WHERE source_key LIKE 'tmdb:%'`);
   const keys = new Set(res.rows.map((r) => r.source_key).filter(Boolean));
   console.log(`${keys.size.toLocaleString()} found`);
   return keys;
@@ -223,28 +213,11 @@ function tvRecord(d) {
   };
 }
 
+// Through the catalog client, which also fills the search_* columns.
 async function upsertBatch(table, items) {
   if (!items.length) return;
-  const p = getPool();
-
-  const cols = Object.keys(items[0]);
-  const colNames = cols.join(', ');
-
-  const updateCols = cols
-    .filter((c) => c !== 'source_key')
-    .map((c) => `${c} = EXCLUDED.${c}`)
-    .join(', ');
-
-  for (const item of items) {
-    const values = cols.map((c) => item[c]);
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-    const query = `
-      INSERT INTO ${table} (${colNames})
-      VALUES (${placeholders})
-      ON CONFLICT (source_key) DO UPDATE SET ${updateCols}
-    `;
-    await p.query(query, values);
-  }
+  const { error } = await getCatalog().from(table).upsert(items, { onConflict: 'source_key' });
+  if (error) throw new Error(`${table} upsert failed: ${error.message}`);
 }
 
 async function syncMediaType(mediaType) {
@@ -257,7 +230,7 @@ async function syncMediaType(mediaType) {
   const prefix = isMovie ? 'tmdb:movie:' : 'tmdb:tv:';
 
   console.log(`\n====================================================`);
-  console.log(`  Syncing ${isMovie ? '🎬 Movies' : '📺 TV Shows'} to Neon Postgres`);
+  console.log(`  Syncing ${isMovie ? '🎬 Movies' : '📺 TV Shows'} to the Turso catalog`);
   console.log(`====================================================`);
 
   const exportItems = await downloadExport(exportType);
@@ -312,13 +285,13 @@ async function main() {
     console.error('Missing TMDB_API_KEY environment variable.');
     process.exit(1);
   }
-  if (!DATABASE_URL) {
-    console.error('Missing DATABASE_URL environment variable.');
+  if (!process.env.TURSO_DATABASE_URL) {
+    console.error('Missing TURSO_DATABASE_URL environment variable.');
     process.exit(1);
   }
 
   const start = Date.now();
-  console.log('Starting TMDB -> Neon Postgres sync...');
+  console.log('Starting TMDB -> Turso catalog sync...');
 
   if (TYPE === 'movie' || TYPE === 'both') {
     await syncMediaType('movie');
@@ -327,17 +300,12 @@ async function main() {
     await syncMediaType('tv');
   }
 
-  if (pool) {
-    await pool.end();
-  }
-
   console.log(`\nSync complete in ${Math.round((Date.now() - start) / 1000)}s.`);
 }
 
 if (require.main === module) {
   main().catch((err) => {
     console.error('Fatal sync error:', err);
-    if (pool) pool.end();
     process.exit(1);
   });
 }

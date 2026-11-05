@@ -1,6 +1,6 @@
 // Shared fluent query description. Execution stays on the authenticated server;
 // database credentials never enter the browser bundle.
-class NeonQuery {
+class CatalogQuery {
   constructor(execute, table) {
     this.execute = execute;
     this.spec = { table, operation: 'select', columns: '*', filters: [], orders: [] };
@@ -32,7 +32,7 @@ class NeonQuery {
   maybeSingle() { this.spec.maybeSingle = true; return this; }
   then(resolve,reject) { return this.execute(this.spec).then(resolve,reject); }
 }
-function createNeonQueryClient(execute, rpc) {
-  return { from: (table) => new NeonQuery(execute,table), rpc };
+function createCatalogQueryClient(execute, rpc) {
+  return { from: (table) => new CatalogQuery(execute,table), rpc };
 }
-module.exports = { createNeonQueryClient };
+module.exports = { createCatalogQueryClient };
