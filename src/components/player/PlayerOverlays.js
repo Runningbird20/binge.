@@ -8,12 +8,14 @@ import { preloadIsPlaying } from '../../utils/preloadNext';
 const label = (id) => SERVER_LABELS[id]?.label || id;
 
 // The server's player, or a placeholder while there's no URL yet. Give it a
-// `key` that changes per load: a new key remounts the iframe.
-export function EmbedFrame({ embedUrl, frameRef, title, onLoad, className, emptyClassName, emptyText }) {
+// `key` that changes per load (and when `sandbox` changes): a new key
+// remounts the iframe. `sandbox` blocks the player's pop-ups (usePopupSandbox).
+export function EmbedFrame({ embedUrl, frameRef, title, onLoad, sandbox, className, emptyClassName, emptyText }) {
   return embedUrl ? (
     <iframe
       ref={frameRef}
       src={embedUrl}
+      sandbox={sandbox}
       className={className}
       allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *; web-share *"
       allowFullScreen
@@ -47,7 +49,7 @@ export function SkipIntroButton({ onSkip, onHide }) {
 // can't be switched off only has its page prefetched; otherwise the frame
 // loads with autoplay off and denied, and removes itself if it reports
 // playback anyway (Safari ignores the autoplay permission).
-export function PreloadFrame({ url, silent }) {
+export function PreloadFrame({ url, silent, sandbox }) {
   const frameRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   useEffect(() => {
@@ -64,7 +66,7 @@ export function PreloadFrame({ url, silent }) {
   if (playing) return null;
   return (
     <iframe ref={frameRef} className="st-preload-frame" src={url} title="Next episode (loading)" aria-hidden="true" tabIndex={-1}
-      allow="autoplay 'none'" referrerPolicy="no-referrer-when-downgrade" />
+      allow="autoplay 'none'" referrerPolicy="no-referrer-when-downgrade" sandbox={sandbox} />
   );
 }
 

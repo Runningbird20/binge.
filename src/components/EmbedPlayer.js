@@ -14,6 +14,7 @@ import useUpNext from './player/useUpNext';
 import usePositionSync from './player/usePositionSync';
 import useFailover from './player/useFailover';
 import usePlaybackMessages from './player/usePlaybackMessages';
+import usePopupSandbox from './player/usePopupSandbox';
 import useFullscreen from './player/useFullscreen';
 import usePlayerKeyboard from './player/usePlayerKeyboard';
 import useControlsAutoHide from './player/useControlsAutoHide';
@@ -103,6 +104,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     provider, item, mediaType, season, episode, iframeRef, playbackRef,
     confirmServer: serverChoice.confirmServer, failover, intro, syncPosition,
   });
+  // Pop-ups blocked by sandboxing the player, where the server allows it.
+  const popups = usePopupSandbox({ provider, itemId: item?.id, season, episode, playbackRef });
 
   const fullscreen = useFullscreen({ isMobile, modalRef, frameWrapRef });
   // Only one video should ever be audible at once — opening this (full)
@@ -171,6 +174,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       href: base,
       positionKey: key,
       vidriftResume: provider === 'vidrift' && at > 0 ? at : null,
+      sandbox: popups.sandbox,
     });
     onClose?.();
   }
@@ -187,6 +191,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     onReportAudio: serverChoice.reportServerAudio,
     blockedCount: serverChoice.blockedIds.size,
     health: serverChoice.providerHealth,
+    popupsBlockedNow: popups.sandboxed,
   };
   // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
   const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
@@ -199,7 +204,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       {upNext.upNext && upNext.nextEpisode && (
         <UpNextCard upNext={upNext.upNext} nextEpisode={upNext.nextEpisode} nextInfo={upNext.nextInfo} onPlay={upNext.playNextEpisode} onCancel={upNext.dismissUpNext} />
       )}
-      {preloadUrl && <PreloadFrame url={preloadUrl} silent={silentPreload} />}
+      {preloadUrl && <PreloadFrame url={preloadUrl} silent={silentPreload} sandbox={popups.sandbox} />}
     </>
   );
   const failoverBar = (
@@ -223,8 +228,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   };
   const layout = {
     item, isTV, season, episode, onClose, onMinimize: handleMinimize, modalRef,
-    frame: { embedUrl, frameRef: iframeRef, title: `Watch ${item.title}`, onLoad: handleFrameLoad },
-    frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}-${resumeNonce}`,
+    frame: { embedUrl, frameRef: iframeRef, title: `Watch ${item.title}`, onLoad: handleFrameLoad, sandbox: popups.sandbox },
+    frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}-${resumeNonce}-${popups.sandboxed ? 'sb' : 'open'}`,
     overlays, failoverBar, lookupState, lookupError, episodes,
     watchedNow: watched.has(currentEpisodeKey),
     canTrackEpisodes,

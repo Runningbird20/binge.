@@ -35,7 +35,15 @@ npm run test:e2e          # Playwright, local only (see Testing notes)
 
 There is no separate lint script. ESLint runs as part of `react-scripts build`/`test` via the `react-app` config in `package.json`. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
 
-**Restart `npm start` after `git pull` or switching branches.** The API server doesn't hot-reload. A stale one kept serving the Neon-era catalog code after the Turso move, and the Movies/TV pages came up empty.
+**Keeping local code current.** Twice the Movies/TV pages came up empty because the local code was the Neon-era version: once from an API server started before a `git pull`, once from a branch cut from a stale local `main`. That database no longer accepts logins. Three guards now:
+- **`npm run server` runs `node --watch`**, so a pull or branch switch restarts it with the new code.
+- **`npm start` first runs `scripts/check-branch.js`** (`prestart`).
+  - A branch with no commits of its own that's behind `origin/main` (`main` itself, or a branch just cut from an old `main`) is fast-forwarded, and local `main` moves along.
+  - A branch with its own commits gets a note to `git merge origin/main`.
+  - It's fast-forward only, never stops the start, and does nothing offline. `BINGE_NO_AUTO_UPDATE=1` turns it off.
+- **The API server says at start which catalog it reached** (`Catalog: Turso (host), 23 tables`), or why it couldn't (missing or wrong `TURSO_*` in `.env.local`).
+
+Branch from an up-to-date `main` (`git pull` on `main` first, or `git switch -c name origin/main`). A git hook doing this automatically was considered and dropped: installing hooks from `npm install` was judged too invasive.
 
 ### Data import / seeding scripts
 
@@ -391,7 +399,15 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - **Saving.** Positions are saved per profile/title/episode in `src/utils/playbackPositions.js` and synced across devices through `continue_watching.position_seconds/duration_seconds`, every ~30s and on close. The newer of local vs synced wins.
   - **The iframe URL never changes for a save.** The start second is frozen per load.
 - **iframe permissions.** Embed iframes use `allow="autoplay *; fullscreen *; …"`. Without the `*`, a player that redirects to another domain loses autoplay/fullscreen.
-- **Before adding or removing a server, test it embedded in an iframe on a non-provider origin and watch for real HLS/MP4 requests.** A 200 page proves nothing: vsembed.ru serves its page but shows "This media is unavailable", and vidsrc.ru is a different, working service.
+- **Before adding or removing a server, test it embedded in an iframe on a non-provider origin and watch for real HLS/MP4 requests.** A 200 page proves nothing: vsembed.ru serves its page but shows "This media is unavailable", and vidsrc.ru is a different, working service. Test it sandboxed too, and set its `sandbox` flag (below).
+- **Pop-ups are blocked by sandboxing the player** (`utils/popupSandbox.js`, `player/usePopupSandbox.js`).
+  - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
+  - **Which servers.** Tested 2026-11-05 in Chrome: only VidRift and CineSrc play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
+  - **The safety net.** A sandboxed server that reports playback but shows none after 12s reloads unsandboxed. If it then plays, the refusal is remembered on that device for 14 days. A server without the flag is only tried sandboxed if it reports playback.
+  - **Also sandboxed:** the next-episode preload and the mini player use the same decision.
+  - **The server lists mark them "No pop-ups"** (`NoPopupsTag` in `PlaybackOptions.js`, a shield on the phone's landscape server chips). It's the same `popupsBlocked()` the player uses, so a refusal this device learned drops the mark. For the server playing now it shows what happened on this load (`popupsBlockedNow`).
+  - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
+  - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.
 
 **Up Next / binge mode.** Servers' own auto-next is turned off in their URLs. The player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
 
