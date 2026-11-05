@@ -1,4 +1,4 @@
-// Where the browser reaches this app's own API (/api/neon-data and the
+// Where the browser reaches this app's own API (/api/catalog and the
 // Express routes). The media catalog (Turso) is only reached through that API.
 
 const isLocalHost = (host) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host || '');

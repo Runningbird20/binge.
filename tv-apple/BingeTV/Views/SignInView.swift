@@ -13,7 +13,7 @@ struct SignInView: View {
         HStack(spacing: 120) {
             VStack(alignment: .leading, spacing: 28) {
                 Wordmark(size: 96)
-                Text("Movies, series, books and live sports, picked for you.")
+                Text("Movies, series and live sports, picked for you.")
                     .font(.title3)
                     .foregroundStyle(Theme.muted)
                     .frame(maxWidth: 640, alignment: .leading)

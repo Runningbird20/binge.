@@ -58,11 +58,11 @@ const authClient = isSupabaseConfigured
   : null;
 
 // Only catalog/media metadata queries go to the media catalog (Turso, through
-// our API; the path keeps its old name). User data and Auth stay Supabase.
+// our API's /api/catalog). User data and Auth stay Supabase.
 async function requestCatalog(path, body) {
   const base = getApiBaseUrl();
   try {
-    const response = await trackedFetch(`${base}/api/neon-data/${path}`, {
+    const response = await trackedFetch(`${base}/api/catalog/${path}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });

@@ -38,7 +38,6 @@ object AppModel {
         private set
     var pinProfile by mutableStateOf<AccountProfile?>(null)
     var lockCheckError by mutableStateOf<String?>(null)
-    var deepLink by mutableStateOf<String?>(null)
 
     // The profile's maturity level (Toddler / Kids / Teens / No restrictions).
     val maturity get() = profile?.maturity ?: Maturity.ALL

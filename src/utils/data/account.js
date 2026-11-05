@@ -99,15 +99,7 @@ async function getStoredSupabaseProfile(authUser, overrides = {}) {
 // the same way every other per-user table is.
 
 export async function fetchAccountProfiles() {
-  if (!isSupabaseConfigured || !supabase) {
-    const rawStored = window.localStorage.getItem('neon_account_profiles');
-    if (rawStored) {
-      try { return JSON.parse(rawStored); } catch {}
-    }
-    return [
-      { id: 'neon-default-profile', name: 'Main', is_default: true, is_kids: false }
-    ];
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
@@ -128,22 +120,6 @@ export async function fetchAccountProfiles() {
 }
 
 export async function createAccountProfile({ name, isKids = false, avatarUrl = null, avatarColor = null }) {
-  if (!isSupabaseConfigured || !supabase) {
-    const newProfile = {
-      id: `profile-${Date.now()}`,
-      name: name?.trim() || 'New Profile',
-      is_kids: Boolean(isKids),
-      avatar_url: avatarUrl,
-      avatar_color: avatarColor,
-      is_default: false,
-      created_at: new Date().toISOString(),
-    };
-    const list = await fetchAccountProfiles();
-    const updated = [...list, newProfile];
-    window.localStorage.setItem('neon_account_profiles', JSON.stringify(updated));
-    return newProfile;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -170,23 +146,6 @@ export async function createAccountProfile({ name, isKids = false, avatarUrl = n
 // is_kids and settings.maturity together; it wins over `isKids`.
 export async function updateAccountProfile(profileId, { name, isKids, maturity, avatarUrl, avatarColor } = {}) {
   if (maturity !== undefined) isKids = maturity !== 'all';
-  if (!isSupabaseConfigured || !supabase) {
-    const list = await fetchAccountProfiles();
-    const updated = list.map((p) => {
-      if (p.id !== profileId) return p;
-      return {
-        ...p,
-        ...(name !== undefined ? { name: name.trim() } : {}),
-        ...(isKids !== undefined ? { is_kids: Boolean(isKids) } : {}),
-        ...(maturity !== undefined ? { settings: { ...(p.settings || {}), maturity } } : {}),
-        ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
-        ...(avatarColor !== undefined ? { avatar_color: avatarColor } : {}),
-      };
-    });
-    window.localStorage.setItem('neon_account_profiles', JSON.stringify(updated));
-    return;
-  }
-
   const client = requireSupabase();
 
   const update = {};
@@ -213,13 +172,6 @@ export async function updateAccountProfile(profileId, { name, isKids, maturity, 
 }
 
 export async function deleteAccountProfile(profileId) {
-  if (!isSupabaseConfigured || !supabase) {
-    const list = await fetchAccountProfiles();
-    const updated = list.filter((p) => p.id !== profileId || p.is_default);
-    window.localStorage.setItem('neon_account_profiles', JSON.stringify(updated));
-    return;
-  }
-
   const client = requireSupabase();
   const { error } = await client
     .from('account_profiles')
@@ -263,10 +215,6 @@ async function saveProfileRow(userId, payload, hasExistingProfile) {
 }
 
 export async function ensureSupabaseProfile(authUser, overrides = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    return buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
-  }
-
   const profileRow = await getProfileRow(authUser.id);
 
   const nextProfile = {
@@ -300,10 +248,6 @@ export async function ensureSupabaseProfile(authUser, overrides = {}) {
 }
 
 export async function resolveSupabaseProfile(authUser, overrides = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    return buildUserProfile(authUser, buildFallbackProfileRow(authUser, overrides));
-  }
-
   const { profile: fallbackProfile, hasStoredProfile } = await getStoredSupabaseProfile(authUser, overrides);
 
   if (hasStoredProfile) {
@@ -474,20 +418,6 @@ export async function signOutFromSupabase() {
 }
 
 export async function updateSupabaseProfile({ username, email, bio, avatarUrl }) {
-  if (!isSupabaseConfigured || !supabase) {
-    const raw = window.localStorage.getItem('user');
-    const current = raw ? JSON.parse(raw) : {};
-    const updated = {
-      ...current,
-      ...(username ? { username } : {}),
-      ...(email ? { email } : {}),
-      ...(bio !== undefined ? { bio } : {}),
-      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
-    };
-    window.localStorage.setItem('user', JSON.stringify(updated));
-    return updated;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -517,15 +447,6 @@ export async function updateSupabaseProfile({ username, email, bio, avatarUrl })
 }
 
 export async function uploadSupabaseAvatar(file) {
-  if (!isSupabaseConfigured || !supabase) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
 
@@ -553,10 +474,6 @@ export async function uploadSupabaseAvatar(file) {
 }
 
 export async function updateSupabasePassword(newPassword) {
-  if (!isSupabaseConfigured || !supabase) {
-    return;
-  }
-
   const client = requireSupabase();
   const { error } = await client.auth.updateUser({ password: newPassword });
 

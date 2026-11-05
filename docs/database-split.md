@@ -14,7 +14,7 @@ stored in both. (The catalog moved from Neon Postgres to Turso on 2026-11-04.)
 
 - **Web:** `src/utils/supabase.js` exports a split client (`splitDatabaseClient`
   in `src/utils/mediaDatabase.js`). `.from()` on a media table and
-  `rpc('search_catalog')` go to `POST /api/neon-data/query|rpc`; everything else
+  `rpc('search_catalog')` go to `POST /api/catalog/query|rpc`; everything else
   is the real Supabase client. Database credentials never reach the browser.
 - **Server:** `server/data-access/client.js` gives the same split
   (`createHybridClient`); trusted server code may write the cache tables.
@@ -23,10 +23,11 @@ stored in both. (The catalog moved from Neon Postgres to Turso on 2026-11-04.)
   specs into SQLite SQL, keeping PostgREST's behaviour (NULL ordering, `*`
   wildcards, JSON columns parsed, numbers as numbers).
 - **Apple TV / Fire TV:** `GET` on a media table goes to
-  `{site}/api/neon-data/rest/{table}` (PostgREST-style, read-only, no Supabase
+  `{site}/api/catalog/rest/{table}` (PostgREST-style, read-only, no Supabase
   credentials sent); every other request goes to Supabase.
-- `/api/neon-data` only serves the media tables and rejects writes. The path
-  kept its Neon-era name because installed TV builds call it.
+- `/api/catalog` (`server/routes/catalog.js`) only serves the media tables and
+  rejects writes. It's also served at its Neon-era name, `/api/neon-data`,
+  because TV builds from before 2026-11 call that.
 
 Catalog ids are shared: Supabase user rows refer to catalog ids (`media_id`), so
 anything that needs a title name next to user data (e.g. the admin overview's
@@ -60,7 +61,7 @@ offsets), an uncached search ~1–15k (cached 10 min). The one-time load wrote
 
 `.github/workflows/database-split.yml` runs every Monday (or Actions → Database
 split → Run workflow). It checks that the deployed site answers
-`/api/neon-data/rest/movies`, then runs `scripts/check-database-split.js`
+`/api/catalog/rest/movies` (and the old `/api/neon-data` path), then runs `scripts/check-database-split.js`
 (Turso holds only the catalog, Supabase exposes none of it). A failed scheduled
 run opens or updates an issue. Secrets: `TURSO_DATABASE_URL`,
 `TURSO_AUTH_TOKEN`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. The catalog sync

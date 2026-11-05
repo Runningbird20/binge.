@@ -1,5 +1,5 @@
 // Runs PostgREST-shaped query specs (src/utils/catalogQuery.js, the TV apps'
-// GET /api/neon-data/rest/:table) against the Turso catalog as SQLite SQL.
+// GET /api/catalog/rest/:table) against the Turso catalog as SQLite SQL.
 // Only MEDIA_TABLES are reachable; untrusted callers can only read.
 const catalogDb = require('../catalogDb');
 const { withSearchColumns } = require('../catalogSearch');

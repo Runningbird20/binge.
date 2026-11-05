@@ -336,7 +336,7 @@ private fun SignInScreen() {
     Row(Modifier.fillMaxSize().padding(horizontal = 60.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(60.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Wordmark(48.sp)
-            Text("Movies, series, books and live sports, picked for you.", style = Type.headline.copy(fontWeight = FontWeight.Normal), color = Palette.muted)
+            Text("Movies, series and live sports, picked for you.", style = Type.headline.copy(fontWeight = FontWeight.Normal), color = Palette.muted)
             Text("New here? Create an account at ${Config.siteHost} on your phone or computer, then sign in here.", style = Type.callout, color = Palette.muted)
         }
         Column(Modifier.width(360.dp).background(Palette.surface, RoundedCornerShape(18.dp)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {

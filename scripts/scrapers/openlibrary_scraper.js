@@ -105,15 +105,6 @@ function buildItemUrl(work) {
   return null;
 }
 
-// Build readable embed URL for the reader
-function buildEmbedUrl(work) {
-  // Open Library read online URL
-  if (work.key) {
-    return `${OL_BASE}${work.key}`;
-  }
-  return null;
-}
-
 function extractAuthors(work) {
   const names = work.authors || work.author_name || [];
   if (!Array.isArray(names) || !names.length) return null;

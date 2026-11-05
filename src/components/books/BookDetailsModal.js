@@ -26,7 +26,6 @@ export function BookDetailsModal({
   userRating,
   detailMessage,
   allowActions = true,
-  browseOnlyMessage = '',
 }) {
   const [showReader, setShowReader] = useState(false);
   const bookOverlayRef = useRef(null);
@@ -220,7 +219,6 @@ export function BookDetailsModal({
                   allowActions={allowActions}
                   size="lg"
                 />
-                {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
                 {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
               </section>
             </div>

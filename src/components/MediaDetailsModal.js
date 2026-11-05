@@ -51,7 +51,6 @@ export default function MediaDetailsModal({
   isAddingWatchlist,
   detailMessage,
   allowActions = true,
-  browseOnlyMessage = '',
   autoPlay = false,
   initialSeason,
   initialEpisode,
@@ -324,7 +323,6 @@ export default function MediaDetailsModal({
         allowActions={allowActions}
         size="lg"
       />
-      {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
       {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
     </section>
   );

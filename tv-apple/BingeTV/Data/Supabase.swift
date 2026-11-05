@@ -31,7 +31,8 @@ actor Supabase {
     static let shared = Supabase()
 
     /// The media catalog lives in Turso and is read through the site's
-    /// /api/neon-data (read-only, public; the path kept its old name).
+    /// /api/catalog (read-only, public; builds before 2026-11 use its old
+    /// name, /api/neon-data, which the site still serves).
     /// Accounts and user data stay here.
     static let mediaTables: Set<String> = ["movies", "tv_shows", "books", "movie_genres", "tv_show_genres", "book_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache"]
 
@@ -167,7 +168,7 @@ actor Supabase {
         guard Config.isConfigured, let base = Config.supabaseURL else { throw BingeError.notConfigured }
         let mediaRead = Self.isMediaRead(method, table: table)
         let endpoint = mediaRead
-            ? Config.siteURL.appending(path: "api/neon-data/rest/\(table)")
+            ? Config.siteURL.appending(path: "api/catalog/rest/\(table)")
             : base.appending(path: "rest/v1/\(table)")
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query }
