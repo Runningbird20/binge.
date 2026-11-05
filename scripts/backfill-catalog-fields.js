@@ -3,7 +3,7 @@
  * backfill-catalog-fields.js
  *
  * Fills popularity, vote_average, original_language and age_rating on
- * catalog rows that were imported without them (sync-tmdb-to-neon.js only
+ * catalog rows that were imported without them (sync-tmdb-to-turso.js only
  * enriches TMDB ids it hasn't seen, so older rows never got these). One TMDB
  * request per row fills every empty column; columns that already have a
  * value are never touched.
@@ -19,7 +19,7 @@
  *   MAX_ROWS=all CONCURRENCY=10 node scripts/backfill-catalog-fields.js   # the whole backlog
  *   DRY_RUN=1 MAX_ROWS=20 node scripts/backfill-catalog-fields.js         # print what would change
  *
- * Needs TMDB_API_KEY and Neon DATABASE_URL.
+ * Needs TMDB_API_KEY and TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN).
  */
 
 'use strict';
@@ -29,7 +29,7 @@ try {
   require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), quiet: true });
 } catch {}
 
-const { Client } = require('pg');
+const catalogDb = require('../server/catalogDb');
 const { tmdbFetch } = require('./tmdb-records');
 
 const TYPE = process.env.TYPE || 'both';
@@ -79,7 +79,7 @@ async function mapLimit(items, limit, fn) {
 async function fill(db, table) {
   const isMovie = table === 'movies';
   const { rows: [{ count }] } = await db.query(
-    `select count(*)::int as count from public.${table} where source_key like 'tmdb:%' and popularity is null`,
+    `select count(*) as count from ${table} where source_key like 'tmdb:%' and popularity is null`,
   );
   const total = Math.min(count, MAX_ROWS);
   console.log(`\n${table}: ${count} rows without popularity; checking ${total}`);
@@ -88,7 +88,7 @@ async function fill(db, table) {
 
   while (checked < total) {
     const { rows } = await db.query(
-      `select id, title, source_key from public.${table}
+      `select id, title, source_key from ${table}
        where source_key like 'tmdb:%' and popularity is null and id > $1
        order by id limit $2`,
       [lastId, Math.min(BATCH, total - checked)],
@@ -105,25 +105,17 @@ async function fill(db, table) {
     if (DRY_RUN) {
       ok.slice(0, 8).forEach((r) => console.log(`  would set ${r.title} → ${JSON.stringify({ popularity: r.popularity, vote_average: r.vote_average, original_language: r.original_language, age_rating: r.age_rating })}`));
     } else if (ok.length) {
-      // One statement per batch; coalesce keeps any value set meanwhile.
-      const values = [];
-      const params = [];
-      ok.forEach((r, i) => {
-        const b = i * 5;
-        values.push(`($${b + 1}::bigint, $${b + 2}::numeric, $${b + 3}::numeric, $${b + 4}::text, $${b + 5}::text)`);
-        params.push(r.id, r.popularity, r.vote_average, r.original_language, r.age_rating);
-      });
-      const result = await db.query(
-        `update public.${table} t set
-           popularity = coalesce(t.popularity, v.popularity),
-           vote_average = coalesce(t.vote_average, v.vote_average),
-           original_language = coalesce(nullif(t.original_language, ''), v.original_language),
-           age_rating = coalesce(nullif(t.age_rating, ''), v.age_rating)
-         from (values ${values.join(', ')}) as v(id, popularity, vote_average, original_language, age_rating)
-         where t.id = v.id`,
-        params,
-      );
-      filled += result.rowCount;
+      // One transaction per batch; coalesce keeps any value set meanwhile.
+      const results = await db.batch(ok.map((r) => ({
+        sql: `update ${table} set
+                popularity = coalesce(popularity, $1),
+                vote_average = coalesce(vote_average, $2),
+                original_language = coalesce(nullif(original_language, ''), $3),
+                age_rating = coalesce(nullif(age_rating, ''), $4)
+              where id = $5`,
+        params: [r.popularity, r.vote_average, r.original_language, r.age_rating, r.id],
+      })));
+      filled += results.reduce((sum, result) => sum + result.rowsAffected, 0);
     }
     checked += rows.length;
     const rate = checked / ((Date.now() - started) / 1000);
@@ -133,18 +125,12 @@ async function fill(db, table) {
 }
 
 async function main() {
-  if (!process.env.TMDB_API_KEY || !(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED)) {
-    console.error('Needs TMDB_API_KEY and Neon DATABASE_URL.');
+  if (!process.env.TMDB_API_KEY || !process.env.TURSO_DATABASE_URL) {
+    console.error('Needs TMDB_API_KEY and TURSO_DATABASE_URL.');
     process.exit(1);
   }
-  const db = new Client({ connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-  await db.connect();
-  try {
-    if (TYPE !== 'tv') await fill(db, 'movies');
-    if (TYPE !== 'movie') await fill(db, 'tv_shows');
-  } finally {
-    await db.end();
-  }
+  if (TYPE !== 'tv') await fill(catalogDb, 'movies');
+  if (TYPE !== 'movie') await fill(catalogDb, 'tv_shows');
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });
