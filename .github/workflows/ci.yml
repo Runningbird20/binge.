@@ -42,7 +42,7 @@ jobs:
         run: npx react-scripts test --watchAll=false
 
       - name: Server tests
-        run: node --test server/data-access/*.test.js
+        run: node --test server/data-access/*.test.js server/routes/*.test.js
 
       - name: Production build (warnings fail it, as on Vercel)
         run: npm run build

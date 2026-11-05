@@ -2,10 +2,6 @@
 
 Ideas for binge., roughly in priority order. Each item names the files to start from.
 
-## Fix first
-
-- [ ] **Install the new TV builds.** TV apps from before the split read the catalog from Supabase, which no longer has it, so their rows are empty. Fire TV: the APK from the latest `tv-apk.yml` run. Apple TV: build and install from Xcode.
-
 ## Features
 
 - [ ] **"Forgot PIN?"** on the lock screen: confirm the account password, then clear or reset the PIN (`ProfileSecurityDialog.js`; `set_profile_lock` already supports removing it).
@@ -32,14 +28,7 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Accounts and privacy
 
-- [ ] **Delete my account.** Account Settings has no delete; only admins can delete users (`/api/admin/users`). Add a self-service route that confirms the password and calls `auth.admin.deleteUser` (everything cascades from `auth.users`).
 - [ ] **Download my data.** Export ratings, My List, history and episode progress as JSON plus a Letterboxd-style CSV, the mirror of `/import` (`historyImport.js` already knows the formats).
-- [ ] **Two-step sign-in.** Supabase Auth supports TOTP authenticator apps, but nothing enrolls or challenges a factor. Add it to Account Settings and the login form, at least for admin accounts.
-
-## GitHub Actions
-
-- [ ] **Bundle size on PRs.** After `CI=true npm run build`, comment the gzipped size of `build/static/js/main.*.js` against `main`, so a heavy import gets noticed before it ships.
-- [ ] **Tidy merged branches.** A weekly job that deletes remote branches already merged into `main`. Unmerged branches stay; it only lists them in the run summary.
 
 ## Tests and reliability
 
@@ -47,3 +36,8 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **An E2E check for the database split.** Signed in, open Home and assert rows have titles: this would have caught the empty preview (`e2e/`, needs `E2E_EMAIL`/`E2E_PASSWORD`).
 - [ ] **E2E for profile PINs** (set PIN → switch away → wrong PIN → right PIN) once a test account exists.
 - [ ] **Watch `/api/neon-data` in production.** Log slow queries and errors to `error_events` so a broken catalog shows on `/admin` instead of as silently empty rows.
+
+## Mobile
+
+- [ ] Andriod APK
+- [ ] Apple ipa

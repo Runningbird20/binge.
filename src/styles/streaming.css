@@ -2018,6 +2018,9 @@
 }
 .profile-delete-card .btn-primary,
 .profile-delete-card .btn-danger { border-radius: 999px; padding-left: 1.4rem; padding-right: 1.4rem; }
+/* Account Settings → Delete account (password check before it happens) */
+.settings-delete-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.settings-delete-actions .btn-danger:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Player chrome */
 .player-header-btns { display: flex; gap: 0.4rem; }
