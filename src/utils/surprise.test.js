@@ -38,3 +38,11 @@ test('over many presses the top of the list comes up most', () => {
   expect(counts.get(1)).toBeGreaterThan(counts.get(12));
   expect(counts.size).toBe(12); // every title can come up
 });
+
+test('each button draws only from its own type, falling back to trending of that type', () => {
+  const personal = { topPicks: [t(1), t(2, { media_type: 'tv_show' }), t(3)], becauseYouWatched: [] };
+  expect(surprisePool(personal, [], { mediaType: 'movie' }).map((item) => item.id)).toEqual([1, 3]);
+  expect(surprisePool(personal, [], { mediaType: 'tv_show' }).map((item) => item.id)).toEqual([2]);
+  const moviesOnly = { topPicks: [t(1)], becauseYouWatched: [] };
+  expect(surprisePool(moviesOnly, [t(7), t(8, { media_type: 'tv_show' })], { mediaType: 'tv_show' }).map((item) => item.id)).toEqual([8]);
+});

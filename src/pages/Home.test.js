@@ -149,7 +149,7 @@ test('a show whose newest episode is marked watched, with nothing saved partway,
   [ratingsSpy, watchlistSpy, continueWatchingSpy, tmdbSpy, watchedSpy, useAuthSpy].forEach((spy) => spy.mockRestore());
 });
 
-test('Surprise me opens one of your picks and Play something starts one', async () => {
+test('the surprise buttons open a movie or a series from your picks', async () => {
   localStorage.setItem('onboarding_done_7', '1');
   const { mockNavigate } = require('../testUtils/pageTestSetup');
   const personalization = require('../utils/personalization');
@@ -162,7 +162,7 @@ test('Surprise me opens one of your picks and Play something starts one', async 
     jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([]),
     jest.spyOn(personalization, 'buildPersonalizedRows').mockResolvedValue({
       hasHistory: true,
-      topPicks: [{ id: 42, media_type: 'movie', title: 'Arrival' }],
+      topPicks: [{ id: 42, media_type: 'movie', title: 'Arrival' }, { id: 7, media_type: 'tv_show', title: 'Severance' }],
       becauseYouWatched: [],
       taste: {},
     }),
@@ -170,12 +170,12 @@ test('Surprise me opens one of your picks and Play something starts one', async 
   mockNavigate.mockClear();
 
   render(<Home />);
-  const surprise = await screen.findByRole('button', { name: 'Surprise me' });
-  await waitFor(() => expect(surprise).toBeEnabled());
-  fireEvent.click(surprise);
+  const movie = await screen.findByRole('button', { name: 'Surprise me with a movie' });
+  await waitFor(() => expect(movie).toBeEnabled());
+  fireEvent.click(movie);
   expect(mockNavigate).toHaveBeenLastCalledWith('/movie/42', expect.objectContaining({ state: expect.any(Object) }));
-  fireEvent.click(screen.getByRole('button', { name: 'Play something' }));
-  expect(mockNavigate).toHaveBeenLastCalledWith('/movie/42?play=1', expect.objectContaining({ state: expect.any(Object) }));
+  fireEvent.click(screen.getByRole('button', { name: 'Surprise me with a series' }));
+  expect(mockNavigate).toHaveBeenLastCalledWith('/tv-show/7', expect.objectContaining({ state: expect.any(Object) }));
 
   [...spies, useAuthSpy].forEach((spy) => spy.mockRestore());
 });
