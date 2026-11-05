@@ -26,6 +26,14 @@ describe('parseImport', () => {
     expect(byTitle.Dune).toMatchObject({ list: 'watchlist' });
   });
 
+  it('uses an optional tmdbID column in Letterboxd CSVs for exact matches', () => {
+    const { records } = parseImport([
+      { name: 'ratings.csv', text: 'Date,Name,Year,Letterboxd URI,Rating,tmdbID\n2024-01-03,Heat,1995,,4,949\n2024-01-04,Heat,1995,,3,10220\n' },
+    ]);
+    // Same title and year, different films: kept apart by their TMDB ids.
+    expect(records.map((r) => [r.tmdbId, r.rating])).toEqual([[949, 4], [10220, 3]]);
+  });
+
   it('reads IMDb ratings (10-point → half stars, TV vs movie, skips episodes)', () => {
     const csv = 'Const,Your Rating,Date Rated,Title,Title Type,Year\n'
       + 'tt2543164,9,2024-01-01,Arrival,Movie,2016\n'

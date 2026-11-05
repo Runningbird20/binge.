@@ -9,7 +9,7 @@ import { uploadSupabaseAvatar } from '../utils/supabaseData';
 const MIN_PASSWORD_LENGTH = 6;
 
 export default function AccountSettings() {
-  const { user, updateProfile, updatePassword, logout } = useAuth();
+  const { user, updateProfile, updatePassword, logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -34,6 +34,12 @@ export default function AccountSettings() {
   const [avatarLoading, setAvatarLoading] = useState(false);
   const [avatarError, setAvatarError] = useState('');
   const [avatarSuccess, setAvatarSuccess] = useState('');
+
+  // Delete account: the button opens a password check before anything happens.
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     setProfileForm({
@@ -179,6 +185,29 @@ export default function AccountSettings() {
       await logout();
     } finally {
       navigate('/');
+    }
+  }
+
+  function closeDelete() {
+    setDeleteOpen(false);
+    setDeletePassword('');
+    setDeleteError('');
+  }
+
+  async function handleDeleteSubmit(e) {
+    e.preventDefault();
+    setDeleteError('');
+    if (!deletePassword) {
+      setDeleteError('Enter your password to delete your account.');
+      return;
+    }
+    setDeleteLoading(true);
+    try {
+      await deleteAccount(deletePassword);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setDeleteError(err.message || "Couldn't delete your account. Try again in a moment.");
+      setDeleteLoading(false);
     }
   }
 
@@ -394,6 +423,45 @@ export default function AccountSettings() {
             <button type="button" className="btn-danger" onClick={handleLogout}>
               Log out
             </button>
+          </section>
+
+          <section className="settings-card" aria-labelledby="delete-account-heading">
+            <div className="settings-card-header">
+              <h2 id="delete-account-heading">Delete account</h2>
+              <p>
+                Permanently deletes your account and every profile on it, with their ratings,
+                My List, watch history, reminders and settings. This can't be undone.
+              </p>
+            </div>
+
+            {!deleteOpen ? (
+              <button type="button" className="btn-danger" onClick={() => setDeleteOpen(true)}>
+                Delete account
+              </button>
+            ) : (
+              <form className="auth-form settings-form" onSubmit={handleDeleteSubmit}>
+                {deleteError && <div className="auth-error" role="alert">{deleteError}</div>}
+                <label>
+                  <input
+                    aria-label="Your password, to confirm"
+                    placeholder="Your password, to confirm"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    autoComplete="current-password"
+                    autoFocus
+                  />
+                </label>
+                <div className="settings-delete-actions">
+                  <button type="submit" className="btn-danger" disabled={deleteLoading || !deletePassword}>
+                    {deleteLoading ? 'Deleting…' : 'Delete my account forever'}
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={closeDelete} disabled={deleteLoading}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
         </div>
       </main>

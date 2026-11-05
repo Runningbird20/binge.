@@ -3,19 +3,35 @@ import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle, Play } from '@phosphor-icons/react';
 import { findFranchise } from '../utils/franchises';
 import { resolveTmdbItems } from '../utils/catalogLookup';
-import { fetchSupabaseRatingMap, fetchSupabaseWatchlistStatusMap, fetchSupabaseContinueWatching } from '../utils/supabaseData';
+import {
+  fetchSupabaseContinueWatching,
+  fetchSupabaseRatingMap,
+  fetchSupabaseWatchlistStatusMap,
+  markMoviesWatched,
+  undoMarkMoviesWatched,
+} from '../utils/supabaseData';
 import { posterSrc } from '../utils/imageQuality';
+import { haptic } from '../utils/haptics';
 import { titleUrl } from './TitleCard';
 import HScroll from './HScroll';
+import SlidingTabs from './SlidingTabs';
+
+const released = (result, now = new Date()) => Boolean(result.releaseDate) && new Date(result.releaseDate) <= now;
 
 // "Part of the Marvel Cinematic Universe · 12 of 37 watched": the
 // franchise in release or story order, your progress through it, and
-// what to watch next.
-export default function FranchiseOrder({ tmdbId, currentId }) {
+// what to watch next. canMark adds "Mark all watched" (every released movie
+// of the franchise on binge., with Undo); onLibraryChange tells the page
+// its library rows changed.
+export default function FranchiseOrder({ tmdbId, currentId, canMark = false, onLibraryChange }) {
   const location = useLocation();
   const [franchise, setFranchise] = useState(null);
   const [items, setItems] = useState(null); // catalog rows by tmdb id
   const [watched, setWatched] = useState(new Set());
+  const [statuses, setStatuses] = useState({}); // media id -> library row
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [note, setNote] = useState(null); // { text, undo? }
   const [started, setStarted] = useState(new Set());
   const [order, setOrder] = useState('story');
   const listRef = useRef(null);
@@ -37,16 +53,20 @@ export default function FranchiseOrder({ tmdbId, currentId }) {
 
   useEffect(() => {
     let cancelled = false;
+    setLibraryLoaded(false);
+    setNote(null);
     Promise.all([
       fetchSupabaseRatingMap('movie').catch(() => ({})),
       fetchSupabaseWatchlistStatusMap('movie').catch(() => ({})),
       fetchSupabaseContinueWatching().catch(() => []),
-    ]).then(([ratings, statuses, playing]) => {
+    ]).then(([ratings, statusMap, playing]) => {
       if (cancelled) return;
       const done = new Set(Object.keys(ratings || {}).map(Number));
-      Object.entries(statuses || {}).forEach(([id, entry]) => { if (entry?.status === 'watched') done.add(Number(id)); });
+      Object.entries(statusMap || {}).forEach(([id, entry]) => { if (entry?.status === 'watched') done.add(Number(id)); });
       setWatched(done);
+      setStatuses(statusMap || {});
       setStarted(new Set((playing || []).filter((row) => row.media_type === 'movie').map((row) => Number(row.media_id))));
+      setLibraryLoaded(true);
     });
     return () => { cancelled = true; };
   }, [tmdbId]);
@@ -73,6 +93,53 @@ export default function FranchiseOrder({ tmdbId, currentId }) {
   const next = available.find((entry) => !watched.has(entry.item.id) && entry.item.id !== currentId)
     || null;
   const background = location.state?.backgroundLocation || location;
+  // What "Mark all watched" covers: released movies on binge. not yet watched.
+  const releasedHere = available.filter((entry) => released(entry.result));
+  const toMark = releasedHere.filter((entry) => !watched.has(entry.item.id));
+
+  async function markAll() {
+    if (!toMark.length || marking) return;
+    haptic();
+    const ids = toMark.map((entry) => entry.item.id);
+    setMarking(true);
+    setWatched((current) => new Set([...current, ...ids]));
+    try {
+      const result = await markMoviesWatched(ids.map((mediaId) => ({ mediaId, entry: statuses[mediaId] || null })));
+      setStatuses((current) => {
+        const nextStatuses = { ...current };
+        result.changed.forEach(({ id, mediaId }) => { nextStatuses[mediaId] = { ...nextStatuses[mediaId], id, status: 'watched' }; });
+        result.added.forEach(({ id, mediaId }) => { nextStatuses[mediaId] = { id, status: 'watched' }; });
+        return nextStatuses;
+      });
+      setNote({ text: `Marked ${ids.length === 1 ? '1 movie' : `${ids.length} movies`} watched.`, undo: () => undo(ids, result) });
+      onLibraryChange?.();
+    } catch (error) {
+      setWatched((current) => new Set([...current].filter((id) => !ids.includes(id))));
+      setNote({ text: error?.message || 'Couldn’t save that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  async function undo(ids, result) {
+    setMarking(true);
+    try {
+      await undoMarkMoviesWatched(result);
+      setWatched((current) => new Set([...current].filter((id) => !ids.includes(id))));
+      setStatuses((current) => {
+        const nextStatuses = { ...current };
+        result.added.forEach(({ mediaId }) => { delete nextStatuses[mediaId]; });
+        result.changed.forEach(({ id, mediaId, status }) => { nextStatuses[mediaId] = { ...nextStatuses[mediaId], id, status }; });
+        return nextStatuses;
+      });
+      setNote(null);
+      onLibraryChange?.();
+    } catch (error) {
+      setNote({ text: error?.message || 'Couldn’t undo that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
 
   return (
     <section className="td-section fr" aria-label={`${franchise.name} watch order`}>
@@ -84,14 +151,38 @@ export default function FranchiseOrder({ tmdbId, currentId }) {
             <span className="fr-bar" aria-hidden="true"><span style={{ width: `${available.length ? (watchedCount / available.length) * 100 : 0}%` }} /></span>
           </p>
         </div>
-        {franchise.story && (
-          <div className="hm-source" role="radiogroup" aria-label="Order">
-            {[['story', 'Story order'], ['release', 'Release order']].map(([value, label]) => (
-              <button key={value} type="button" role="radio" aria-checked={order === value} className={order === value ? 'active' : ''} onClick={() => setOrder(value)}>{label}</button>
-            ))}
-          </div>
-        )}
+        <div className="fr-tools">
+          {/* Same pill as a series' "Mark season watched". */}
+          {canMark && releasedHere.length > 0 && (toMark.length > 0 ? (
+            <button
+              type="button"
+              className="td-mark-season fr-mark-all"
+              onClick={markAll}
+              disabled={marking || !libraryLoaded}
+              title={`Mark the ${toMark.length === 1 ? 'one movie' : `${toMark.length} movies`} of ${franchise.name} you haven't watched as watched`}
+            >
+              <CheckCircle size={18} weight="bold" aria-hidden="true" />
+              Mark all watched
+            </button>
+          ) : (
+            <span className="td-mark-season fr-mark-all on">
+              <CheckCircle size={18} weight="fill" aria-hidden="true" />
+              All watched
+            </span>
+          ))}
+          {franchise.story && (
+            <SlidingTabs className="st-tabs st-tabs--sm fr-order" role="radiogroup" aria-label="Order">
+              {[['story', 'Story order'], ['release', 'Release order']].map(([value, label]) => (
+                <button key={value} type="button" role="radio" aria-checked={order === value} className={`st-tab${order === value ? ' active' : ''}`} onClick={() => setOrder(value)}>{label}</button>
+              ))}
+            </SlidingTabs>
+          )}
+        </div>
       </div>
+      <p className="fr-note" role="status">
+        {note?.text}
+        {note?.undo && <button type="button" className="td-mark-undo" onClick={note.undo} disabled={marking}>Undo</button>}
+      </p>
 
       {next && (
         <Link className="fr-next" to={titleUrl(next.item, { play: true })} state={{ backgroundLocation: background }}>

@@ -1,7 +1,7 @@
 // v5: TMDB title data cached network-first (binge-data) for flaky connections.
 const CACHE_NAME = 'binge-shell-v5';
 // v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
-const IMAGE_CACHE_NAME = 'binge-images-v2';
+const IMAGE_CACHE_NAME = 'binge-images-v3';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
 // Title details/seasons from TMDB's API: network-first, this copy is only
 // used when the network fails, so title and episode pages still open on a
@@ -95,7 +95,10 @@ self.addEventListener('fetch', (event) => {
   if (isImageRequest(event.request, url)) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
-        if (cached) return cached;
+        // A CORS request (a canvas reading the pixels: the title popup's
+        // where-to-watch logos) can't use an opaque copy saved from a plain
+        // <img>, so fetch it again; the CORS copy kept then serves both.
+        if (cached && !(cached.type === 'opaque' && event.request.mode === 'cors')) return cached;
         return fetch(event.request).then((response) => {
           // Cross-origin <img> requests (no explicit CORS mode) come back
           // opaque — status 0, ok:false — by design. That's still a valid,

@@ -772,6 +772,7 @@ export default function Movies() {
           allowActions={!selectedItemBrowseOnly}
           browseOnlyMessage="Fallback catalog mode is browse-only."
           autoPlay={playImmediately}
+          onLibraryChange={() => fetchSupabaseWatchlistStatusMap('movie').then(setWatchlistStatusMap).catch(() => {})}
         />
       )}
     </div>

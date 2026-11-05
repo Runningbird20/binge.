@@ -9,6 +9,7 @@ const HOW_TO = [
   { name: 'IMDb', steps: 'Your Ratings (and Watchlist) → ⋯ menu → Export. Upload the .csv files.' },
   { name: 'Trakt', steps: 'Settings → Data → Export your data. Upload the .zip or the .json files.' },
   { name: 'Netflix', steps: 'Account → your profile → Viewing activity → Download all. Upload the .csv.' },
+  { name: 'binge.', steps: 'Profile → Download my data (another profile or account). Upload the .zip as-is.' },
 ];
 
 function summarize(records) {
