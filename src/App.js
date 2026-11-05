@@ -46,6 +46,7 @@ const PAGE_LOADERS = [
   () => import('./pages/Settings'),
   () => import('./pages/ReleaseCalendar'),
   () => import('./pages/Wrapped'),
+  () => import('./pages/Person'),
 ];
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => {
@@ -76,6 +77,7 @@ const Wrapped        = lazyWithReload(() => import('./pages/Wrapped'));
 const Settings       = lazyWithReload(() => import('./pages/Settings'));
 const ShareTarget    = lazyWithReload(() => import('./pages/ShareTarget'));
 const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
+const Person         = lazyWithReload(() => import('./pages/Person'));
 const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
 // TEMP (UI preview only — do not commit)
@@ -161,6 +163,7 @@ function AppRoutes() {
         <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
         <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
+        <Route path="/person/:id" element={<ProtectedRoute><Person /></ProtectedRoute>} />
         <Route path="/import"    element={<ProtectedRoute><ImportHistory /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         {/* Old address for user management — now a tab in the admin panel. */}
