@@ -903,6 +903,8 @@
   color: var(--exp-text);
 }
 .st-pb-tag--best { background: var(--st-match); border-color: transparent; color: #04170a; }
+/* Pop-ups blocked on this server (utils/popupSandbox.js). */
+.st-pb-tag--safe { display: inline-flex; align-items: center; gap: 0.2rem; }
 .st-pb-hint { margin: 0.6rem 0 0; font-size: 0.74rem; color: var(--exp-text-faint); line-height: 1.4; }
 .st-pb-broken { margin-top: 0.6rem; width: 100%; }
 .st-pb-done { grid-column: 1 / -1; justify-self: end; min-height: 38px; }

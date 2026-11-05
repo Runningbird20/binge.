@@ -81,6 +81,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Mini player | ✓ | ✓ | ◐ | — | Computer: a draggable corner window. Phone: a dock. Apple TV: only a live game in the corner. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
+| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps refuse every pop-up. The website sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
 
 ## Sports
 

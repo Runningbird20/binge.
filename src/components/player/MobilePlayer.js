@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsOut, CaretDown, DeviceRotate, LockSimple, LockSimpleOpen, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDown, DeviceRotate, LockSimple, LockSimpleOpen, ShieldCheck, X } from '@phosphor-icons/react';
 import { MobilePlaybackPickers } from '../PlaybackOptions';
 import { SERVER_LABELS } from '../../utils/embedProviders';
+import { popupsBlocked } from '../../utils/popupSandbox';
 import { EmbedFrame } from './PlayerOverlays';
 import { MobileEpisodeRows } from './EpisodePickers';
 
@@ -105,14 +106,19 @@ export default function MobilePlayer({
             <div className="mp-row">
               <span className="mp-row-label">Server</span>
               <div className="mp-chips">
-                {servers.map((server) => (
-                  <button
-                    key={server.id}
-                    className={`mp-chip ${provider === server.id ? 'active' : ''}`}
-                    onClick={() => onSelectServer(server.id)}
-                    type="button"
-                  >{SERVER_LABELS[server.id]?.label || server.id}</button>
-                ))}
+                {servers.map((server) => {
+                  const label = SERVER_LABELS[server.id]?.label || server.id;
+                  const safe = provider === server.id ? playbackOptionProps.popupsBlockedNow : popupsBlocked(server.id);
+                  return (
+                    <button
+                      key={server.id}
+                      className={`mp-chip ${provider === server.id ? 'active' : ''}`}
+                      onClick={() => onSelectServer(server.id)}
+                      type="button"
+                      aria-label={safe ? `${label}, no pop-ups` : undefined}
+                    >{label}{safe && <ShieldCheck size={12} weight="fill" className="mp-chip-safe" aria-hidden="true" />}</button>
+                  );
+                })}
               </div>
             </div>
           </div>
