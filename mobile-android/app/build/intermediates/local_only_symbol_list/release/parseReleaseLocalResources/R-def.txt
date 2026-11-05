@@ -1,9 +1,0 @@
-R_DEF: Internal format may change without notice
-local
-color binge_background
-color binge_gold
-drawable ic_launcher_background
-drawable ic_launcher_foreground
-mipmap ic_launcher
-string app_name
-style Theme.Binge

@@ -1,7 +1,0 @@
-#Thu Nov 05 02:54:59 EST 2026
-base.1=/Users/cristalwilliams/binge./mobile-android/app/build/intermediates/global_synthetics_dex/release/mergeReleaseGlobalSynthetics/classes.dex
-path.1=classes.dex
-base.0=/Users/cristalwilliams/binge./mobile-android/app/build/intermediates/dex/release/mergeDexRelease/classes.dex
-renamed.1=classes2.dex
-renamed.0=classes.dex
-path.0=classes.dex
