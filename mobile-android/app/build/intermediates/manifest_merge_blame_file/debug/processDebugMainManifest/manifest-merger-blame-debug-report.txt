@@ -1,0 +1,89 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<!--
+3 Debug builds only: may point at a local http:// site, e.g. a dev server or test page
+4     (gradle assembleDebug -Pbinge.url=http://10.0.2.2:3000 from the emulator).
+5-->
+6<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+7    package="com.binge.mobile"
+8    android:versionCode="1"
+9    android:versionName="1.0" >
+10
+11    <uses-sdk
+11-->INJECTED
+12        android:minSdkVersion="23"
+12-->INJECTED
+13        android:targetSdkVersion="34" />
+13-->INJECTED
+14
+15    <uses-permission android:name="android.permission.INTERNET" />
+15-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:4:5-67
+15-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:4:22-64
+16
+17    <application
+17-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:6:5-33:19
+18        android:allowBackup="true"
+18-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:7:9-35
+19        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+19-->[androidx.core:core:1.1.0] /private/tmp/claude-501/-Users-cristalwilliams-binge-/b8b2cfbe-49f0-4e76-adc0-17ad6c2841b8/scratchpad/android/gradle-home/caches/9.8.2/transforms/edaf3124734bc808e167df7d626d8a84/transformed/core-1.1.0/AndroidManifest.xml:24:18-86
+20        android:debuggable="true"
+21        android:extractNativeLibs="false"
+21-->INJECTED
+22        android:hardwareAccelerated="true"
+22-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:8:9-43
+23        android:icon="@mipmap/ic_launcher"
+23-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:9:9-43
+24        android:label="@string/app_name"
+24-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:11:9-41
+25        android:roundIcon="@mipmap/ic_launcher"
+25-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:10:9-48
+26        android:supportsRtl="true"
+26-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:12:9-35
+27        android:theme="@style/Theme.Binge"
+27-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:13:9-43
+28        android:usesCleartextTraffic="true" > <!-- configChanges: turning the phone (e.g. for a video) must not reload the page. -->
+28-->/Users/cristalwilliams/binge./mobile-android/app/src/debug/AndroidManifest.xml:5:18-53
+29        <activity
+29-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:16:9-32:20
+30            android:name="com.binge.mobile.MainActivity"
+30-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:17:13-41
+31            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+31-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:18:13-141
+32            android:exported="true"
+32-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:19:13-36
+33            android:launchMode="singleTask"
+33-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:20:13-44
+34            android:windowSoftInputMode="adjustResize" >
+34-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:21:13-55
+35            <intent-filter>
+35-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:22:13-25:29
+36                <action android:name="android.intent.action.MAIN" />
+36-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:23:17-69
+36-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:23:25-66
+37
+38                <category android:name="android.intent.category.LAUNCHER" />
+38-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:24:17-77
+38-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:24:27-74
+39            </intent-filter>
+40            <intent-filter>
+40-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:26:13-31:29
+41                <action android:name="android.intent.action.VIEW" />
+41-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:27:17-69
+41-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:27:25-66
+42
+43                <category android:name="android.intent.category.DEFAULT" />
+43-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:28:17-76
+43-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:28:27-73
+44                <category android:name="android.intent.category.BROWSABLE" />
+44-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:29:17-78
+44-->/Users/cristalwilliams/binge./mobile-android/app/src/main/AndroidManifest.xml:29:27-75
+45
+46                <data
+46-->INJECTED
+47                    android:host="10.0.2.2"
+47-->INJECTED
+48                    android:scheme="https" />
+49            </intent-filter>
+50        </activity>
+51    </application>
+52
+53</manifest>

@@ -1,0 +1,8 @@
+com.binge.mobile.app-pngs-0 /Users/cristalwilliams/binge./mobile-android/app/build/generated/res/pngs/release
+com.binge.mobile.app-updated_navigation_xml-1 /Users/cristalwilliams/binge./mobile-android/app/build/generated/updated_navigation_xml/release
+com.binge.mobile.app-packageReleaseResources-2 /Users/cristalwilliams/binge./mobile-android/app/build/intermediates/incremental/release/packageReleaseResources/merged.dir
+com.binge.mobile.app-packageReleaseResources-3 /Users/cristalwilliams/binge./mobile-android/app/build/intermediates/incremental/release/packageReleaseResources/stripped.dir
+com.binge.mobile.app-release-4 /Users/cristalwilliams/binge./mobile-android/app/build/intermediates/merged_res/release/mergeReleaseResources
+com.binge.mobile.app-main-5 /Users/cristalwilliams/binge./mobile-android/app/src/main/res
+com.binge.mobile.app-release-6 /Users/cristalwilliams/binge./mobile-android/app/src/release/res
+gradleHome-0 /private/tmp/claude-501/-Users-cristalwilliams-binge-/b8b2cfbe-49f0-4e76-adc0-17ad6c2841b8/scratchpad/android/gradle-home

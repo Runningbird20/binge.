@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary.dia",
+    "emit-module-dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary-emit-module.dia",
+    "pch" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary.swiftdeps"
+  },
+  "/Users/cristalwilliams/binge./mobile-ios/BingeMobile/BingeApp.swift" : {
+    "const-values" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.swiftconstvalues",
+    "dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.d",
+    "diagnostics" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.dia",
+    "index-unit-output-path" : "/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.o",
+    "llvm-bc" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.bc",
+    "object" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.o",
+    "swift-dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp.swiftdeps",
+    "swiftmodule" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeApp~partial.swiftmodule"
+  },
+  "/Users/cristalwilliams/binge./mobile-ios/BingeMobile/BingeWebView.swift" : {
+    "const-values" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.swiftconstvalues",
+    "dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.d",
+    "diagnostics" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.dia",
+    "index-unit-output-path" : "/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.o",
+    "llvm-bc" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.bc",
+    "object" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.o",
+    "swift-dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView.swiftdeps",
+    "swiftmodule" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/BingeWebView~partial.swiftmodule"
+  },
+  "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/cristalwilliams/binge./mobile-ios/build/sim/Build/Intermediates.noindex/BingeMobile.build/Debug-iphonesimulator/BingeMobile.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}

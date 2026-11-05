@@ -1,0 +1,12 @@
+{
+  "/Users/cristalwilliams/binge./mobile-ios/BingeMobile/BingeApp.swift" : {
+    "abi-baseline-json" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/Binge.abi.json",
+    "const-values" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary.swiftconstvalues",
+    "dependencies" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary.d",
+    "diagnostics" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/BingeMobile-primary.dia",
+    "objc-header" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/Binge-Swift.h",
+    "swiftdoc" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/Binge.swiftdoc",
+    "swiftmodule" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/Binge.swiftmodule",
+    "swiftsourceinfo" : "/Users/cristalwilliams/binge./mobile-ios/build/device/Build/Intermediates.noindex/BingeMobile.build/Release-iphoneos/BingeMobile.build/Objects-normal/arm64/Binge.swiftsourceinfo"
+  }
+}
