@@ -104,8 +104,9 @@ export async function findSourceBooks({ mediaType, tmdbId, title }) {
   };
 }
 
-// Movies/shows adapted from a book, verified by the credited author.
-export async function findAdaptations(book) {
+// Movies/shows adapted from a book, verified by the credited author, within
+// the profile's maturity level (`kidsSafe`, as the catalog filters take it).
+export async function findAdaptations(book, { kidsSafe = false } = {}) {
   if (!book?.title || !book.author) return [];
   const { main, series } = splitBookTitle(book.title);
   const queries = [...new Set([main, series].filter(Boolean))];
@@ -130,8 +131,8 @@ export async function findAdaptations(book) {
   }))).filter(Boolean);
 
   const [movies, shows] = await Promise.all([
-    resolveTmdbItems(verified.filter((r) => r.mediaType === 'movie'), 'movie'),
-    resolveTmdbItems(verified.filter((r) => r.mediaType === 'tv_show'), 'tv_show'),
+    resolveTmdbItems(verified.filter((r) => r.mediaType === 'movie'), 'movie', { kidsSafe }),
+    resolveTmdbItems(verified.filter((r) => r.mediaType === 'tv_show'), 'tv_show', { kidsSafe }),
   ]);
   return [...movies, ...shows].sort((a, b) => String(a.release_date || '').localeCompare(String(b.release_date || '')));
 }
