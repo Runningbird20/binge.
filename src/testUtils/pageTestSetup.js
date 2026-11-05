@@ -42,11 +42,16 @@ export function mockBookCatalog(books) {
   // by id when it merges its probe + window batches, so returning the same
   // items each time is safe — and unlike counting calls, it doesn't break
   // when a genre click cancels a load cycle part-way through.
-  return jest.spyOn(supabaseCatalogModule, 'fetchBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
+  const filterBooks = (genre) => {
     const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
-    const filtered = genreValues.length === 0
-      ? books
-      : books.filter((book) => genreValues.includes(book.genre));
+    return genreValues.length === 0 ? books : books.filter((book) => genreValues.includes(book.genre));
+  };
+  // The "featured" shelf's random windows (used when the list spans several).
+  jest.spyOn(supabaseCatalogModule, 'fetchRandomBookWindow').mockImplementation(({ genre } = {}) => (
+    Promise.resolve(filterBooks(genre))
+  ));
+  return jest.spyOn(supabaseCatalogModule, 'fetchBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
+    const filtered = filterBooks(genre);
 
     return Promise.resolve({
       items: filtered,

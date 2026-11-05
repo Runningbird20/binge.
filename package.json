@@ -7,8 +7,7 @@
     "node": "24.x"
   },
   "dependencies": {
-    "@neon/config": "^1.10.0",
-    "@neon/env": "^1.6.8",
+    "@libsql/client": "^0.18.0",
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.118.0",
     "@testing-library/dom": "^10.4.2",
@@ -74,8 +73,8 @@
     "import:openlibrary:large": "node scripts/scrapers/openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node scripts/scrapers/openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node scripts/scrapers/tmdb_scraper.js --type both --pages 500",
-    "import:language": "node scripts/sync-language-to-neon.js",
-    "import:language:preview": "node scripts/sync-language-to-neon.js --dry-run",
+    "import:language": "node scripts/sync-language-to-turso.js",
+    "import:language:preview": "node scripts/sync-language-to-turso.js --dry-run",
     "clean:adult": "node scripts/scrapers/clean_adult_content.js",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report e2e-report"

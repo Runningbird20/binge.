@@ -1,7 +1,7 @@
 // The curated browse rows (Featured, genres, decades...) for movies, TV and
-// books, built from the Neon catalog and cached for CURATED_CACHE_TTL.
+// books, built from the Turso catalog and cached for CURATED_CACHE_TTL.
 
-const neonDb = require('../neonDb');
+const catalogDb = require('../catalogDb');
 
 let cachedCuratedMovies = null;
 
@@ -17,7 +17,7 @@ let cachedCuratedBooksTime = 0;
 
 const CURATED_CACHE_TTL = 15 * 60 * 1000;
 
-async function getCuratedMovieRowsNeon() {
+async function getCuratedMovieRows() {
   const now = Date.now();
   if (cachedCuratedMovies && now - cachedCuratedMoviesTime < CURATED_CACHE_TTL) {
     return cachedCuratedMovies;
@@ -44,7 +44,7 @@ async function getCuratedMovieRowsNeon() {
   const results = await Promise.all(
     rowDefs.map(async (def) => {
       try {
-        const res = await neonDb.query(def.query);
+        const res = await catalogDb.query(def.query);
         return {
           id: def.id,
           title: def.title,
@@ -65,7 +65,7 @@ async function getCuratedMovieRowsNeon() {
   return filtered;
 }
 
-async function getCuratedTvRowsNeon() {
+async function getCuratedTvRows() {
   const now = Date.now();
   if (cachedCuratedTv && now - cachedCuratedTvTime < CURATED_CACHE_TTL) {
     return cachedCuratedTv;
@@ -90,7 +90,7 @@ async function getCuratedTvRowsNeon() {
   const results = await Promise.all(
     rowDefs.map(async (def) => {
       try {
-        const res = await neonDb.query(def.query);
+        const res = await catalogDb.query(def.query);
         return {
           id: def.id,
           title: def.title,
@@ -111,7 +111,7 @@ async function getCuratedTvRowsNeon() {
   return filtered;
 }
 
-async function getCuratedBookRowsNeon() {
+async function getCuratedBookRows() {
   const now = Date.now();
   if (cachedCuratedBooks && now - cachedCuratedBooksTime < CURATED_CACHE_TTL) {
     return cachedCuratedBooks;
@@ -132,7 +132,7 @@ async function getCuratedBookRowsNeon() {
   const results = await Promise.all(
     rowDefs.map(async (def) => {
       try {
-        const res = await neonDb.query(def.query);
+        const res = await catalogDb.query(def.query);
         return {
           id: def.id,
           title: def.title,
@@ -153,4 +153,4 @@ async function getCuratedBookRowsNeon() {
   return filtered;
 }
 
-module.exports = { getCuratedMovieRowsNeon, getCuratedTvRowsNeon, getCuratedBookRowsNeon };
+module.exports = { getCuratedMovieRows, getCuratedTvRows, getCuratedBookRows };

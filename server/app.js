@@ -81,69 +81,19 @@ app.use(express.json({ limit: '1mb' }));
 // Global rate limit: 200 requests / minute per IP (generous for normal use)
 app.use(rateLimit({ windowMs: 60_000, max: 200, message: 'Too many requests — slow down.' }));
 
-const neonDb = require('./neonDb');
-const neonFunctions = require('./neonFunctions');
-
+const catalogDb = require('./catalogDb');
 
 app.get('/api/health', async (_req, res) => {
-  const neonPg = await neonDb.healthCheck().catch((err) => ({ ok: false, error: err.message }));
-  const neonFn = await neonFunctions.healthCheck().catch((err) => ({ ok: false, error: err.message }));
-
+  const catalog = await catalogDb.healthCheck().catch((err) => ({ ok: false, error: err.message }));
   res.json({
     ok: true,
     server: 'binge-standalone',
-    neon: {
-      branch: process.env.NEON_BRANCH || 'production',
-      postgres: { ok: neonPg.ok, configured: neonPg.configured },
-      functions: { ok: neonFn.ok, configured: neonFn.configured },
-    },
+    catalog: { ok: catalog.ok, configured: catalog.configured },
   });
 });
 
-// Comprehensive Neon diagnostics endpoint
-app.get('/api/neon/health', async (_req, res) => {
-  const [postgres, functions] = await Promise.all([
-    neonDb.healthCheck(),
-    neonFunctions.healthCheck(),
-  ]);
-
-  const allHealthy = (!postgres.configured || postgres.ok) &&
-                     (!functions.configured || functions.ok);
-
-  res.status(allHealthy ? 200 : 503).json({
-    ok: allHealthy,
-    branch: process.env.NEON_BRANCH || 'production',
-    services: {
-      postgres,
-      functions,
-    },
-  });
-});
-
-// Neon Functions proxy
-app.get('/api/neon/functions/hello', async (_req, res) => {
-  try {
-    const result = await neonFunctions.callHelloFunction();
-    res.json(result);
-  } catch (err) {
-    res.status(502).json({ ok: false, error: err.message });
-  }
-});
-
-// Neon Postgres test endpoint
-app.get('/api/neon/postgres/test', async (_req, res) => {
-  try {
-    const result = await neonDb.query('SELECT NOW() as current_time, current_database() as db_name, version()');
-    res.json({
-      ok: true,
-      row: result.rows[0],
-    });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-
+// The media catalog (Turso). The path keeps its old name: installed TV builds
+// request {site}/api/neon-data/rest/{table}.
 app.use('/api/neon-data', require('./routes/neonData'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/watchlist', require('./routes/watchlist'));

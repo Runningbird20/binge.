@@ -66,6 +66,6 @@ test-results/
 supabase/.temp/
 
 # Generated data, kept out of git: scraper output/checkpoints (scripts/scrapers/)
-# and catalog exports (the catalog lives in Neon, with backup branches).
+# and catalog exports (data/turso/catalog.db is a local copy of the Turso catalog).
 /data/
 /backups/
