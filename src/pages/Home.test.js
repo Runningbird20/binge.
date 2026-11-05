@@ -148,3 +148,34 @@ test('a show whose newest episode is marked watched, with nothing saved partway,
 
   [ratingsSpy, watchlistSpy, continueWatchingSpy, tmdbSpy, watchedSpy, useAuthSpy].forEach((spy) => spy.mockRestore());
 });
+
+test('Surprise me opens one of your picks and Play something starts one', async () => {
+  localStorage.setItem('onboarding_done_7', '1');
+  const { mockNavigate } = require('../testUtils/pageTestSetup');
+  const personalization = require('../utils/personalization');
+  const { fireEvent } = require('@testing-library/react');
+
+  const useAuthSpy = jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({ user: { id: 7, username: 'mediafan' }, authLoading: false });
+  const spies = [
+    jest.spyOn(supabaseDataModule, 'fetchSupabaseRatings').mockResolvedValue([]),
+    jest.spyOn(supabaseDataModule, 'fetchSupabaseWatchlist').mockResolvedValue([]),
+    jest.spyOn(supabaseDataModule, 'fetchSupabaseContinueWatching').mockResolvedValue([]),
+    jest.spyOn(personalization, 'buildPersonalizedRows').mockResolvedValue({
+      hasHistory: true,
+      topPicks: [{ id: 42, media_type: 'movie', title: 'Arrival' }],
+      becauseYouWatched: [],
+      taste: {},
+    }),
+  ];
+  mockNavigate.mockClear();
+
+  render(<Home />);
+  const surprise = await screen.findByRole('button', { name: 'Surprise me' });
+  await waitFor(() => expect(surprise).toBeEnabled());
+  fireEvent.click(surprise);
+  expect(mockNavigate).toHaveBeenLastCalledWith('/movie/42', expect.objectContaining({ state: expect.any(Object) }));
+  fireEvent.click(screen.getByRole('button', { name: 'Play something' }));
+  expect(mockNavigate).toHaveBeenLastCalledWith('/movie/42?play=1', expect.objectContaining({ state: expect.any(Object) }));
+
+  [...spies, useAuthSpy].forEach((spy) => spy.mockRestore());
+});
