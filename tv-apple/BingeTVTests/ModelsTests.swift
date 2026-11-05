@@ -348,10 +348,10 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
     }
 }
 
-// The catalog is read from Neon through the site; everything else (and every
+// The catalog (Turso) is read through the site; everything else (and every
 // write) stays on Supabase.
 @Suite struct DatabaseSplitTests {
-    @Test func catalogReadsGoToNeon() {
+    @Test func catalogReadsGoThroughTheSite() {
         for table in ["movies", "tv_shows", "books", "title_ratings", "subtitle_cache"] {
             #expect(Supabase.isMediaRead("GET", table: table))
         }
