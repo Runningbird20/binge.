@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getEmbeddedId } from '../utils/embedPlayability';
 import { tmdbGet, tmdbImage, tmdbKind } from '../utils/tmdb';
+import { pickWatchProviders } from '../utils/watchProviders';
 
 function usCertification(data, mediaType) {
   if (mediaType === 'tv_show') {
@@ -42,7 +43,7 @@ export default function useTitleDetails(item, mediaType) {
     let cancelled = false;
     const extra = mediaType === 'tv_show' ? 'content_ratings' : 'release_dates';
     tmdbGet(`/${tmdbKind(mediaType)}/${tmdbId}`, {
-      append_to_response: `credits,images,videos,${extra}`,
+      append_to_response: `credits,images,videos,watch/providers,${extra}`,
       include_image_language: 'en,null',
     }).then((data) => {
       if (cancelled || !data) return;
@@ -67,6 +68,8 @@ export default function useTitleDetails(item, mediaType) {
           : (data.credits?.crew || []).filter((person) => person.job === 'Director').map((person) => person.name),
         trailerKey: pickTrailer(data.videos),
         networks: (data.networks || data.production_companies || []).slice(0, 2).map((entry) => entry.name),
+        // Legal streaming / rent options in the viewer's country (JustWatch data).
+        watch: pickWatchProviders(data['watch/providers']),
       });
     });
     return () => { cancelled = true; };
