@@ -2,13 +2,6 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 
-const fetchFn =
-  typeof fetch !== 'undefined'
-    ? fetch
-    : (() => {
-        throw new Error('This script requires Node.js 18+ with built-in fetch support.');
-      })();
-
 const DEFAULT_OUTPUT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.json');
 const DEFAULT_BULK_OUTPUT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.bulk.jsonl');
 const DEFAULT_CHECKPOINT = path.join(__dirname, '..', '..', 'data', 'internet_archive_books.bulk.checkpoint.json');
@@ -152,13 +145,13 @@ function normalizeArchiveTitle(value) {
     .replace(/^BK\s*\d+\s*-\s*/i, '')
     .replace(/^\d{4}\s+Or Before\s*-\s*/i, '')
     .replace(/^\d{4}\s*-\s*/i, '')
-    .replace(/^\d+\s*[\.\-]\s*/i, '')
+    .replace(/^\d+\s*[.-]\s*/i, '')
     .replace(
       /\[(?:[^\]]*?(?:z[\s-]?lib(?:rary)?|bookzz(?:\.org)?|kobo|yen press|kitzoku)[^\]]*)\]/ig,
       ' '
     )
     .replace(
-      /\((?:[^\)]*?(?:z[\s-]?lib(?:rary)?|bookzz(?:\.org)?|anna[’']s archive)[^\)]*)\)/ig,
+      /\((?:[^)]*?(?:z[\s-]?lib(?:rary)?|bookzz(?:\.org)?|anna[’']s archive)[^)]*)\)/ig,
       ' '
     )
     .replace(/anna[’']s archive.*$/i, '')

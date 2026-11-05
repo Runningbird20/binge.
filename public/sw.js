@@ -1,5 +1,5 @@
-// v5: TMDB title data cached network-first (binge-data) for flaky connections.
-const CACHE_NAME = 'binge-shell-v5';
+// v6: the ad host/path blocking is gone (it only ever saw binge.'s own requests).
+const CACHE_NAME = 'binge-shell-v6';
 // v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
 const IMAGE_CACHE_NAME = 'binge-images-v3';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
@@ -16,28 +16,6 @@ function dataCacheKey(url) {
   return copy.href;
 }
 const SHELL_ASSETS = ['/', '/index.html', '/manifest.json'];
-const BLOCKED_AD_HOST_PARTS = [
-  'doubleclick.net',
-  'googlesyndication.com',
-  'googleadservices.com',
-  'adservice.google.',
-  'adnxs.com',
-  'taboola.com',
-  'outbrain.com',
-  'popads.net',
-  'propellerads.com',
-];
-const BLOCKED_AD_PATH_PARTS = ['/ads/', '/adserver', '/advert', '/banner', '/popunder', '/popup'];
-
-function isBlockedAdRequest(url) {
-  const host = url.hostname.toLowerCase();
-  const path = `${url.pathname}${url.search}`.toLowerCase();
-  return (
-    BLOCKED_AD_HOST_PARTS.some((part) => host.includes(part)) ||
-    BLOCKED_AD_PATH_PARTS.some((part) => path.includes(part))
-  );
-}
-
 // Poster/cover art comes from third-party hosts (TMDB, Plex, Open Library,
 // Supabase storage), so it can't be caught by the same-origin static-asset
 // rule below — it needs its own origin-agnostic check.
@@ -81,11 +59,6 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
-
-  if (isBlockedAdRequest(url)) {
-    event.respondWith(new Response(null, { status: 204, statusText: 'Blocked by Binge ad blocker' }));
-    return;
-  }
 
   // Cache-first for poster/cover art, regardless of origin — this is the
   // bulk of what's slow to re-load on Movies/TV/Books/Home/Profile, and

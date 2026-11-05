@@ -2,13 +2,14 @@ import ExpandableSearch from '../components/ExpandableSearch';
 import SlidingTabs from '../components/SlidingTabs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { BookOpen, WarningCircle } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import BookBrowseView from '../components/BookBrowseView';
 import GenreScrollBar from '../components/GenreScrollBar';
 import MangaTab from '../components/MangaTab';
 import useDebounce from '../hooks/useDebounce';
 import { api } from '../api';
-import { SkeletonGrid } from '../components/SkeletonCard';
+import LoadingBar from '../components/LoadingBar';
 import PullToRefresh from '../components/PullToRefresh';
 import {
   addSupabaseWatchlistItem,
@@ -18,11 +19,6 @@ import {
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import { fetchBookById, fetchBooksPage, fetchRandomBookWindow } from '../utils/catalogQueries';
-import {
-  buildMediaGenreFacets,
-  filterBooksCatalog,
-  loadFallbackBooks,
-} from '../utils/catalogFallback';
 import { BOOK_GENRE_GROUPS, buildGenreGroups, sameGenreList } from '../utils/genreGroups';
 import { SORT_OPTIONS, sortModeToQuery } from '../utils/catalogSort';
 import ThemedSelect from '../components/ThemedSelect';
@@ -89,13 +85,13 @@ export default function Books() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const [usingFallbackCatalog, setUsingFallbackCatalog] = useState(false);
+  // The catalog couldn't be reached at all: say so, with Retry.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [renderedCount, setRenderedCount] = useState(VISIBLE_BATCH_SIZE);
   const [sortMode, setSortMode] = useState('featured');
   const [watchlistStatusMap, setWatchlistStatusMap] = useState({});
   const [userRatings, setUserRatings] = useState({});
   const [selectedBook, setSelectedBook] = useState(null);
-  const [selectedBookBrowseOnly, setSelectedBookBrowseOnly] = useState(false);
   const [addingBookId, setAddingBookId] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -210,14 +206,13 @@ export default function Books() {
       setLoading(false);
       setBooks(cached.items);
       setTotal(cached.total);
-      setUsingFallbackCatalog(cached.usingFallbackCatalog);
       sourceRef.current = cached.source;
     } else {
       setLoading(true);
       setBooks([]);
       setTotal(0);
-      setUsingFallbackCatalog(false);
     }
+    setLoadFailed(false);
 
     function adoptGenres(fetchedGenres) {
       if (!Array.isArray(fetchedGenres) || fetchedGenres.length === 0) return;
@@ -229,12 +224,11 @@ export default function Books() {
       });
     }
 
-    function persistCache(itemsSnapshot, totalSnapshot, genresSnapshot, isFallback) {
+    function persistCache(itemsSnapshot, totalSnapshot, genresSnapshot) {
       setCached(cacheKey, {
         items: itemsSnapshot,
         total: totalSnapshot,
         allGenres: Array.isArray(genresSnapshot) ? genresSnapshot : [],
-        usingFallbackCatalog: Boolean(isFallback),
         source: sourceRef.current,
       });
     }
@@ -255,10 +249,10 @@ export default function Books() {
           setTotal(totalCount);
           setBooks(page.items);
           setLoading(false);
-          persistCache(page.items, totalCount, page.facets?.genres, false);
+          persistCache(page.items, totalCount, page.facets?.genres);
           return;
         } catch {
-          // Fall through to the legacy API, then the bundled snapshot below.
+          // Fall through to the legacy API below.
         }
       } else {
       try {
@@ -283,7 +277,7 @@ export default function Books() {
         if (totalCount === 0) {
           setBooks([]);
           setLoading(false);
-          persistCache([], 0, probe?.facets?.genres, false);
+          persistCache([], 0, probe?.facets?.genres);
           return;
         }
 
@@ -293,10 +287,10 @@ export default function Books() {
         const nextBooks = appendUniqueBooks([], firstBatch);
         setBooks(nextBooks);
         setLoading(false);
-        persistCache(nextBooks, totalCount, probe?.facets?.genres, false);
+        persistCache(nextBooks, totalCount, probe?.facets?.genres);
         return;
       } catch {
-        // Fall through to the legacy API, then the bundled snapshot.
+        // Fall through to the legacy API below.
       }
       }
 
@@ -315,36 +309,19 @@ export default function Books() {
         setTotal(totalCount);
         setBooks(orderedItems);
         setLoading(false);
-        persistCache(orderedItems, totalCount, data.facets.genres, false);
+        persistCache(orderedItems, totalCount, data.facets.genres);
         return;
       } catch {
-        // Fall through to the bundled snapshot.
+        // Neither path answered: handled below.
       }
 
-      try {
-        const fallbackItems = await loadFallbackBooks();
-        if (cancelled || requestTokenRef.current !== requestToken) return;
-
-        const pool = filterBooksCatalog(fallbackItems, {
-          search: searchTerm,
-          genre: genreValues,
-          sortOrder: 'year-desc',
-          page: 1,
-          pageSize: fallbackItems.length,
-        });
-
-        adoptGenres(buildMediaGenreFacets(fallbackItems));
-        sourceRef.current = { mode: 'fallback' };
-        setTotal(pool.total);
-        setBooks(orderBatch(pool.items));
-        setUsingFallbackCatalog(true);
-        setLoading(false);
-        // Not cached — see the equivalent note in Movies.js's loadCatalog.
-      } catch {
-        if (cancelled || requestTokenRef.current !== requestToken) return;
+      if (cancelled || requestTokenRef.current !== requestToken) return;
+      setLoading(false);
+      // Results already on screen from this session stay; otherwise say so, with Retry.
+      if (!cached) {
         setBooks([]);
         setTotal(0);
-        setLoading(false);
+        setLoadFailed(true);
       }
     }
 
@@ -397,7 +374,6 @@ export default function Books() {
         sourceRef.current = { ...source, nextPage: source.nextPage + 1 };
         setBooks((current) => appendUniqueBooks(current, orderBatch(data.items)));
       }
-      // Fallback mode already holds the full pool; nothing to fetch.
     } catch {
       emptyBatchesRef.current += 1;
     } finally {
@@ -408,8 +384,7 @@ export default function Books() {
   }, [total, fetchSupabaseWindows, fetchSupabaseSortedPage, fetchApiPage]);
 
   const visibleBooks = books.slice(0, renderedCount);
-  const canFetchMore = !usingFallbackCatalog
-    && books.length < total
+  const canFetchMore = books.length < total
     && emptyBatchesRef.current < MAX_EMPTY_BATCHES
     && (sourceRef.current.mode !== 'api' || sourceRef.current.nextPage <= sourceRef.current.totalPages);
   const hasMore = renderedCount < books.length || canFetchMore;
@@ -461,36 +436,22 @@ export default function Books() {
         const book = await fetchBookById(openId);
         if (!cancelled && book?.id) {
           setSelectedBook(book);
-          setSelectedBookBrowseOnly(false);
           setDetailMessage('');
           return;
         }
       } catch {
-        // Fall through to the legacy API and bundled catalog below.
+        // Fall through to the legacy API below.
       }
 
       try {
         const book = await api.get(`/media/books/${openId}`);
         if (!cancelled && book?.id) {
           setSelectedBook(book);
-          setSelectedBookBrowseOnly(false);
           setDetailMessage('');
           return;
         }
       } catch {
-        // Fall back to the bundled catalog below.
-      }
-
-      try {
-        const fallbackItems = await loadFallbackBooks();
-        const match = fallbackItems.find((book) => book.id === openId);
-        if (!cancelled && match) {
-          setSelectedBook(match);
-          setSelectedBookBrowseOnly(true);
-          setDetailMessage('');
-        }
-      } catch {
-        // Ignore missing fallback data.
+        // Nothing to open.
       }
     }
 
@@ -519,15 +480,13 @@ export default function Books() {
       .catch(() => {});
   }, []);
 
-  function openBookDetails(book, { browseOnly = false } = {}) {
+  function openBookDetails(book) {
     setSelectedBook(book);
-    setSelectedBookBrowseOnly(browseOnly);
     setDetailMessage('');
   }
 
   function closeBookDetails() {
     setSelectedBook(null);
-    setSelectedBookBrowseOnly(false);
     setDetailMessage('');
     setAddingBookId(null);
   }
@@ -660,10 +619,17 @@ export default function Books() {
             </GenreScrollBar>
 
             {loading ? (
-              <SkeletonGrid count={20} />
+              <LoadingBar label="Loading titles…" />
+            ) : loadFailed ? (
+              <div className="empty-state" role="alert">
+                <WarningCircle size={32} aria-hidden="true" />
+                <p>Couldn’t load books right now.</p>
+                <p className="empty-hint">Check your connection, then try again.</p>
+                <button type="button" className="st-btn st-btn--ghost" onClick={() => setRefreshKey((key) => key + 1)}>Retry</button>
+              </div>
             ) : books.length === 0 ? (
               <div className="empty-state">
-                <p style={{ fontSize: '2rem', margin: 0 }}>📖</p>
+                <BookOpen size={32} aria-hidden="true" />
                 <p>No books match {searchTerm ? `"${searchTerm}"` : 'this genre'}.</p>
                 <p className="empty-hint">Try a different {searchTerm ? 'search term' : 'genre'}.</p>
               </div>
@@ -674,7 +640,7 @@ export default function Books() {
                     <BookPosterTile
                       key={book.id}
                       book={book}
-                      onClick={() => openBookDetails(book, { browseOnly: usingFallbackCatalog })}
+                      onClick={() => openBookDetails(book)}
                       watchlistEntry={watchlistStatusMap[book.id]}
                       addingWatchlist={addingBookId === book.id}
                       onAddWatchlist={handleAddToLibrary}
@@ -691,7 +657,6 @@ export default function Books() {
                   ) : (
                     <span>
                       {total.toLocaleString()} book{total === 1 ? '' : 's'}
-                      {usingFallbackCatalog ? ' (offline snapshot)' : ''}
                     </span>
                   )}
                   {hasMore && <div ref={loadMoreRef} style={{ height: 1 }} />}
@@ -713,8 +678,6 @@ export default function Books() {
           onRate={handleRate}
           userRating={userRatings[selectedBook?.id]}
           detailMessage={detailMessage}
-          allowActions={!selectedBookBrowseOnly}
-          browseOnlyMessage="Fallback catalog mode is browse-only."
         />
       )}
 

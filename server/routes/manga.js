@@ -28,7 +28,7 @@ function normalizeManga(m) {
   // prefer an English alternate title ("Solo Leveling") when there is one.
   const englishAlt = (attrs.altTitles || []).find((alt) => alt.en)?.en;
   const original = attrs.title?.en || Object.values(attrs.title || {})[0] || 'Unknown';
-  const isRomanized = attrs.originalLanguage && attrs.originalLanguage !== 'en' && !attrs.title?.en?.match(/[^\x00-\x7F]/)
+  const isRomanized = attrs.originalLanguage && attrs.originalLanguage !== 'en' && !attrs.title?.en?.match(/[\u0080-\uFFFF]/)
     && englishAlt && englishAlt.toLowerCase() !== original.toLowerCase();
   const title  = isRomanized ? englishAlt : original;
   const desc   = attrs.description?.en || Object.values(attrs.description || {})[0] || '';

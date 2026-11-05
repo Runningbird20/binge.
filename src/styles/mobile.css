@@ -208,19 +208,6 @@
      matching the existing .artifact-panel precedent below. */
   .rating-artifact { display: none; }
 
-  /* Horizontal card rows bleed to the screen edges — content peeks
-     past the viewport to signal scrollability, like the poster rows
-     on streaming apps. Padding keeps the ring/active scale unclipped. */
-  .foryou-grid {
-    margin-left: -1rem;
-    margin-right: -1rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
-    scrollbar-width: none;
-  }
-  .foryou-grid::-webkit-scrollbar { display: none; }
-  .foryou-card { flex: 0 0 138px; width: 138px; }
-
   /* ── Catalog pages (Movies / TV / Books) ────────────────── */
 
   .catalog-search-row { padding: 0 1rem 0.7rem; }
@@ -237,14 +224,6 @@
     padding: 0.45rem 0.9rem;
     font-size: 0.8rem;
   }
-
-  .books-tab-bar {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-  .books-tab-bar::-webkit-scrollbar { display: none; }
 
   /* ── Rate tab: larger tap targets for category rating buttons ── */
   .rating-input-row {
@@ -748,13 +727,6 @@
 @media (hover: none) and (pointer: coarse) {
   * {
     -webkit-tap-highlight-color: transparent;
-  }
-
-  /* The shared poster-card hover (scale-up + ring) never fires on
-     touch — replace it with a subtle press-down on the same frames. */
-  .foryou-card:active {
-    transform: scale(0.96);
-    transition: transform 0.1s ease;
   }
 
   button:active {

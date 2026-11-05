@@ -44,8 +44,9 @@ fun toJson(value: Any?): JsonElement = when (value) {
 object Supabase {
     enum class Auth { REQUIRED, OPTIONAL }
 
-    /** The media catalog lives in Turso and is read through the site's /api/neon-data
-     *  (read-only, public; the path kept its old name). Accounts and user data stay on Supabase. */
+    /** The media catalog lives in Turso and is read through the site's /api/catalog
+     *  (read-only, public; builds before 2026-11 use its old name, /api/neon-data, which the
+     *  site still serves). Accounts and user data stay on Supabase. */
     private val mediaTables = setOf("movies", "tv_shows", "books", "movie_genres", "tv_show_genres", "book_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache")
 
     private lateinit var prefs: SharedPreferences
@@ -146,7 +147,7 @@ object Supabase {
     private suspend fun send(method: String, table: String, query: List<Pair<String, String>>, body: Any?, auth: Auth, prefer: String? = null): String {
         if (!Config.isConfigured) throw BingeException("This build is missing its settings.")
         val mediaRead = method == "GET" && table in mediaTables
-        val endpoint = if (mediaRead) "${Config.siteUrl}/api/neon-data/rest/$table" else "${Config.supabaseUrl}/rest/v1/$table"
+        val endpoint = if (mediaRead) "${Config.siteUrl}/api/catalog/rest/$table" else "${Config.supabaseUrl}/rest/v1/$table"
         val url = endpoint.toHttpUrl().newBuilder().apply {
             query.forEach { (k, v) -> addQueryParameter(k, v) }
         }.build()
