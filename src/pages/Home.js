@@ -1,12 +1,12 @@
 import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Info, X } from '@phosphor-icons/react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { FilmSlate, Info, MonitorPlay, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import PullToRefresh from '../components/PullToRefresh';
 import BrowseHero from '../components/BrowseHero';
 import TitleRow from '../components/TitleRow';
-import TitleCard from '../components/TitleCard';
+import TitleCard, { titleUrl } from '../components/TitleCard';
 import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -29,6 +29,8 @@ import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { findNewEpisodes } from '../utils/newEpisodes';
 import { seasonStatus } from '../utils/seasonStatus';
 import { precacheUpNext } from '../utils/smartPrecache';
+import { pickSurprise, surpriseKey, surprisePool } from '../utils/surprise';
+import { haptic } from '../utils/haptics';
 import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 import { fetchSharedWithMe, markSharesSeen } from '../utils/profileShares';
 import { enableNewEpisodeAlerts, isSubscribed, pushSupported } from '../utils/pushNotifications';
@@ -204,6 +206,51 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
         {activeProfile && !activeProfile.is_default ? 'Manage profiles' : 'Edit profile'}
       </Link>
     </section>
+  );
+}
+
+// "Surprise me with a movie" / "… a series": opens one of your picks of that
+// type, above Continue Watching, in the title popup's Trailer-button style.
+// personal === null means the picks are still loading.
+const SURPRISES = [
+  { mediaType: 'movie', label: 'Surprise me with a movie', Icon: FilmSlate },
+  { mediaType: 'tv_show', label: 'Surprise me with a series', Icon: MonitorPlay },
+];
+
+function SurpriseButtons({ personal, fallback }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const recent = useRef([]);
+  const pools = useMemo(
+    () => Object.fromEntries(SURPRISES.map(({ mediaType }) => [mediaType, surprisePool(personal, fallback, { mediaType })])),
+    [personal, fallback],
+  );
+  // Loaded and nothing to offer of a type: that button goes.
+  const shown = SURPRISES.filter(({ mediaType }) => !personal || pools[mediaType].length > 0);
+  if (!shown.length) return null;
+
+  function surprise(mediaType) {
+    const item = pickSurprise(pools[mediaType], recent.current);
+    if (!item) return;
+    recent.current = [surpriseKey(item), ...recent.current].slice(0, 6);
+    haptic();
+    navigate(titleUrl(item), { state: { backgroundLocation: location } });
+  }
+
+  return (
+    <div className="st-surprise">
+      {shown.map(({ mediaType, label, Icon }) => (
+        <button
+          key={mediaType}
+          type="button"
+          className="st-btn td-resume-control td-play--compact"
+          onClick={() => surprise(mediaType)}
+          disabled={!pools[mediaType].length}
+        >
+          <Icon size={18} weight="bold" aria-hidden="true" /> {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -439,6 +486,10 @@ export default function Home() {
     });
   }
 
+  // "Surprise me" for a profile with no history yet: the spotlight's
+  // trending titles (not its Continue Watching slide).
+  const surpriseFallback = useMemo(() => (heroItems || []).filter((item) => !item._playUrl), [heroItems]);
+
   // Bottom-nav "For You" tab links to /home#for-you.
   useEffect(() => {
     if (location.hash !== '#for-you' || authLoading || !userId) return;
@@ -481,6 +532,7 @@ export default function Home() {
         <BrowseHero items={heroItems} kicker={`Welcome back, ${name}`} />
 
         <div className="st-rows">
+          <SurpriseButtons personal={personal} fallback={surpriseFallback} />
           {visibleContinueWatching.length > 0 && (
             <div id="continue-watching" className="st-anchor">
             <TitleRow

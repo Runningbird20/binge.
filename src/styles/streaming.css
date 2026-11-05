@@ -246,6 +246,9 @@
 }
 
 .st-rows { display: flex; flex-direction: column; gap: 0.35rem; }
+/* Home: "Surprise me with a movie / a series", above Continue Watching. */
+.st-surprise { display: flex; flex-wrap: wrap; gap: 0.6rem; padding: 0.9rem 0 0.2rem; }
+.st-surprise .st-btn:disabled { opacity: 0.55; cursor: default; }
 
 /* ── Rows ─────────────────────────────────────────────────────── */
 
