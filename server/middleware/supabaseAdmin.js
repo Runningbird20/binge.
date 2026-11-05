@@ -1,5 +1,5 @@
 // Shared Supabase helpers for server routes: a service-role client (media
-// tables go to Neon through the hybrid client), the signed-in user from a
+// tables go to the Turso catalog through the hybrid client), the signed-in user from a
 // request's Bearer token, and an admin gate.
 
 let service = null;

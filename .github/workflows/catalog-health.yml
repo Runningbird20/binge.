@@ -5,7 +5,7 @@ name: Catalog health
 # TMDB's trending titles match a catalog row (normally ~95%). Fails below 90%
 # coverage so a broken sync shows up. Read-only (scripts/catalog-health.js).
 #
-# Secrets: DATABASE_URL (Neon), TMDB_API_KEY.
+# Secrets: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (the catalog), TMDB_API_KEY.
 
 on:
   schedule:
@@ -41,6 +41,8 @@ jobs:
       - name: Report
         run: node scripts/catalog-health.js
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          NODE_PATH: ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           MIN_COVERAGE: ${{ inputs.min_coverage || '90' }}

@@ -1,6 +1,6 @@
 const express = require('express');
 const router  = express.Router();
-const neonDb  = require('../neonDb');
+const catalogDb = require('../catalogDb');
 let _sbCreateClient = null;
 function getCreateClient() {
   if (!_sbCreateClient) {
@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
     const tasks = [];
     if (typeArr.includes('movies')) {
       tasks.push(
-        neonDb.query(`
+        catalogDb.query(`
           SELECT id, title, year, genre, poster_url, source_key
           FROM movies
           WHERE source_key IS NOT NULL AND (title ILIKE $1 OR genre ILIKE $1)
@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
     }
     if (typeArr.includes('tv')) {
       tasks.push(
-        neonDb.query(`
+        catalogDb.query(`
           SELECT id, title, year, genre, poster_url, source_key
           FROM tv_shows
           WHERE source_key IS NOT NULL AND (title ILIKE $1 OR genre ILIKE $1)
@@ -55,7 +55,7 @@ router.get('/', async (req, res) => {
     }
     if (typeArr.includes('books')) {
       tasks.push(
-        neonDb.query(`
+        catalogDb.query(`
           SELECT id, title, author, year, genre, cover_url, source_key
           FROM books
           WHERE source_key IS NOT NULL AND (title ILIKE $1 OR author ILIKE $1)

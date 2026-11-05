@@ -27,6 +27,7 @@ import {
 import {
   fetchBookById,
   fetchBooksPage,
+  fetchRandomBookWindow,
   sampleCatalogForRecommendations,
 } from '../utils/catalogQueries';
 import {
@@ -528,21 +529,23 @@ export default function Books() {
   const fetchSupabaseWindows = useCallback(async ({ totalCount }) => {
     const windowSize = Math.min(SAMPLE_WINDOW, Math.max(totalCount, 1));
     const totalWindowPages = Math.max(1, Math.ceil(totalCount / windowSize));
-    const pages = Array.from({ length: WINDOWS_PER_BATCH }, () => (
-      1 + Math.floor(Math.random() * totalWindowPages)
-    ));
 
-    const results = await Promise.all(pages.map((page) => (
-      fetchBooksPage({
-        page,
-        pageSize: windowSize,
-        search: searchTerm,
-        genre: genreValues,
-        sortOrder: 'title-asc',
-      }).catch(() => null)
+    // Everything fits in one window (a narrow search): just fetch it.
+    if (totalWindowPages === 1) {
+      const result = await fetchBooksPage({
+        page: 1, pageSize: windowSize, search: searchTerm, genre: genreValues, sortOrder: 'title-asc',
+      }).catch(() => null);
+      return orderBatch(Array.isArray(result?.items) ? result.items : []);
+    }
+
+    // Random windows start at a random id (a random page OFFSET read every
+    // skipped row, which the catalog database bills).
+    const windows = await Promise.all(Array.from({ length: WINDOWS_PER_BATCH }, () => (
+      fetchRandomBookWindow({ size: windowSize, search: searchTerm, genre: genreValues }).catch(() => [])
     )));
-
-    return orderBatch(results.flatMap((result) => (Array.isArray(result?.items) ? result.items : [])));
+    const seen = new Set();
+    const items = windows.flat().filter((book) => (seen.has(book.id) ? false : seen.add(book.id)));
+    return orderBatch(items);
   }, [genreValues, searchTerm]);
 
   // Real sequential, sorted pages — used whenever sortMode isn't 'featured'.
