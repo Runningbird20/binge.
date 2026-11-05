@@ -19,8 +19,6 @@ import { hydratePlaybackPrefs } from '../utils/streamPreferences';
 import { hydrateSettings } from '../utils/profileSettings';
 
 const AuthContext = createContext(null);
-// TEMP (UI preview only — do not commit): raw context export for the mock preview route
-export { AuthContext as __AuthContextForPreview };
 
 function readStoredUser() {
   try {

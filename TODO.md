@@ -25,7 +25,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Code cleanup and organization
 
-- [ ] **Take down `/ui-preview`.** `src/pages/__UIPreview.js` says "TEMP … do not commit" but has been live since July. It shows Movies, TV and Books to anyone, signed in or not, under a fake user. Delete it, its route in `App.js` and the `__AuthContextForPreview` export in `AuthContext.js`.
 - [ ] **Remove the dead VidSrc RIP server.** On 2026-11-05 `vidsrc.rip` served an ad-filled news site instead of a player. Take it out of `PROVIDERS` (`src/utils/embedProviders.js`) and `PROBES` (`server/routes/cron.js`), or switch it off in Admin → Servers until then.
 - [ ] **Delete Express routes nothing calls.** Nothing in `src/`, `tv-apple/` or `tv-android/` uses `/api/embed-proxy` (`server/routes/embedProxy.js`), `/api/proxy` (`proxy.js`) or `/api/notifications` (`notifications.js`). Unmount them in `server/app.js` and delete the files.
 - [ ] **Drop the "Supabase not configured" fallbacks.** `src/utils/data/{account,library,progress,shared}.js` carry 44 branches for running without Supabase: localStorage copies (`neon_account_profiles`) and calls to the old Express routes (`/watchlist`, `/ratings/my`, …). The app requires Supabase now, so every change has to keep paths working that never run. Remove them, and mock the client in any tests that lean on them. Then check whether `server/routes/{media,watchlist,ratings,profile,search}.js` still have callers.
