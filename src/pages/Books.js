@@ -309,7 +309,7 @@ export function BookDetailsModal({
           aria-labelledby="book-detail-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" className="td-close" onClick={onClose} aria-label="Close book details">
+          <button type="button" className="td-close td-round-btn" onClick={onClose} aria-label="Close book details">
             <X size={20} weight="bold" />
           </button>
 
@@ -383,11 +383,26 @@ export function BookDetailsModal({
                 </div>
               )}
             </div>
-            <dl className="td-facts">
-              {book.author && (<><dt>Author</dt><dd>{book.author}</dd></>)}
-              <dt>Genre</dt><dd>{genres.join(', ') || 'General Fiction'}</dd>
-              {book.year && (<><dt>Published</dt><dd>{book.year}</dd></>)}
-            </dl>
+            {/* The facts, then your rating right under them (as on movies). */}
+            <div className="td-aside">
+              <dl className="td-facts">
+                {book.author && (<><dt>Author</dt><dd>{book.author}</dd></>)}
+                <dt>Genre</dt><dd>{genres.join(', ') || 'General Fiction'}</dd>
+                {book.year && (<><dt>Published</dt><dd>{book.year}</dd></>)}
+              </dl>
+              <section className="td-section td-rate td-rate--aside" aria-label="Your rating">
+                <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
+                <RateReviewPanel
+                  mediaType="book"
+                  value={userRating}
+                  onSave={handleRatingSave}
+                  allowActions={allowActions}
+                  size="lg"
+                />
+                {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
+                {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+              </section>
+            </div>
           </div>
 
           {book.author && <BookShelfSection title={`More by ${book.author}`} load={() => fetchBooksByAuthor(book)} />}
@@ -395,18 +410,6 @@ export function BookDetailsModal({
 
           <Adaptations book={book} />
 
-          <section className="td-section td-rate" aria-label="Your rating">
-            <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
-            <RateReviewPanel
-              mediaType="book"
-              value={userRating}
-              onSave={handleRatingSave}
-              allowActions={allowActions}
-              size="lg"
-            />
-            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
-            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
-          </section>
         </div>
       </div>
 

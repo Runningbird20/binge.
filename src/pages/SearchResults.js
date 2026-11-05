@@ -1,7 +1,7 @@
 import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, ClockCounterClockwise, Info, MagnifyingGlass, Play, Sparkle, Trophy, X } from '@phosphor-icons/react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRight, ClockCounterClockwise, MagnifyingGlass, Sparkle, Trophy, X } from '@phosphor-icons/react';
 import { askBinge } from '../utils/aiSearch';
 import Navbar from '../components/Navbar';
 import { api } from '../api';
@@ -11,8 +11,6 @@ import { filterItems, filterOptions, hasFilters, readFilters } from '../utils/se
 import TitleCard from '../components/TitleCard';
 import { fetchTmdbRecommendations, tmdbIdFromItem } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
-import { titleUrl } from '../components/TitleCard';
-import { backdropSrc, posterSrc } from '../utils/imageQuality';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, isGameLive, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
@@ -95,35 +93,6 @@ function GridSkeleton() {
 }
 
 const TYPE_LABELS = { movie: 'Movies', tv: 'TV Shows', book: 'Books' };
-const KIND = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
-
-// The single best match, shown big with Play / Details.
-function TopResult({ item }) {
-  const location = useLocation();
-  const art = item.media_type === 'book' ? null : backdropSrc(item.backdrop_url, 'w1280');
-  const poster = posterSrc(item.poster_url || item.cover_url);
-  return (
-    <section className="sr-top" aria-label="Top result">
-      <div className="sr-top-art" aria-hidden="true">
-        {art ? <img src={art} alt="" referrerPolicy="no-referrer" /> : poster && <img src={poster} alt="" className="sr-top-blur" referrerPolicy="no-referrer" />}
-      </div>
-      <div className="sr-top-body">
-        {poster && <img className="sr-top-poster" src={poster} alt="" referrerPolicy="no-referrer" />}
-        <div className="sr-top-text">
-          <h2>{item.title}</h2>
-          <p className="sr-top-meta">{[KIND[item.media_type], item.year, item.media_type === 'book' ? item.author : String(item.genre || '').split(',')[0]].filter(Boolean).join(' · ')}</p>
-          <div className="sr-top-actions">
-            {item.media_type !== 'book' && (
-              <Link to={titleUrl(item, { play: true })} state={{ backgroundLocation: location }} className="st-btn st-btn--primary"><Play size={18} weight="fill" /> Play</Link>
-            )}
-            <Link to={titleUrl(item)} state={{ backgroundLocation: location }} className="st-btn st-btn--secondary"><Info size={18} weight="bold" /> Details</Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function GameTile({ game }) {
   const live = isGameLive(game);
   return (
@@ -350,12 +319,19 @@ export default function SearchResults() {
     return filterItems(await resolveTmdbItems(list || [], topMatchType), filters);
   }, [topMatchType, topMatchTmdbId, filters]);
 
-  // The top result and grids come from the filtered title matches.
-  const grouped = groupResults({
+  // The grids come from the filtered title matches, the best match first in
+  // its own section (the page has no separate "top result" card).
+  const best = groupResults({
     movies: filterItems(primaryMovies, filters),
     tv: filterItems(primaryTv, filters),
     books: filterItems(primaryBooks, filters),
   });
+  const leadWithBest = (list, mediaType) => (best.top?.media_type === mediaType ? [best.top, ...list] : list);
+  const grouped = {
+    movies: leadWithBest(best.movies, 'movie'),
+    series: leadWithBest(best.series, 'tv_show'),
+    books: leadWithBest(best.books, 'book'),
+  };
 
   // The chips offer what's in the results (every section, before filtering).
   const options = filterOptions([
@@ -368,7 +344,7 @@ export default function SearchResults() {
   const relatedTotal = allRelatedMovies.length + allRelatedTv.length + allRelatedBooks.length;
   const nothingFound = primaryState === 'done' && relatedState === 'done' && primaryTotal === 0 && relatedTotal === 0 && !games.length && !person?.items?.length;
   // Filters set and, once everything has arrived, nothing left to show.
-  const shownCount = (grouped.top ? 1 : 0) + grouped.movies.length + grouped.series.length + grouped.books.length
+  const shownCount = grouped.movies.length + grouped.series.length + grouped.books.length
     + personItems.length + relatedMovies.length + relatedTv.length + relatedBooks.length + filterItems(aiItems, filters).length;
   const filteredAway = filtering && !nothingFound && primaryState === 'done' && relatedState !== 'loading' && aiItems !== null && shownCount === 0;
 
@@ -413,7 +389,6 @@ export default function SearchResults() {
 
         {primaryState === 'done' && (
           <div className="home-sections">
-            {grouped.top && !(person && personItems.length >= 3) && <TopResult item={grouped.top} />}
             {person && personItems.length > 0 && (
               <section className="st-search-section sr-person" aria-label={`Titles with ${person.person.name}`}>
                 <Link to={`/person/${person.person.id}`} className="sr-person-head">
@@ -426,7 +401,6 @@ export default function SearchResults() {
                 <TitleRow title={`${person.person.name} on binge.`} items={personItems} />
               </section>
             )}
-            {grouped.top && person && personItems.length >= 3 && <TopResult item={grouped.top} />}
             <ResultGrid title="Movies" items={grouped.movies} />
             <ResultGrid title="Series" items={grouped.series} />
             {grouped.books.length > 0 && <TitleRow title={TYPE_LABELS.book} items={grouped.books} />}
