@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
-import { clearTokenCache, setTokenCache } from '../api';
+import { api, clearTokenCache, setTokenCache } from '../api';
 import {
   getSupabaseSessionProfile,
   resolveSupabaseProfile,
@@ -314,6 +314,14 @@ export function AuthProvider({ children }) {
     void signOutFromSupabase().catch(() => {});
   }, []);
 
+  // Permanently deletes the signed-in account (server/routes/account.js checks
+  // the password, then auth.admin.deleteUser cascades to every user table),
+  // then clears this device's session. Throws the server's message on failure.
+  const deleteAccount = useCallback(async (password) => {
+    await api.post('/account/delete', { password });
+    await logout();
+  }, [logout]);
+
 
   // Admin/dev privileges are account-level, but must not follow onto sub-
   // profiles — a kid (or any non-default) profile shouldn't get the Admin
@@ -329,6 +337,7 @@ export function AuthProvider({ children }) {
     signIn,
     signUp,
     logout,
+    deleteAccount,
     refreshUser,
     updateProfile,
     updatePassword,
@@ -343,7 +352,7 @@ export function AuthProvider({ children }) {
     canUseAdminFeatures,
     canUseDevFeatures,
   }), [
-    authLoading, logout, refreshUser, signIn, signUp, updatePassword, updateProfile, user,
+    authLoading, logout, deleteAccount, refreshUser, signIn, signUp, updatePassword, updateProfile, user,
     profiles, activeProfile, profilesLoading, switchProfile, addProfile, loadProfiles,
     canUseAdminFeatures, canUseDevFeatures,
   ]);

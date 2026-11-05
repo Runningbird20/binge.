@@ -157,6 +157,7 @@ app.use('/api/manga',       require('./routes/manga'));
 app.use('/api/books',       require('./routes/books'));
 app.use('/api/search', require('./routes/search'));
 app.use('/api/profile', require('./routes/profile'));
+app.use('/api/account', require('./routes/account'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));
 app.use('/api/ops', require('./routes/ops'));
