@@ -6,6 +6,7 @@ import { FilmSlate, MonitorPlay, BookOpen, X, Star, PencilSimple, Users, ClockCo
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
+import DownloadDataButton from '../components/DownloadDataButton';
 import ThemedSelect from '../components/ThemedSelect';
 import RatingArtifact, { computeStarRating, computeNormalizedScore } from '../components/RatingArtifact';
 import { useAuth } from '../contexts/AuthContext';
@@ -448,12 +449,15 @@ export default function Profile() {
             <div><dt>Ratings</dt><dd>{stats.totalRatings}</dd></div>
             <div><dt>Avg score</dt><dd>{stats.avg}</dd></div>
           </dl>
-          {taste.length > 0 && (
-            <div className="pf-taste">
-              <span className="pf-taste-label">Your taste</span>
-              {taste.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}
-            </div>
-          )}
+          <div className="pf-hero-foot">
+            {taste.length > 0 && (
+              <div className="pf-taste">
+                <span className="pf-taste-label">Your taste</span>
+                {taste.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}
+              </div>
+            )}
+            <DownloadDataButton profileName={displayName} />
+          </div>
         </header>
 
         <section className="pf-section">
