@@ -37,6 +37,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Spotlight trailers | ✓ | — | ✓ | — | The website plays them only with a mouse or trackpad (`canAutoplayPreviews`). |
 | Trailer previews when hovering a card | ✓ | — | — | — | `HoverPreview.js`, needs a mouse or trackpad. |
 | "Surprise me with a movie / a series" | ✓ | ✓ | — | — | Home, above Continue Watching (`utils/surprise.js`). |
+| Watched titles left out of every recommendation | ✓ | ✓ | ◐ | ◐ | `utils/watchedTitles.js`. The TV apps leave them out of Top Picks and Because you watched only; their Trending, genre and seasonal rows still show them. |
 | Finished shows leave Continue Watching | ✓ | ✓ | — | — | Newest episode marked watched and nothing saved partway (`Home.js`). The TV apps keep them. |
 | Home opens instantly from the last visit | ◐ | ◐ | — | ✓ | Fire TV saves Home to disk for 7 days (`HomeSnapshot`). The website keeps it only for the open tab (`sessionCache`). |
 | Pull to refresh | — | ✓ | — | — | Touch only. |

@@ -31,6 +31,7 @@ import useSwipeDismiss from '../hooks/useSwipeDismiss';
 import useDeviceType from '../hooks/useDeviceType';
 import { fetchTmdbRecommendations, languageName } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
+import { useWatchedKeys, withoutWatched } from '../utils/watchedTitles';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
 import { titleUrl } from './TitleCard';
 import { isComingSoon, formatReleaseDay } from '../utils/releaseWindow';
@@ -247,9 +248,12 @@ function SourceBooks({ mediaType, tmdbId, title }) {
   );
 }
 
+// TMDB's recommendations for this title, minus what the profile has watched.
 function MoreLikeThis({ mediaType, tmdbId }) {
   const location = useLocation();
-  const [items, setItems] = useState(null);
+  const [loaded, setItems] = useState(null);
+  const watched = useWatchedKeys();
+  const items = useMemo(() => (loaded && watched ? withoutWatched(loaded, watched).slice(0, 12) : null), [loaded, watched]);
 
   useEffect(() => {
     setItems(null);
@@ -257,7 +261,7 @@ function MoreLikeThis({ mediaType, tmdbId }) {
     let cancelled = false;
     fetchTmdbRecommendations(mediaType, tmdbId)
       .then((list) => resolveTmdbItems(list || [], mediaType))
-      .then((resolved) => { if (!cancelled) setItems(resolved.slice(0, 12)); })
+      .then((resolved) => { if (!cancelled) setItems(resolved.slice(0, 30)); })
       .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
   }, [mediaType, tmdbId]);
