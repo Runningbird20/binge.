@@ -1755,6 +1755,7 @@
 .pf-download-note.is-error { color: #f08080; }
 
 .pf-section { padding-top: 1.75rem; }
+.pf-tab-short { display: none; }
 .pf-tab-count {
   margin-left: 0.4rem;
   padding: 0.05rem 0.45rem;
@@ -1823,6 +1824,11 @@
   }
   .pf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pf-stats > div:first-child { grid-column: 1 / -1; }
+  /* My List · Watched · Ratings share the width. */
+  .pf-section > .st-tabs { display: flex; width: 100%; box-sizing: border-box; }
+  .pf-section > .st-tabs .st-tab { flex: 1 1 auto; padding: 0 0.6rem; font-size: 0.88rem; }
+  .pf-tab-full { display: none; }
+  .pf-tab-short { display: inline; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
