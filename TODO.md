@@ -12,7 +12,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## UI and UX
 
-- [ ] **Spoiler-safe episode lists.** Episode stills and summaries further ahead than your next episode give plot away. Blur those stills and hide those summaries until tapped, with a switch in Settings (`MediaDetailsModal.js`, `profileSettings.js`).
 - [ ] **"Install binge." prompt.** The site is a PWA (manifest, service worker, shortcuts), but nothing handles `beforeinstallprompt`, so most people never install it. Offer Install in the Me sheet / Settings on Chrome and Android, and an "Add to Home Screen" how-to sheet on iPhone.
 - [ ] **Link previews for shared titles.** `/movie/:id`, `/tv-show/:id` and `/book/:id` are rendered in the browser, so iMessage, Discord and Slack show the generic site card. Serve `og:title` / `og:description` / `og:image` (the TMDB backdrop) for those paths from a small Vercel function before the app loads.
 - [ ] **Notification inbox.** New-episode, reminder, game and admin push alerts disappear once dismissed, and nothing in the app lists them. Add a bell in the navbar with the last 30 days of alerts (one table both crons write to), with unread dots.
@@ -50,9 +49,13 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **Lint the server and scripts.** ESLint only runs inside `react-scripts build`/`test`, which never look at `server/`, `api/` or `scripts/`. Add `npm run lint` covering all of them, and run it in `.github/workflows/ci.yml`.
 - [ ] **Rethink the 6.5 MB static catalog.** `public/catalog/*.bulk.jsonl` (5.2 MB of Internet Archive books, 1.3 MB of Plex movies and TV) ship with every deploy for `utils/catalogFallback.js`. With the catalog in Turso, decide whether the outage fallback earns its size, or cut it down to a small set.
 - [ ] **Names that no longer fit.** `SkeletonCard`/`SkeletonGrid` (`components/SkeletonCard.js`) render `LoadingBar`, not skeletons. `server/routes/neonData.js` serves Turso. Rename them when you're next in those files.
-- [ ] **Fire TV leftovers.** `PlaybackPrefs.trailers`, `AppModel.deepLink` and `QrCode` aren't used. The sign-in screen still mentions books, which the TV apps don't have (see DIFF.md's known mismatches).
+- [ ] **Fire TV leftovers.** `PlaybackPrefs.trailers`, `AppModel.deepLink` and `QrCode` aren't used. The sign-in screen still mentions books, which the TV apps don't have.
 
 ## Mobile
 
-- [ ] Andriod APK
-- [ ] Apple ipa
+The phone apps exist (`mobile-android/`, `mobile-ios/`; `scripts/build-apk.sh`, `scripts/build-ipa.sh`). Next:
+
+- [ ] **Build them in CI.** A `tv-apk.yml`-style workflow for `mobile-android/` (reusing the `TV_DEBUG_KEYSTORE` signing), and an unsigned `.ipa` on a macOS runner, both attached to a GitHub Release on a `mobile-v*` tag.
+- [ ] **A signed iPhone app.** Without an Apple Developer account the `.ipa` has to be re-signed with a personal Apple ID (installs expire after 7 days). A paid account can sign it (ad hoc / TestFlight) in `scripts/build-ipa.sh` or CI.
+- [ ] **Notifications in the apps.** Web push doesn't reach the web views. Register for FCM / APNs natively, and have the crons (`server/routes/cron.js`) send to those tokens as well as to `push_subscriptions`.
+- [ ] **Open binge. links in the app.** Android needs `public/.well-known/assetlinks.json` (with the APK's signing fingerprint) and `autoVerify`. iOS needs Associated Domains (`apple-app-site-association`) and a signed build.
