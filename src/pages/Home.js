@@ -15,13 +15,14 @@ import {
   fetchSupabaseRatings,
   fetchSupabaseWatchlist,
   fetchSupabaseContinueWatching,
+  fetchWatchedAmong,
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
 import { isChildLevel, maturityRestriction } from '../utils/kidsMode';
-import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
+import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft, hasSavedPosition, lastAiredEpisode } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
@@ -212,8 +213,12 @@ export default function Home() {
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
   // "2 episodes left in Season 3" / "New season Friday" per show in
-  // Continue Watching (TMDB details are cached for 30 minutes).
+  // Continue Watching (TMDB details are cached for 30 minutes). The same
+  // details find finished shows: the newest aired episode is marked watched
+  // and nothing is saved partway through, so the show leaves Continue
+  // Watching (it comes back when a new episode airs).
   const [seasonNotes, setSeasonNotes] = useState({});
+  const [finishedShows, setFinishedShows] = useState(() => new Set());
   useEffect(() => {
     let cancelled = false;
     const shows = continueWatchingItems.filter((item) => item.media_type === 'tv_show').slice(0, 24);
@@ -222,13 +227,33 @@ export default function Home() {
       if (!tmdbId) return null;
       const details = await tmdbGet(`/tv/${tmdbId}`).catch(() => null);
       const note = seasonStatus(details, Number(item.current_season) || 1, Number(item.current_episode) || 1);
-      return note ? [`tv_show:${item.media_id ?? item.id}`, note] : null;
-    })).then((pairs) => { if (!cancelled) setSeasonNotes(Object.fromEntries(pairs.filter(Boolean))); });
+      return { item, key: `tv_show:${item.media_id ?? item.id}`, note, last: lastAiredEpisode(details) };
+    })).then(async (entries) => {
+      const found = entries.filter(Boolean);
+      if (cancelled) return;
+      setSeasonNotes(Object.fromEntries(found.filter((entry) => entry.note).map((entry) => [entry.key, entry.note])));
+      const candidates = found.filter((entry) => entry.last && !hasSavedPosition(entry.item));
+      const watched = candidates.length
+        ? await fetchWatchedAmong(candidates.map(({ item, last }) => ({ mediaId: item.media_id, ...last }))).catch(() => new Set())
+        : new Set();
+      if (cancelled) return;
+      const finished = candidates
+        .filter(({ item, last }) => watched.has(`${Number(item.media_id)}:${last.season}:${last.episode}`))
+        .map((entry) => entry.key);
+      // Only a real change re-renders (the spotlight rebuilds from this list).
+      setFinishedShows((current) => (finished.length === current.size && finished.every((key) => current.has(key)) ? current : new Set(finished)));
+    });
     return () => { cancelled = true; };
   }, [continueWatchingItems]);
+  // What the Continue Watching row and the spotlight show. New Episodes and
+  // the calendar keep using the full list.
+  const visibleContinueWatching = useMemo(
+    () => continueWatchingItems.filter((item) => !finishedShows.has(`${item.media_type}:${item.media_id ?? item.id}`)),
+    [continueWatchingItems, finishedShows],
+  );
 
   // Smart downloads: warm the next episodes' pages/art while idle.
-  useEffect(() => { precacheUpNext(continueWatchingItems); }, [continueWatchingItems]);
+  useEffect(() => { precacheUpNext(visibleContinueWatching); }, [visibleContinueWatching]);
   const jumpToContinue = new URLSearchParams(location.search).get('jump') === 'continue';
   const [dataLoading, setDataLoading] = useState(true);
   const [personal, setPersonal] = useState(null);
@@ -327,7 +352,7 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     async function buildHero() {
-      const resume = continueWatchingItems
+      const resume = visibleContinueWatching
         .filter((item) => item.media_type !== 'book')
         .slice(0, 1)
         .map((item) => ({ ...asTitle(item), _playUrl: resumeUrl(item), _playLabel: 'Resume', _reason: computeProgressBadge(item) ? `Continue ${computeProgressBadge(item)}` : 'Continue where you left off' }));
@@ -357,7 +382,7 @@ export default function Home() {
     }
     buildHero();
     return () => { cancelled = true; };
-  }, [continueWatchingItems, personal, kidsSafe]);
+  }, [visibleContinueWatching, personal, kidsSafe]);
 
   // Shows in your list with an episode newer than where you are.
   useEffect(() => {
@@ -430,11 +455,11 @@ export default function Home() {
 
   // Home-screen shortcut "Continue Watching" (manifest) lands here.
   useEffect(() => {
-    if (!jumpToContinue || !continueWatchingItems.length) return;
+    if (!jumpToContinue || !visibleContinueWatching.length) return;
     const row = document.getElementById('continue-watching');
     row?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     row?.querySelector('.st-card')?.focus({ preventScroll: true });
-  }, [jumpToContinue, continueWatchingItems.length]);
+  }, [jumpToContinue, visibleContinueWatching.length]);
 
   return (
     <div className="app-layout">
@@ -448,11 +473,11 @@ export default function Home() {
         <BrowseHero items={heroItems} kicker={`Welcome back, ${name}`} />
 
         <div className="st-rows">
-          {continueWatchingItems.length > 0 && (
+          {visibleContinueWatching.length > 0 && (
             <div id="continue-watching" className="st-anchor">
             <TitleRow
               title={`Continue Watching for ${name}`}
-              items={continueWatchingItems}
+              items={visibleContinueWatching}
               eager
               renderItem={(item, index) => (
                 <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} note={seasonNotes[`${item.media_type}:${item.media_id ?? item.id}`]} />

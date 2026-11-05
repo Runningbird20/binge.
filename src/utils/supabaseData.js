@@ -37,6 +37,7 @@ export const fetchSupabaseDashboardCounts = library.fetchSupabaseDashboardCounts
 export const enrichMediaRecords = shared.enrichMediaRecords;
 export const fetchEpisodeProgress = progress.fetchEpisodeProgress;
 export const fetchEpisodeProgressCounts = progress.fetchEpisodeProgressCounts;
+export const fetchWatchedAmong = progress.fetchWatchedAmong;
 export const markEpisodeWatched = progress.markEpisodeWatched;
 export const unmarkEpisodeWatched = progress.unmarkEpisodeWatched;
 export const markEpisodesWatched = progress.markEpisodesWatched;
