@@ -91,20 +91,53 @@ export function countCompleted(watchlist, ratings) {
   return counted.size;
 }
 
-// Watch time as a clock, "HH:MM:SS" (hours keep counting past 99).
-export function formatWatchTime(minutes) {
-  const total = Math.max(0, Math.round(Number(minutes) || 0));
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}:00`;
+// Years, months, weeks, days, hours and minutes in a whole number of
+// minutes (a year is 365 days, a month 30, a week 7).
+const DAY = 1440;
+const CALENDAR = [['years', 365 * DAY], ['months', 30 * DAY], ['weeks', 7 * DAY], ['days', DAY]];
+function watchTimeParts(minutes) {
+  let rest = Math.max(0, Math.round(Number(minutes) || 0));
+  const parts = {};
+  CALENDAR.forEach(([name, size]) => { parts[name] = Math.floor(rest / size); rest %= size; });
+  return { ...parts, hours: Math.floor(rest / 60), mins: rest % 60 };
 }
 
-// The same, spelled out for screen readers ("12 hours 30 minutes").
+// Watch time as "1y 2m 3w 4d HH:MM:SS". Units before the first one in use
+// are left out (days always show: "0d 12:30:00"); the ones after it stay,
+// even at 0, so each keeps its place. Watch time is counted in whole
+// minutes, so the seconds are always 00.
+export function formatWatchTime(minutes) {
+  const time = watchTimeParts(minutes);
+  const pad = (value) => String(value).padStart(2, '0');
+  const first = CALENDAR.findIndex(([name]) => time[name] > 0);
+  const units = CALENDAR.slice(first === -1 ? CALENDAR.length - 1 : first)
+    .map(([name]) => `${time[name].toLocaleString()}${name === 'months' ? 'm' : name[0]}`);
+  return `${units.join(' ')} ${pad(time.hours)}:${pad(time.mins)}:00`;
+}
+
+// The same, spelled out for screen readers ("2 weeks 14 hours 30 minutes").
 export function describeWatchTime(minutes) {
-  const total = Math.max(0, Math.round(Number(minutes) || 0));
-  const hours = Math.floor(total / 60);
-  const rest = total % 60;
+  const time = watchTimeParts(minutes);
+  const unit = (count, word) => `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
   const parts = [];
-  if (hours) parts.push(`${hours.toLocaleString()} ${hours === 1 ? 'hour' : 'hours'}`);
-  if (rest || !hours) parts.push(`${rest} ${rest === 1 ? 'minute' : 'minutes'}`);
-  return parts.join(' ');
+  [['years', 'year'], ['months', 'month'], ['weeks', 'week'], ['days', 'day'], ['hours', 'hour'], ['mins', 'minute']]
+    .forEach(([name, word]) => { if (time[name]) parts.push(unit(time[name], word)); });
+  return parts.length ? parts.join(' ') : '0 minutes';
+}
+
+// Finished (watched or read) — those leave My List for the Profile's
+// Watched tab until they're rated.
+export function isFinished(item) {
+  return item?.status === 'watched' || item?.status === 'read';
+}
+
+// Splits the (unrated) library into My List and Watched; Watched is newest
+// first, by when the title was last updated (marked finished).
+export function splitFinished(library) {
+  const list = [];
+  const finished = [];
+  (library || []).forEach((item) => (isFinished(item) ? finished : list).push(item));
+  const when = (item) => new Date(item.updated_at || item.added_at || 0).getTime() || 0;
+  finished.sort((a, b) => when(b) - when(a));
+  return { list, finished };
 }

@@ -237,6 +237,7 @@ Two independent cache layers exist to cut catalog/image load times. Neither is a
 
 A rated title is treated as watched and belongs in the "Ratings & Reviews" section, **not** the watchlist/library:
 - `saveSupabaseRating` (`src/utils/data/library.js`) deletes the matching watchlist row after saving a rating (best-effort — a delete failure must not fail the save).
+- The Profile page has three tabs: My List (still to watch/read or in progress), Watched (finished — `watched`/`read` — but not rated, newest first; `splitFinished` in `libraryStats.js`) and Ratings & Reviews ("Ratings" on phones so all three fit). Rating a watched title moves it on to Ratings & Reviews.
 - `src/utils/libraryStats.js` centralizes the dashboard math shared by Home (`ProfileStatsHeader`) and Profile: `excludeRated` hides rated titles from the library view, `computeWatchMinutes` counts both watchlist progress and rated titles toward watch time (deduped, since rating a title you'd already tracked must not double-count), and `countCompleted` counts watched/read + rated titles. If you change what "counts" as watched or completed, do it here so both dashboards stay in sync.
 
 ### Design rules (web, mobile, TV)
