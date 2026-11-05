@@ -231,6 +231,89 @@ export async function removeSupabaseWatchlistItem(id) {
   }
 }
 
+const SIGN_IN_TO_TRACK = 'Sign in to keep track of what you’ve watched.';
+
+// Puts library rows back to the statuses they had ([{ id, status }]).
+async function restoreStatuses(client, changed) {
+  const byStatus = new Map();
+  changed.forEach(({ id, status }) => byStatus.set(status, [...(byStatus.get(status) || []), id]));
+  const results = await Promise.all([...byStatus].map(([status, ids]) => client.from('watchlist').update({ status }).in('id', ids)));
+  const failed = results.find((result) => result.error);
+  if (failed) throw new Error(toFriendlyError(failed.error, 'Unable to update those library items.'));
+}
+
+// A franchise's "Mark all watched": the same as picking "Watched" on each
+// movie, in one go. Movies already in the library get the status; the rest
+// are added as watched. movies: [{ mediaId, entry }], entry being the row
+// from fetchSupabaseWatchlistStatusMap (or null).
+// → { added: [{ id, mediaId }], changed: [{ id, mediaId, status }] }: what
+// undoMarkMoviesWatched needs to put everything back.
+export async function markMoviesWatched(movies) {
+  const changed = movies.filter((movie) => movie.entry?.id)
+    .map((movie) => ({ id: movie.entry.id, mediaId: Number(movie.mediaId), status: movie.entry.status }));
+  const fresh = movies.filter((movie) => !movie.entry?.id).map((movie) => Number(movie.mediaId));
+
+  if (!isSupabaseConfigured || !supabase) {
+    const added = [];
+    for (const { id } of changed) await updateSupabaseWatchlistStatus(id, 'watched'); // eslint-disable-line no-await-in-loop
+    for (const mediaId of fresh) {
+      const saved = await addSupabaseWatchlistItem({ mediaType: 'movie', mediaId, status: 'watched' }); // eslint-disable-line no-await-in-loop
+      added.push({ id: saved.id, mediaId });
+    }
+    return { added, changed };
+  }
+
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser().catch(() => { throw new Error(SIGN_IN_TO_TRACK); });
+  const profileId = getActiveProfileId();
+  const now = new Date().toISOString();
+
+  if (changed.length) {
+    const { error } = await client.from('watchlist')
+      .update({ status: 'watched', completed_at: now })
+      .in('id', changed.map((row) => row.id));
+    if (error) throw new Error(toFriendlyError(error, 'Unable to update those library items.'));
+  }
+
+  let added = [];
+  if (fresh.length) {
+    const { data, error } = await client.from('watchlist')
+      .upsert(fresh.map((mediaId) => ({
+        user_id: authUser.id,
+        profile_id: profileId,
+        media_type: 'movie',
+        media_id: mediaId,
+        status: 'watched',
+        completed_at: now,
+      })), { onConflict: 'user_id,media_type,media_id,profile_id', ignoreDuplicates: true })
+      .select('id, media_id');
+    if (error) {
+      // All or nothing: the statuses already changed go back.
+      await restoreStatuses(client, changed).catch(() => {});
+      throw new Error(toFriendlyError(error, 'Unable to save those movies.'));
+    }
+    added = (data || []).map((row) => ({ id: row.id, mediaId: Number(row.media_id) }));
+  }
+  return { added, changed };
+}
+
+// Undo for markMoviesWatched: removes the rows it added and puts the
+// statuses it changed back.
+export async function undoMarkMoviesWatched({ added = [], changed = [] }) {
+  if (!isSupabaseConfigured || !supabase) {
+    for (const { id } of added) await removeSupabaseWatchlistItem(id); // eslint-disable-line no-await-in-loop
+    for (const { id, status } of changed) await updateSupabaseWatchlistStatus(id, status); // eslint-disable-line no-await-in-loop
+    return;
+  }
+
+  const client = requireSupabase();
+  if (added.length) {
+    const { error } = await client.from('watchlist').delete().in('id', added.map((row) => row.id));
+    if (error) throw new Error(toFriendlyError(error, 'Unable to remove those library items.'));
+  }
+  if (changed.length) await restoreStatuses(client, changed);
+}
+
 // isOwnRatings is passed explicitly by the caller rather than re-derived
 // from `userId` here — fetchSupabaseRatings' multi-type branch always
 // resolves a concrete userId before calling this (even for "my own"

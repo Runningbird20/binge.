@@ -321,6 +321,9 @@ export default function MediaDetailsModal({
   initialEpisode,
   initialPosition,
   closeOnPlayerExit = false,
+  // Called after this popup changes library rows itself (a franchise's
+  // "Mark all watched"), so the page can reload them.
+  onLibraryChange,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [playerStart, setPlayerStart] = useState(null);
@@ -743,7 +746,7 @@ export default function MediaDetailsModal({
             <EpisodeHeatmap tmdbId={details.tmdbId} seasons={details.seasons} onPlay={play} />
           )}
 
-          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} />}
+          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} canMark={allowActions} onLibraryChange={onLibraryChange} />}
 
           <SourceBooks mediaType={mediaType} tmdbId={details?.tmdbId} title={item.title} />
 
