@@ -5,6 +5,9 @@ What each binge. app has that the others don't. Features that work the same ever
 **The four apps**
 - **Computer**: the website on a desktop, laptop or tablet (`src/`).
 - **Phone**: the same website on a phone. A phone is a screen whose short side is 768 px or less (`useDeviceType`). The phone layout adds the bottom nav, bottom sheets and swipe gestures. The site can also be installed as a PWA.
+  - It also comes as the binge. app (`mobile-android/`, `mobile-ios/`): the same phone website in a native shell.
+  - The app refuses every pop-up and redirect from the players, and saves files the site makes.
+  - It lacks web push. Where the app differs, the Notes say so.
 - **Apple TV**: `tv-apple/`, SwiftUI.
 - **Fire TV**: `tv-android/`, Kotlin + Compose for TV.
 
@@ -81,7 +84,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Mini player | ✓ | ✓ | ◐ | — | Computer: a draggable corner window. Phone: a dock. Apple TV: only a live game in the corner. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
-| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps refuse every pop-up. The website sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
+| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
 
 ## Sports
 
