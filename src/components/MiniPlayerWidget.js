@@ -106,6 +106,7 @@ function DesktopMini({ nowPlaying, onClose }) {
           <iframe
             ref={frameRef}
             src={nowPlaying.embedUrl}
+            sandbox={nowPlaying.sandbox}
             allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
             allowFullScreen
             referrerPolicy="no-referrer-when-downgrade"
@@ -131,6 +132,7 @@ function MobileMini({ nowPlaying, minimized, onExpand, onMinimize, onClose }) {
             <iframe
               ref={frameRef}
               src={embedUrl}
+              sandbox={nowPlaying.sandbox}
               className="mini-player-iframe"
               allow="autoplay *; encrypted-media *"
               referrerPolicy="no-referrer-when-downgrade"
@@ -178,6 +180,7 @@ function MobileMini({ nowPlaying, minimized, onExpand, onMinimize, onClose }) {
           <iframe
             ref={frameRef}
             src={embedUrl}
+            sandbox={nowPlaying.sandbox}
             className="mini-player-iframe"
             allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
             allowFullScreen
