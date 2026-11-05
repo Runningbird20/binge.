@@ -32,6 +32,45 @@ export async function fetchEpisodeProgress(mediaId) {
   return data || [];
 }
 
+// Which of these episodes are marked watched, as a Set of
+// "mediaId:season:episode" (Home checks each Continue Watching show's newest
+// episode). One small query per episode; Home asks for a handful.
+// episodes: [{ mediaId, season, episode }]
+export async function fetchWatchedAmong(episodes) {
+  const key = (mediaId, season, episode) => `${Number(mediaId)}:${Number(season)}:${Number(episode)}`;
+  const wanted = (episodes || []).slice(0, 30);
+  if (!wanted.length) return new Set();
+  if (!isSupabaseConfigured || !supabase) {
+    const found = new Set();
+    wanted.forEach(({ mediaId, season, episode }) => {
+      try {
+        const list = JSON.parse(window.localStorage.getItem(`ep_progress_${mediaId}`) || '[]');
+        if (list.some((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode))) found.add(key(mediaId, season, episode));
+      } catch {}
+    });
+    return found;
+  }
+
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) return new Set();
+  const profileId = getActiveProfileId();
+  const results = await Promise.all(wanted.map(async ({ mediaId, season, episode }) => {
+    let query = client
+      .from('episode_progress')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('media_id', Number(mediaId))
+      .eq('season', Number(season))
+      .eq('episode', Number(episode))
+      .limit(1);
+    if (profileId) query = scopeToProfile(query, profileId);
+    const { data, error } = await query;
+    return !error && data?.length ? key(mediaId, season, episode) : null;
+  }));
+  return new Set(results.filter(Boolean));
+}
+
 // media_id -> number of episodes watched, across every show — an engagement
 // signal for recommendations (binging 30 episodes says more than one).
 export async function fetchEpisodeProgressCounts() {
