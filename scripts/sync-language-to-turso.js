@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * sync-language-to-neon.js
+ * sync-language-to-turso.js
  *
  * Keeps one original language (Malayalam by default) complete and current in
- * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-neon.js)
+ * the movies / tv_shows catalog. The bulk sync (sync-tmdb-to-turso.js)
  * works through TMDB's whole export by popularity and skips anything below
  * MIN_POPULARITY, so a small new regional release can wait weeks. This asks
  * TMDB discover directly:
@@ -17,7 +17,7 @@
  * ratings and popularity fill in during a film's first weeks.
  *
  * Env vars (same as the bulk sync, minus TMDB_READ_TOKEN):
- *   TMDB_API_KEY, Neon DATABASE_URL
+ *   TMDB_API_KEY, TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN)
  *   LANGUAGES      comma-separated ISO 639-1 codes (default "ml")
  *   TYPE           "movie" | "tv" | "both" (default "both")
  *   YEARS          how far back the recent pass goes (default 3)
@@ -34,7 +34,7 @@ try {
   require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 } catch {}
 
-const { createCatalogClient } = require('./neon-catalog-client');
+const { createCatalogClient } = require('./catalog-client');
 const { movieRecord, tvRecord, tmdbFetch } = require('./tmdb-records');
 
 const LANGUAGES     = (process.env.LANGUAGES || 'ml').split(',').map(s => s.trim()).filter(Boolean);
@@ -143,8 +143,8 @@ async function syncKind(supabase, kind, language) {
 
 async function main() {
   const { TMDB_API_KEY } = process.env;
-  if (!TMDB_API_KEY || (!DRY_RUN && !(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED))) {
-    console.error('❌  Missing env vars: TMDB_API_KEY, Neon DATABASE_URL');
+  if (!TMDB_API_KEY || (!DRY_RUN && !process.env.TURSO_DATABASE_URL)) {
+    console.error('❌  Missing env vars: TMDB_API_KEY, TURSO_DATABASE_URL');
     process.exit(1);
   }
   const supabase = DRY_RUN ? null : createCatalogClient();

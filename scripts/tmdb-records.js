@@ -1,8 +1,8 @@
 /**
- * TMDB helpers shared by the Neon catalog scripts (sync-language-to-neon.js,
+ * TMDB helpers shared by the catalog scripts (sync-language-to-turso.js,
  * backfill-catalog-fields.js): a rate-limit-aware fetch and the row formatters
  * for the movies / tv_shows tables. Moved unchanged from the retired
- * sync-tmdb-to-supabase.js; the catalog lives in Neon only.
+ * sync-tmdb-to-supabase.js; the catalog lives in Turso.
  */
 try { require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }); } catch {}
 

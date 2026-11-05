@@ -22,7 +22,7 @@ function Bars({ series, label }) {
 }
 
 // admin_stats (Supabase, user data) returns top titles as ids; their names and
-// posters come from the Neon catalog.
+// posters come from the media catalog (Turso).
 async function withTitles(top) {
   const tables = { movie: 'movies', tv_show: 'tv_shows' };
   const found = new Map();

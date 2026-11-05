@@ -107,11 +107,12 @@ test('falls back to a placeholder when a book cover image fails to load', async 
   // Discovering the catalog's genres from the first fetch updates state that
   // (via a useMemo returning a fresh empty-array literal) re-triggers the
   // load effect exactly once more, momentarily clearing and rebuilding the
-  // book list — see mockBookCatalog's call count. Wait for that second cycle
-  // to finish before grabbing element references, so they aren't stale by
-  // the time we interact with them.
+  // book list — see mockBookCatalog's call count (each cycle is a probe plus
+  // one window, since a one-book catalog fits in a single window). Wait for
+  // that second cycle to finish before grabbing element references, so they
+  // aren't stale by the time we interact with them.
   await waitFor(() => {
-    expect(booksPageSpy.mock.calls.length).toBeGreaterThanOrEqual(8);
+    expect(booksPageSpy.mock.calls.length).toBeGreaterThanOrEqual(4);
   });
 
   const duneButton = await screen.findByRole('button', { name: /open details for dune/i });

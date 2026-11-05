@@ -1,5 +1,5 @@
 // Weekly catalog health report (catalog-health.yml). Read-only.
-//   - row counts for movies / tv_shows / books in Neon
+//   - row counts for movies / tv_shows / books in the Turso catalog
 //   - how many movies and shows lack vote_average / popularity / original_language
 //   - coverage: how many of TMDB's trending titles (this week, movies + series,
 //     the ones the browse rows would show) match a catalog row by source_key,
@@ -7,11 +7,11 @@
 // Writes a Markdown table to the run summary and exits 1 below MIN_COVERAGE
 // (default 90%), so a broken sync shows up.
 //
-//   DATABASE_URL=… TMDB_API_KEY=… node scripts/catalog-health.js
+//   TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… TMDB_API_KEY=… node scripts/catalog-health.js
 require('dotenv').config({ path: '.env.local', quiet: true });
 require('dotenv').config({ path: '.env', quiet: true });
 const fs = require('fs');
-const { Client } = require('pg');
+const db = require('../server/catalogDb');
 
 const MIN_COVERAGE = Number(process.env.MIN_COVERAGE || 90);
 const TRENDING_PAGES = 3; // 20 titles a page
@@ -45,15 +45,10 @@ const pct = (part, whole) => (whole ? (100 * part) / whole : 0);
 const fmt = (n) => n.toLocaleString('en-US');
 
 async function main() {
-  const db = new Client({
-    connectionString: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
-  await db.connect();
-  try {
+  {
     const counts = {};
     for (const table of ['movies', 'tv_shows', 'books']) {
-      counts[table] = Number((await db.query(`select count(*) from public.${table}`)).rows[0].count);
+      counts[table] = Number((await db.query(`select count(*) as count from ${table}`)).rows[0].count);
     }
 
     const gaps = {};
@@ -62,7 +57,7 @@ async function main() {
         select count(*) filter (where vote_average is null) as vote_average,
                count(*) filter (where popularity is null) as popularity,
                count(*) filter (where original_language is null or original_language = '') as original_language
-        from public.${table}`)).rows[0];
+        from ${table}`)).rows[0];
     }
 
     const coverage = {};
@@ -70,7 +65,7 @@ async function main() {
       const items = await trending(kind);
       const keys = items.map((item) => `tmdb:${type}:${item.id}`);
       const found = new Set((await db.query(
-        `select source_key from public.${table} where source_key = any($1)`, [keys],
+        `select source_key from ${table} where source_key in (${keys.map((_, i) => `$${i + 1}`).join(',')})`, keys,
       )).rows.map((row) => row.source_key));
       coverage[table] = {
         matched: keys.filter((key) => found.has(key)).length,
@@ -105,8 +100,6 @@ async function main() {
     console.log(report);
     if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`);
     if (!ok) process.exit(1);
-  } finally {
-    await db.end();
   }
 }
 

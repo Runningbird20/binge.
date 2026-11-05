@@ -1,7 +1,7 @@
 // Trakt popular/trending lists, used to rank catalog rows the way Trakt's
 // Discover page does, and the popular-titles list built from them.
 
-const neonDb = require('../neonDb');
+const catalogDb = require('../catalogDb');
 
 const TRAKT_API_URL = 'https://api.trakt.tv';
 
@@ -198,10 +198,10 @@ async function fetchPopularTitlesFromTrakt(mediaType) {
     .filter((key) => /^tmdb:\d+$/.test(key))
     .map((key) => `tmdb:${type === 'tv' ? 'tv' : 'movie'}:${key.slice(5)}`);
   if (!keys.length) return null;
-  const { rows } = await neonDb.query(
+  const { rows } = await catalogDb.query(
     `SELECT * FROM ${table}
-     WHERE source_key = ANY($1) AND poster_url IS NOT NULL AND TRIM(poster_url) <> ''`,
-    [keys]
+     WHERE source_key IN (${keys.map((_, i) => `$${i + 1}`).join(',')}) AND poster_url IS NOT NULL AND TRIM(poster_url) <> ''`,
+    keys
   );
 
   const titles = sortRowsByTraktRelevance(rows, relevanceMap)
