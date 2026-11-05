@@ -70,3 +70,21 @@ export function formatTimeLeft(seconds) {
   if (minutes < 60) return `${minutes}m left`;
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m left`;
 }
+
+// The newest aired episode of a show, from TMDB details
+// (last_episode_to_air): { season, episode } or null.
+export function lastAiredEpisode(details) {
+  const last = details?.last_episode_to_air;
+  return last && last.season_number > 0 && last.episode_number > 0
+    ? { season: last.season_number, episode: last.episode_number }
+    : null;
+}
+
+// Whether a playback position is saved for where Continue Watching points
+// (this device's or the synced one).
+export function hasSavedPosition(item) {
+  if (!item) return false;
+  const mediaId = item.media_id ?? item.id;
+  const local = getPositionEntry(positionKey(item.media_type, mediaId, item.current_season || 1, item.current_episode || 1));
+  return Number(local?.t) > 0 || Number(item.position_seconds) > 0;
+}

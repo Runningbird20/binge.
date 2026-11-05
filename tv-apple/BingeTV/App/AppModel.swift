@@ -21,7 +21,10 @@ final class AppModel: ObservableObject {
     // Debug-only: browse without an account (-BingeDemo launch argument).
     @Published private(set) var isDemo = false
 
-    var isKids: Bool { profile?.isKids ?? false }
+    // The profile's maturity level (Toddler / Kids / Teens / No restrictions).
+    var maturity: Maturity { profile?.maturity ?? .all }
+    // A child level (Toddler or Kids): the kids-only rows, no Sports tab.
+    var isKids: Bool { maturity.isChild }
     var isSignedIn: Bool { session != nil }
 
     private var lastProfileKey: String { "binge.lastProfile.\(session?.userId ?? "")" }
@@ -272,7 +275,7 @@ final class AppModel: ObservableObject {
         var seen = Set<String>()
         return rows.compactMap { row in
             let title = row.mediaType == "movie" ? movieMap[row.mediaId] : showMap[row.mediaId]
-            guard let title, !isKids || KidsFilter.allows(title.ageRating), seen.insert(title.id).inserted else { return nil }
+            guard let title, maturity.allows(title.ageRating), seen.insert(title.id).inserted else { return nil }
             return title
         }
     }
@@ -291,7 +294,7 @@ final class AppModel: ObservableObject {
         var seen = Set<String>()
         let items: [ContinueItem] = rows.compactMap { row in
             let title = row.mediaType == "movie" ? movieMap[row.mediaId] : showMap[row.mediaId]
-            guard let title, !isKids || KidsFilter.allows(title.ageRating), seen.insert(title.id).inserted else { return nil }
+            guard let title, maturity.allows(title.ageRating), seen.insert(title.id).inserted else { return nil }
             return ContinueItem(title: title, season: row.currentSeason, episode: row.currentEpisode,
                                 position: row.positionSeconds, duration: row.durationSeconds)
         }
@@ -353,7 +356,7 @@ final class AppModel: ObservableObject {
         let movieMap = (try? await Catalog.titles(.movie, ids: lovedMovies)) ?? [:]
         let showMap = (try? await Catalog.titles(.tvShow, ids: lovedShows)) ?? [:]
         let titles = lovedShows.compactMap { showMap[$0] } + lovedMovies.compactMap { movieMap[$0] }
-        return titles.filter { !isKids || KidsFilter.allows($0.ageRating) }
+        return titles.filter { maturity.allows($0.ageRating) }
     }
 
     // Every rated title (for excluding from picks).

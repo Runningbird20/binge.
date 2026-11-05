@@ -7,6 +7,7 @@ import RemindButton from './RemindButton';
 import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
 import WhereToWatch from './WhereToWatch';
+import CastRow from './CastRow';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
@@ -30,6 +31,9 @@ import useSwipeDismiss from '../hooks/useSwipeDismiss';
 import useDeviceType from '../hooks/useDeviceType';
 import { fetchTmdbRecommendations, languageName } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
+import { useWatchedKeys, withoutWatched } from '../utils/watchedTitles';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
 import { titleUrl } from './TitleCard';
 import { isComingSoon, formatReleaseDay } from '../utils/releaseWindow';
@@ -246,20 +250,25 @@ function SourceBooks({ mediaType, tmdbId, title }) {
   );
 }
 
+// TMDB's recommendations for this title within the profile's maturity
+// level, minus what the profile has watched.
 function MoreLikeThis({ mediaType, tmdbId }) {
   const location = useLocation();
-  const [items, setItems] = useState(null);
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
+  const [loaded, setItems] = useState(null);
+  const watched = useWatchedKeys();
+  const items = useMemo(() => (loaded && watched ? withoutWatched(loaded, watched).slice(0, 12) : null), [loaded, watched]);
 
   useEffect(() => {
     setItems(null);
     if (!tmdbId) return undefined;
     let cancelled = false;
     fetchTmdbRecommendations(mediaType, tmdbId)
-      .then((list) => resolveTmdbItems(list || [], mediaType))
-      .then((resolved) => { if (!cancelled) setItems(resolved.slice(0, 12)); })
+      .then((list) => resolveTmdbItems(list || [], mediaType, { kidsSafe }))
+      .then((resolved) => { if (!cancelled) setItems(resolved.slice(0, 30)); })
       .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
-  }, [mediaType, tmdbId]);
+  }, [mediaType, tmdbId, kidsSafe]);
 
   if (items && items.length === 0) return null;
   const background = location.state?.backgroundLocation || location;
@@ -416,8 +425,6 @@ export default function MediaDetailsModal({
   const facts = useMemo(() => {
     if (!item) return {};
     return {
-      cast: details?.cast?.length ? details.cast : splitList(item.cast_members).slice(0, 8),
-      creators: details?.creators?.length ? details.creators : splitList(item.director || item.creator),
       genres: details?.genres?.length ? details.genres : splitList(item.genre),
       language: languageName(details?.originalLanguage || item.original_language),
     };
@@ -575,6 +582,26 @@ export default function MediaDetailsModal({
     }
   }
 
+  // "Your Rating & Review": under the facts for movies, after the episodes
+  // for series.
+  const ratingSection = (
+    <section className={`td-section td-rate${isTV ? '' : ' td-rate--aside'}`} aria-label="Your rating">
+      <div className="td-section-head">
+        <h3>Your Rating &amp; Review</h3>
+        {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}
+      </div>
+      <RateReviewPanel
+        mediaType={mediaType}
+        value={userRating}
+        onSave={handleRatingSave}
+        allowActions={allowActions}
+        size="lg"
+      />
+      {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
+      {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+    </section>
+  );
+
   async function handleRatingSave(categories) {
     if (typeof onRate !== 'function') return;
     await onRate(item, categories);
@@ -717,15 +744,21 @@ export default function MediaDetailsModal({
               {item._reason && <p className="td-reason">{item._reason}</p>}
             </div>
 
+            <div className="td-aside">
             <dl className="td-facts">
-              {facts.cast?.length > 0 && (<><dt>Cast</dt><dd>{facts.cast.slice(0, 5).join(', ')}</dd></>)}
-              {facts.creators?.length > 0 && (<><dt>{isTV ? 'Created by' : 'Director'}</dt><dd>{facts.creators.join(', ')}</dd></>)}
               {facts.genres?.length > 0 && (<><dt>Genres</dt><dd>{facts.genres.join(', ')}</dd></>)}
               {facts.language && (<><dt>Original language</dt><dd>{facts.language}</dd></>)}
               {details?.networks?.length > 0 && (<><dt>{isTV ? 'Network' : 'Studio'}</dt><dd>{details.networks.join(', ')}</dd></>)}
               {item.imdb_rating && (<><dt>IMDb</dt><dd>{item.imdb_rating}/10</dd></>)}
               {item.rotten_tomatoes_score && (<><dt>Rotten Tomatoes</dt><dd>{item.rotten_tomatoes_score}%</dd></>)}
             </dl>
+            {/* Movies: your rating right under the facts (series keep it
+                beside their episodes). */}
+            {!isTV && ratingSection}
+            </div>
+            {/* The whole width under the description (on phones straight
+                after it, before the facts). */}
+            <CastRow people={details?.people} />
           </div>
 
           {isTV && details?.seasons?.length > 0 && (
@@ -752,21 +785,7 @@ export default function MediaDetailsModal({
 
           <MoreLikeThis mediaType={mediaType} tmdbId={details?.tmdbId} />
 
-          <section className="td-section td-rate" aria-label="Your rating">
-            <div className="td-section-head">
-              <h3>Your Rating &amp; Review</h3>
-              {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}
-            </div>
-            <RateReviewPanel
-              mediaType={mediaType}
-              value={userRating}
-              onSave={handleRatingSave}
-              allowActions={allowActions}
-              size="lg"
-            />
-            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
-            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
-          </section>
+          {isTV && ratingSection}
 
           {onWatchlist && !saved && allowActions && (
             <div className="td-footer-cta">

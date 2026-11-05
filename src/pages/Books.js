@@ -43,6 +43,8 @@ import { findReadableEdition, findReadableEditionQueued, isFreeToRead } from '..
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 import { backdropSrc, posterSrc } from '../utils/imageQuality';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
 // first visible row across common viewport widths so the browser starts
@@ -163,16 +165,17 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
 // "Watch the adaptation" — movies/shows credited to this book's author.
 function Adaptations({ book }) {
   const location = useLocation();
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const [items, setItems] = useState(null);
 
   useEffect(() => {
     setItems(null);
     let cancelled = false;
-    findAdaptations(book)
+    findAdaptations(book, { kidsSafe })
       .then((result) => { if (!cancelled) setItems(result); })
       .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
-  }, [book]);
+  }, [book, kidsSafe]);
 
   if (!items?.length) return null;
   const background = location.state?.backgroundLocation || location;
@@ -309,7 +312,7 @@ export function BookDetailsModal({
           aria-labelledby="book-detail-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" className="td-close" onClick={onClose} aria-label="Close book details">
+          <button type="button" className="td-close td-round-btn" onClick={onClose} aria-label="Close book details">
             <X size={20} weight="bold" />
           </button>
 
@@ -383,11 +386,26 @@ export function BookDetailsModal({
                 </div>
               )}
             </div>
-            <dl className="td-facts">
-              {book.author && (<><dt>Author</dt><dd>{book.author}</dd></>)}
-              <dt>Genre</dt><dd>{genres.join(', ') || 'General Fiction'}</dd>
-              {book.year && (<><dt>Published</dt><dd>{book.year}</dd></>)}
-            </dl>
+            {/* The facts, then your rating right under them (as on movies). */}
+            <div className="td-aside">
+              <dl className="td-facts">
+                {book.author && (<><dt>Author</dt><dd>{book.author}</dd></>)}
+                <dt>Genre</dt><dd>{genres.join(', ') || 'General Fiction'}</dd>
+                {book.year && (<><dt>Published</dt><dd>{book.year}</dd></>)}
+              </dl>
+              <section className="td-section td-rate td-rate--aside" aria-label="Your rating">
+                <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
+                <RateReviewPanel
+                  mediaType="book"
+                  value={userRating}
+                  onSave={handleRatingSave}
+                  allowActions={allowActions}
+                  size="lg"
+                />
+                {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
+                {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+              </section>
+            </div>
           </div>
 
           {book.author && <BookShelfSection title={`More by ${book.author}`} load={() => fetchBooksByAuthor(book)} />}
@@ -395,18 +413,6 @@ export function BookDetailsModal({
 
           <Adaptations book={book} />
 
-          <section className="td-section td-rate" aria-label="Your rating">
-            <div className="td-section-head"><h3>Your Rating &amp; Review</h3></div>
-            <RateReviewPanel
-              mediaType="book"
-              value={userRating}
-              onSave={handleRatingSave}
-              allowActions={allowActions}
-              size="lg"
-            />
-            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
-            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
-          </section>
         </div>
       </div>
 

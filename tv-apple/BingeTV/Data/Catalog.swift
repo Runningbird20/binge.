@@ -17,7 +17,7 @@ struct LoadedRow: Identifiable {
 // TMDB lists matched back to catalog rows through
 // source_key = 'tmdb:{movie|tv}:{id}', like the site's catalogLookup.js.
 enum Catalog {
-    static func match(_ items: [TMDBItem], kind: MediaKind, kids: Bool) async throws -> [Title] {
+    static func match(_ items: [TMDBItem], kind: MediaKind, maturity: Maturity) async throws -> [Title] {
         let candidates = items.filter { ReleaseWindow.isVisible($0.date) }
         guard !candidates.isEmpty else { return [] }
 
@@ -33,7 +33,7 @@ enum Catalog {
         var seen = Set<Int>()
         return candidates.compactMap { item in
             guard let row = byKey["tmdb:\(kind.tmdbPath):\(item.id)"], seen.insert(row.id).inserted else { return nil }
-            if kids && !KidsFilter.allows(row.ageRating) { return nil }
+            if !maturity.allows(row.ageRating) { return nil }
             var title = row.asTitle(kind)
             title.poster = TMDB.image(item.posterPath, TMDB.poster) ?? title.poster
             title.backdrop = TMDB.image(item.backdropPath, TMDB.wide)
@@ -55,20 +55,20 @@ enum Catalog {
         return Dictionary(rows.map { ($0.id, $0.asTitle(kind)) }, uniquingKeysWith: { first, _ in first })
     }
 
-    static func load(_ spec: RowSpec, kids: Bool) async -> LoadedRow? {
+    static func load(_ spec: RowSpec, maturity: Maturity) async -> LoadedRow? {
         do {
             let page: TMDBPage = try await TMDB.shared.get(spec.path, spec.params)
-            let items = try await match(page.results, kind: spec.kind, kids: kids)
+            let items = try await match(page.results, kind: spec.kind, maturity: maturity)
             return items.isEmpty ? nil : LoadedRow(id: spec.id, title: spec.title, items: items)
         } catch {
             return nil
         }
     }
 
-    static func loadAll(_ specs: [RowSpec], kids: Bool) async -> [LoadedRow] {
+    static func loadAll(_ specs: [RowSpec], maturity: Maturity) async -> [LoadedRow] {
         await withTaskGroup(of: (Int, LoadedRow?).self) { group in
             for (index, spec) in specs.enumerated() {
-                group.addTask { (index, await load(spec, kids: kids)) }
+                group.addTask { (index, await load(spec, maturity: maturity)) }
             }
             var loaded: [(Int, LoadedRow)] = []
             for await (index, row) in group {
@@ -80,7 +80,7 @@ enum Catalog {
 
     // Movies and series for a search, in TMDB's relevance order. People
     // contribute the titles they're known for.
-    static func search(_ query: String, kids: Bool) async throws -> [Title] {
+    static func search(_ query: String, maturity: Maturity) async throws -> [Title] {
         let page: TMDBPage = try await TMDB.shared.get("search/multi", ["query": query, "include_adult": "false"])
         var ordered: [(MediaKind, TMDBItem)] = []
         for item in page.results {
@@ -97,8 +97,8 @@ enum Catalog {
         }
         let movieItems = ordered.filter { $0.0 == .movie }.map(\.1)
         let showItems = ordered.filter { $0.0 == .tvShow }.map(\.1)
-        async let movies = match(movieItems, kind: .movie, kids: kids)
-        async let shows = match(showItems, kind: .tvShow, kids: kids)
+        async let movies = match(movieItems, kind: .movie, maturity: maturity)
+        async let shows = match(showItems, kind: .tvShow, maturity: maturity)
         let found = try await movies + shows
         let byTmdb = Dictionary(found.map { ("\($0.kind.rawValue):\($0.tmdbId ?? 0)", $0) }, uniquingKeysWith: { first, _ in first })
         var seen = Set<String>()

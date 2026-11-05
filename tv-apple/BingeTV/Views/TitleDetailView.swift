@@ -328,7 +328,7 @@ struct TitleDetailView: View {
         warmUp()
         async let outsideTask = OutsideRatings.load(title)
         async let starsTask = app.myRating(for: title)
-        async let franchiseTask = Franchises.find(for: title, kids: app.isKids)
+        async let franchiseTask = Franchises.find(for: title, maturity: app.maturity)
         if title.kind == .tvShow, let tmdbId = title.tmdbId {
             await loadPreviously(tmdbId: tmdbId)
             heatmap = await EpisodeHeatmap.load(tmdbId: tmdbId, seasons: seasons)
@@ -337,7 +337,7 @@ struct TitleDetailView: View {
         if let tmdbId = title.tmdbId {
             let spec = RowSpec(id: "more", title: "More Like This", kind: title.kind,
                                path: "\(title.kind.tmdbPath)/\(tmdbId)/recommendations")
-            more = await Catalog.load(spec, kids: app.isKids)?.items.filter { $0.id != title.id } ?? []
+            more = await Catalog.load(spec, maturity: app.maturity)?.items.filter { $0.id != title.id } ?? []
         }
     }
 

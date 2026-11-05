@@ -4,6 +4,7 @@
 import { getActiveProfileId } from './activeProfile';
 import { normalizeTmdbResult, tmdbGet, tmdbImage } from './tmdb';
 import { resolveTmdbItems } from './catalogLookup';
+import { workCredits } from './people';
 import { fetchSportsStreams } from './sportsProviders';
 
 // ── Recent searches (per profile, this device) ─────────────────────────
@@ -85,26 +86,10 @@ export async function searchPerson(query) {
 
   const credits = await tmdbGet(`/person/${person.id}/combined_credits`);
   const directing = person.known_for_department === 'Directing';
-  // Actors: real roles only — no "Himself" guest spots, talk/news/reality
-  // shows, or one-episode TV cameos. Ranked by how widely known the title
-  // is (vote count), so Forrest Gump beats a talk-show appearance.
-  const NON_ROLES = /\b(self|himself|herself|themselves|host|narrator|presenter|guest)\b/i;
-  const UNSCRIPTED = [10767, 10763, 10764];
-  const raw = directing
-    ? (credits?.crew || []).filter((credit) => credit.job === 'Director' || credit.job === 'Creator')
-    : (credits?.cast || []).filter((credit) => !NON_ROLES.test(credit.character || '')
-      && !(credit.genre_ids || []).some((id) => UNSCRIPTED.includes(id))
-      && (credit.media_type !== 'tv' || (credit.episode_count || 0) >= 3));
-  const seen = new Set();
-  const results = raw
-    .filter((credit) => credit.media_type === 'movie' || credit.media_type === 'tv')
-    .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
-    .filter((credit) => {
-      const key = `${credit.media_type}:${credit.id}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
+  // The same rule as their page (people.js): real, scripted roles, most
+  // widely known first.
+  const work = workCredits(credits);
+  const results = (directing ? work.directing : work.acting)
     .slice(0, 30)
     .map((credit) => normalizeTmdbResult(credit));
   const [movies, shows] = await Promise.all([

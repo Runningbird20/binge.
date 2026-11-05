@@ -13,7 +13,7 @@ object Personal {
 
     private data class Seed(val title: Title, val verb: String, val weight: Double)
 
-    suspend fun build(watched: List<ContinueItem>, loved: List<Title>, exclude: Set<String>, kids: Boolean, name: String?): Rows = coroutineScope {
+    suspend fun build(watched: List<ContinueItem>, loved: List<Title>, exclude: Set<String>, maturity: Maturity, name: String?): Rows = coroutineScope {
         val fresh = watched.filter { it.newEpisode != null }.map { it.title.copy(badge = "New ${it.newEpisode}") }
         val newEpisodes = if (fresh.isNotEmpty()) LoadedRow("new-episodes", "New Episodes", fresh) else null
 
@@ -26,7 +26,7 @@ object Personal {
         val recs = seeds.map { seed ->
             async {
                 val tmdbId = seed.title.tmdbId ?: return@async emptyList<Title>()
-                Catalog.load(RowSpec("rec-${seed.title.id}", "", seed.title.kind, "${seed.title.kind.tmdbPath}/$tmdbId/recommendations"), kids)?.items.orEmpty()
+                Catalog.load(RowSpec("rec-${seed.title.id}", "", seed.title.kind, "${seed.title.kind.tmdbPath}/$tmdbId/recommendations"), maturity)?.items.orEmpty()
             }
         }.awaitAll()
 

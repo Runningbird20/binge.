@@ -11,7 +11,9 @@ jest.mock('./WhereToWatch', () => () => null);
 jest.mock('./EpisodeHeatmap', () => () => null);
 jest.mock('./FranchiseOrder', () => () => null);
 jest.mock('./RateReviewPanel', () => () => null);
-jest.mock('../utils/catalogLookup', () => ({ resolveTmdbItems: () => Promise.resolve([]) }));
+jest.mock('../utils/catalogLookup', () => ({ resolveTmdbItems: jest.fn(() => Promise.resolve([])) }));
+let mockAuth = null;
+jest.mock('../contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
 jest.mock('../utils/adaptations', () => ({ ...jest.requireActual('../utils/adaptations'), findSourceBooks: () => Promise.resolve([]) }));
 jest.mock('../utils/tmdb', () => ({ ...jest.requireActual('../utils/tmdb'), fetchTmdbRecommendations: () => Promise.resolve([]) }));
 
@@ -142,4 +144,15 @@ test('browse-only viewers get the episode list without marking controls', async 
   expect(await screen.findByText('One 1')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Mark season watched' })).toBeNull();
   expect(screen.queryByRole('button', { name: /Watched up to/ })).toBeNull();
+});
+
+test('More Like This keeps to a restricted profile’s maturity level', async () => {
+  const { resolveTmdbItems } = require('../utils/catalogLookup');
+  mockAuth = { activeProfile: { id: 'p1', is_kids: true, settings: { maturity: 'teens' } } };
+  try {
+    open();
+    await waitFor(() => expect(resolveTmdbItems).toHaveBeenCalledWith([], 'tv_show', { kidsSafe: 'teens' }));
+  } finally {
+    mockAuth = null;
+  }
 });

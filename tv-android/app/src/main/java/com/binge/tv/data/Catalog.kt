@@ -12,7 +12,7 @@ data class LoadedRow(val id: String, val title: String, val items: List<Title>)
 // TMDB lists matched back to catalog rows through
 // source_key = 'tmdb:{movie|tv}:{id}', like the site's catalogLookup.js.
 object Catalog {
-    suspend fun match(items: List<TmdbItem>, kind: MediaKind, kids: Boolean): List<Title> {
+    suspend fun match(items: List<TmdbItem>, kind: MediaKind, maturity: Maturity): List<Title> {
         val candidates = items.filter { ReleaseWindow.isVisible(it.date) }
         if (candidates.isEmpty()) return emptyList()
         val keys = candidates.joinToString(",") { "\"tmdb:${kind.tmdbPath}:${it.id}\"" }
@@ -25,7 +25,7 @@ object Catalog {
         return candidates.mapNotNull { item ->
             val row = byKey["tmdb:${kind.tmdbPath}:${item.id}"] ?: return@mapNotNull null
             if (!seen.add(row.id)) return@mapNotNull null
-            if (kids && !KidsFilter.allows(row.ageRating)) return@mapNotNull null
+            if (!maturity.allows(row.ageRating)) return@mapNotNull null
             row.asTitle(kind).copy(
                 poster = Tmdb.image(item.posterPath, Tmdb.POSTER) ?: row.posterUrl,
                 backdrop = Tmdb.image(item.backdropPath, Tmdb.WIDE),
@@ -45,19 +45,19 @@ object Catalog {
         return rows.associate { it.id to it.asTitle(kind) }
     }
 
-    suspend fun load(spec: RowSpec, kids: Boolean): LoadedRow? = runCatching {
+    suspend fun load(spec: RowSpec, maturity: Maturity): LoadedRow? = runCatching {
         val page: TmdbPage = Tmdb.get(spec.path, spec.params)
-        val items = match(page.results, spec.kind, kids)
+        val items = match(page.results, spec.kind, maturity)
         if (items.isEmpty()) null else LoadedRow(spec.id, spec.title, items)
     }.getOrNull()
 
-    suspend fun loadAll(specs: List<RowSpec>, kids: Boolean): List<LoadedRow> = coroutineScope {
-        specs.map { async { load(it, kids) } }.awaitAll().filterNotNull()
+    suspend fun loadAll(specs: List<RowSpec>, maturity: Maturity): List<LoadedRow> = coroutineScope {
+        specs.map { async { load(it, maturity) } }.awaitAll().filterNotNull()
     }
 
     // Movies and series for a search, in TMDB's relevance order. People
     // contribute the titles they're known for.
-    suspend fun search(query: String, kids: Boolean): List<Title> = coroutineScope {
+    suspend fun search(query: String, maturity: Maturity): List<Title> = coroutineScope {
         val page: TmdbPage = Tmdb.get("search/multi", mapOf("query" to query, "include_adult" to "false"))
         val ordered = ArrayList<Pair<MediaKind, TmdbItem>>()
         for (item in page.results) {
@@ -70,8 +70,8 @@ object Catalog {
                 }
             }
         }
-        val movies = async { match(ordered.filter { it.first == MediaKind.MOVIE }.map { it.second }, MediaKind.MOVIE, kids) }
-        val shows = async { match(ordered.filter { it.first == MediaKind.TV }.map { it.second }, MediaKind.TV, kids) }
+        val movies = async { match(ordered.filter { it.first == MediaKind.MOVIE }.map { it.second }, MediaKind.MOVIE, maturity) }
+        val shows = async { match(ordered.filter { it.first == MediaKind.TV }.map { it.second }, MediaKind.TV, maturity) }
         val found = movies.await() + shows.await()
         val byTmdb = found.associateBy { "${it.kind.raw}:${it.tmdbId}" }
         val seen = HashSet<String>()

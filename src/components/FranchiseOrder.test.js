@@ -6,6 +6,8 @@ import { resolveTmdbItems } from '../utils/catalogLookup';
 
 jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
 jest.mock('./HScroll', () => ({ children }) => <ol>{children}</ol>);
+let mockAuth = null;
+jest.mock('../contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
 jest.mock('../utils/franchises', () => ({ findFranchise: jest.fn() }));
 jest.mock('../utils/catalogLookup', () => ({ resolveTmdbItems: jest.fn() }));
 jest.mock('../utils/supabaseData', () => ({
@@ -107,4 +109,30 @@ test('collections without a story order get the button too', async () => {
   open();
   expect(await ready('Mark all watched')).toBeInTheDocument();
   expect(screen.queryByRole('radiogroup')).toBeNull();
+});
+
+describe('a restricted profile', () => {
+  beforeEach(() => { mockAuth = { activeProfile: { id: 'p1', is_kids: true, settings: { maturity: 'kids' } } }; });
+  afterEach(() => { mockAuth = null; });
+
+  test('only sees the movies within its level, numbered among themselves', async () => {
+    // A and C pass the Kids filter; B is over it, D isn't on binge., E isn't out.
+    resolveTmdbItems.mockResolvedValue(CATALOG.filter((item) => [1, 3].includes(item._tmdb.tmdbId)));
+    const { container } = open();
+    expect(await screen.findByText(/1 of 2 watched/)).toBeInTheDocument();
+    expect(resolveTmdbItems).toHaveBeenCalledWith(RELEASE, 'movie', { kidsSafe: 'kids' });
+    // Story order (the reverse of release): C then A.
+    expect([...container.querySelectorAll('.fr-title')].map((node) => node.textContent)).toEqual(['C', 'A']);
+    expect([...container.querySelectorAll('.fr-num')].map((node) => node.textContent)).toEqual(['1', '2']);
+    expect(screen.queryByText(/not on binge\./)).toBeNull();
+  });
+
+  test('a franchise with fewer than two of its movies left isn’t shown', async () => {
+    resolveTmdbItems.mockResolvedValue(CATALOG.filter((item) => item._tmdb.tmdbId === 1));
+    const { container } = open();
+    await waitFor(() => expect(resolveTmdbItems).toHaveBeenCalled());
+    await waitFor(() => expect(data.fetchSupabaseRatingMap).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container).toBeEmptyDOMElement();
+  });
 });

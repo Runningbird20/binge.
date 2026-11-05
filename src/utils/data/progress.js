@@ -3,7 +3,7 @@
 import { getSupabaseUser, isSupabaseConfigured, supabase } from '../supabase';
 import { getActiveProfileId } from '../activeProfile';
 import { api } from '../../api';
-import { enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
+import { RATING_TABLES, enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
 
 // ─── Episode Progress (watched tracking) ──────────────────────────────────────
 
@@ -32,6 +32,45 @@ export async function fetchEpisodeProgress(mediaId) {
   return data || [];
 }
 
+// Which of these episodes are marked watched, as a Set of
+// "mediaId:season:episode" (Home checks each Continue Watching show's newest
+// episode). One small query per episode; Home asks for a handful.
+// episodes: [{ mediaId, season, episode }]
+export async function fetchWatchedAmong(episodes) {
+  const key = (mediaId, season, episode) => `${Number(mediaId)}:${Number(season)}:${Number(episode)}`;
+  const wanted = (episodes || []).slice(0, 30);
+  if (!wanted.length) return new Set();
+  if (!isSupabaseConfigured || !supabase) {
+    const found = new Set();
+    wanted.forEach(({ mediaId, season, episode }) => {
+      try {
+        const list = JSON.parse(window.localStorage.getItem(`ep_progress_${mediaId}`) || '[]');
+        if (list.some((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode))) found.add(key(mediaId, season, episode));
+      } catch {}
+    });
+    return found;
+  }
+
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) return new Set();
+  const profileId = getActiveProfileId();
+  const results = await Promise.all(wanted.map(async ({ mediaId, season, episode }) => {
+    let query = client
+      .from('episode_progress')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('media_id', Number(mediaId))
+      .eq('season', Number(season))
+      .eq('episode', Number(episode))
+      .limit(1);
+    if (profileId) query = scopeToProfile(query, profileId);
+    const { data, error } = await query;
+    return !error && data?.length ? key(mediaId, season, episode) : null;
+  }));
+  return new Set(results.filter(Boolean));
+}
+
 // media_id -> number of episodes watched, across every show — an engagement
 // signal for recommendations (binging 30 episodes says more than one).
 export async function fetchEpisodeProgressCounts() {
@@ -57,6 +96,52 @@ export async function fetchEpisodeProgressCounts() {
     counts.set(id, (counts.get(id) || 0) + 1);
   });
   return counts;
+}
+
+// Every movie and series this profile has watched, as "movie:12" /
+// "tv_show:34" keys: rated, marked Watched (or Watching) in the library, in
+// Continue Watching, or with any episode watched. Ids only, paged past
+// Supabase's 1000-row cap, so it stays cheap. A table that fails to load is
+// left out rather than failing the rest. Keeps watched titles out of
+// recommendations (utils/watchedTitles.js).
+const WATCHED_STATUSES = ['watched', 'watching'];
+const PAGE = 1000;
+
+export async function fetchWatchedTitleKeys() {
+  const keys = new Set();
+  if (!isSupabaseConfigured || !supabase) return keys;
+  try {
+    const { data: { user } = {} } = await getSupabaseUser();
+    if (!user) return keys;
+    const client = requireSupabase();
+    const profileId = getActiveProfileId();
+
+    async function allRows(table, columns, refine = (query) => query) {
+      const rows = [];
+      for (let page = 0; page < 20; page += 1) {
+        let query = refine(client.from(table).select(columns).eq('user_id', user.id));
+        if (profileId) query = scopeToProfile(query, profileId);
+        // eslint-disable-next-line no-await-in-loop
+        const { data, error } = await query.order('id').range(page * PAGE, page * PAGE + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
+    }
+
+    const add = (mediaType) => (rows) => rows.forEach((row) => keys.add(`${row.media_type || mediaType}:${Number(row.media_id)}`));
+    await Promise.allSettled([
+      allRows(RATING_TABLES.movie.table, 'id, media_id').then(add('movie')),
+      allRows(RATING_TABLES.tv_show.table, 'id, media_id').then(add('tv_show')),
+      allRows('watchlist', 'id, media_type, media_id', (query) => query.in('media_type', ['movie', 'tv_show']).in('status', WATCHED_STATUSES)).then(add()),
+      allRows('continue_watching', 'id, media_type, media_id', (query) => query.in('media_type', ['movie', 'tv_show'])).then(add()),
+      allRows('episode_progress', 'id, media_id').then(add('tv_show')),
+    ]);
+  } catch {
+    // Signed out or offline: nothing is known to be watched.
+  }
+  return keys;
 }
 
 export async function markEpisodeWatched({ mediaId, season, episode }) {
@@ -435,7 +520,10 @@ export async function fetchEpisodeHistory(limit = 300) {
 
 // Remove a title from watch history: its Continue Watching row and, for
 // shows, its watched-episode records. Ratings and My List are untouched.
-export async function removeTitleFromHistory({ mediaType, mediaId }) {
+// profileId: the profile it was removed from (the Undo popup carries out
+// the removal 10 seconds later, maybe after a profile switch); the active
+// profile when left out.
+export async function removeTitleFromHistory({ mediaType, mediaId, profileId: forProfile }) {
   if (!isSupabaseConfigured || !supabase) {
     try {
       const stored = window.localStorage.getItem('continue_watching');
@@ -451,7 +539,7 @@ export async function removeTitleFromHistory({ mediaType, mediaId }) {
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
-  const profileId = getActiveProfileId();
+  const profileId = forProfile !== undefined ? forProfile : getActiveProfileId();
   const scope = (query) => (profileId ? query.eq('profile_id', profileId) : query);
   const tasks = [
     scope(client.from('continue_watching').delete().eq('user_id', authUser.id).eq('media_type', mediaType).eq('media_id', Number(mediaId))),

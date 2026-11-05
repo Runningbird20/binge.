@@ -68,7 +68,7 @@ fun SearchScreen() {
     suspend fun ask(q: String) {
         aiLoading = true; aiError = null
         try {
-            val (summary, titles) = AskBinge.ask(q, AppModel.isKids)
+            val (summary, titles) = AskBinge.ask(q, AppModel.maturity)
             if (q == query.trim()) { ai = titles; aiSummary = summary; if (titles.isEmpty() && results.isEmpty()) aiError = "Nothing on binge. fits that yet. Try saying it another way." }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e
         } catch (e: Exception) {
@@ -85,15 +85,15 @@ fun SearchScreen() {
         searching = true
         ai = emptyList(); aiSummary = null; aiError = null
         delay(350)
-        results = runCatching { Catalog.search(text, AppModel.isKids) }.getOrDefault(emptyList())
+        results = runCatching { Catalog.search(text, AppModel.maturity) }.getOrDefault(emptyList())
         searching = false
         if (text.length >= 2) { delay(250); ask(text) }
     }
     LaunchedEffect(Unit) {
         if (trending.isNotEmpty()) return@LaunchedEffect
-        val kids = AppModel.isKids
-        val m = async { Catalog.load(RowSpec("s-m", "", MediaKind.MOVIE, "trending/movie/week"), kids)?.items.orEmpty() }
-        val s = async { Catalog.load(RowSpec("s-t", "", MediaKind.TV, "trending/tv/week"), kids)?.items.orEmpty() }
+        val maturity = AppModel.maturity
+        val m = async { Catalog.load(RowSpec("s-m", "", MediaKind.MOVIE, "trending/movie/week"), maturity)?.items.orEmpty() }
+        val s = async { Catalog.load(RowSpec("s-t", "", MediaKind.TV, "trending/tv/week"), maturity)?.items.orEmpty() }
         val a = m.await(); val b = s.await()
         // Interleaved so the grid isn't all movies first.
         trending = (0 until maxOf(a.size, b.size)).flatMap { i -> listOfNotNull(b.getOrNull(i), a.getOrNull(i)) }
