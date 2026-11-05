@@ -80,8 +80,6 @@ const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
 const Person         = lazyWithReload(() => import('./pages/Person'));
 const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
-// TEMP (UI preview only — do not commit)
-const UIPreview      = lazyWithReload(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
 const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];
@@ -169,8 +167,6 @@ function AppRoutes() {
         {/* Old address for user management — now a tab in the admin panel. */}
         <Route path="/admin/users"      element={<Navigate to="/admin?tab=users" replace />} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
-        {/* TEMP (UI preview only — do not commit) */}
-        <Route path="/ui-preview" element={<UIPreview />} />
         <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
         {MediaOverlayRoutes()}
         <Route path="*" element={
