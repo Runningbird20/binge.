@@ -11,6 +11,8 @@ import { filterItems, filterOptions, hasFilters, readFilters } from '../utils/se
 import TitleCard from '../components/TitleCard';
 import { fetchTmdbRecommendations, tmdbIdFromItem } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, isGameLive, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
@@ -223,6 +225,7 @@ const tagType = (list, type) => (list || []).map((item) => ({ ...item, _type: ty
 
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const query = searchParams.get('q') || '';
   const filterKey = ['type', 'decade', 'lang'].map((key) => searchParams.get(key) || '').join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -316,8 +319,8 @@ export default function SearchResults() {
   const loadMoreLike = useCallback(async () => {
     if (!topMatchTmdbId) return [];
     const list = await fetchTmdbRecommendations(topMatchType, topMatchTmdbId);
-    return filterItems(await resolveTmdbItems(list || [], topMatchType), filters);
-  }, [topMatchType, topMatchTmdbId, filters]);
+    return filterItems(await resolveTmdbItems(list || [], topMatchType, { kidsSafe }), filters);
+  }, [topMatchType, topMatchTmdbId, filters, kidsSafe]);
 
   // The grids come from the filtered title matches, the best match first in
   // its own section (the page has no separate "top result" card).

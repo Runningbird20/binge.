@@ -43,6 +43,8 @@ import { findReadableEdition, findReadableEditionQueued, isFreeToRead } from '..
 import { getCached, setCached, buildCatalogCacheKey } from '../utils/sessionCache';
 import { backdropSrc, posterSrc } from '../utils/imageQuality';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 
 // How many grid tiles get loading="eager" + high fetch priority. Covers the
 // first visible row across common viewport widths so the browser starts
@@ -163,16 +165,17 @@ function BookPosterTile({ book, onClick, watchlistEntry, addingWatchlist, onAddW
 // "Watch the adaptation" — movies/shows credited to this book's author.
 function Adaptations({ book }) {
   const location = useLocation();
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const [items, setItems] = useState(null);
 
   useEffect(() => {
     setItems(null);
     let cancelled = false;
-    findAdaptations(book)
+    findAdaptations(book, { kidsSafe })
       .then((result) => { if (!cancelled) setItems(result); })
       .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
-  }, [book]);
+  }, [book, kidsSafe]);
 
   if (!items?.length) return null;
   const background = location.state?.backgroundLocation || location;

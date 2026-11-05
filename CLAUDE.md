@@ -131,7 +131,8 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - Catalog filters take `kidsSafe` = `false` or the level (`maturityRestriction(profile)`, `ratingsFor`).
   - Only Toddler/Kids get the kids-only rows (`isChildLevel`).
   - The website lets unrated Family/Animation/Kids titles through. The TV apps leave out every unrated title on a restricted level (see TV apps).
-  - **Website search doesn't apply maturity levels yet.**
+  - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, a book's screen adaptations, the calendar's Coming Soon row and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
+  - **Website search results don't apply maturity levels yet:** title matches, Ask binge. picks and person search.
 - **Profile settings** (`/settings`, `src/utils/profileSettings.js`):
   - Autoplay next, previews, data saver, haptics and captions-first live in `account_profiles.settings` (jsonb) + localStorage.
   - Audio/subtitle prefs live in `audio_pref`/`subtitle_pref`.
@@ -269,6 +270,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Episode heatmap** (`EpisodeHeatmap`): all seasons via one TMDB call per 20 seasons (`append_to_response=season/N`), plus IMDb episode ratings via `/api/extras/episodes` (cached in `episode_ratings_cache`) when OMDb is configured.
 - **Franchise order** (`utils/franchises.js`, `FranchiseOrder`):
   - **Ordering.** Curated MCU / Star Wars / Fast & Furious lists offer release and story order (ids verified against TMDB). MCU films sit in separate TMDB sub-collections, so the curated list wins. Any other movie uses its TMDB collection in release order. The toggle is `SlidingTabs` `st-tabs--sm`.
+  - **Restricted profiles** only see the franchise's movies within their level, numbered among themselves. Movies over the level aren't listed, not even as "not on binge.", and the section hides when fewer than two are left.
   - **"Mark all watched"** sits left of the toggle, in the same pill as "Mark season watched". It marks every released movie of the franchise that's on binge. and not yet watched or rated.
     - `markMoviesWatched` (`utils/data/library.js`) sets library status `watched`, adding rows as needed, like picking Watched on each one. It returns what `undoMarkMoviesWatched` needs.
     - The popup reloads its own library row through `onLibraryChange`.

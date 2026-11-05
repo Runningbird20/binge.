@@ -5,6 +5,8 @@ import { CalendarPlus, CalendarBlank } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import TitleRow from '../components/TitleRow';
 import { exportToCalendar, loadReleaseCalendar } from '../utils/releaseCalendar';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 
 function dayHeading(iso) {
   const date = new Date(`${iso}T12:00:00`);
@@ -23,14 +25,15 @@ export default function ReleaseCalendar() {
   const location = useLocation();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
 
   useEffect(() => {
     let cancelled = false;
-    loadReleaseCalendar()
+    loadReleaseCalendar({ kidsSafe })
       .then((result) => { if (!cancelled) setData(result); })
       .catch(() => { if (!cancelled) setError('Couldn’t load your calendar.'); });
     return () => { cancelled = true; };
-  }, []);
+  }, [kidsSafe]);
 
   const groups = useMemo(() => {
     const map = new Map();

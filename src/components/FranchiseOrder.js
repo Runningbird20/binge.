@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { CheckCircle, Play } from '@phosphor-icons/react';
 import { findFranchise } from '../utils/franchises';
 import { resolveTmdbItems } from '../utils/catalogLookup';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 import {
   fetchSupabaseContinueWatching,
   fetchSupabaseRatingMap,
@@ -22,9 +24,11 @@ const released = (result, now = new Date()) => Boolean(result.releaseDate) && ne
 // franchise in release or story order, your progress through it, and
 // what to watch next. canMark adds "Mark all watched" (every released movie
 // of the franchise on binge., with Undo); onLibraryChange tells the page
-// its library rows changed.
+// its library rows changed. A restricted profile (Toddler/Kids/Teens) only
+// sees the movies within its maturity level, numbered among themselves.
 export default function FranchiseOrder({ tmdbId, currentId, canMark = false, onLibraryChange }) {
   const location = useLocation();
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const [franchise, setFranchise] = useState(null);
   const [items, setItems] = useState(null); // catalog rows by tmdb id
   const [watched, setWatched] = useState(new Set());
@@ -45,11 +49,11 @@ export default function FranchiseOrder({ tmdbId, currentId, canMark = false, onL
       if (cancelled || !found) return;
       setFranchise(found);
       if (!found.story) setOrder('release');
-      const resolved = await resolveTmdbItems(found.release, 'movie').catch(() => []);
+      const resolved = await resolveTmdbItems(found.release, 'movie', { kidsSafe }).catch(() => []);
       if (!cancelled) setItems(new Map(resolved.map((item) => [item._tmdb?.tmdbId, item])));
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [tmdbId]);
+  }, [tmdbId, kidsSafe]);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,12 +77,14 @@ export default function FranchiseOrder({ tmdbId, currentId, canMark = false, onL
 
   const list = useMemo(() => {
     if (!franchise) return [];
-    return (order === 'story' && franchise.story ? franchise.story : franchise.release).map((result, index) => ({
-      result,
-      index,
-      item: items?.get(result.tmdbId) || null,
-    }));
-  }, [franchise, items, order]);
+    const entries = (order === 'story' && franchise.story ? franchise.story : franchise.release)
+      .map((result) => ({ result, item: items?.get(result.tmdbId) || null }))
+      // Restricted: a movie left out (over the level, or not rated and not
+      // known to be family-friendly) isn't listed at all, not even as
+      // "not on binge.".
+      .filter((entry) => !kidsSafe || entry.item);
+    return entries.map((entry, index) => ({ ...entry, index }));
+  }, [franchise, items, order, kidsSafe]);
 
   // Keep the title you're looking at in view when the order changes.
   useEffect(() => {
@@ -88,6 +94,7 @@ export default function FranchiseOrder({ tmdbId, currentId, canMark = false, onL
   }, [list, items]);
 
   if (!franchise || !items) return null;
+  if (kidsSafe && list.length < 2) return null;
   const available = list.filter((entry) => entry.item);
   const watchedCount = available.filter((entry) => watched.has(entry.item.id)).length;
   const next = available.find((entry) => !watched.has(entry.item.id) && entry.item.id !== currentId)

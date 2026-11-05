@@ -32,6 +32,8 @@ import useDeviceType from '../hooks/useDeviceType';
 import { fetchTmdbRecommendations, languageName } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
 import { useWatchedKeys, withoutWatched } from '../utils/watchedTitles';
+import { maturityRestriction } from '../utils/kidsMode';
+import { useAuth } from '../contexts/AuthContext';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
 import { titleUrl } from './TitleCard';
 import { isComingSoon, formatReleaseDay } from '../utils/releaseWindow';
@@ -248,9 +250,11 @@ function SourceBooks({ mediaType, tmdbId, title }) {
   );
 }
 
-// TMDB's recommendations for this title, minus what the profile has watched.
+// TMDB's recommendations for this title within the profile's maturity
+// level, minus what the profile has watched.
 function MoreLikeThis({ mediaType, tmdbId }) {
   const location = useLocation();
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const [loaded, setItems] = useState(null);
   const watched = useWatchedKeys();
   const items = useMemo(() => (loaded && watched ? withoutWatched(loaded, watched).slice(0, 12) : null), [loaded, watched]);
@@ -260,11 +264,11 @@ function MoreLikeThis({ mediaType, tmdbId }) {
     if (!tmdbId) return undefined;
     let cancelled = false;
     fetchTmdbRecommendations(mediaType, tmdbId)
-      .then((list) => resolveTmdbItems(list || [], mediaType))
+      .then((list) => resolveTmdbItems(list || [], mediaType, { kidsSafe }))
       .then((resolved) => { if (!cancelled) setItems(resolved.slice(0, 30)); })
       .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
-  }, [mediaType, tmdbId]);
+  }, [mediaType, tmdbId, kidsSafe]);
 
   if (items && items.length === 0) return null;
   const background = location.state?.backgroundLocation || location;
