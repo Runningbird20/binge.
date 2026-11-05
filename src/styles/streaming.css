@@ -149,6 +149,23 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* The title's logo art (the same one its popup shows) as the headline. */
+.st-hero-title--logo { display: block; overflow: visible; margin-bottom: 1rem; }
+.st-hero-title--logo img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(480px, 80%);
+  max-height: clamp(96px, 20vh, 180px);
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.6));
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.st-hero-title--logo img.loaded { opacity: 1; }
+/* Waiting briefly for the logo: keep the title's space, show nothing. */
+.st-hero-title--waiting { visibility: hidden; }
 
 .st-hero-context { font-weight: 700; color: #fff; }
 .st-hero-meta {
@@ -418,13 +435,14 @@
   .st-hero-dot { height: 26px; padding: 10px 0; background-clip: content-box; }
   .st-hero { touch-action: pan-y; }
   .st-hero-content { padding: 0 var(--st-gutter) 2.6rem; }
+  .st-hero-title--logo img { max-width: 75%; max-height: 100px; }
   .st-row-arrow { display: none; }
   .st-row-track { gap: 0.5rem; }
   .st-browse-toolbar { justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .st-hero-backdrop, .st-card-poster, .st-row-track { transition: none; scroll-behavior: auto; }
+  .st-hero-backdrop, .st-card-poster, .st-row-track, .st-hero-title--logo img { transition: none; scroll-behavior: auto; }
 }
 
 /* ── Home extras ──────────────────────────────────────────────── */
