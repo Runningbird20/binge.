@@ -52,7 +52,7 @@ struct SearchView: View {
             searching = true
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
-            let found = (try? await Catalog.search(text, kids: app.isKids)) ?? []
+            let found = (try? await Catalog.search(text, maturity: app.maturity)) ?? []
             guard !Task.isCancelled else { return }
             results = found
             searching = false
@@ -63,8 +63,8 @@ struct SearchView: View {
         }
         .task {
             guard trending.isEmpty else { return }
-            async let movies = Catalog.load(RowSpec(id: "s-m", title: "", kind: .movie, path: "trending/movie/week"), kids: app.isKids)
-            async let shows = Catalog.load(RowSpec(id: "s-t", title: "", kind: .tvShow, path: "trending/tv/week"), kids: app.isKids)
+            async let movies = Catalog.load(RowSpec(id: "s-m", title: "", kind: .movie, path: "trending/movie/week"), maturity: app.maturity)
+            async let shows = Catalog.load(RowSpec(id: "s-t", title: "", kind: .tvShow, path: "trending/tv/week"), maturity: app.maturity)
             let (m, s) = await (movies, shows)
             // Interleave so the grid isn't all movies first.
             let a = m?.items ?? [], b = s?.items ?? []
@@ -124,7 +124,7 @@ struct SearchView: View {
         aiLoading = true
         aiError = nil
         do {
-            let result = try await AskBinge.ask(text, kids: app.isKids)
+            let result = try await AskBinge.ask(text, maturity: app.maturity)
             guard text == query.trimmingCharacters(in: .whitespaces) else { aiLoading = false; return }
             ai = result.titles
             aiSummary = result.summary

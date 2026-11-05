@@ -226,6 +226,48 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
     }
 }
 
+// Same levels as the website's kidsMode.js.
+@Suite struct MaturityTests {
+    private func profile(isKids: Bool, settings: Any?) -> AccountProfile {
+        var json: [String: Any] = ["id": "p", "name": "N", "is_kids": isKids, "is_default": false]
+        if let settings { json["settings"] = settings }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try! decoder.decode(AccountProfile.self, from: JSONSerialization.data(withJSONObject: json))
+    }
+
+    @Test func levelComesFromSettingsWithKidsAsTheDefault() {
+        #expect(profile(isKids: false, settings: ["maturity": "toddler"]).maturity == .all) // is_kids is the master switch
+        #expect(profile(isKids: true, settings: nil).maturity == .kids)
+        #expect(profile(isKids: true, settings: ["maturity": "toddler"]).maturity == .toddler)
+        #expect(profile(isKids: true, settings: ["maturity": "teens", "autoplay": true]).maturity == .teens)
+        #expect(profile(isKids: true, settings: ["maturity": "all"]).maturity == .kids)
+        #expect(profile(isKids: true, settings: ["maturity": 3]).maturity == .kids)
+        #expect(profile(isKids: true, settings: "unexpected").maturity == .kids)
+        #expect(profile(isKids: true, settings: NSNull()).maturity == .kids)
+    }
+
+    @Test func eachLevelSeesItsRatings() {
+        #expect(Maturity.toddler.allows("G") && Maturity.toddler.allows("TV-Y"))
+        #expect(!Maturity.toddler.allows("PG") && !Maturity.toddler.allows("TV-Y7"))
+        #expect(Maturity.kids.allows("PG") && Maturity.kids.allows("TV-PG") && !Maturity.kids.allows("PG-13"))
+        #expect(Maturity.teens.allows("PG-13") && Maturity.teens.allows("TV-14") && Maturity.teens.allows("G"))
+        #expect(!Maturity.teens.allows("R") && !Maturity.teens.allows("TV-MA"))
+        #expect(Maturity.all.allows("R") && Maturity.all.allows(nil))
+        for level in [Maturity.toddler, .kids, .teens] { #expect(!level.allows(nil)) }
+    }
+
+    @Test func childLevelsGetKidsRowsAndPills() {
+        #expect(Maturity.toddler.isChild && Maturity.kids.isChild)
+        #expect(!Maturity.teens.isChild && !Maturity.all.isChild)
+        #expect(Maturity.allCases.map(\.label) == ["Toddler", "Kids", "Teens", nil])
+    }
+
+    @Test func settingsAreRequested() {
+        #expect(AccountProfile.columns.split(separator: ",").contains("settings"))
+    }
+}
+
 @Suite struct AccountProfileTests {
     private func profile(_ avatar: String?) -> AccountProfile {
         let json: [String: Any] = ["id": "p", "name": "N", "is_kids": false, "is_default": true].merging(avatar.map { ["avatar_url": $0] } ?? [:]) { a, _ in a }
