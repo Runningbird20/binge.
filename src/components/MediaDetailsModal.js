@@ -575,6 +575,26 @@ export default function MediaDetailsModal({
     }
   }
 
+  // "Your Rating & Review": under the facts for movies, after the episodes
+  // for series.
+  const ratingSection = (
+    <section className={`td-section td-rate${isTV ? '' : ' td-rate--aside'}`} aria-label="Your rating">
+      <div className="td-section-head">
+        <h3>Your Rating &amp; Review</h3>
+        {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}
+      </div>
+      <RateReviewPanel
+        mediaType={mediaType}
+        value={userRating}
+        onSave={handleRatingSave}
+        allowActions={allowActions}
+        size="lg"
+      />
+      {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
+      {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+    </section>
+  );
+
   async function handleRatingSave(categories) {
     if (typeof onRate !== 'function') return;
     await onRate(item, categories);
@@ -717,6 +737,7 @@ export default function MediaDetailsModal({
               {item._reason && <p className="td-reason">{item._reason}</p>}
             </div>
 
+            <div className="td-aside">
             <dl className="td-facts">
               {facts.cast?.length > 0 && (<><dt>Cast</dt><dd>{facts.cast.slice(0, 5).join(', ')}</dd></>)}
               {facts.creators?.length > 0 && (<><dt>{isTV ? 'Created by' : 'Director'}</dt><dd>{facts.creators.join(', ')}</dd></>)}
@@ -726,6 +747,10 @@ export default function MediaDetailsModal({
               {item.imdb_rating && (<><dt>IMDb</dt><dd>{item.imdb_rating}/10</dd></>)}
               {item.rotten_tomatoes_score && (<><dt>Rotten Tomatoes</dt><dd>{item.rotten_tomatoes_score}%</dd></>)}
             </dl>
+            {/* Movies: your rating right under the facts (series keep it
+                beside their episodes). */}
+            {!isTV && ratingSection}
+            </div>
           </div>
 
           {isTV && details?.seasons?.length > 0 && (
@@ -752,21 +777,7 @@ export default function MediaDetailsModal({
 
           <MoreLikeThis mediaType={mediaType} tmdbId={details?.tmdbId} />
 
-          <section className="td-section td-rate" aria-label="Your rating">
-            <div className="td-section-head">
-              <h3>Your Rating &amp; Review</h3>
-              {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}
-            </div>
-            <RateReviewPanel
-              mediaType={mediaType}
-              value={userRating}
-              onSave={handleRatingSave}
-              allowActions={allowActions}
-              size="lg"
-            />
-            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
-            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
-          </section>
+          {isTV && ratingSection}
 
           {onWatchlist && !saved && allowActions && (
             <div className="td-footer-cta">
