@@ -6,6 +6,15 @@ import { __AuthContextForPreview as AuthContext } from '../contexts/AuthContext'
 import Movies from './Movies';
 import TVShows from './TVShows';
 import Books from './Books';
+import { useEffect, useState } from 'react';
+import MediaDetailsModal from '../components/MediaDetailsModal';
+import { fetchMovieById, fetchTvShowById } from '../utils/catalogQueries';
+
+function TitlePreview({ type, id }) {
+  const [item, setItem] = useState(null);
+  useEffect(() => { (type === 'movie' ? fetchMovieById : fetchTvShowById)(id).then(setItem); }, [type, id]);
+  return item ? <MediaDetailsModal item={item} mediaType={type} onClose={() => {}} allowActions={false} /> : null;
+}
 
 const AUTH_VALUE = {
   user: { username: 'Cristal', avatarUrl: null, id: 'preview' },
@@ -21,7 +30,7 @@ export default function UIPreview() {
 
   return (
     <AuthContext.Provider value={AUTH_VALUE}>
-      {page === 'series' ? <TVShows /> : page === 'books' ? <Books /> : <Movies />}
+      {page === 'title' ? <TitlePreview type={searchParams.get('type')} id={searchParams.get('id')} /> : page === 'series' ? <TVShows /> : page === 'books' ? <Books /> : <Movies />}
     </AuthContext.Provider>
   );
 }

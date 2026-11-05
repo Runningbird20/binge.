@@ -6,6 +6,7 @@ import EmbedPlayer from './EmbedPlayer';
 import RemindButton from './RemindButton';
 import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
+import WhereToWatch from './WhereToWatch';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
@@ -522,7 +523,8 @@ export default function MediaDetailsModal({
                   : (details?.runtime ? <span>{formatRuntime(details.runtime)}</span> : null)}
                 <span className="td-hd">HD</span>
               </div>
-              <OutsideRatings item={item} tmdbScore={score} tmdbVotes={details?.voteCount || 0} />
+              <WhereToWatch watch={details?.watch} mediaType={mediaType} />
+              <OutsideRatings item={item} />
               {details?.tagline && <p className="td-tagline">{details.tagline}</p>}
               {overview && <p className="td-overview">{overview}</p>}
               {item._reason && <p className="td-reason">{item._reason}</p>}
