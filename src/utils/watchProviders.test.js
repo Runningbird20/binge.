@@ -24,6 +24,16 @@ test('tiers, ad plans and resold channels are one service', () => {
   expect(providerFamily('Disney Plus')).toBe('disney plus');
 });
 
+test('everything from YouTube is one service with the regular YouTube logo', () => {
+  ['YouTube', 'YouTube TV', 'YouTube Free', 'YouTube Premium'].forEach((name) => {
+    expect(providerFamily(name)).toBe('youtube');
+    expect(serviceName(name)).toBe('YouTube');
+  });
+  const watch = pickWatchProviders({ results: { US: { flatrate: [p(2528, 'YouTube TV', 1)], free: [p(235, 'YouTube Free', 2)] } } }, 'US');
+  expect(watch.providers).toHaveLength(1);
+  expect(watch.providers[0]).toMatchObject({ name: 'YouTube', plain: false });
+});
+
 test('Amazon MX Player is never shown', () => {
   const watch = pickWatchProviders({ results: { US: { ads: [p(2593, 'Amazon MX Player', 1), p(73, 'Tubi TV', 2)], free: [p(2594, 'MX Player', 3)] } } }, 'US');
   expect(watch.providers.map((x) => x.name)).toEqual(['Tubi TV']);
@@ -68,4 +78,13 @@ test('a title listing only a variant gets the plain service logo from TMDB’s l
   const resolved = await withPlainLogos(watch, 'tv_show', 'US');
   expect(tmdbGet).toHaveBeenCalledWith('/watch/providers/tv', { watch_region: 'US' });
   expect(resolved.providers.map((x) => [x.name, x.logo])).toEqual([['Netflix', '/8.png'], ['HBO Max', '/1899.png']]);
+});
+
+test('the plain logo can come from the other type’s list (plain YouTube is only listed for movies)', async () => {
+  tmdbGet.mockReset();
+  tmdbGet.mockImplementation(async (path) => (path === '/watch/providers/movie' ? { results: [p(192, 'YouTube')] } : { results: [p(2528, 'YouTube TV')] }));
+  const watch = pickWatchProviders({ results: { US: { flatrate: [p(2528, 'YouTube TV')] } } }, 'US');
+  const resolved = await withPlainLogos(watch, 'tv_show', 'US');
+  expect(tmdbGet).toHaveBeenCalledWith('/watch/providers/movie', { watch_region: 'US' });
+  expect(resolved.providers.map((x) => [x.name, x.logo, x.plain])).toEqual([['YouTube', '/192.png', true]]);
 });
