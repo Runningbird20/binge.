@@ -90,3 +90,21 @@ export function countCompleted(watchlist, ratings) {
   (ratings || []).forEach((rating) => counted.add(mediaKey(rating)));
   return counted.size;
 }
+
+// Watch time as a clock, "HH:MM:SS" (hours keep counting past 99).
+export function formatWatchTime(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}:00`;
+}
+
+// The same, spelled out for screen readers ("12 hours 30 minutes").
+export function describeWatchTime(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours.toLocaleString()} ${hours === 1 ? 'hour' : 'hours'}`);
+  if (rest || !hours) parts.push(`${rest} ${rest === 1 ? 'minute' : 'minutes'}`);
+  return parts.join(' ');
+}

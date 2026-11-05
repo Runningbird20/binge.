@@ -18,7 +18,7 @@ import {
 } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import { computeProgressBadge } from '../utils/continueWatching';
-import { excludeRated, countCompleted, computeWatchMinutes } from '../utils/libraryStats';
+import { excludeRated, countCompleted, computeWatchMinutes, describeWatchTime, formatWatchTime } from '../utils/libraryStats';
 import { posterSrc, posterSrcSet } from '../utils/imageQuality';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
@@ -443,7 +443,10 @@ export default function Profile() {
             </div>
           </div>
           <dl className="pf-stats">
-            <div><dt>Minutes watched</dt><dd>{stats.minutes.toLocaleString()}</dd></div>
+            <div className="pf-stat--time">
+              <dt>Time watched:</dt>
+              <dd><span aria-hidden="true">{formatWatchTime(stats.minutes)}</span><span className="sr-only">{describeWatchTime(stats.minutes)}</span></dd>
+            </div>
             <div><dt>Completed</dt><dd>{stats.completed}</dd></div>
             <div><dt>In progress</dt><dd>{stats.inProgress}</dd></div>
             <div><dt>Ratings</dt><dd>{stats.totalRatings}</dd></div>
