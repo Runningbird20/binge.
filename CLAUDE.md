@@ -217,6 +217,11 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Sorting.** The row is re-sorted by the profile's taste (`sortForTaste` / `Seasonal.sorted`): top genres + language share, popularity breaks ties. The scoring is the same on all three.
   - Keyword ids are TMDB's; re-check coverage if you change one.
 - **Release window** (`src/utils/releaseWindow.js`): released → shown; releasing within 30 days → shown with a "Coming Soon" badge; later → hidden. Apply it to any new browse surface.
+- **Watched titles are never recommended** (`src/utils/watchedTitles.js`). Watched means rated, marked Watched/Watching, in Continue Watching, or any episode watched.
+  - **Where they're left out:** every row and the spotlight on Movies/TV (`BrowseView`); Home's spotlight, Top Picks, Because you watched, Top 10, taste rows and New Movies; More Like This; search's "More like {title}"; Surprise me.
+  - **Where they still show:** search results (title matches, synopsis matches, Ask binge. picks), the `?view=all` grid, person pages, franchises, the calendar, and the profile's own rows (Continue Watching, My List, New Episodes, Sent to you).
+  - **How to filter.** Give a recommendation row `hideWatched` (`TitleRow`; it shows its loading bar until the list is known). Put a Top 10's cut in `limit`, not `.slice()`, so it's applied after watched titles drop out. Elsewhere, use `useWatchedKeys()` + `withoutWatched()`.
+  - **Data and freshness.** The list is one shared copy per profile (`fetchWatchedTitleKeys`: ids only, paged past the 1000-row cap), reused for a minute. Library and episode writes announce `binge:historyChanged` (the `announcing` wrapper in `supabaseData.js`), so marking something watched takes it out of rows already on screen. Playback's 30-second progress saves don't announce.
 - **Spotlight** (`BrowseHero`):
   - **Logo headline.** The headline is the title's logo art (`fetchTitleLogo`, using the popup's own cached TMDB request, for the slide on screen and the next one). The text title shows if there's no logo or it takes over 0.9s.
   - **States and motion.** `items={null}` means loading (a placeholder, no empty-headline flash). It rotates every 35s, even during trailers, and swipes on phones.
@@ -232,7 +237,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
 - **Surprise me** (above Continue Watching, `SurpriseButtons` in `Home.js`, logic in `utils/surprise.js`):
   - "Surprise me with a movie" and "… with a series" each open one title of that type.
-  - The title comes from the profile's Top Picks / "Because you watched" rows, which `buildPersonalizedRows` has already filtered for maturity and the release window. Picks lean toward the top and skip Coming Soon titles and the last 6 surprises.
+  - The title comes from the profile's Top Picks / "Because you watched" rows, which `buildPersonalizedRows` has already filtered for maturity and the release window. Picks lean toward the top and skip Coming Soon titles, watched titles (`exclude`) and the last 6 surprises.
   - A profile with no history gets the spotlight's trending titles of that type. A type with nothing to offer loses its button.
   - Styled like the title popup's Trailer button (`st-btn td-resume-control td-play--compact`).
 - **Sent to you** — the household queue (`profile_shares`; RLS requires both profiles to belong to the account). Sent with `SendToProfileButton` on the title popup (`utils/profileShares.js`); the TV apps have "Send to…" and the same row.

@@ -3,7 +3,7 @@
 import { getSupabaseUser, isSupabaseConfigured, supabase } from '../supabase';
 import { getActiveProfileId } from '../activeProfile';
 import { api } from '../../api';
-import { enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
+import { RATING_TABLES, enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
 
 // ─── Episode Progress (watched tracking) ──────────────────────────────────────
 
@@ -96,6 +96,52 @@ export async function fetchEpisodeProgressCounts() {
     counts.set(id, (counts.get(id) || 0) + 1);
   });
   return counts;
+}
+
+// Every movie and series this profile has watched, as "movie:12" /
+// "tv_show:34" keys: rated, marked Watched (or Watching) in the library, in
+// Continue Watching, or with any episode watched. Ids only, paged past
+// Supabase's 1000-row cap, so it stays cheap. A table that fails to load is
+// left out rather than failing the rest. Keeps watched titles out of
+// recommendations (utils/watchedTitles.js).
+const WATCHED_STATUSES = ['watched', 'watching'];
+const PAGE = 1000;
+
+export async function fetchWatchedTitleKeys() {
+  const keys = new Set();
+  if (!isSupabaseConfigured || !supabase) return keys;
+  try {
+    const { data: { user } = {} } = await getSupabaseUser();
+    if (!user) return keys;
+    const client = requireSupabase();
+    const profileId = getActiveProfileId();
+
+    async function allRows(table, columns, refine = (query) => query) {
+      const rows = [];
+      for (let page = 0; page < 20; page += 1) {
+        let query = refine(client.from(table).select(columns).eq('user_id', user.id));
+        if (profileId) query = scopeToProfile(query, profileId);
+        // eslint-disable-next-line no-await-in-loop
+        const { data, error } = await query.order('id').range(page * PAGE, page * PAGE + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
+    }
+
+    const add = (mediaType) => (rows) => rows.forEach((row) => keys.add(`${row.media_type || mediaType}:${Number(row.media_id)}`));
+    await Promise.allSettled([
+      allRows(RATING_TABLES.movie.table, 'id, media_id').then(add('movie')),
+      allRows(RATING_TABLES.tv_show.table, 'id, media_id').then(add('tv_show')),
+      allRows('watchlist', 'id, media_type, media_id', (query) => query.in('media_type', ['movie', 'tv_show']).in('status', WATCHED_STATUSES)).then(add()),
+      allRows('continue_watching', 'id, media_type, media_id', (query) => query.in('media_type', ['movie', 'tv_show'])).then(add()),
+      allRows('episode_progress', 'id, media_id').then(add('tv_show')),
+    ]);
+  } catch {
+    // Signed out or offline: nothing is known to be watched.
+  }
+  return keys;
 }
 
 export async function markEpisodeWatched({ mediaId, season, episode }) {

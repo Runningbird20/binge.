@@ -4,20 +4,25 @@
 // toward the strongest picks. Titles not out yet are skipped (they can't
 // play), and so are the last few surprises, so pressing again finds
 // something new. A profile with no history yet gets a trending title.
+// Titles the profile has already watched (`exclude`, from
+// utils/watchedTitles.js) are never picked.
 
 const keyOf = (item) => `${item.media_type}:${item.media_id ?? item.id}`;
 const watchable = (item) => item && (item.media_type === 'movie' || item.media_type === 'tv_show') && !item._comingSoon;
 
 // The candidates, strongest first, each title once; only `mediaType`
-// ('movie' / 'tv_show') when given.
-export function surprisePool(personal, fallback = [], { mediaType = '' } = {}) {
-  const seen = new Set();
+// ('movie' / 'tv_show') when given, never one whose key is in `exclude`.
+export function surprisePool(personal, fallback = [], { mediaType = '', exclude = null } = {}) {
+  const seen = new Set(exclude || []);
   const pool = [];
-  const add = (items, limit) => (items || []).filter((item) => !mediaType || item?.media_type === mediaType).slice(0, limit).forEach((item) => {
-    if (!watchable(item) || seen.has(keyOf(item))) return;
-    seen.add(keyOf(item));
-    pool.push(item);
-  });
+  const add = (items, limit) => (items || [])
+    .filter((item) => (!mediaType || item?.media_type === mediaType) && watchable(item) && !seen.has(keyOf(item)))
+    .slice(0, limit)
+    .forEach((item) => {
+      if (seen.has(keyOf(item))) return;
+      seen.add(keyOf(item));
+      pool.push(item);
+    });
   add(personal?.topPicks, 15);
   (personal?.becauseYouWatched || []).forEach((row) => add(row.items, 6));
   if (!pool.length) add(fallback, 20);

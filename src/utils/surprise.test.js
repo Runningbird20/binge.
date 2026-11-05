@@ -46,3 +46,10 @@ test('each button draws only from its own type, falling back to trending of that
   const moviesOnly = { topPicks: [t(1)], becauseYouWatched: [] };
   expect(surprisePool(moviesOnly, [t(7), t(8, { media_type: 'tv_show' })], { mediaType: 'tv_show' }).map((item) => item.id)).toEqual([8]);
 });
+
+test('never a title already watched; if every pick is watched it falls back to trending', () => {
+  const personal = { topPicks: [t(1), t(2)], becauseYouWatched: [{ items: [t(3)] }] };
+  expect(surprisePool(personal, [], { exclude: new Set(['movie:1']) }).map((item) => item.id)).toEqual([2, 3]);
+  const allWatched = new Set(['movie:1', 'movie:2', 'movie:3', 'movie:8']);
+  expect(surprisePool(personal, [t(8), t(9)], { exclude: allWatched }).map((item) => item.id)).toEqual([9]);
+});

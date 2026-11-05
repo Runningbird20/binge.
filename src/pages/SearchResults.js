@@ -418,6 +418,7 @@ export default function SearchResults() {
                 subtitle="Titles people who watched it went on to watch"
                 load={loadMoreLike}
                 minItems={3}
+                hideWatched
               />
             )}
 
