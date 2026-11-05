@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from './neon';
+import { getApiBaseUrl } from './apiBaseUrl';
 
 // Vercel had REACT_APP_API_URL=http://localhost:5001 copied from .env, which
 // sent every catalog request on the deployed site to the visitor's machine.

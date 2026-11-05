@@ -1,17 +1,15 @@
-name: Database split (Neon media, Supabase accounts)
+name: Database split (Turso media, Supabase accounts)
 
 # Weekly check that the split still holds (docs/database-split.md):
-#   Neon     keeps movies, tv_shows, books, their genre views, title_ratings,
+#   Turso    keeps movies, tv_shows, books, their genre views, title_ratings,
 #            episode_ratings_cache, subtitle_cache and catalog search.
 #   Supabase keeps Auth and every user-owned table.
-# It checks the deployed site reads media from Neon, then runs
-# scripts/check-database-split.js (Neon holds only the catalog, Supabase serves
-# none of it). A failed Monday run opens or updates an issue. Read-only.
+# It checks the deployed site reads media through /api/neon-data (the path
+# keeps its old name for installed TV builds), then runs
+# scripts/check-database-split.js (Turso holds only the catalog, Supabase
+# serves none of it). A failed Monday run opens or updates an issue. Read-only.
 #
-# The one-time migration that removed the duplicates is done; its audit/apply
-# jobs were removed on 2026-11-04 (see git history).
-#
-# Secrets: DATABASE_URL (Neon), SUPABASE_URL, SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)
+# Secrets: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, SUPABASE_URL, SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY)
 # Variables (optional): BINGE_URL
 
 on:
@@ -33,7 +31,9 @@ jobs:
     timeout-minutes: 10
     env:
       SITE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      NODE_PATH: ${{ github.workspace }}/scripts/node_modules
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
@@ -49,14 +49,14 @@ jobs:
         run: npm install
         working-directory: scripts
 
-      - name: Deployed site serves media from Neon
+      - name: Deployed site serves the media catalog
         run: |
           # BINGE_URL may end in "/"; "//api" gets a 308 "Redirecting..." page.
           url="${SITE_URL%/}/api/neon-data/rest/movies?select=id&limit=1"
           body=$(curl -fsSL "$url")
           echo "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let rows;try{rows=JSON.parse(s)}catch{console.error("Not JSON from "+process.argv[1]+": "+s.slice(0,200));process.exit(1)}if(!Array.isArray(rows)||!rows.length){console.error("Expected catalog rows from /api/neon-data");process.exit(1)}console.log("ok:",s)})' "$url"
 
-      - name: Neon holds only the catalog; Supabase serves none of it
+      - name: Turso holds only the catalog; Supabase serves none of it
         run: node scripts/check-database-split.js
 
   report:
@@ -74,7 +74,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Weekly database-split check failed"
-          body="Either the site couldn't read media from Neon, or a table is on the wrong side of the Neon (catalog) / Supabase (accounts) split. The failed step says which: $RUN_URL"
+          body="Either the site couldn't read the media catalog, or a table is on the wrong side of the Turso (catalog) / Supabase (accounts) split. The failed step says which: $RUN_URL"
           existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "Failed again: $RUN_URL"

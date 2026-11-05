@@ -1,16 +1,16 @@
 const { splitDatabaseClient } = require('../../src/utils/mediaDatabase');
-const { createNeonQueryClient } = require('../../src/utils/neonQuery');
+const { createCatalogQueryClient } = require('../../src/utils/catalogQuery');
 const { executeQuery } = require('./query');
-const neonDb = require('../neonDb');
+const catalogSearch = require('../catalogSearch');
 
 // Popular searches repeat a lot; the catalog only changes with the twice-weekly
 // sync, so results are kept per instance for a while. Keyed like
-// search_catalog normalizes (case, accents, punctuation), so "Amélie" and
+// searchNorm normalizes (case, accents, punctuation), so "Amélie" and
 // "amelie" share an entry. Oldest entries go first once full.
 const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 const SEARCH_CACHE_MAX = 500;
 const searchCache = new Map();
-const searchKey = (q, lim) => `${lim}|${q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()}`;
+const searchKey = (q, lim) => `${lim}|${q.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()}`;
 
 async function rpc(name,args={}) {
   try {
@@ -24,13 +24,13 @@ async function rpc(name,args={}) {
       searchCache.delete(key);searchCache.set(key,hit); // most recently used last
       return {data:hit.rows,error:null};
     }
-    const result=await neonDb.query('SELECT * FROM public.search_catalog($1,$2)',[q,lim]);
-    searchCache.set(key,{at:Date.now(),rows:result.rows});
+    const rows=await catalogSearch.searchCatalog(q,lim);
+    searchCache.set(key,{at:Date.now(),rows});
     if(searchCache.size>SEARCH_CACHE_MAX)searchCache.delete(searchCache.keys().next().value);
-    return {data:result.rows,error:null};
-  }catch(error){return {data:null,error:{message:error.message,code:error.code||'NEON_RPC_ERROR'}};}
+    return {data:rows,error:null};
+  }catch(error){return {data:null,error:{message:error.message,code:error.code||'CATALOG_RPC_ERROR'}};}
 }
-function dataClient() { return createNeonQueryClient(spec=>executeQuery(spec,{trusted:true}),rpc); }
+function dataClient() { return createCatalogQueryClient(spec=>executeQuery(spec,{trusted:true}),rpc); }
 function createHybridClient(url,key,options) {
   const raw=require('@supabase/supabase-js').createClient(url,key,options);
   const media=dataClient();
