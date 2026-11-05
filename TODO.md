@@ -12,7 +12,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **"Surprise me."** A button on Home and Movies/Series that picks one title from the profile's top recommendations (`buildPersonalizedRows`), respecting the release window and maturity level, and opens or plays it.
 - [ ] **Search filters.** `/search` (`SearchResults.js`) has no way to narrow results. Add chips for type, decade and language (`role="group"` + `aria-pressed`, like the genre chips), applied to both catalog results and Ask binge.
 - [ ] **Sleep timer on the website.** The TV apps have one (`PlayerModel.swift`, `PlayerModel.kt`); the web player doesn't. "End of episode / 30 / 60 min" in `PlaybackOptions.js`, pausing via the same position save as closing the player.
-- [ ] **Maturity levels on the TV apps.** The website has Toddler / Kids / Teens / No restrictions (`src/utils/kidsMode.js`), but the TV apps only read `is_kids` and apply the Kids list to every restricted profile. Read `settings.maturity` in `Models.swift` / `Models.kt`, extend `KidsFilter` with each level's ratings, and show the age pill on the TV profile pickers.
 
 ## UI and UX
 

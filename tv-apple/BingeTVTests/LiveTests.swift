@@ -317,10 +317,10 @@ enum ServerProbe {
     func findsTheTitle(_ key: String) async throws {
         let parts = key.split(separator: "|").map(String.init)
         let (query, wanted, within) = (parts[0], parts[1], Int(parts[2])!)
-        var results = try await Catalog.search(query, kids: false)
+        var results = try await Catalog.search(query, maturity: .all)
         // What the Search page shows: Ask binge. runs when the search alone finds nothing.
         if AskBinge.shouldAutoAsk(query, results: results), results.isEmpty {
-            results = (try? await AskBinge.ask(query, kids: false).titles.map(\.0)) ?? []
+            results = (try? await AskBinge.ask(query, maturity: .all).titles.map(\.0)) ?? []
         }
         let keys = results.map { "\($0.kind.rawValue):\($0.tmdbId ?? 0)" }
         let rank = keys.firstIndex(of: wanted)
@@ -332,21 +332,21 @@ enum ServerProbe {
 
     @Test(arguments: ["The Dark Knight", "Oppenheimer", "Breaking Bad", "Squid Game", "Deadpool", "The Exorcist"])
     func kidsProfilesDontSeeGrownUpTitles(_ query: String) async throws {
-        let results = try await Catalog.search(query, kids: true)
+        let results = try await Catalog.search(query, maturity: .kids)
         Live.report("kidsSearch", ["query": query, "results": results.map { "\($0.name) [\($0.ageRating ?? "nil")]" }])
         #expect(results.allSatisfy { KidsFilter.allows($0.ageRating) })
     }
 
     @Test(arguments: ["Bluey", "Toy Story", "Frozen", "Paw Patrol", "Moana"])
     func kidsProfilesFindKidsTitles(_ query: String) async throws {
-        let results = try await Catalog.search(query, kids: true)
+        let results = try await Catalog.search(query, maturity: .kids)
         Live.report("kidsSearch", ["query": query, "results": results.prefix(5).map { "\($0.name) [\($0.ageRating ?? "nil")]" }])
         #expect(!results.isEmpty, "a kids profile can't find \(query)")
     }
 
     @Test(arguments: ["", " ", "zzzzqqqqxxxx", "%", "'; drop table movies;--", String(repeating: "a", count: 300), "🙂"])
     func oddQueriesDontBreak(_ query: String) async {
-        let results = try? await Catalog.search(query, kids: false)
+        let results = try? await Catalog.search(query, maturity: .all)
         Live.report("oddSearch", ["query": String(query.prefix(30)), "ok": results != nil, "results": results?.count ?? 0])
         if query.trimmingCharacters(in: .whitespaces).isEmpty { return } // the view never searches these
         #expect(results != nil, "search threw for \(query.prefix(30))")
@@ -372,7 +372,7 @@ enum ServerProbe {
     @Test(arguments: pages)
     func everyRowFills(_ page: String) async {
         let (specs, kids) = Self.specs(page)
-        let loaded = await Catalog.loadAll(specs, kids: kids)
+        let loaded = await Catalog.loadAll(specs, maturity: kids ? .kids : .all)
         for spec in specs {
             let row = loaded.first { $0.id == spec.id }
             let items = row?.items ?? []
@@ -395,7 +395,7 @@ enum ServerProbe {
         #expect(watched.count == 3)
         let items = watched.map { ContinueItem(title: $0, season: 1, episode: 1, position: 100, duration: 1000) }
         let exclude = Set(watched.map(\.id) + loved.map(\.id))
-        let rows = await Personal.build(watched: items, loved: loved, exclude: exclude, kids: false, name: "Test")
+        let rows = await Personal.build(watched: items, loved: loved, exclude: exclude, maturity: .all, name: "Test")
         Live.report("recs", ["topPicks": rows.topPicks?.items.prefix(12).map(\.name) ?? [], "because": rows.because.map(\.title)])
         #expect((rows.topPicks?.items.count ?? 0) >= 12)
         #expect(rows.because.count >= 2)
@@ -408,7 +408,7 @@ enum ServerProbe {
                       "anime for someone who loved Attack on Titan", "a feel-good movie for a family night"])
     func askBingeFindsCatalogTitles(_ query: String) async throws {
         let started = Date()
-        let result = try await AskBinge.ask(query, kids: false)
+        let result = try await AskBinge.ask(query, maturity: .all)
         Live.report("ask", ["query": query, "summary": result.summary ?? "", "titles": result.titles.map(\.0.name),
                             "seconds": (Date().timeIntervalSince(started) * 10).rounded() / 10])
         #expect(result.titles.count >= 3, "Ask binge. found \(result.titles.count) catalog titles")
@@ -430,7 +430,7 @@ enum ServerProbe {
     func franchises(_ tmdb: Int, _ name: String, _ minimum: Int) async {
         var title = Title(kind: .movie, dbId: 0, name: "", year: nil, overview: nil, genre: nil, ageRating: nil)
         title.tmdbId = tmdb
-        let order = await Franchises.find(for: title, kids: false)
+        let order = await Franchises.find(for: title, maturity: .all)
         Live.report("franchise", ["seed": tmdb, "name": order?.name ?? NSNull(), "release": order?.release.count ?? 0, "story": order?.story?.count ?? NSNull()])
         #expect(order?.name.hasPrefix(name) == true, "got \(order?.name ?? "nothing")")
         #expect((order?.release.count ?? 0) >= minimum, "only \(order?.release.count ?? 0) films matched the catalog")

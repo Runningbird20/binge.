@@ -149,7 +149,7 @@ struct ProfileAvatar: View {
                         .foregroundStyle(Theme.muted)
                         .accessibilityLabel("Locked with a PIN")
                 }
-                if profile.isKids { Badge(text: "Kids") }
+                if let level = profile.maturity.label { Badge(text: level) }
             }
         }
     }

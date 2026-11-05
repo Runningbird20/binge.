@@ -77,7 +77,7 @@ struct CatalogRow: Decodable {
 }
 
 struct AccountProfile: Decodable, Identifiable, Hashable {
-    static let columns = "id,name,avatar_url,avatar_color,is_kids,is_default,audio_pref,subtitle_pref"
+    static let columns = "id,name,avatar_url,avatar_color,is_kids,is_default,audio_pref,subtitle_pref,settings"
 
     let id: String
     let name: String
@@ -87,6 +87,11 @@ struct AccountProfile: Decodable, Identifiable, Hashable {
     let isDefault: Bool
     var audioPref: String?
     var subtitlePref: String?
+    // account_profiles.settings (jsonb): only the maturity level is read here.
+    var settings: ProfileSettings? = nil
+
+    // The profile's maturity level, as on the website (Edit Profile).
+    var maturity: Maturity { Maturity(isKids: isKids, level: settings?.maturity) }
 
     var avatarImageURL: URL? {
         guard let avatarUrl, !avatarUrl.isEmpty else { return nil }
@@ -189,11 +194,70 @@ enum ReleaseWindow {
     }
 }
 
+// Read leniently: settings is free-form JSON the website owns, and a value
+// of an unexpected shape must never stop the profiles from loading.
+struct ProfileSettings: Decodable, Hashable {
+    var maturity: String?
+
+    init(maturity: String? = nil) { self.maturity = maturity }
+
+    private enum CodingKeys: String, CodingKey { case maturity }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        maturity = (try? container?.decodeIfPresent(String.self, forKey: .maturity)) ?? nil
+    }
+}
+
+// Maturity levels, the same as the website's (src/utils/kidsMode.js):
+// is_kids is the master switch and settings.maturity picks the level (Kids
+// when it's missing). Toddler and Kids get the kids-only rows; Teens browse
+// the normal rows, filtered by rating; No restrictions sees everything.
+enum Maturity: String, CaseIterable, Hashable {
+    case toddler, kids, teens, all
+
+    init(isKids: Bool, level: String?) {
+        guard isKids else { self = .all; return }
+        switch level {
+        case "toddler": self = .toddler
+        case "teens": self = .teens
+        default: self = .kids
+        }
+    }
+
+    // Ratings this level may see; nil = no restrictions.
+    var ratings: Set<String>? {
+        switch self {
+        case .toddler: return ["G", "TV-Y"]
+        case .kids: return KidsFilter.allowed
+        case .teens: return KidsFilter.allowed.union(["PG-13", "TV-14"])
+        case .all: return nil
+        }
+    }
+
+    // Toddler and Kids: the kids-only rows (no Sports tab).
+    var isChild: Bool { self == .toddler || self == .kids }
+
+    // The age pill on profile pickers (none without restrictions).
+    var label: String? {
+        switch self {
+        case .toddler: return "Toddler"
+        case .kids: return "Kids"
+        case .teens: return "Teens"
+        case .all: return nil
+        }
+    }
+
+    // Unknown ratings are left out on every restricted level.
+    func allows(_ rating: String?) -> Bool {
+        guard let ratings else { return true }
+        guard let rating else { return false }
+        return ratings.contains(rating.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
+    }
+}
+
 // Kids profiles only see titles rated for kids (unknown ratings are left out).
 enum KidsFilter {
     static let allowed: Set<String> = ["G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG"]
-    static func allows(_ rating: String?) -> Bool {
-        guard let rating else { return false }
-        return allowed.contains(rating.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
-    }
+    static func allows(_ rating: String?, for maturity: Maturity = .kids) -> Bool { maturity.allows(rating) }
 }

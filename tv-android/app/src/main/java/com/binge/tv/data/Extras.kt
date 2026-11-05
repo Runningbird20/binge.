@@ -66,7 +66,7 @@ object AskBinge {
 
     private val slowClient = Net.client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build()
 
-    suspend fun ask(query: String, kids: Boolean): Pair<String?, List<Pair<Title, String?>>> = coroutineScope {
+    suspend fun ask(query: String, maturity: Maturity): Pair<String?, List<Pair<Title, String?>>> = coroutineScope {
         val request = Request.Builder().url("${Config.siteUrl}/api/extras/ai/picks")
             .post(toJson(mapOf("q" to query)).toString().toRequestBody("application/json".toMediaType())).build()
         val body = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { slowClient.newCall(request).execute().use { it.body?.string() ?: "" } }
@@ -76,8 +76,8 @@ object AskBinge {
         response.error?.let { throw BingeException(it) }
         val picks = response.picks.orEmpty()
         fun stub(p: Pick) = TmdbItem(id = p.tmdbId)
-        val movies = async { Catalog.match(picks.filter { it.mediaType != "tv_show" }.map(::stub), MediaKind.MOVIE, kids) }
-        val shows = async { Catalog.match(picks.filter { it.mediaType == "tv_show" }.map(::stub), MediaKind.TV, kids) }
+        val movies = async { Catalog.match(picks.filter { it.mediaType != "tv_show" }.map(::stub), MediaKind.MOVIE, maturity) }
+        val shows = async { Catalog.match(picks.filter { it.mediaType == "tv_show" }.map(::stub), MediaKind.TV, maturity) }
         val byKey = (movies.await() + shows.await()).associateBy { "${it.kind.raw}:${it.tmdbId}" }
         response.summary to picks.mapNotNull { pick -> byKey["${if (pick.mediaType == "tv_show") "tv_show" else "movie"}:${pick.tmdbId}"]?.let { it to pick.why } }
     }
@@ -104,11 +104,11 @@ object Franchises {
 
     @Serializable private data class CollectionInfo(val name: String, val parts: List<TmdbItem> = emptyList())
 
-    suspend fun find(title: Title, kids: Boolean): Order? = coroutineScope {
+    suspend fun find(title: Title, maturity: Maturity): Order? = coroutineScope {
         val tmdbId = title.tmdbId
         if (title.kind != MediaKind.MOVIE || tmdbId == null) return@coroutineScope null
         curated.firstOrNull { tmdbId in it.release }?.let { franchise ->
-            val matched = runCatching { Catalog.match(franchise.release.map { TmdbItem(id = it) }, MediaKind.MOVIE, kids) }.getOrDefault(emptyList())
+            val matched = runCatching { Catalog.match(franchise.release.map { TmdbItem(id = it) }, MediaKind.MOVIE, maturity) }.getOrDefault(emptyList())
             val byId = matched.associateBy { it.tmdbId ?: 0 }
             val posters = byId.keys.map { id -> async { id to runCatching { Tmdb.get<TmdbDetails>("movie/$id") }.getOrNull()?.posterPath } }.awaitAll()
                 .mapNotNull { (id, path) -> Tmdb.image(path, Tmdb.POSTER)?.let { id to it } }.toMap()
@@ -119,7 +119,7 @@ object Franchises {
         val id = details?.belongsToCollection?.id ?: return@coroutineScope null
         val collection = runCatching { Tmdb.get<CollectionInfo>("collection/$id") }.getOrNull() ?: return@coroutineScope null
         val parts = collection.parts.filter { !it.releaseDate.isNullOrEmpty() }.sortedBy { it.releaseDate }
-        val titles = runCatching { Catalog.match(parts, MediaKind.MOVIE, kids) }.getOrDefault(emptyList())
+        val titles = runCatching { Catalog.match(parts, MediaKind.MOVIE, maturity) }.getOrDefault(emptyList())
         if (titles.size < 2) null else Order(collection.name.replace(" Collection", ""), titles, null)
     }
 }

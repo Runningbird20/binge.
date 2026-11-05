@@ -103,8 +103,8 @@ struct HomeView: View {
 
     private func load() async {
         loading = true
-        let kids = app.isKids
-        async let general = Catalog.loadAll(Rows.home(kids: kids), kids: kids)
+        let maturity = app.maturity
+        async let general = Catalog.loadAll(Rows.home(kids: maturity.isChild), maturity: maturity)
         async let cw: [ContinueItem] = (try? await app.continueWatching()) ?? []
         async let list: [Title] = (try? await app.myList()) ?? []
         async let loved = app.lovedTitles()
@@ -120,7 +120,7 @@ struct HomeView: View {
 
         let exclude = (await rated).union(items.map(\.id)).union(listTitles.map(\.id))
         personal = await Personal.build(watched: items, loved: await loved, exclude: exclude,
-                                        kids: kids, name: app.profile?.name)
+                                        maturity: maturity, name: app.profile?.name)
         chooseSpotlight()
         // Ambient mode's slideshow: what you're watching, then your picks.
         AmbientStore.shared.titles = Array((items.map(\.title) + (personal.topPicks?.items ?? []) + myList + (rows.first?.items ?? []))
@@ -146,14 +146,14 @@ enum Personal {
         let weight: Double
     }
 
-    static func build(watched: [ContinueItem], loved: [Title], exclude: Set<String>, kids: Bool, name: String?) async -> Rows {
+    static func build(watched: [ContinueItem], loved: [Title], exclude: Set<String>, maturity: Maturity, name: String?) async -> Rows {
         let seeds = seeds(watched: watched, loved: loved)
         let recs: [String: [Title]] = await withTaskGroup(of: (String, [Title]).self) { group in
             for seed in seeds {
                 guard let tmdbId = seed.title.tmdbId else { continue }
                 let spec = RowSpec(id: "rec-\(seed.title.id)", title: "", kind: seed.title.kind,
                                    path: "\(seed.title.kind.tmdbPath)/\(tmdbId)/recommendations")
-                group.addTask { (seed.title.id, await Catalog.load(spec, kids: kids)?.items ?? []) }
+                group.addTask { (seed.title.id, await Catalog.load(spec, maturity: maturity)?.items ?? []) }
             }
             var all: [String: [Title]] = [:]
             for await (id, items) in group { all[id] = items }
@@ -264,7 +264,7 @@ struct BrowseView: View {
         loading = true
         async let watched: [ContinueItem] = (try? await app.continueWatching()) ?? []
         async let loved = app.lovedTitles()
-        rows = await Catalog.loadAll(Rows.browse(kind, kids: app.isKids), kids: app.isKids)
+        rows = await Catalog.loadAll(Rows.browse(kind, kids: app.isKids), maturity: app.maturity)
         loading = false
         // The seasonal row leads with what this profile likes.
         let taste = Seasonal.Taste(history: await watched.map(\.title) + loved)

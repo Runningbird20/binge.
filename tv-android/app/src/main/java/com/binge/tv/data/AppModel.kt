@@ -40,7 +40,10 @@ object AppModel {
     var lockCheckError by mutableStateOf<String?>(null)
     var deepLink by mutableStateOf<String?>(null)
 
-    val isKids get() = profile?.isKids ?: false
+    // The profile's maturity level (Toddler / Kids / Teens / No restrictions).
+    val maturity get() = profile?.maturity ?: Maturity.ALL
+    // A child level (Toddler or Kids): the kids-only rows, no Sports tab.
+    val isKids get() = maturity.isChild
     val isSignedIn get() = session != null
     private val lastProfileKey get() = "lastProfile.${session?.userId ?: ""}"
     val lastProfileId get() = Prefs.string(lastProfileKey)
@@ -209,7 +212,7 @@ object AppModel {
         val seen = HashSet<String>()
         return rows.mapNotNull { row ->
             val title = (if (row.mediaType == "movie") movies[row.mediaId] else shows[row.mediaId]) ?: return@mapNotNull null
-            title.takeIf { (!isKids || KidsFilter.allows(it.ageRating)) && seen.add(it.id) }
+            title.takeIf { maturity.allows(it.ageRating) && seen.add(it.id) }
         }
     }
 
@@ -222,7 +225,7 @@ object AppModel {
         val seen = HashSet<String>()
         val items = rows.mapNotNull { row ->
             val title = (if (row.mediaType == "movie") movies[row.mediaId] else shows[row.mediaId]) ?: return@mapNotNull null
-            if (isKids && !KidsFilter.allows(title.ageRating) || !seen.add(title.id)) return@mapNotNull null
+            if (!maturity.allows(title.ageRating) || !seen.add(title.id)) return@mapNotNull null
             ContinueItem(title, row.currentSeason, row.currentEpisode, row.positionSeconds, row.durationSeconds)
         }
         return withBackdrops(items)
@@ -268,7 +271,7 @@ object AppModel {
         val lovedMovies = loved(m.await()); val lovedShows = loved(t.await())
         val movies = runCatching { Catalog.titles(MediaKind.MOVIE, lovedMovies) }.getOrDefault(emptyMap())
         val shows = runCatching { Catalog.titles(MediaKind.TV, lovedShows) }.getOrDefault(emptyMap())
-        (lovedShows.mapNotNull { shows[it] } + lovedMovies.mapNotNull { movies[it] }).filter { !isKids || KidsFilter.allows(it.ageRating) }
+        (lovedShows.mapNotNull { shows[it] } + lovedMovies.mapNotNull { movies[it] }).filter { maturity.allows(it.ageRating) }
     }
 
     // Everything this profile rated, newest first, with its stars (1–5).
@@ -286,7 +289,7 @@ object AppModel {
             val id = row["media_id"]?.jsonPrimitive?.content?.toLongOrNull() ?: return@mapNotNull null
             map[id]?.let { it to average(JsonObject(row - "media_id")) }
         }
-        (pairs(showRows, shows) + pairs(movieRows, movies)).filter { !isKids || KidsFilter.allows(it.first.ageRating) }
+        (pairs(showRows, shows) + pairs(movieRows, movies)).filter { maturity.allows(it.first.ageRating) }
     }
 
     @Serializable private data class MediaIdRow(val mediaId: Long)

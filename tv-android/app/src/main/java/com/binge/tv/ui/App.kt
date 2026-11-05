@@ -402,7 +402,7 @@ fun ProfileAvatar(profile: AccountProfile, size: androidx.compose.ui.unit.Dp, lo
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(profile.name, style = Type.headline)
             if (locked) androidx.tv.material3.Icon(Icons.Rounded.Lock, contentDescription = "Locked with a PIN", tint = Palette.muted, modifier = Modifier.size(14.dp))
-            if (profile.isKids) Badge("Kids")
+            profile.maturity.label?.let { Badge(it) }
         }
     }
 }
