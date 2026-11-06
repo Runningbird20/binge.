@@ -47,7 +47,13 @@ data class MediaState(
     val audio: List<MediaTrack> = emptyList(),
     val text: List<MediaTrack> = emptyList(),
     val cue: String = "",
-)
+    // The native player has drawn its first picture and is playing: counts as
+    // started even before the clock passes the 0.4s a page needs to prove it.
+    val rendering: Boolean = false,
+) {
+    // Really playing: the clock moved, or the native player is showing pictures.
+    val isPlaying get() = !paused && (t > 0.4 || rendering)
+}
 
 sealed class MediaCommand(val js: String) {
     object Play : MediaCommand("play")
@@ -64,13 +70,50 @@ sealed class MediaCommand(val js: String) {
     // Live: wait for a few seconds of buffer before playing (now, and whenever it runs dry).
     object CushionStart : MediaCommand("cushion:start")
     object CushionOn : MediaCommand("cushion:on")
-    class SeekBy(s: Double) : MediaCommand("seekBy:$s")
-    class SeekTo(s: Double) : MediaCommand("seekTo:$s")
-    class AudioTrack(i: Int) : MediaCommand("audio:$i")
-    class TextTrack(i: Int) : MediaCommand("text:$i")
+    class SeekBy(val seconds: Double) : MediaCommand("seekBy:$seconds")
+    class SeekTo(val seconds: Double) : MediaCommand("seekTo:$seconds")
+    class AudioTrack(val index: Int) : MediaCommand("audio:$index")
+    class TextTrack(val index: Int) : MediaCommand("text:$index")
     class CaptionStyle(size: Int, background: String) : MediaCommand("cue:$size:$background")
     // Server subtitles shifted by the viewer (seconds, + = later).
     class CueShift(seconds: Double) : MediaCommand("cueshift:$seconds")
+}
+
+// What the player, races and Multiview drive: a server's page (WebEngine),
+// the native player (NativeEngine), or a page handing over to the native
+// player once it finds the stream (HybridEngine).
+interface Engine {
+    val view: View
+    val muted: Boolean
+    var onProcessGone: (() -> Unit)?
+    // The latest report from the main video (null when it went quiet).
+    fun poll(): MediaState?
+    fun send(command: MediaCommand)
+    fun destroy()
+}
+
+// A stream found in a server's page: its manifest and the headers the page
+// sent for it (most servers' CDNs refuse requests without their Referer/Origin).
+data class StreamSource(val url: String, val headers: Map<String, String>, val dash: Boolean)
+
+// Hosts the server pages load that only show ads, pop-unders or tracking:
+// never fetched (less to download and run on a stick's CPU, faster start).
+// Seen on the servers' pages on a Fire TV, 2026-11-06.
+object AdBlock {
+    private val hosts = listOf(
+        "doubleclick.net", "googlesyndication.com", "googleadservices.com", "google-analytics.com", "googletagmanager.com",
+        "adservice.google.com", "cloudflareinsights.com", "clarity.ms", "yandex.ru", "yandex.com", "mc.yandex.ru",
+        "adsco.re", "adexchangerapid.com", "rapidadexchange.com", "usrpubtrk.com", "usrpubtrck.com", "intellipopup.com",
+        "plumingsaeume.com", "gurlleviter.cyou", "alchemmauls.com", "hexa.su", "popads.net", "popcash.net", "propellerads.com",
+        "adsterra.com", "exoclick.com", "juicyads.com", "histats.com", "onclickads.net", "a-ads.com", "hotjar.com",
+        "facebook.net", "scorecardresearch.com", "quantserve.com", "amazon-adsystem.com", "taboola.com", "outbrain.com",
+    )
+    fun blocks(url: android.net.Uri): Boolean {
+        val host = url.host ?: return false
+        if (hosts.any { host == it || host.endsWith(".$it") }) return true
+        // The Chromecast sender framework: no casting from a TV.
+        return host == "www.gstatic.com" && url.path.orEmpty().startsWith("/cv/")
+    }
 }
 
 // The server's own player page in an Android WebView, loaded top-level, with
@@ -78,17 +121,23 @@ sealed class MediaCommand(val js: String) {
 // away from the server's site (ad redirects), the same rules as the Apple TV
 // app. Never takes focus: the remote belongs to the app.
 @SuppressLint("SetJavaScriptEnabled", "ViewConstructor")
-class WebEngine(context: Context, private var allowedHost: String?) {
-    val view: WebView = WebView(context)
+class WebEngine(context: Context, private var allowedHost: String?) : Engine {
+    override val view: WebView = WebView(context)
     private val main = Handler(Looper.getMainLooper())
     private var latest: MediaState? = null
     private var latestAt = 0L
     private var destroyed = false
     // Wanted sound state, re-sent every second (a server can replace its
     // video or frame, and new ones start muted).
-    var muted = true
+    override var muted = true
         private set
-    var onProcessGone: (() -> Unit)? = null
+    override var onProcessGone: (() -> Unit)? = null
+    // Called (on the main thread) the first time the page requests a stream
+    // manifest the native player can play.
+    var onStream: ((StreamSource) -> Unit)? = null
+    private var streamFound = false
+    // Once the native player has the stream: the page stops downloading video.
+    @Volatile var blockMedia = false
 
     init {
         live++
@@ -129,6 +178,27 @@ class WebEngine(context: Context, private var allowedHost: String?) {
                 val allowed = allowedHost ?: return false
                 val ok = host == allowed || host.endsWith(".$allowed") || allowed.endsWith(".$host")
                 return !ok
+            }
+
+            // Ads and trackers never load; the stream manifest is handed to the
+            // native player; and once it plays there, the page's own video
+            // stops downloading.
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? {
+                val url = request.url
+                val u = url.toString()
+                if (com.binge.tv.BuildConfig.DEBUG && (com.binge.tv.DebugLaunch.logAll || MANIFEST.containsMatchIn(u))) {
+                    android.util.Log.i("binge-media", "${allowedHost} ${request.method} $u headers=${request.requestHeaders}")
+                }
+                if (AdBlock.blocks(url)) return EMPTY()
+                if (blockMedia && SEGMENT.containsMatchIn(u)) return EMPTY()
+                if (!streamFound && request.method == "GET" && MANIFEST.containsMatchIn(u)) {
+                    streamFound = true
+                    val headers = request.requestHeaders.filterKeys { it.equals("Referer", true) || it.equals("Origin", true) || it.equals("User-Agent", true) }.toMutableMap()
+                    CookieManager.getInstance().getCookie(u)?.let { headers["Cookie"] = it }
+                    val source = StreamSource(u, headers, u.contains(".mpd", ignoreCase = true))
+                    main.post { if (!destroyed) onStream?.invoke(source) }
+                }
+                return null
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
@@ -210,14 +280,14 @@ class WebEngine(context: Context, private var allowedHost: String?) {
     private var lastSoundAt = 0L
 
     // The latest report from the page's main video (null when it went quiet).
-    fun poll(): MediaState? {
+    override fun poll(): MediaState? {
         if (destroyed) return null
         val now = System.currentTimeMillis()
         if (now - lastSoundAt > 1000) { lastSoundAt = now; run(if (muted) "mute" else "unmute") }
         return latest?.takeIf { now - latestAt < 3000 }
     }
 
-    fun send(command: MediaCommand) {
+    override fun send(command: MediaCommand) {
         when (command) {
             MediaCommand.Mute, MediaCommand.Stop -> muted = true
             MediaCommand.Unmute -> muted = false
@@ -231,7 +301,7 @@ class WebEngine(context: Context, private var allowedHost: String?) {
         view.evaluateJavascript("window.__bingeRun && window.__bingeRun('$js')", null)
     }
 
-    fun destroy() {
+    override fun destroy() {
         if (destroyed) return
         destroyed = true
         live = maxOf(0, live - 1)
@@ -246,6 +316,11 @@ class WebEngine(context: Context, private var allowedHost: String?) {
         var live = 0
             private set
         fun hostOf(url: String): String? = Uri.parse(url).host
+        // A stream manifest: HLS/DASH by extension, or CineSrc's /api/playlist/.
+        private val MANIFEST = Regex("\\.(m3u8|mpd)(\\?|$)|cinesrc\\.st/api/playlist/", RegexOption.IGNORE_CASE)
+        // Video/audio segments (any server): blocked once the native player has the stream.
+        private val SEGMENT = Regex("\\.(ts|m4s|m4v|m4a|aac)(\\?|$)|/seg-|/chunk-|init[^/]*\\.mp4", RegexOption.IGNORE_CASE)
+        private fun EMPTY() = android.webkit.WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
     }
 }
 
