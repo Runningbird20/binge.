@@ -34,10 +34,14 @@ describe('registry', () => {
       expect(typeof provider.readLinks).toBe('function');
       expect(provider.rows.length).toBeGreaterThan(0);
       provider.rows.forEach((row) => expect(typeof row.load).toBe('function'));
-      if (provider.reading === 'in-app') {
-        expect(typeof provider.getChapters).toBe('function');
-        expect(typeof provider.getPages).toBe('function');
-      }
+    });
+  });
+  it('in-app providers can list chapters and pages', () => {
+    const inApp = PROVIDER_LIST.filter((provider) => provider.reading === 'in-app');
+    expect(inApp.length).toBeGreaterThan(0);
+    inApp.forEach((provider) => {
+      expect(typeof provider.getChapters).toBe('function');
+      expect(typeof provider.getPages).toBe('function');
     });
   });
   it('old library entries without a provider open with MangaDex', () => {

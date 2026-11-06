@@ -3,6 +3,7 @@
 The binge. website's phone layout in a full-screen WebView (`MainActivity.kt`), plus what a browser can't do for it:
 
 - **Every pop-up and tab redirect from the video servers' players is refused**, as in the TV apps. On the website only VidRift and CineSrc can be sandboxed.
+- **binge. links open in the app**, from messages, email or the browser: a verified App Link. The site's `public/.well-known/assetlinks.json` lists the SHA-256 of the key the APK is signed with, so a build signed with another key opens them in the browser instead.
 - **Links to other sites open in the phone's browser.**
 - **Files the site saves go to Downloads:** Download my data, the calendar's `.ics`, the Wrapped card. A calendar file or picture also opens straight away. (`PageScript.kt` reads them, because a WebView can't download `blob:` links itself.)
 - **Video servers see plain Chrome.** The WebView drops `; wv` and `X-Requested-With`, as the Fire TV app does, so players don't refuse it.
@@ -22,4 +23,4 @@ Needs JDK 17+, the Android SDK (`ANDROID_HOME` or `sdk.dir` in `local.properties
 
 ## Install
 
-Copy `binge.apk` to the phone, open it, and allow installing from that app when Android asks. Or `adb install -r binge.apk`.
+Download the newest build on the phone from https://github.com/Runningbird20/binge./releases/download/mobile-latest/binge.apk (CI publishes it when a `mobile-v*` tag is pushed, `.github/workflows/mobile-apps.yml`), open it, and allow installing from your browser when Android asks. Or copy a `binge.apk` you built to the phone and open it the same way, or `adb install -r binge.apk`.

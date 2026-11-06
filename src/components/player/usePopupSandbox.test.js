@@ -10,8 +10,8 @@ afterEach(() => jest.useRealTimers());
 
 function setup(props = {}) {
   const playbackRef = { current: { time: 0 } };
-  const hook = renderHook((current) => usePopupSandbox({ provider: 'vidrift', itemId: 1, season: 1, episode: 1, playbackRef, ...current }), { initialProps: props });
-  return { ...hook, playbackRef };
+  const view = renderHook((current) => usePopupSandbox({ provider: 'vidrift', itemId: 1, season: 1, episode: 1, playbackRef, ...current }), { initialProps: props });
+  return { ...view, playbackRef };
 }
 
 test('a server that plays sandboxed stays sandboxed', () => {

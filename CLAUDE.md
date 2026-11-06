@@ -27,17 +27,18 @@ npm run start:client      # CRA dev server only (port 3000, proxies /api to :500
 npm run server            # Express server only (server/index.js, port 5001)
 npm run build             # production build (react-scripts build) — CI=true build treats warnings as errors
 npm test                  # Jest/RTL in watch mode
-npm run lint              # ESLint on server/, api/, scripts/ (the build lints src/)
+npm run lint              # ESLint on server/, api/, scripts/, src/ and e2e/, tests included (warnings fail it)
 CI=true npx react-scripts test --watchAll=false                    # run the full suite once, non-interactive
 CI=true npx react-scripts test --watchAll=false src/pages/Books.test.js    # run a single test file
 node --test server/data-access/*.test.js server/routes/*.test.js    # server tests (CI runs these too)
 npm run test:e2e          # Playwright, local only (see Testing notes)
 ```
 
-ESLint uses the `react-app` config in `package.json`.
-- **`src/`** is linted by `react-scripts build`. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
-- **`server/`, `api/`, `scripts/`** are linted by `npm run lint` (`--max-warnings=0`; an override parses them as CommonJS scripts). The build never looks at them.
-- Test files aren't linted by either.
+ESLint uses the `react-app` config in `package.json`. `npm run lint` (`--max-warnings=0`, run by CI) covers everything; the build only sees part of it.
+- **`src/`** is also linted by `react-scripts build`, but only the files the app imports. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
+- **Test files in `src/`** get the `react-app/jest` rules (Jest + Testing Library) through an override scoped to `src/`. Query by role, label, text or title, not with `querySelector`/`closest`/`container`. Keep one assertion per `waitFor`, and put imports above the `jest.mock` calls (babel-jest hoists the mocks anyway).
+- **`e2e/`** is Playwright, so the Jest rules don't apply there (they misread `page.getByRole` and `expect(locator, message)`).
+- **`server/`, `api/`, `scripts/`** are parsed as CommonJS scripts (an override). The build never looks at them.
 
 **Keeping local code current.** Twice the Movies/TV pages came up empty because the local code was the Neon-era version: once from an API server started before a `git pull`, once from a branch cut from a stale local `main`. That database no longer accepts logins. Three guards now:
 - **`npm run server` runs `node --watch`**, so a pull or branch switch restarts it with the new code.
@@ -80,7 +81,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 ### Two databases: Turso = media catalog, Supabase = accounts + user data
 
 Nothing lives in both (see `docs/database-split.md`). The `supabase` client exported by `src/utils/supabase.js` is split:
-- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only. It's also served at its Neon-era name, `/api/neon-data`, because TV builds from before 2026-11 call that; drop it once those are gone.
+- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only. Its Neon-era name, `/api/neon-data`, is gone: a TV build from before 2026-11 calls it and gets no catalog, so reinstall it.
 - Everything else is real Supabase.
 
 Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/catalog/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
@@ -195,20 +196,27 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 - Cards and title/book popups are single responsive components (`TitleCard`, `MediaDetailsModal`, `BookDetailsModal`). The old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone.
 - **The player is the one split.** `EmbedPlayer.js` renders `components/player/MobilePlayer.js` or `DesktopPlayer.js`, chosen by `useDeviceType().isMobile` (`src/hooks/useDeviceType.js`). A phone is a screen whose short side is ≤ 768 px: a landscape phone counts, a tablet doesn't, and TV mode never does. When you change a player control, change both layouts; they don't share markup.
+- **The player is a black stage, and nothing of ours goes on the video.** The server's own controls are inside its iframe, along its top and bottom edges, so anything over the video covers them.
+  - **Computer** (`DesktopPlayer`): our bar above the video (title, the "S1 · E1" episode picker, Mark as watched, Servers, Close), the video as big as fits at 16:9, and one quiet line for notices under it. Only in our fullscreen (F) does the bar go over the video, on hover.
+  - **Phone** (`MobilePlayer`): the same in portrait. In landscape our buttons are a narrow column beside the video, in the space a 16:9 picture leaves.
+  - Switch notices clear themselves after 15s (`NOTICE_SECONDS`), held while the pointer or focus is on them.
+  - **Closing:** the X closes the player and the title popup it was opened from, back to the page underneath. Escape and a TV remote's Back (`onBack`) step back to the title popup, or close both when the popup was opened just to play (Continue Watching, previews).
+  - **Never close a popup with a plain `history.back()`.** A server's own navigations inside its iframe (its Next button, its server picker) add entries to the same browser history, so one step back only stepped the server back (checked in Chromium). `MediaOverlay` closes with `goBackTo` (`utils/historyBack.js`), which jumps straight to the entry the popup was opened from (Navigation API), or back past every entry added since.
 - **Phones:**
   - The bottom nav is Home · Sports · Browse · Search · Me. Browse and Me open `BottomSheet`s, and `html.has-bottom-nav` hides the top search/profile.
   - Title/book sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
   - The player's server/audio/subtitle pickers are bottom sheets (`MobilePlaybackPickers`).
   - Fullscreen + landscape lock only works on Android; iPhones get a "turn your phone" hint.
-- **Mini-player:**
-  - On computers it's a draggable corner PiP (`MiniPlayerWidget`); on phones, a dock.
-  - Both keep saving positions from the embed's messages (`utils/playbackMessages.js`).
-  - `MiniPlayerProvider` must sit inside `BrowserRouter`, because Expand navigates.
 - **Keyboard** (`components/KeyboardShortcuts.js`, mounted in `AppShell`): spatial arrow-key focus over `.st-card, .st-game, …` (scoped to the open dialog), `/` for search, `?` for help. It stands down while an element with `data-embed-player` is mounted (the player owns the arrows).
 - **Mouse-only rule:** every horizontal scroller must have real ‹ › buttons, not just swipe/trackpad scrolling. That means `TitleRow`, `BrowseHero`, `GenreScrollBar`, `CastRow`, and `HScroll` for anything new.
 - **PWA:**
   - Manifest `shortcuts`: Continue Watching (`/home?jump=continue`), Sports, Search.
   - `share_target` → `/share` (`pages/ShareTarget.js`): binge./TMDB/IMDb links open the title; anything else searches.
+  - **Install button** (`InstallApp`, the phone header's top right; logic in `utils/installApp.js`). Its sheet offers two ways to have binge. as an app, each saying what it gets you:
+    - **Add to Home Screen:** Chrome's own dialog (the `beforeinstallprompt` offer is held from startup, `captureInstallPrompt` in `App.js`), else where to find it in the browser menu; on iPhone, the Share steps.
+    - **The phone apps:** `binge.apk` / `binge.ipa` from the `mobile-latest` release (`APP_DOWNLOADS`).
+    - **Hidden** on computers, in a Home Screen install (`display-mode: standalone`) and inside the phone apps (`BingeApp/` in the user agent).
+    - **The sheet is portaled to `document.body`.** The phone header's `backdrop-filter` makes it the containing block for `position: fixed`, so an overlay rendered inside the header covers only the header.
 - **Website TV mode** (for smart-TV browsers; the TV apps don't use it):
   - `src/utils/tvMode.js` turns on `html.tv-mode` for `BingeTV` in the UA, TV browser UAs, or `?tv=1` (`?tv=0` turns it off; remembered per device).
   - `useDeviceType` reports desktop in TV mode. A 1080p TV WebView is 960×540 CSS px and would otherwise get the phone layout.
@@ -396,7 +404,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 
   Server health (see Admin) and the admin's on/off switches also apply.
 - **Code layout.** `EmbedPlayer.js` is wiring only. The logic is hooks in `src/components/player/` (`useServerChoice`, `useFailover`, `usePlaybackMessages`, `useUpNext`, `useIntroMarkers`, `usePositionSync`…) and the layouts `MobilePlayer`/`DesktopPlayer`. Behaviour is pinned by `EmbedPlayer.test.js` snapshots.
-- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The "Audio & Subtitles" panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
+- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
 - **Failover.**
   - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy `PLAYER_EVENT`) are confirmed working by real playback rather than a timer.
   - Server catalogs differ per title: a server can load fine but not have that episode, identical on the provider's own site. So if an automatically chosen `events` server reports no playback time within `FAILOVER_SECONDS`, it's marked dead for that title and the next ranked server loads, with a notice and a "try it anyway" undo.
@@ -415,12 +423,17 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
   - **Which servers.** Tested 2026-11-05 in Chrome: only VidRift and CineSrc play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
   - **The safety net.** A sandboxed server that reports playback but shows none after 12s reloads unsandboxed. If it then plays, the refusal is remembered on that device for 14 days. A server without the flag is only tried sandboxed if it reports playback.
-  - **Also sandboxed:** the next-episode preload and the mini player use the same decision.
+  - **Also sandboxed:** the next-episode preload uses the same decision.
   - **The server lists mark them "No pop-ups"** (`NoPopupsTag` in `PlaybackOptions.js`, a shield on the phone's landscape server chips). It's the same `popupsBlocked()` the player uses, so a refusal this device learned drops the mark. For the server playing now it shows what happened on this load (`popupsBlockedNow`).
   - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
   - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.
 
-**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs. The player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
+**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it.
+- **Episode changes inside VidRift** (its Next button, Episodes menu or own Up Next) are followed: it posts `vidrift:episode` just before switching, and every VidRift message carries `tmdbId`, `season` and `episode`, which also catches a missed switch (`useServerEpisode`, `readServerEpisode`).
+- The site moves to that episode without reloading the player: the frame keeps the URL it loaded until a reload of ours (another episode, server or resume), and the start position isn't re-sent to it.
+- For 10s after a switch, the old episode's late progress messages are ignored.
+
+The rest of Up Next: the player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
 
 **Intro/credits markers** (`utils/episodeMarkers.js`, TV `Data/EpisodeMarkers.swift`; table `episode_markers` + the `episode_marker_summary` RPC; migration `20261014120000_markers_shares.sql`, APPLIED). We don't own the video files, so markers come from two places:
 - **AniSkip, for anime.** The MAL id comes via AniList, which must confirm a Japanese title of that exact name; the catalog's `original_language` is often null.
@@ -565,10 +578,11 @@ Rules that apply every time:
 
 ## Phone apps (`mobile-android/`, `mobile-ios/`)
 
-Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `mobile-android/scripts/build-apk.sh` and `mobile-ios/scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`.
+Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `mobile-android/scripts/build-apk.sh` and `mobile-ios/scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`. CI builds both (`mobile-apps.yml`); a `mobile-v*` tag publishes them (see Testing notes).
 - **What they add over the browser:**
   - **Every pop-up and tab redirect from the players is refused.** Players' frames may load anything inside themselves, but only binge.'s own top-level page may open windows or leave the site. Its links to other sites open in the phone's browser.
   - **Alerts from other origins' frames (ad traps) are dropped.**
+  - **binge. links open in the Android app** (a verified App Link): `autoVerify` in its manifest + `public/.well-known/assetlinks.json`, which must list the SHA-256 of the key the APK is signed with (the Android debug key; `mobile-apps.yml` warns when a build's isn't listed). Not on iOS yet: Associated Domains need a paid Apple account.
   - **Files saved through `<a download>` blob links reach the phone.** Android saves them to Downloads; iOS opens the share sheet via `WKDownload`.
   - **The web views present as plain Chrome / Safari** (Android drops `; wv` and `X-Requested-With`, as Fire TV does). The UA ends in `BingeApp/1.0`, which must never contain `BingeTV`, the website's TV-mode trigger.
 - **What they don't have:** web push (web views don't get it), and a sign-in shared with the browser.
@@ -653,6 +667,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 **TV and data workflows:**
 - **Apple TV.** `apple-tv.yml` builds the Apple TV app and runs its unit suites on a macOS runner with the newest Xcode. `tv-apple/scripts/ci-simulator.sh` boots a simulator, and `Secrets.xcconfig` is written from the repo variables because `SmokeTests` needs the keys. `run-tests.sh` exits with xcodebuild's status.
 - **Fire TV.** `tv-apk.yml` runs on PRs and pushes to main that touch `tv-android/`. A `tv-v*` tag publishes the APK as `binge-tv.apk` on a GitHub Release, signed with the `TV_DEBUG_KEYSTORE` secret so it installs over earlier builds.
+- **Phone apps.** `mobile-apps.yml` builds `binge.apk` (Linux, same signing secret) and an unsigned `binge.ipa` (macOS) on PRs and pushes to main that touch `mobile-android/` or `mobile-ios/`. A `mobile-v*` tag puts both on a Release of that name and replaces the `mobile-latest` release, the fixed download address (`releases/download/mobile-latest/binge.apk`). Phone releases are never marked "latest": the Fire TV stick installs from `releases/latest/download/binge-tv.apk`.
 - **Migrations.** `supabase-migrations.yml` (PRs touching migrations + the 1st of every month) runs `scripts/check-supabase-migrations.js`: every public table/view/function the migrations leave behind must be exposed by Supabase's REST API. Anything removed by hand must also be dropped in a migration (see `20261029120000_record_removed_tables.sql`), or the check expects it.
 - **Weekly (Mondays): database split.** `database-split.yml` checks that the site serves the catalog, and runs `scripts/check-database-split.js`: Turso holds only the catalog, and Supabase serves none of it. Keep its `MEDIA` list in sync with `turso/schema.sql`. It opens or updates an issue when it fails.
 - **Catalog workflows** (`sync-tmdb.yml`, `sync-languages.yml`, `catalog-health.yml`, `database-split.yml`) need the `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` secrets. The syncs end with `turso-catalog.js refresh`.

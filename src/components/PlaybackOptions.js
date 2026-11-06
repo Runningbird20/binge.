@@ -24,9 +24,10 @@ export function NoPopupsTag() {
 
 const NO_POPUPS_HINT = 'Servers marked No pop-ups play with their pop-ups and redirects blocked. The others won’t play that way.';
 
-// Netflix-style "Audio & Subtitles" panel for the embed player: pick audio
-// and subtitle language without leaving the video, and see every server
-// ranked for those choices (with why it's recommended).
+// The player's "Servers" panel: pick audio and subtitle language without
+// leaving the video, and see every server ranked for those choices (with why
+// it's recommended). Called Servers, not "Audio & Subtitles", because most
+// servers have their own menu by that name inside the video.
 export function PlaybackOptionsPanel({
   prefs,
   onPrefsChange,
@@ -172,12 +173,12 @@ export default function PlaybackOptions(props) {
     <div className="st-pb" ref={wrapRef}>
       <button
         type="button"
-        className="st-pb-trigger"
+        className="player-pill st-pb-trigger"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <Subtitles size={18} weight="bold" /> Audio &amp; Subtitles
+        <HardDrives size={18} weight="bold" aria-hidden="true" /> Servers
       </button>
       {open && <PlaybackOptionsPanel {...props} onClose={() => setOpen(false)} />}
     </div>

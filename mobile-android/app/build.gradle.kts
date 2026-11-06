@@ -20,7 +20,8 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "BINGE_URL", "\"$bingeUrl\"")
-        // Links to the site open in the app (Settings › Open by default › Open supported links).
+        // Links to the site open in the app: a verified App Link (the manifest's
+        // autoVerify + the site's public/.well-known/assetlinks.json).
         manifestPlaceholders["bingeHost"] = URI(bingeUrl).host
     }
 

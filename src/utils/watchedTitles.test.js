@@ -1,3 +1,6 @@
+import * as supabaseData from './supabaseData';
+import { loadWatchedKeys, resetWatchedKeys, titleKey, withoutWatched } from './watchedTitles';
+
 let mockTables = {};
 
 // A tiny stand-in for the Supabase query builder: honours eq/in filters and
@@ -26,9 +29,6 @@ jest.mock('./supabase', () => ({
     };
   },
 }));
-
-import * as supabaseData from './supabaseData';
-import { loadWatchedKeys, resetWatchedKeys, titleKey, withoutWatched } from './watchedTitles';
 
 afterEach(() => {
   jest.restoreAllMocks();

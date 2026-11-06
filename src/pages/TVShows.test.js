@@ -66,11 +66,10 @@ test('uses a genre chip filter bar on the TV shows page', async () => {
   const genreBar = screen.getByRole('group', { name: /series genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /crime & mystery/i }));
 
-  await waitFor(() => {
-    expect(screen.getByText('Dark')).toBeInTheDocument();
-    expect(screen.queryByText('Blue Eye Samurai')).not.toBeInTheDocument();
-    expect(screen.queryByText('The Bear')).not.toBeInTheDocument();
-  });
+  await waitFor(() => expect(screen.queryByText('The Bear')).not.toBeInTheDocument());
+  expect(await screen.findByText('Dark')).toBeInTheDocument();
+  expect(screen.queryByText('Blue Eye Samurai')).not.toBeInTheDocument();
+  expect(screen.queryByText('The Bear')).not.toBeInTheDocument();
 
   useAuthSpy.mockRestore();
   tvSegmentSpy.mockRestore();

@@ -117,15 +117,13 @@ test('falls back to a placeholder when a book cover image fails to load', async 
 
   const duneButton = await screen.findByRole('button', { name: /open details for dune/i });
   // The cover is decorative (alt=""); the button carries the title.
-  const coverImage = duneButton.querySelector('img');
-  expect(coverImage).not.toBeNull();
+  const coverImage = within(duneButton).getByRole('presentation');
 
   fireEvent.error(coverImage);
 
-  await waitFor(() => {
-    expect(duneButton.querySelector('img')).toBeNull();
-    expect(within(duneButton).getByText('D')).toBeInTheDocument();
-  });
+  // The cover gives way to the title's first letter.
+  expect(await within(duneButton).findByText('D')).toBeInTheDocument();
+  expect(within(duneButton).queryByRole('presentation')).toBeNull();
 
   useAuthSpy.mockRestore();
   booksPageSpy.mockRestore();
@@ -193,19 +191,16 @@ test('uses a genre chip filter bar on the books page', async () => {
   const genreBar = screen.getByRole('group', { name: /book genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument();
-  });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument());
+  expect(await screen.findByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /open details for emma/i })).not.toBeInTheDocument();
 
   await userEvent.click(within(genreBar).getByRole('button', { name: /^featured$/i }));
 
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open details for emma/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
-  });
+  expect(await screen.findByRole('button', { name: /open details for emma/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /open details for dune/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /open details for project hail mary/i })).toBeInTheDocument();
 
   useAuthSpy.mockRestore();
   booksPageSpy.mockRestore();
