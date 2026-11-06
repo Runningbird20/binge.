@@ -46,7 +46,7 @@ test('finished, unrated titles get their own Watched tab between My List and Rat
   expect(screen.queryByText('Old Watch')).toBeNull();
 
   fireEvent.click(tab('Watched'));
-  const titles = [...document.querySelectorAll('.st-card-title')].map((el) => el.textContent);
+  const titles = screen.getAllByText(/^(Planned Movie|Watching Show|Old Watch|Finished Book)$/).map((el) => el.textContent);
   expect(titles).toEqual(['Finished Book', 'Old Watch']); // newest first
   expect(screen.getByText(/rate one to move it to Ratings & Reviews/)).toBeInTheDocument();
   expect(screen.queryByText('Planned Movie')).toBeNull();
