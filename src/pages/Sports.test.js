@@ -1,3 +1,11 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import Sports from './Sports';
+import { loadSportsStreams } from '../utils/sportsProviders';
+import { fetchScoreboards } from '../utils/liveScores';
+import { listFollowedTeams } from '../utils/teams';
+import { isHostReachable, reachabilityMap } from '../utils/hostReachability';
+import { setMockSearchParams } from '../testUtils/pageTestSetup';
+
 jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
 jest.mock('../components/Navbar', () => () => null);
 jest.mock('../components/FantasyBoard', () => () => null);
@@ -6,14 +14,6 @@ jest.mock('../utils/liveScores', () => ({ ...jest.requireActual('../utils/liveSc
 jest.mock('../utils/teams', () => ({ ...jest.requireActual('../utils/teams'), listFollowedTeams: jest.fn() }));
 // jsdom has no network, so the real probe would call every server blocked.
 jest.mock('../utils/hostReachability', () => ({ ...jest.requireActual('../utils/hostReachability'), reachabilityMap: jest.fn(), isHostReachable: jest.fn() }));
-
-import { render, screen, waitFor } from '@testing-library/react';
-import Sports from './Sports';
-import { loadSportsStreams } from '../utils/sportsProviders';
-import { fetchScoreboards } from '../utils/liveScores';
-import { listFollowedTeams } from '../utils/teams';
-import { isHostReachable, reachabilityMap } from '../utils/hostReachability';
-import { setMockSearchParams } from '../testUtils/pageTestSetup';
 
 const now = Math.floor(Date.now() / 1000);
 const GAME = {
@@ -33,7 +33,8 @@ const OTHER = {
   name: 'Knicks vs Bulls',
   providers: [{ id: 'ppv', label: 'PPV', embedUrl: 'https://example.com/embed/knicks-bulls' }],
 };
-const frames = () => [...document.querySelectorAll('iframe')].map((frame) => frame.getAttribute('src'));
+// The game players: iframes titled with the game's name.
+const frames = () => screen.queryAllByTitle(/ vs /).filter((el) => el.tagName === 'IFRAME').map((frame) => frame.getAttribute('src'));
 
 // Implementations go here, not in jest.mock: CRA's Jest config resets mocks before each test.
 beforeEach(() => {

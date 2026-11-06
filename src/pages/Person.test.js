@@ -28,9 +28,10 @@ test('shows who they are and their work on binge., for this profile’s maturity
   expect(screen.getByRole('region', { name: 'Series with Matt Damon' })).toHaveTextContent('Project Greenlight');
   // A long biography is trimmed until asked for.
   const toggle = screen.getByRole('button', { name: 'Read more' });
-  expect(document.querySelector('.person-bio')).toHaveClass('clamped');
+  const bio = screen.getByText(/^Matthew Paige Damon is an American actor\./);
+  expect(bio).toHaveClass('clamped');
   fireEvent.click(toggle);
-  expect(document.querySelector('.person-bio')).not.toHaveClass('clamped');
+  expect(bio).not.toHaveClass('clamped');
   expect(toggle).toHaveTextContent('Show less');
 });
 

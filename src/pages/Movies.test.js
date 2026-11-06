@@ -118,11 +118,10 @@ test('uses a genre chip filter bar on the movies page', async () => {
   const genreBar = screen.getByRole('group', { name: /movie genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
-  await waitFor(() => {
-    expect(screen.getByText('Arrival')).toBeInTheDocument();
-    expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
-    expect(screen.queryByText('Heat')).not.toBeInTheDocument();
-  });
+  await waitFor(() => expect(screen.queryByText('Heat')).not.toBeInTheDocument());
+  expect(await screen.findByText('Arrival')).toBeInTheDocument();
+  expect(await screen.findByText('Mad Max: Fury Road')).toBeInTheDocument();
+  expect(screen.queryByText('Heat')).not.toBeInTheDocument();
 
   useAuthSpy.mockRestore();
   movieSegmentSpy.mockRestore();

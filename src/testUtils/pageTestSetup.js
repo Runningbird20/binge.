@@ -14,12 +14,15 @@ let searchParams = new URLSearchParams();
 // What useSearchParams() returns for the next render, e.g. '?view=all'.
 export function setMockSearchParams(query = '') { searchParams = new URLSearchParams(query); }
 
+// The href a real <Link> renders for a string or { pathname, search, hash } `to`.
+const hrefOf = (to) => (typeof to === 'string' ? to : `${to?.pathname || ''}${to?.search || ''}${to?.hash || ''}`) || '/';
+
 export const routerMock = {
   __esModule: true,
-  Link: ({ children, to, ...props }) => <a href={typeof to === 'string' ? to : '#'} {...props}>{children}</a>,
+  Link: ({ children, to, ...props }) => <a href={hrefOf(to)} {...props}>{children}</a>,
   NavLink: ({ children, className, to, ...props }) => (
     <a
-      href={typeof to === 'string' ? to : '#'}
+      href={hrefOf(to)}
       className={typeof className === 'function' ? className({ isActive: false }) : className}
       {...props}
     >

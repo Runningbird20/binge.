@@ -1,9 +1,9 @@
-jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
-
 import { act, render, screen } from '@testing-library/react';
 import * as supabaseData from '../utils/supabaseData';
 import { resetWatchedKeys } from '../utils/watchedTitles';
 import TitleRow from './TitleRow';
+
+jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
 
 const items = Array.from({ length: 12 }, (_, index) => ({ media_type: 'movie', id: index + 1, title: `Movie ${index + 1}` }));
 const renderItem = (item) => <span>{item.title}</span>;

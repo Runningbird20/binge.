@@ -27,17 +27,18 @@ npm run start:client      # CRA dev server only (port 3000, proxies /api to :500
 npm run server            # Express server only (server/index.js, port 5001)
 npm run build             # production build (react-scripts build) — CI=true build treats warnings as errors
 npm test                  # Jest/RTL in watch mode
-npm run lint              # ESLint on server/, api/, scripts/ (the build lints src/)
+npm run lint              # ESLint on server/, api/, scripts/, src/ and e2e/, tests included (warnings fail it)
 CI=true npx react-scripts test --watchAll=false                    # run the full suite once, non-interactive
 CI=true npx react-scripts test --watchAll=false src/pages/Books.test.js    # run a single test file
 node --test server/data-access/*.test.js server/routes/*.test.js    # server tests (CI runs these too)
 npm run test:e2e          # Playwright, local only (see Testing notes)
 ```
 
-ESLint uses the `react-app` config in `package.json`.
-- **`src/`** is linted by `react-scripts build`. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
-- **`server/`, `api/`, `scripts/`** are linted by `npm run lint` (`--max-warnings=0`; an override parses them as CommonJS scripts). The build never looks at them.
-- Test files aren't linted by either.
+ESLint uses the `react-app` config in `package.json`. `npm run lint` (`--max-warnings=0`, run by CI) covers everything; the build only sees part of it.
+- **`src/`** is also linted by `react-scripts build`, but only the files the app imports. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
+- **Test files in `src/`** get the `react-app/jest` rules (Jest + Testing Library) through an override scoped to `src/`. Query by role, label, text or title, not with `querySelector`/`closest`/`container`. Keep one assertion per `waitFor`, and put imports above the `jest.mock` calls (babel-jest hoists the mocks anyway).
+- **`e2e/`** is Playwright, so the Jest rules don't apply there (they misread `page.getByRole` and `expect(locator, message)`).
+- **`server/`, `api/`, `scripts/`** are parsed as CommonJS scripts (an override). The build never looks at them.
 
 **Keeping local code current.** Twice the Movies/TV pages came up empty because the local code was the Neon-era version: once from an API server started before a `git pull`, once from a branch cut from a stale local `main`. That database no longer accepts logins. Three guards now:
 - **`npm run server` runs `node --watch`**, so a pull or branch switch restarts it with the new code.

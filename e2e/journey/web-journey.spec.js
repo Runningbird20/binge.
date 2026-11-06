@@ -14,7 +14,6 @@ const path = require('path');
 const { test, expect } = require('@playwright/test');
 
 const SHOW = { id: 45424, name: 'Breaking Bad' }; // S1E1 is 58 minutes
-const MOVIE_QUERY = 'Fight Club';
 const SHOTS = path.join(__dirname, '..', '..', 'e2e-report', 'journey');
 const REPORT = path.join(SHOTS, 'report.jsonl');
 

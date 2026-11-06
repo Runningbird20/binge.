@@ -98,11 +98,9 @@ test('shows an account settings gear link for signed-in users', async () => {
 
   expect(screen.getByRole('link', { name: /account settings/i })).toBeInTheDocument();
 
-  await waitFor(() => {
-    expect(ratingsSpy).toHaveBeenCalled();
-    expect(watchlistSpy).toHaveBeenCalled();
-    expect(continueWatchingSpy).toHaveBeenCalled();
-  });
+  await waitFor(() => expect(ratingsSpy).toHaveBeenCalled());
+  await waitFor(() => expect(watchlistSpy).toHaveBeenCalled());
+  await waitFor(() => expect(continueWatchingSpy).toHaveBeenCalled());
 
   ratingsSpy.mockRestore();
   watchlistSpy.mockRestore();

@@ -77,7 +77,8 @@ async function setup({ item = SHOW, mediaType = 'tv_show', mobile = false, lands
   await flush();
   return { ...view, onClose };
 }
-const frame = () => document.querySelector('iframe:not(.st-preload-frame)');
+// The server's player (titled "Watch …"), not the next episode's hidden preload frame.
+const frame = () => screen.getByTitle(/^Watch /);
 function post(data) {
   act(() => {
     window.dispatchEvent(new MessageEvent('message', { data, source: frame().contentWindow }));
@@ -137,22 +138,22 @@ test('phone TV player, portrait and landscape with the episode picker open', asy
 });
 
 test('picking an episode from the desktop popover loads it', async () => {
-  const { container } = await setup();
+  await setup();
   fireEvent.click(screen.getByRole('button', { name: /S1 · E1/ }));
-  expect(container.querySelector('.player-ep-popover').outerHTML).toMatchSnapshot();
+  expect(screen.getByRole('dialog', { name: 'Season and episode selector' }).outerHTML).toMatchSnapshot();
   fireEvent.click(screen.getByRole('button', { name: '3' }));
   await flush();
   expect(frame().getAttribute('src')).toMatchSnapshot();
-  expect(container.querySelector('.player-ep-popover')).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Season and episode selector' })).toBeNull();
 });
 
 test('Up Next appears near the end and plays the next episode after the countdown', async () => {
-  const { container } = await setup({ watched: [] });
+  await setup({ watched: [] });
   const firstSrc = frame().getAttribute('src');
   post(vidrift(100));
   post(vidrift(2590));
   await flush(1000);
-  expect(container.querySelector('.st-upnext').outerHTML).toMatchSnapshot();
+  expect(screen.getByRole('dialog', { name: 'Up next' }).outerHTML).toMatchSnapshot();
   for (let i = 0; i < 11; i += 1) await flush(1000);
   expect(markEpisodeWatched).toHaveBeenCalledWith({ mediaId: 42, season: 1, episode: 1 });
   expect(frame().getAttribute('src')).not.toBe(firstSrc);
@@ -160,22 +161,22 @@ test('Up Next appears near the end and plays the next episode after the countdow
 });
 
 test('a server that never reports playback fails over to the next one', async () => {
-  const { container } = await setup();
+  await setup();
   const before = frame().getAttribute('src');
   await flush(25000);
   expect(submitStreamReport).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 42, works: false }));
-  expect(container.querySelector('.st-failover').textContent).toMatchSnapshot();
+  expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(frame().getAttribute('src')).not.toBe(before);
 });
 
 test('buffering offers a switch, then switches on its own', async () => {
-  const { container } = await setup();
+  await setup();
   post(vidrift(100));
   post({ type: 'vidrift:unpaused', currentTime: 100 });
   await flush(14000);
-  expect(container.querySelector('.st-failover--stall').textContent).toMatchSnapshot('offer');
+  expect(screen.getByRole('status').textContent).toMatchSnapshot('offer');
   await flush(18000);
-  expect(container.querySelector('.st-failover').textContent).toMatchSnapshot('switched');
+  expect(screen.getByRole('status').textContent).toMatchSnapshot('switched');
 });
 
 test('minimize hands the current second to the mini-player and closes', async () => {
@@ -214,34 +215,37 @@ test('opening the player closes the mini-player', async () => {
 });
 
 test('seen playback (PLAYER_EVENT) cancels failover; a frozen clock is buffering instead', async () => {
-  const { container } = await setup({ item: MOVIE, mediaType: 'movie' });
+  await setup({ item: MOVIE, mediaType: 'movie' });
   const before = frame().getAttribute('src');
   post(progress(50, 6000, 'play'));
   await flush(25000);
-  expect(container.querySelector('.st-failover:not(.st-failover--stall)')).toBeNull();
-  expect(container.querySelector('.st-failover--stall').textContent).toMatchSnapshot();
+  // One notice only: the buffering offer, no failover.
+  expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(frame().getAttribute('src')).toBe(before);
 });
 
 test('Skip intro shows inside the intro and jumps to its end', async () => {
   episodeMarkers.fetchEpisodeMarkers.mockResolvedValue({ intro: { start: 60, end: 150 } });
-  const { container } = await setup();
+  await setup();
   const before = frame().getAttribute('src');
   post(vidrift(70));
   await flush(500);
-  expect(container.querySelector('.st-skip-intro-wrap').outerHTML).toMatchSnapshot();
-  fireEvent.click(screen.getByRole('button', { name: /^Skip intro$/ }));
+  const skip = screen.getByRole('button', { name: /^Skip intro$/ });
+  const hide = screen.getByRole('button', { name: 'Hide Skip intro' });
+  expect([skip.outerHTML, hide.outerHTML]).toMatchSnapshot();
+  fireEvent.click(skip);
   await flush();
-  expect(container.querySelector('.st-skip-intro-wrap')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Skip intro$/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Hide Skip intro' })).toBeNull();
   expect(frame().getAttribute('src')).not.toBe(before);
   expect(frame().getAttribute('src')).toMatchSnapshot();
 });
 
 test('a server playing a different-length video is replaced', async () => {
   expectedRuntimeSeconds.mockResolvedValue(2700);
-  const { container } = await setup();
+  await setup();
   post(vidrift(100, 900));
   await flush();
-  expect(container.querySelector('.st-failover').textContent).toMatchSnapshot();
+  expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(submitStreamReport).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 42, works: false }));
 });

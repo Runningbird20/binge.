@@ -1,6 +1,11 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Skip intro shows inside the intro and jumps to its end 1`] = `"<div class=\\"st-skip-intro-wrap\\"><button type=\\"button\\" class=\\"st-skip-intro\\"><svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"18\\" height=\\"18\\" fill=\\"currentColor\\" viewBox=\\"0 0 256 256\\" aria-hidden=\\"true\\"><path d=\\"M208,40V216a8,8,0,0,1-16,0V146.77L72.43,221.55A15.95,15.95,0,0,1,48,208.12V47.88A15.95,15.95,0,0,1,72.43,34.45L192,109.23V40a8,8,0,0,1,16,0Z\\"></path></svg> Skip intro</button><button type=\\"button\\" class=\\"st-skip-intro-hide\\" aria-label=\\"Hide Skip intro\\"><svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"16\\" height=\\"16\\" fill=\\"currentColor\\" viewBox=\\"0 0 256 256\\" aria-hidden=\\"true\\"><path d=\\"M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z\\"></path></svg></button></div>"`;
+exports[`Skip intro shows inside the intro and jumps to its end 1`] = `
+Array [
+  "<button type=\\"button\\" class=\\"st-skip-intro\\"><svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"18\\" height=\\"18\\" fill=\\"currentColor\\" viewBox=\\"0 0 256 256\\" aria-hidden=\\"true\\"><path d=\\"M208,40V216a8,8,0,0,1-16,0V146.77L72.43,221.55A15.95,15.95,0,0,1,48,208.12V47.88A15.95,15.95,0,0,1,72.43,34.45L192,109.23V40a8,8,0,0,1,16,0Z\\"></path></svg> Skip intro</button>",
+  "<button type=\\"button\\" class=\\"st-skip-intro-hide\\" aria-label=\\"Hide Skip intro\\"><svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"16\\" height=\\"16\\" fill=\\"currentColor\\" viewBox=\\"0 0 256 256\\" aria-hidden=\\"true\\"><path d=\\"M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z\\"></path></svg></button>",
+]
+`;
 
 exports[`Skip intro shows inside the intro and jumps to its end 2`] = `"https://cinesrc.st/embed/tv/1399?s=1&e=1&autoplay=true&t=150&continueprompt=false&color=%23f4f6f8&prioritize=true&autonext=false&subtitles=auto&subtitlelang=English"`;
 

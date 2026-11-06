@@ -23,10 +23,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **E2E for profile PINs** (set PIN → switch away → wrong PIN → right PIN) once a test account exists.
 - [ ] **Watch `/api/catalog` in production.** Log slow queries and errors to `error_events` so a broken catalog shows on `/admin` instead of as silently empty rows.
 
-## Code cleanup and organization
-
-- [ ] **Lint the test files.** Nothing lints `src/**/*.test.js` or `e2e/`: `npx eslint src e2e` finds 77 problems (`testing-library/*` and `jest/*` rules, and `import/first` after the `jest.mock` calls; babel-jest hoists those anyway, so the imports can move up). Fix them, then add `src` and `e2e` to `npm run lint`.
-
 ## Mobile
 
 The phone apps exist (`mobile-android/`, `mobile-ios/`; each builds with its own `scripts/build-apk.sh` / `scripts/build-ipa.sh`). Next:
