@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import EmbedPlayer from './EmbedPlayer';
 import useDeviceType from '../hooks/useDeviceType';
-import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import * as supabaseData from '../utils/supabaseData';
 import * as streamPreferences from '../utils/streamPreferences';
 import { api } from '../api';
@@ -19,7 +18,6 @@ const { submitStreamReport } = streamPreferences;
 // the server ranking, URL building and message parsing real.
 
 jest.mock('../hooks/useDeviceType', () => jest.fn());
-jest.mock('../contexts/MiniPlayerContext', () => ({ useMiniPlayer: jest.fn() }));
 jest.mock('../api', () => ({
   api: { get: jest.fn() },
 }));
@@ -60,7 +58,6 @@ jest.mock('../utils/runtimeCheck', () => ({
 const SHOW = { id: 42, title: 'The Show', seasons: 2, source_key: 'tmdb:tv:1399', poster_url: 'https://img/p.jpg', original_language: 'en' };
 const MOVIE = { id: 7, title: 'The Film', year: 2010, source_key: 'tmdb:movie:27205', original_language: 'en' };
 
-let mini;
 async function flush(ms = 0) {
   await act(async () => {
     if (ms) jest.advanceTimersByTime(ms);
@@ -68,11 +65,11 @@ async function flush(ms = 0) {
     await Promise.resolve();
   });
 }
-async function setup({ item = SHOW, mediaType = 'tv_show', mobile = false, landscape = false, watched = [{ season: 1, episode: 1 }] } = {}) {
+async function setup({ item = SHOW, mediaType = 'tv_show', mobile = false, landscape = false, watched = [{ season: 1, episode: 1 }], onBack } = {}) {
   useDeviceType.mockReturnValue({ isMobile: mobile, isLandscape: landscape });
   fetchEpisodeProgress.mockResolvedValue(watched);
   const onClose = jest.fn();
-  const view = render(<EmbedPlayer item={item} mediaType={mediaType} onClose={onClose} initialSeason={1} initialEpisode={1} />);
+  const view = render(<EmbedPlayer item={item} mediaType={mediaType} onClose={onClose} onBack={onBack} initialSeason={1} initialEpisode={1} />);
   await flush();
   await flush();
   return { ...view, onClose };
@@ -92,8 +89,6 @@ const vidrift = (time, duration = 2600) => ({ type: 'vidrift:progress', currentT
 beforeEach(() => {
   jest.useFakeTimers();
   window.localStorage.clear();
-  mini = { showMini: jest.fn(), closeMini: jest.fn() };
-  useMiniPlayer.mockReturnValue(mini);
   api.get.mockImplementation((path) => {
     if (path.startsWith('/media/tmdb-show')) return Promise.resolve({ numberOfSeasons: 2 });
     if (path.startsWith('/media/tmdb-season')) return Promise.resolve({ episodeCount: 10 });
@@ -201,11 +196,6 @@ test('mark as watched toggles the current episode', async () => {
   expect(screen.getByRole('button', { name: /Watched/ })).toBeInTheDocument();
 });
 
-test('opening the player closes the mini-player', async () => {
-  await setup({ item: MOVIE, mediaType: 'movie' });
-  expect(mini.closeMini).toHaveBeenCalled();
-});
-
 test('seen playback (PLAYER_EVENT) cancels failover; a frozen clock is buffering instead', async () => {
   await setup({ item: MOVIE, mediaType: 'movie' });
   const before = frame().getAttribute('src');
@@ -268,4 +258,15 @@ test('a switch inside VidRift whose message was missed is caught from its next p
   post({ ...vidrift(30), tmdbId: 1399, mediaType: 'tv', season: 2, episode: 1 });
   await flush();
   expect(screen.getByRole('button', { name: /S2 · E1/ })).toBeInTheDocument();
+});
+
+test('the X closes the player entirely; Escape (a TV remote’s Back) only steps back', async () => {
+  const onBack = jest.fn();
+  const { onClose } = await setup({ onBack });
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(onBack).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Close player' }));
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(onBack).toHaveBeenCalledTimes(1);
 });

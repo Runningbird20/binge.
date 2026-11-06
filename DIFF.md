@@ -81,7 +81,6 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Sleep timer, "Still watching?" | — | — | ✓ | ✓ | On the website's TODO. |
 | Audio description first, Larger text | — | — | ✓ | ✓ | |
 | Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Fire TV has an on/off switch; on Apple TV it's always on. |
-| Mini player | — | — | ◐ | — | Apple TV: only a live game in the corner. The website's Minimize button was removed (2026-11-06), so nothing opens its corner window / dock (`MiniPlayerWidget`) any more. |
 | Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |

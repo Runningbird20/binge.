@@ -758,12 +758,3 @@
   .ptr-spinner, .ptr-spinner--spin { animation: none; }
 }
 
-/* ── Mini player: dock above the fixed bottom-nav, full-width card ── */
-@media (max-width: 768px) {
-  .mini-player--dock {
-    left: 0.75rem;
-    right: 0.75rem;
-    width: auto;
-    bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 0.75rem);
-  }
-}
