@@ -1,30 +1,272 @@
-/* The movie/TV player: controls, Audio & Subtitles, failover, Up Next, skip intro, mini-player.
+/* The movie/TV player: the stage, Servers, failover, Up Next, skip intro, mini-player.
    Split out of streaming.css; App.js imports it after streaming.css. */
 
-/* ── Player: Audio & Subtitles ────────────────────────────────── */
+/* ── Player: the stage (desktop) ──────────────────────────────────
+   A full-window black stage: our bar above the video, the video as big as
+   fits at 16:9, and one line for notices under it. Nothing of ours goes over
+   the video, because the server's own controls are inside it along its top
+   and bottom edges. The exception is our fullscreen (F), where the bar goes
+   over the video while the pointer is on it. */
 
-.st-pb { position: relative; }
+.player-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: #fff;
+}
 
-.st-pb-trigger {
+.player-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 72px;
+  padding: 0.75rem clamp(16px, 3vw, 40px);
+}
+
+.player-bar-title { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+
+.player-bar-name {
+  margin: 0;
+  min-width: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-bar-meta { flex: none; color: var(--exp-text-dim); font-size: 0.95rem; }
+
+.player-bar-actions { flex: none; display: flex; align-items: center; gap: 0.5rem; }
+
+/* The bar's pills: the episode, Mark as watched, Servers. */
+
+.player-pill {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   min-height: 40px;
-  padding: 0 1rem;
-  border-radius: 8px;
+  padding: 0 0.95rem;
+  border-radius: 999px;
   border: 1px solid var(--exp-border-strong);
-  background: rgba(11, 13, 18, 0.78);
+  background: rgba(255, 255, 255, 0.06);
   color: #fff;
   font: inherit;
-  font-weight: 600;
   font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
-  backdrop-filter: blur(8px);
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
-.st-pb-trigger:hover { background: rgba(11, 13, 18, 0.95); }
+.player-pill:hover:not(:disabled),
+.player-pill[aria-expanded="true"] { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.4); }
 
-.st-pb-trigger:focus-visible { outline: none; box-shadow: var(--st-focus); }
+.player-pill:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.player-pill:disabled { cursor: default; opacity: 0.5; }
+
+.player-pill--on svg { color: var(--st-match); }
+
+/* Minimize (or exit fullscreen) and close. */
+
+.player-close {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.player-close:hover { background: #fff; color: #0b0d12; }
+
+.player-close:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+/* The video: as big as fits at 16:9. Without container units (old TV
+   browsers) it's full width at 16:9, and the server letterboxes inside. */
+
+.player-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 clamp(16px, 3vw, 40px);
+  container-type: size;
+}
+
+.player-frame-wrap {
+  position: relative;
+  width: 100%;
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+@supports (width: 1cqw) {
+  .player-frame-wrap { width: min(100cqw, 100cqh * 16 / 9); max-height: none; }
+}
+
+.player-frame { display: block; width: 100%; height: 100%; border: 0; }
+
+.player-no-url {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--exp-text-dim);
+  font-size: 0.95rem;
+}
+
+.player-no-url .loading-bar-state { width: min(360px, 100%); }
+
+.player-frame-wrap:fullscreen { width: 100vw; height: 100vh; aspect-ratio: auto; }
+
+/* Our fullscreen: the bar over the top of the video, shown on hover, while
+   the remote or keyboard is on it, or while one of its menus is open. */
+
+.player-controls-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 7;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.5) 65%, transparent);
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.player-controls-overlay .player-bar { padding-bottom: 2rem; }
+
+.player-controls-overlay.visible,
+.player-controls-overlay:focus-within,
+.player-controls-overlay:has(.st-pb-panel),
+.player-controls-overlay:has(.player-ep-popover) { opacity: 1; transform: none; pointer-events: auto; }
+
+/* Notices: one quiet line under the video. The row keeps its height with or
+   without one, so the video never jumps. */
+
+.player-notices {
+  flex: none;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem clamp(16px, 3vw, 40px);
+}
+
+.player-notice { margin: 0; color: var(--exp-text-dim); font-size: 0.9rem; text-align: center; }
+
+.player-notice--warn { color: #ffd9a8; }
+
+/* Season and episode picker: the "S1 · E1" pill beside the title opens a
+   popover with the seasons and every episode. */
+
+.player-ep-selector { position: relative; flex: none; }
+
+.player-ep-trigger-caret { color: var(--exp-text-dim); transition: transform 0.15s; }
+
+.player-ep-trigger-caret.open { transform: rotate(180deg); }
+
+.player-ep-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 40;
+  width: min(380px, 80vw);
+  max-height: min(440px, 60vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--exp-border-strong);
+  background: rgba(14, 17, 24, 0.97);
+  box-shadow: var(--exp-shadow);
+}
+
+.player-ep-section-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--exp-text-faint);
+}
+
+.player-ep-season-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.player-ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr)); gap: 0.4rem; }
+
+.player-ep-season-chip,
+.player-ep-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--exp-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--exp-text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.player-ep-season-chip { min-width: 2.6rem; padding: 0 0.65rem; }
+
+.player-ep-chip { padding: 0 0.3rem; }
+
+.player-ep-chip.watched { color: var(--exp-text-faint); }
+
+.player-ep-chip.watched svg { color: var(--st-match); }
+
+.player-ep-season-chip.partial { border-color: rgba(70, 211, 105, 0.35); }
+
+.player-ep-season-chip.done { border-color: rgba(70, 211, 105, 0.5); color: #9be0a3; }
+
+.player-ep-season-chip:hover:not(.active),
+.player-ep-chip:hover:not(.active) { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.player-ep-season-chip.active,
+.player-ep-chip.active { background: #f4f6f8; border-color: #f4f6f8; color: #0c0e13; }
+
+.player-ep-season-chip:focus-visible,
+.player-ep-chip:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.player-ep-loading { color: var(--exp-text-faint); font-size: 0.85rem; }
+
+/* ── Player: Servers ──────────────────────────────────────────── */
+
+.st-pb { position: relative; }
+
+/* The panel opens under the Servers pill, from the bar's right edge. */
+
+.player-bar-actions .st-pb-panel { left: auto; right: 0; }
 
 .st-pb-panel {
   position: absolute;
@@ -129,14 +371,6 @@
   .st-pb-col--wide { grid-column: 1 / -1; }
 }
 
-/* Keep the auto-hiding player controls up while the panel is open. */
-
-.player-controls-overlay:has(.st-pb-panel) {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-}
-
 .st-pb-report {
   display: flex;
   align-items: center;
@@ -159,76 +393,44 @@
 
 .st-pb-report select option { background: #151a24; }
 
-/* ═══════════════════════════════════════════════════════════════
-   LANDING, AUTH & GLOBAL BUTTON POLISH
-═══════════════════════════════════════════════════════════════ */
-
-/* Player chrome */
-
-.player-header-btns { display: flex; gap: 0.4rem; }
-
-.player-close {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--exp-border-strong);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  cursor: pointer;
-}
-
-.player-close:hover { background: #fff; color: #0b0d12; }
-
-.player-close:focus-visible { outline: none; box-shadow: var(--st-focus); }
-
-.player-title strong { font-size: 1.1rem; font-weight: 700; }
-
-.player-year { margin-left: 0.6rem; color: var(--exp-text-dim); font-size: 0.9rem; }
-
-.player-mark-btn { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.75rem; }
-
-/* Player: automatic server failover notice */
+/* ── Player: the automatic-switch and buffering notices, as one quiet line
+   (FailoverBar). A switch notice clears itself after NOTICE_SECONDS. */
 
 .st-failover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
-  margin: 0.6rem 0 0;
-  padding: 0.65rem 0.85rem;
-  border-radius: 10px;
-  border: 1px solid var(--exp-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--exp-text);
+  justify-content: center;
+  gap: 0.35rem 0.75rem;
+  max-width: 100%;
+  color: var(--exp-text-dim);
   font-size: 0.9rem;
+  text-align: center;
+  animation: td-fade 0.2s ease;
 }
 
-.st-failover span { flex: 1 1 260px; }
-
 .st-failover button {
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 0.8rem;
-  border-radius: 6px;
+  border-radius: 999px;
   border: 1px solid var(--exp-border-strong);
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
   color: #fff;
   font: inherit;
   font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.st-failover button:hover { background: rgba(255, 255, 255, 0.16); }
+.st-failover button:hover { background: rgba(255, 255, 255, 0.1); }
 
-.st-failover .st-failover-dismiss { width: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; background: none; }
+.st-failover button:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
-.mp-shell .st-failover { margin: 0.6rem 0.75rem 0; }
+.st-failover .st-failover-dismiss { width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; color: var(--exp-text-dim); }
 
-/* Buffering notice */
+/* Buffering: the spinning dot carries the state. */
 
-.st-failover--stall { border-color: rgba(245, 196, 81, 0.35); background: rgba(245, 196, 81, 0.08); }
+.st-failover--stall { color: #fff; }
 
 .st-stall-dot {
   flex: 0 0 10px;
@@ -376,7 +578,7 @@
 
 /* Mobile player pickers */
 
-.mp-pickers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; padding: 0.25rem 0; }
+.mp-pickers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; padding: 0.25rem 1rem; }
 
 .mp-picker {
   display: flex; align-items: center; gap: 0.4rem; min-height: 52px; min-width: 0; padding: 0.45rem 0.6rem;
@@ -386,7 +588,7 @@
 
 .mp-picker-text { flex: 1; min-width: 0; display: flex; flex-direction: column; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.mp-picker-label { font-size: 0.68rem; font-weight: 600; color: rgba(255, 255, 255, 0.55); text-transform: uppercase; letter-spacing: 0.06em; }
+.mp-picker-label { font-size: 0.72rem; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
 
 .mp-picker-ok { color: var(--st-match); flex: none; }
 
@@ -466,10 +668,6 @@
    TV MODE (html.tv-mode) — remote-driven, viewed from the couch.
    Set by utils/tvMode.js (Fire TV app, TV browsers, ?tv=1).
 ═══════════════════════════════════════════════════════════════ */
-
-/* Player: controls show while the remote is on them. */
-
-.tv-mode .player-controls-overlay:focus-within { opacity: 1; transform: none; pointer-events: auto; }
 
 .tv-mode .player-frame-wrap iframe:focus { outline-offset: -3px; }
 
