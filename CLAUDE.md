@@ -200,16 +200,13 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
   - **Computer** (`DesktopPlayer`): our bar above the video (title, the "S1 · E1" episode picker, Mark as watched, Servers, Close), the video as big as fits at 16:9, and one quiet line for notices under it. Only in our fullscreen (F) does the bar go over the video, on hover.
   - **Phone** (`MobilePlayer`): the same in portrait. In landscape our buttons are a narrow column beside the video, in the space a 16:9 picture leaves.
   - Switch notices clear themselves after 15s (`NOTICE_SECONDS`), held while the pointer or focus is on them.
+  - **Closing:** the X closes the player and the title popup it was opened from, back to the page underneath. Escape and a TV remote's Back (`onBack`) step back to the title popup, or close both when the popup was opened just to play (Continue Watching, previews).
+  - **Never close a popup with a plain `history.back()`.** A server's own navigations inside its iframe (its Next button, its server picker) add entries to the same browser history, so one step back only stepped the server back (checked in Chromium). `MediaOverlay` closes with `goBackTo` (`utils/historyBack.js`), which jumps straight to the entry the popup was opened from (Navigation API), or back past every entry added since.
 - **Phones:**
   - The bottom nav is Home · Sports · Browse · Search · Me. Browse and Me open `BottomSheet`s, and `html.has-bottom-nav` hides the top search/profile.
   - Title/book sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
   - The player's server/audio/subtitle pickers are bottom sheets (`MobilePlaybackPickers`).
   - Fullscreen + landscape lock only works on Android; iPhones get a "turn your phone" hint.
-- **Mini-player:**
-  - Nothing opens it at the moment: the player's Minimize button was removed (2026-11-06), and that was its only way in.
-  - On computers it's a draggable corner PiP (`MiniPlayerWidget`); on phones, a dock.
-  - Both keep saving positions from the embed's messages (`utils/playbackMessages.js`).
-  - `MiniPlayerProvider` must sit inside `BrowserRouter`, because Expand navigates.
 - **Keyboard** (`components/KeyboardShortcuts.js`, mounted in `AppShell`): spatial arrow-key focus over `.st-card, .st-game, …` (scoped to the open dialog), `/` for search, `?` for help. It stands down while an element with `data-embed-player` is mounted (the player owns the arrows).
 - **Mouse-only rule:** every horizontal scroller must have real ‹ › buttons, not just swipe/trackpad scrolling. That means `TitleRow`, `BrowseHero`, `GenreScrollBar`, `CastRow`, and `HScroll` for anything new.
 - **PWA:**
@@ -421,7 +418,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
   - **Which servers.** Tested 2026-11-05 in Chrome: only VidRift and CineSrc play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
   - **The safety net.** A sandboxed server that reports playback but shows none after 12s reloads unsandboxed. If it then plays, the refusal is remembered on that device for 14 days. A server without the flag is only tried sandboxed if it reports playback.
-  - **Also sandboxed:** the next-episode preload and the mini player use the same decision.
+  - **Also sandboxed:** the next-episode preload uses the same decision.
   - **The server lists mark them "No pop-ups"** (`NoPopupsTag` in `PlaybackOptions.js`, a shield on the phone's landscape server chips). It's the same `popupsBlocked()` the player uses, so a refusal this device learned drops the mark. For the server playing now it shows what happened on this load (`popupsBlockedNow`).
   - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
   - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.

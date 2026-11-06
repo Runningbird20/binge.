@@ -1,6 +1,6 @@
 // Normalizes the playback messages embed servers post to the parent page
-// (time / duration / play-pause-ended), shared by the full player and the
-// mini-player.
+// (time / duration / play-pause-ended), and reads which episode VidRift says
+// is playing.
 
 // One normalized reading from any server's postMessage, or null.
 export function readPlayback(raw) {

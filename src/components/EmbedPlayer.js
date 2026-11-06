@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import useDeviceType from '../hooks/useDeviceType';
 import { isTvMode } from '../utils/tvMode';
-import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import { getResumePosition, positionKey } from '../utils/playbackPositions';
 import { setCaptionCapableServers } from '../utils/streamPreferences';
 import { PROVIDERS, SERVER_LABELS, buildUrl, normalizeStartAt, prefersLowBandwidth } from '../utils/embedProviders';
@@ -32,9 +31,11 @@ setCaptionCapableServers(PROVIDERS.filter((entry) => entry.subtitles).map((entry
 // (usePlaybackMessages), when to move to another server (useFailover), and
 // the extras around the video (episodes, Up Next, Skip intro, position sync).
 // The layout is MobilePlayer on phones and DesktopPlayer elsewhere.
-export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode, initialPosition }) {
+//
+// Two ways out: the X (onClose) closes the player entirely, and Escape or a
+// TV remote's Back (onBack, onClose when not given) steps back one layer.
+export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose, initialSeason, initialEpisode, initialPosition }) {
   const { isMobile, isLandscape } = useDeviceType();
-  const { closeMini } = useMiniPlayer();
   const isTV = mediaType === 'tv_show';
   // Per-title state resets when the title (or the episode it opens on) changes.
   const resetKey = `${item?.id}|${item?.title}|${mediaType}|${initialSeason}|${initialEpisode}`;
@@ -131,15 +132,8 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
   const popups = usePopupSandbox({ provider, itemId: item?.id, season: frameSeason, episode: frameEpisode, playbackRef });
 
   const fullscreen = useFullscreen({ isMobile, modalRef, frameWrapRef });
-  // Only one video should ever be audible at once — opening this (full)
-  // player always wins over whatever the mini-player widget was doing.
-  useEffect(() => {
-    closeMini();
-    // Once on mount: opening the full player closes the mini-player.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   usePlayerKeyboard({
-    isTV, onClose, season, episode, setSeason, setEpisode, totalSeasons, seasonEpisodeCounts,
+    isTV, onClose: onBack, season, episode, setSeason, setEpisode, totalSeasons, seasonEpisodeCounts,
     epPopoverOpen, setEpPopoverOpen, epSelectorRef, toggleFullscreen: fullscreen.toggleFullscreen,
   });
   const controls = useControlsAutoHide(item?.id, season, episode);
