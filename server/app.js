@@ -92,21 +92,16 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
-// The media catalog (Turso). The path keeps its old name: installed TV builds
-// request {site}/api/neon-data/rest/{table}.
-app.use('/api/neon-data', require('./routes/neonData'));
+// The media catalog (Turso). /api/neon-data is the old name, still served for
+// installed TV builds and cached website bundles that request it.
+const catalogRoutes = require('./routes/catalog');
+app.use('/api/catalog', catalogRoutes);
+app.use('/api/neon-data', catalogRoutes);
 app.use('/api/media', require('./routes/media'));
-app.use('/api/watchlist', require('./routes/watchlist'));
-app.use('/api/ratings', require('./routes/ratings'));
 app.use('/api/sports',      require('./routes/sports'));
-app.use('/api/proxy',      require('./routes/proxy'));
-app.use('/api/embed-proxy', require('./routes/embedProxy'));
-app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/manga',       require('./routes/manga'));
 app.use('/api/books',       require('./routes/books'));
-app.use('/api/search', require('./routes/search'));
-app.use('/api/profile', require('./routes/profile'));
 app.use('/api/account', require('./routes/account'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));

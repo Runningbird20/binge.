@@ -11,7 +11,6 @@ import { MiniPlayerProvider } from './contexts/MiniPlayerContext';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
-import AdBlocker from './components/AdBlocker';
 import ErrorBoundary, { PageError } from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import AnnouncementBanner from './components/AnnouncementBanner';
@@ -24,10 +23,18 @@ import PasswordReset from './pages/PasswordReset';
 import Signup from './pages/Signup';
 // Stylesheets, in cascade order: App.css (base + design tokens), then
 // mobile.css (small-screen adaptations), then streaming.css (rows, hero,
-// sports, player), whose rules win over both.
+// cards, search, shared controls), whose rules win over both, then one file
+// per area. The area files come last, so at equal specificity their rules win
+// over streaming.css; keep this order.
 import './styles/App.css';
 import './styles/mobile.css';
 import './styles/streaming.css';
+import './styles/player.css';
+import './styles/title.css';
+import './styles/sports.css';
+import './styles/profile.css';
+import './styles/wrapped.css';
+import './styles/admin.css';
 
 // Every page's code, fetched in the background once the first screen is up,
 // so moving between pages never waits on a download (no loading skeleton
@@ -80,8 +87,6 @@ const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
 const Person         = lazyWithReload(() => import('./pages/Person'));
 const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
-// TEMP (UI preview only — do not commit)
-const UIPreview      = lazyWithReload(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
 const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];
@@ -169,8 +174,6 @@ function AppRoutes() {
         {/* Old address for user management — now a tab in the admin panel. */}
         <Route path="/admin/users"      element={<Navigate to="/admin?tab=users" replace />} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
-        {/* TEMP (UI preview only — do not commit) */}
-        <Route path="/ui-preview" element={<UIPreview />} />
         <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
         {MediaOverlayRoutes()}
         <Route path="*" element={
@@ -206,7 +209,6 @@ export default function App() {
           <MiniPlayerProvider>
             <Suspense fallback={<AppRouteFallback />}>
               <AppShell>
-                <AdBlocker />
                 <AppRoutes />
               </AppShell>
             </Suspense>

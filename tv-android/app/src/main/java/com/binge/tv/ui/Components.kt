@@ -1,7 +1,5 @@
 package com.binge.tv.ui
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.foundation.background
@@ -38,7 +36,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -59,8 +56,6 @@ import coil.compose.SubcomposeAsyncImage
 import com.binge.tv.data.Performance
 import com.binge.tv.data.LoadedRow
 import com.binge.tv.data.Title
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 
 // Picture with a graceful fallback (name on a charcoal card) while loading or without art.
 @Composable
@@ -223,19 +218,6 @@ fun ActionButton(label: String, icon: ImageVector?, modifier: Modifier = Modifie
 fun ProgressBar(progress: Float, modifier: Modifier = Modifier) {
     Box(modifier.height(3.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f))) {
         Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(3.dp).background(Palette.gold))
-    }
-}
-
-@Composable
-fun QrCode(text: String, size: Dp = 200.dp) {
-    val bitmap = remember(text) {
-        val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 512, 512)
-        Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565).apply {
-            for (x in 0 until 512) for (y in 0 until 512) setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-        }.asImageBitmap()
-    }
-    Box(Modifier.background(Color.White, RoundedCornerShape(14.dp)).padding(12.dp)) {
-        Image(bitmap, contentDescription = "QR code for $text", modifier = Modifier.size(size))
     }
 }
 

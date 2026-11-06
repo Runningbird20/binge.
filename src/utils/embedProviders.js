@@ -19,6 +19,8 @@ import { getServerMemory, rankServers } from './streamPreferences';
 // service from vsembed.ru despite the name.
 // Removed that day: vsembed.su (domain now DNS-sinkholed as malicious),
 // multiembed.mov (connection reset), autoembed.co (no stream).
+// Removed 2026-11-05: vidsrc.rip ("VidSrc RIP"). Its domain served an ad-filled
+// news site, then a "Redirecting…" page, instead of a player.
 //   events:    sends PLAYER_EVENT postMessages (play/timeupdate), so the
 //              player can confirm real playback instead of guessing
 //   subtitles: accepts a default subtitle language parameter
@@ -197,16 +199,6 @@ export const PROVIDERS = [
       // Documented: default subtitle language, ISO 639-1.
       if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
       return url.toString();
-    },
-  },
-  {
-    id: 'vidsrc-rip',
-    label: 'VidSrc RIP',
-    sandbox: false, // its domain showed a news site, not a player, on 2026-11-05
-    idKinds: ['tmdb'],
-    types: ['movie'],
-    buildUrl(id) {
-      return `https://vidsrc.rip/embed/movie/${id.value}`;
     },
   },
 ];

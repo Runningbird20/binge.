@@ -5,6 +5,7 @@ name: CI
 # build would catch, and more:
 #   - Jest (the whole web suite, once)
 #   - the server tests (node --test)
+#   - npm run lint: ESLint on server/, api/ and scripts/, which the build never looks at
 #   - CI=true npm run build, which fails on any ESLint warning, like Vercel
 
 on:
@@ -43,6 +44,9 @@ jobs:
 
       - name: Server tests
         run: node --test server/data-access/*.test.js server/routes/*.test.js
+
+      - name: Lint the server and scripts (warnings fail it)
+        run: npm run lint
 
       - name: Production build (warnings fail it, as on Vercel)
         run: npm run build

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import MediaDetailsModal from './MediaDetailsModal';
-import { BookDetailsModal } from '../pages/Books';
-import { loadFallbackBooks, loadFallbackMovies, loadFallbackTvShows } from '../utils/catalogFallback';
+import { BookDetailsModal } from './books/BookDetailsModal';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -19,9 +18,9 @@ import {
 } from '../utils/catalogQueries';
 
 const CONFIG = {
-  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },
-  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', loadFallback: loadFallbackTvShows, homePath: '/tv-shows' },
-  book:     { fetchById: fetchBookById,   apiPath: 'books',    loadFallback: loadFallbackBooks,   homePath: '/books' },
+  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    homePath: '/movies' },
+  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', homePath: '/tv-shows' },
+  book:     { fetchById: fetchBookById,   apiPath: 'books',    homePath: '/books' },
 };
 
 // Renders a movie/TV/book details modal as an overlay on top of whatever
@@ -42,7 +41,6 @@ export default function MediaOverlay({ mediaType }) {
   const config = CONFIG[mediaType];
 
   const [item, setItem] = useState(null);
-  const [browseOnly, setBrowseOnly] = useState(false);
   const [userRating, setUserRating] = useState(null);
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [watchlistEntry, setWatchlistEntry] = useState(null);
@@ -52,7 +50,6 @@ export default function MediaOverlay({ mediaType }) {
   useEffect(() => {
     let cancelled = false;
     setItem(null);
-    setBrowseOnly(false);
     setDetailMessage('');
 
     async function load() {
@@ -63,14 +60,8 @@ export default function MediaOverlay({ mediaType }) {
 
       try {
         const result = await api.get(`/media/${config.apiPath}/${numericId}`);
-        if (!cancelled && result?.id) { setItem(result); return; }
-      } catch { /* fall through */ }
-
-      try {
-        const items = await config.loadFallback();
-        const match = items.find((entry) => entry.id === numericId);
-        if (!cancelled && match) { setItem(match); setBrowseOnly(true); }
-      } catch { /* ignore missing fallback data */ }
+        if (!cancelled && result?.id) setItem(result);
+      } catch { /* nothing to open */ }
     }
 
     if (numericId) load();
@@ -177,8 +168,6 @@ export default function MediaOverlay({ mediaType }) {
         onRate={handleRate}
         userRating={userRating}
         detailMessage={detailMessage}
-        allowActions={!browseOnly}
-        browseOnlyMessage="Fallback catalog mode is browse-only."
       />
     );
   }
@@ -188,15 +177,13 @@ export default function MediaOverlay({ mediaType }) {
       item={item}
       mediaType={mediaType}
       onClose={goBack}
-      onRate={browseOnly ? undefined : handleRate}
-      onWatchlist={browseOnly ? undefined : handleWatchlist}
+      onRate={handleRate}
+      onWatchlist={handleWatchlist}
       watchlistEntry={watchlistEntry}
-      onStatusChange={browseOnly ? undefined : handleStatusChange}
+      onStatusChange={handleStatusChange}
       userRating={userRating}
       isAddingWatchlist={isAddingWatchlist}
       detailMessage={detailMessage}
-      allowActions={!browseOnly}
-      browseOnlyMessage="Fallback catalog mode is browse-only."
       autoPlay={playImmediately}
       initialSeason={initialSeason}
       initialEpisode={initialEpisode}

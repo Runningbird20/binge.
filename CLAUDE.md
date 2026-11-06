@@ -27,13 +27,17 @@ npm run start:client      # CRA dev server only (port 3000, proxies /api to :500
 npm run server            # Express server only (server/index.js, port 5001)
 npm run build             # production build (react-scripts build) — CI=true build treats warnings as errors
 npm test                  # Jest/RTL in watch mode
+npm run lint              # ESLint on server/, api/, scripts/ (the build lints src/)
 CI=true npx react-scripts test --watchAll=false                    # run the full suite once, non-interactive
 CI=true npx react-scripts test --watchAll=false src/pages/Books.test.js    # run a single test file
 node --test server/data-access/*.test.js server/routes/*.test.js    # server tests (CI runs these too)
 npm run test:e2e          # Playwright, local only (see Testing notes)
 ```
 
-There is no separate lint script. ESLint runs as part of `react-scripts build`/`test` via the `react-app` config in `package.json`. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
+ESLint uses the `react-app` config in `package.json`.
+- **`src/`** is linted by `react-scripts build`. A `CI=true` build fails on any ESLint warning (unused vars, missing hook deps). Always do a `CI=true` build after removing code, not just a normal one.
+- **`server/`, `api/`, `scripts/`** are linted by `npm run lint` (`--max-warnings=0`; an override parses them as CommonJS scripts). The build never looks at them.
+- Test files aren't linted by either.
 
 **Keeping local code current.** Twice the Movies/TV pages came up empty because the local code was the Neon-era version: once from an API server started before a `git pull`, once from a branch cut from a stale local `main`. That database no longer accepts logins. Three guards now:
 - **`npm run server` runs `node --watch`**, so a pull or branch switch restarts it with the new code.
@@ -57,7 +61,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 
 ## Repo layout
 
-- `src/` — the website: `pages/`, `components/` (player hooks in `components/player/`), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`; nearly everything new goes in `styles/streaming.css`).
+- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `books/` for the book popup, `sports/` for the Sports page, `manga/` for the Manga tab), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `turso/schema.sql` — the media catalog schema.
@@ -66,15 +70,20 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 - `DIFF.md` — which features exist on the website (computer / phone), Apple TV and Fire TV but not the others. **Update it whenever a feature ships on only some of them** (and delete a row once every app has it).
 - `TODO.md` — the feature backlog, each item naming the files to start from. Remove an item when it ships.
 
+**Stylesheets** (`src/styles/`, imported in this order from `App.js`; the order is the cascade, so keep it):
+- `App.css` (base + design tokens), then `mobile.css` (small screens), then `streaming.css` (rows, hero, cards, search, settings, shared controls, TV mode).
+- Then one file per area: `player.css`, `title.css` (the `td-*` popup), `sports.css`, `profile.css`, `wrapped.css`, `admin.css`. New styles for an area go in its file; anything shared goes in `streaming.css`.
+- Area files load last, so at equal specificity an area rule beats a `streaming.css` one. A few profile/title rules stay in `streaming.css` on purpose (each says why) because a later shared rule must keep beating them.
+
 ## Data & backend
 
 ### Two databases: Turso = media catalog, Supabase = accounts + user data
 
 Nothing lives in both (see `docs/database-split.md`). The `supabase` client exported by `src/utils/supabase.js` is split:
-- These go to the catalog through `/api/neon-data`: `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only; it kept its Neon-era name because installed TV builds call it.
+- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only. It's also served at its Neon-era name, `/api/neon-data`, because TV builds from before 2026-11 call that; drop it once those are gone.
 - Everything else is real Supabase.
 
-Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/neon-data/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
+Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/catalog/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
 
 **Turso (moved from Neon 2026-11-04).** libSQL/SQLite (`server/catalogDb.js`): `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`, or `file:data/turso/catalog.db` for a local copy made with `turso-catalog.js pull --db file:…`. Schema in `turso/schema.sql`; maintenance with `scripts/turso-catalog.js` (`schema`, `refresh`, `rebuild-search`, `pull`). Nothing reads or syncs with Neon any more.
 - **SQL dialect.** `server/data-access/query.js` turns the PostgREST-shaped specs into SQLite SQL: `?N` params, `LIKE` for ilike, Postgres's NULL ordering spelled out, titles `COLLATE NOCASE`, no `DEFAULT` in VALUES. `catalogDb.query` also accepts the routes' Postgres-flavoured SQL (`$1`, `ILIKE`), but `ANY()`, `::casts` and `NOW()` don't exist. Turso also rejects named arguments a statement doesn't use (local SQLite ignores them).
@@ -94,13 +103,15 @@ This is the one thing every route/feature decision hinges on. There are two ways
 2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`), a client-side router that reimplements a handful of REST-shaped endpoints (search, media details, profile, admin) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
 
 **The Express backend** (`server/app.js` + `server/routes/*.js`) is deployed unconditionally as a Vercel serverless function (`api/index.js` re-exports `server/app`; `vercel.json` routes `/api/(.*)` to `api/[...slug].js`). Its route files:
-- `neonData` — the catalog proxy;
+- `catalog` — the catalog proxy;
 - `extras` — OMDb ratings, episode ratings, Ask binge., subtitles;
 - `sports` — feeds, ESPN, fantasy;
 - `books`, `manga` — reading proxies;
 - `cron`, `ops` — error reports, health checks, broadcasts;
 - `admin`, `account` — service role;
-- `notifications` (an in-app list with read state), plus the older REST routes the `api` fallback reaches.
+- `media` — the few catalog reads `supabaseApi.js` deliberately passes on (popular titles, curated lists, relevance sort).
+
+The data layer (`src/utils/data/*`) has no second backend. Without Supabase configured, reads return nothing and writes throw "Supabase is not configured". (Jest runs that way: `.env.local` isn't loaded in tests, so mock what a test needs.)
 
 Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENABLE_LEGACY_BACKEND`, or `REACT_APP_LEGACY_API_URL` for a separately hosted backend (see `src/api.js`). Production (`vercel.json`) sets it to `true`.
 
@@ -177,7 +188,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 - `src/App.js` is the single route table. Pages are lazy-loaded with `lazyWithReload` (`utils/lazyWithReload.js`): `React.lazy`, plus one reload (at most once a minute) when a deploy has removed the old build's chunks. Page code is prefetched on idle after load (`PAGE_LOADERS`), so switching pages doesn't wait on a download. A new page needs both entries.
 - Routes needing auth are wrapped in `<ProtectedRoute>`. Admin-only routes also pass `allowedUserTypes={['admin']}`.
-- **Loading** shows `LoadingBar` (`components/LoadingBar.js`) in the box the content will fill: rows, grids and cards (`SkeletonCard`/`SkeletonGrid` render it too). It has a label and a bar that counts finished data requests (`trackedFetch` in `utils/loadingProgress.js`). Never use a page-centered spinner. The person page uses `.person-skel` placeholders.
+- **Loading** shows `LoadingBar` (`components/LoadingBar.js`) in the box the content will fill: rows, grids and cards. It has a label and a bar that counts finished data requests (`trackedFetch` in `utils/loadingProgress.js`). Never use a page-centered spinner. The person page uses `.person-skel` placeholders.
 - **Errors/offline:** an `ErrorBoundary` per route (`AppShell`), per `TitleRow` (`RowProblem` + Retry) and around `BrowseHero`; plus `OfflineBanner`.
 
 ### One responsive layout, two player layouts
@@ -207,7 +218,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 ### Browse rows, recommendations & release window
 
-Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `BrowseHero` spotlight plus `TitleRow`s of `TitleCard`s). `?view=all` or `?genre=` switches those pages to the older filterable grid (`CatalogView` inside `Movies.js`/`TVShows.js`). Home uses the same components.
+Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `BrowseHero` spotlight plus `TitleRow`s of `TitleCard`s). `?view=all` or `?genre=` switches those pages to the older filterable grid (`CatalogView`). Both pages are one component, `pages/CatalogPage.js`; what differs between them is its `CATALOGS` entry, and `Movies.js`/`TVShows.js` just pass `mediaType`. Home uses the same components.
 
 - **Rows come from live TMDB lists, matched back to catalog rows.** The catalog's own `popularity`/`vote_average` are a stale import snapshot, null for many big titles.
   - `src/utils/browseRows.js` defines each row as a TMDB query (`src/utils/tmdb.js`: browser-side, public `REACT_APP_TMDB_API_KEY`, 30-min sessionStorage cache keyed by path + params) plus a catalog-table fallback (`fetchCatalogBrowseRow`).
@@ -253,7 +264,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 
 ### Title popup (movies, series, books)
 
-`MediaDetailsModal.js` (movies/TV) and `BookDetailsModal` in `Books.js` share the `td-*` classes in `src/styles/streaming.css`.
+`MediaDetailsModal.js` (movies/TV; its episode list, Previously on, source books and More Like This are in `components/title/`) and `components/books/BookDetailsModal.js` share the `td-*` classes in `src/styles/title.css`.
 - **Layout.** `td-body` is a grid of the main column and `td-aside`.
   - **Main column:** the description, then the full-width **Cast row**. On phones the Cast row comes straight after the description.
   - **`td-aside`:** the facts list (studio etc.), then **Rating & Review** for movies and books (`td-rate--aside`).
@@ -445,9 +456,9 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
 - **Stable game ids.** A game's id comes from the first listing's team names, so `loadSportsStreams` merges feeds in a fixed order (PPV, Streamed, StreamFree), never in arrival order. Otherwise a game's id changed between refreshes and the player showed "not in the schedule" mid-game. The page also keeps the game being watched (and Multiview tiles) across refreshes, re-finding it with `sameGame` under its old id.
 - **Player and chips.** Servers in the player are a row of buttons. Hovering a live card warms it (`expandStreamProviders` is cached 90s). The chip bar fades an edge only when there's more to scroll that way.
 
-**Merging and servers.** `src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge: fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, a ±3h window and league inference. `server/routes/sports.js` only fetches + normalizes and returns `{ raw }`; the client merges. Keep the normalizers in both files in sync. Each game's provider feeds are its selectable servers:
+**Merging and servers.** `src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge: fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, a ±3h window and league inference. The feed fetchers + normalizers are one ES module, `src/utils/sportsFeeds.mjs`. The browser imports it, and `server/routes/sports.js` `require`s it (Node 24) with its own timeout and PPV User-Agent, returning `{ raw }` for the client to merge. Each game's provider feeds are its selectable servers:
 - **PPV:** `substreams` mirrors are extra servers.
-- **StreamFree:** `sources` (an array of embeds, filled near game time; the old `embed_url` is gone) gives one server per quality. Entries with embeds and a timestamp more than 2 days old are 24/7 channels (RedZone, Sky Sports F1, Willow).
+- **StreamFree:** `sources` (filled near game time) gives one server per quality. Since 2026-11 its entries are `{ quality, url, live }` objects (plain URLs before that; the old `embed_url` is gone), and the normalizer takes both. Entries with embeds and a timestamp more than 2 days old are 24/7 channels (RedZone, Sky Sports F1, Willow).
 - **Streamed:** when a game opens, `expandStreamProviders` (via `/api/sports/resolve/streamed/:source/:id?all=1`) turns each source into all its streams, HD first, at most 4 per source.
 - **Ranking:** the player orders servers with `rankFeeds` (`utils/sportsServerMemory.js`). The server that last worked for this game goes first, then the feed families that worked lately. "Worked" means 60s on a server; leaving within the minute or a load failure counts against it.
 - PPV shows "Remove sandbox attributes" to headless/automated browsers even top-level. That isn't our iframe; verify PPV in a real browser.
@@ -503,13 +514,13 @@ Two independent cache layers cut catalog/image load times. Neither is a build co
    - **Static assets.** Cache-first for same-origin JS/CSS/fonts.
    - **HTML.** Network-first.
    - **TMDB API responses.** Network-first in `binge-data-v1`, stored without `api_key`.
-   - **Ads.** It also does lightweight ad host/path blocking.
+   - **No ad blocking.** A service worker never sees a cross-origin player's requests, so it can't block their ads. Pop-ups are the sandbox's job (see Web player).
    - **Any behavior change here needs a `CACHE_NAME` / `IMAGE_CACHE_NAME` version bump**, so existing clients pick it up on their next load.
 2. **`src/utils/sessionCache.js`** — an in-memory, per-tab (module-level `Map`) stale-while-revalidate cache for *page-level* data.
    - **What it holds.** The Movies/TVShows/Books catalog browse results (keyed by `buildCatalogCacheKey` over filters + sort + search + kids mode) and the Home/Profile user-data fetches (keyed by `buildUserDataCacheKey` over namespace + userId + profileId).
    - **How callers use it.** They hydrate instantly from the cache when it has an entry (skipping the loading state), then always refetch in the background and re-cache.
    - **Not persisted, by design.** It's cleared on a full reload.
-   - **The bundled static fallback catalog is never cached**, so a transient outage's placeholder data can't get stuck.
+   - **When the catalog can't be reached**, the `?view=all` grids (Movies, Series, Books) keep results already cached this session, or show "Couldn't load …" with Retry. There's no bundled offline copy.
 
 Also:
 - **Smart downloads.** `utils/smartPrecache.js` warms the next episodes' TMDB data and art while idle.
@@ -554,7 +565,7 @@ Rules that apply every time:
 
 ## Phone apps (`mobile-android/`, `mobile-ios/`)
 
-Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `scripts/build-apk.sh` and `scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`.
+Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `mobile-android/scripts/build-apk.sh` and `mobile-ios/scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`.
 - **What they add over the browser:**
   - **Every pop-up and tab redirect from the players is refused.** Players' frames may load anything inside themselves, but only binge.'s own top-level page may open windows or leave the site. Its links to other sites open in the phone's browser.
   - **Alerts from other origins' frames (ad traps) are dropped.**
@@ -577,7 +588,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **No small labels above headings.** Context goes in a subtitle under the heading (`.st-page-sub`) or the hero's meta row (`.st-hero-context`).
 - **No emoji or text characters as icons.** Use `@phosphor-icons/react` SVG components on the web (e.g. the Sports `CatIcon`) and SF Symbols on tvOS. A glyph like `+`/`✕` in a round button isn't reliably centered by the font, so close/add/remove buttons render `<Plus>` / `<X>` inside a flex-centered button (`td-round-btn` on the popups). Arrows inside written instructions and keyboard-key labels are fine.
 - **No big-number / small-label stat tiles.** Profile and Home stats are one line of facts (`.pf-stats`, with Time watched as `pf-stat--time`). The admin overview is a table (`.adm-facts`).
-- **Wrapped is the one exception, a deliberate showpiece: your year as movie tickets** (web `.wp-*` in `Wrapped.js`/`streaming.css`, TV `WrappedView.swift`). The user rejected an editorial-serif version, so keep it tickets.
+- **Wrapped is the one exception, a deliberate showpiece: your year as movie tickets** (web `.wp-*` in `Wrapped.js`/`styles/wrapped.css`, TV `WrappedView.swift`). The user rejected an editorial-serif version, so keep it tickets.
   - Each stat is a ticket: a gold ADMIT ONE stub with a ticket number, a perforation with real notches, and a paper body.
   - Type: a Barlow Condensed marquee headline, IBM Plex Mono printed line items (mono is legitimate here because it's printed data), and a generated barcode. The last ticket gets an oxblood ADMITTED stamp.
   - Fonts: the web loads them only on that page; the TV bundles them in `BingeTV/Fonts` (Open Font License).
@@ -586,7 +597,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **No identical icon-card grids.** The TV Me tab is a native `List`.
 - **Gold only marks actions, selection or state** (never taglines, section icons or captions).
 - **No purple/blue gradients or frosted glass as decoration.**
-- **Text fields are pills, like the search box.** What goes in them is the placeholder, plus a matching `aria-label` (no label above). One global rule at the end of `src/styles/streaming.css` styles every text-type input/textarea; inputs inside their own pill wrapper opt out with `.field-bare`. Checkboxes are one global custom style there too (white fill + dark tick when checked); never restyle them per page.
+- **Text fields are pills, like the search box.** What goes in them is the placeholder, plus a matching `aria-label` (no label above). One global rule near the end of `src/styles/streaming.css` styles every text-type input/textarea; inputs inside their own pill wrapper opt out with `.field-bare`. Checkboxes are one global custom style there too (white fill + dark tick when checked); never restyle them per page.
 - **Reuse the existing control styles:**
   - two-way toggles are `SlidingTabs` (`st-tabs st-tabs--sm` for small ones);
   - filter chips are `GenreScrollBar` + `genre-chip` (`role="group"` + `aria-pressed`, not tablists);
@@ -613,12 +624,12 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
     - `GROQ_API_KEY` — Ask binge.;
     - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles;
     - `GOOGLE_BOOKS_API_KEY` — book previews.
-  - **Optional:** `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
-- **Scripts and tests only:** the Goodreads/Trakt/Tavily scraper credentials, `SUPABASE_DB_URL` (`npm run supabase:sql`), and `E2E_*`.
+  - **Optional:** `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` (popular titles for the `media` route's relevance sort), `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
+- **Scripts and tests only:** the Goodreads scraper credentials, `SUPABASE_DB_URL` (`npm run supabase:sql`), and `E2E_*`.
 
 ## Testing notes
 
-**CI** (`.github/workflows/ci.yml`, "Tests and build", meant to be the required check on `main`) runs Jest, `node --test server/data-access/*.test.js server/routes/*.test.js` and `CI=true npm run build` on every PR. The full suite is expected to be green.
+**CI** (`.github/workflows/ci.yml`, "Tests and build", meant to be the required check on `main`) runs Jest, `node --test server/data-access/*.test.js server/routes/*.test.js`, `npm run lint` and `CI=true npm run build` on every PR. The full suite is expected to be green.
 
 **Jest conventions.** Test files sit next to what they test (`*.test.js`), not in a separate directory.
 - **Page tests** sit next to their pages (`src/pages/Books.test.js`, `Movies.test.js`, …) and share `src/testUtils/pageTestSetup.js`: the router mock, `setMockSearchParams`, `renderWithAuth`, the catalog mocks and `installPageTestHooks()`.

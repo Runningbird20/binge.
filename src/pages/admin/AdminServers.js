@@ -3,6 +3,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { supabase } from '../../utils/supabase';
 import { api } from '../../api';
+import { PROVIDERS } from '../../utils/embedProviders';
+
+// Servers the player still has. A removed server's old server_status row stays in
+// the table but isn't listed.
+const CURRENT = new Set(PROVIDERS.map((entry) => entry.id));
 
 const DOT = { up: 'green', slow: 'yellow', down: 'red', unknown: 'gray' };
 
@@ -29,7 +34,7 @@ export default function AdminServers() {
       supabase.from('server_status').select('*').order('provider'),
       supabase.from('server_config').select('*'),
     ]);
-    setRows(status || []);
+    setRows((status || []).filter((row) => CURRENT.has(row.provider)));
     setConfig(Object.fromEntries((switches || []).map((row) => [row.provider, row])));
   }, []);
 
