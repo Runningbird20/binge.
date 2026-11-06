@@ -185,6 +185,15 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
         player.trackSelectionParameters = params.build()
     }
 
+    override fun setShown(shown: Boolean) {
+        val params = surface.layoutParams ?: return
+        val size = if (shown) android.view.ViewGroup.LayoutParams.MATCH_PARENT else 1
+        if (params.width == size && params.height == size) return
+        params.width = size
+        params.height = size
+        surface.layoutParams = params
+    }
+
     override fun destroy() {
         if (destroyed) return
         destroyed = true

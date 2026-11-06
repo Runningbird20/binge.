@@ -90,6 +90,10 @@ interface Engine {
     fun poll(): MediaState?
     fun send(command: MediaCommand)
     fun destroy()
+    // On screen or not. Alpha is enough for a page; a native player's video
+    // is its own layer behind the app that ignores alpha (a hidden one covered
+    // the video on screen), so it shrinks to a pixel instead.
+    fun setShown(shown: Boolean) { view.alpha = if (shown) 1f else 0f }
 }
 
 // A stream found in a server's page: its manifest and the headers the page

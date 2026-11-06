@@ -283,8 +283,12 @@ private fun LoadingCard(model: PlayerModel, modifier: Modifier) {
         val gaveUp = model.notice?.startsWith("No server") == true
         if (!gaveUp) {
             Spinner(28.dp)
-            Text(if (!model.request.isLive && QualityPreference.current == QualityPreference.BEST) "Finding the best-quality server…" else "Finding the fastest server…", style = Type.headline)
-            if (model.racingNames.isNotEmpty()) Text("Trying ${model.racingNames} at once", style = Type.callout, color = Palette.muted, textAlign = TextAlign.Center)
+            Text(when {
+                model.handPicked -> "Starting ${model.racingNames}…"
+                !model.request.isLive && QualityPreference.current == QualityPreference.BEST -> "Finding the best-quality server…"
+                else -> "Finding the fastest server…"
+            }, style = Type.headline, textAlign = TextAlign.Center)
+            if (model.racingNames.isNotEmpty() && !model.handPicked) Text("Trying ${model.racingNames}", style = Type.callout, color = Palette.muted, textAlign = TextAlign.Center)
         }
         model.notice?.let { Text(it, style = if (gaveUp) Type.headline else Type.callout, color = if (gaveUp) Color.White else Palette.gold, textAlign = TextAlign.Center) }
         if (!gaveUp) Text("Press ▼ to pick another server", style = Type.caption, color = Palette.muted)
@@ -341,7 +345,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                             add(Triple(Pane.SUBTITLES, "Subtitles", subtitleLabel))
                             if (model.subtitlesShowing) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "In sync" else "%+.1fs".format(model.subtitleOffset)))
                             add(Triple(Pane.SERVER, if (model.request.isLive) "Stream" else "Server", model.server?.name ?: "Choosing…"))
-                            add(Triple(Pane.PICTURE, "Picture", if (model.fillScreen) "Fill screen" else "Server's layout"))
+                            if (!model.isNative) add(Triple(Pane.PICTURE, "Picture", if (model.fillScreen) "Fill screen" else "Server's layout"))
                             if (!model.request.isLive) add(Triple(Pane.QUALITY, "Quality", QualityPreference.current.label))
                             add(Triple(Pane.SLEEP, "Sleep timer", model.sleep.label))
                             if (model.isEpisode && episodes.isNotEmpty()) add(Triple(Pane.EPISODES, "Episodes", "Season ${model.request.season ?: 1}"))
