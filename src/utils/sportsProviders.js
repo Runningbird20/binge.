@@ -14,11 +14,11 @@
 // shows a duplicate, a false merge would play the wrong game, so the rule
 // leans strict.
 //
-// Fetching + normalizing each feed is in sportsFeeds.mjs, shared with the server
+// Fetching + normalizing each feed is in sportsFeeds.js, shared with the server
 // route (/api/sports/streams), which returns the unmerged list; merging only happens here.
 
 import { fetchDisabledServers } from './streamPreferences';
-import { fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized } from './sportsFeeds.mjs';
+import { fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized } from './sportsFeeds';
 
 const PROVIDER_NAMES = {
   ppv: 'PPV',
