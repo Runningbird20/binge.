@@ -23,7 +23,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter>
+            <!-- binge. links open here. autoVerify: Android checks the site's
+                 /.well-known/assetlinks.json (public/), which must list the SHA-256
+                 of the key this APK is signed with, then opens them without asking. -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
