@@ -49,7 +49,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: smaller, optimized code (Compose is much faster on a stick's
+            // CPU in an optimized build). Libraries ship their own keep rules.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Signed with this machine's debug key, the same key as earlier
             // installs, so a new APK installs over the old one (sideload only).
             signingConfig = signingConfigs.getByName("debug")
