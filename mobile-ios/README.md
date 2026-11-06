@@ -21,7 +21,7 @@ Needs Xcode (`DEVELOPER_DIR` defaults to `/Applications/Xcode.app`).
 
 ## Install
 
-An unsigned `.ipa` doesn't install as it is. It has to be signed on its way to the phone:
+The newest build is at https://github.com/Runningbird20/binge./releases/download/mobile-latest/binge.ipa (CI publishes it when a `mobile-v*` tag is pushed, `.github/workflows/mobile-apps.yml`), or build your own. An unsigned `.ipa` doesn't install as it is. It has to be signed on its way to the phone:
 
 - **Sideloadly or AltStore, with your Apple ID.** They re-sign `binge.ipa`. A free Apple ID's installs expire after 7 days; a paid Apple Developer account's last a year.
 - **Xcode.** Open `BingeMobile.xcodeproj`, choose your team under Signing & Capabilities, plug in the iPhone, and press Run.
