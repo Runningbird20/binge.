@@ -78,7 +78,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Subtitle size & background | — | — | ✓ | ✓ | |
 | Skip intro | ◐ | ◐ | ✓ | ✓ | The website can only jump on some servers (VidRift, or ones that can start at a given second). |
 | Best quality / Fastest start, resolution badge | — | — | ✓ | ✓ | Apple TV also learns each server's real resolution (`QualityMemory`). |
-| Sleep timer, "Still watching?" | — | — | ✓ | ✓ | On the website's TODO. |
+| "Still watching?" (after 3 episodes in a row) | — | — | ✓ | ✓ | The website has the sleep timer, not this. |
 | Audio description first, Larger text | — | — | ✓ | ✓ | |
 | Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Fire TV has an on/off switch; on Apple TV it's always on. |
 | Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |

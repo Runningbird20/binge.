@@ -171,6 +171,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
 
   Admin-only server actions use `adminOnly()` from `server/middleware/supabaseAdmin.js`. Admin-only tables use the `public.is_admin()` RLS helper.
 - **Error tracking** (our own, no third party). `src/utils/monitoring.js` posts ErrorBoundary crashes and uncaught errors/rejections (production only, noise-filtered, 1/min per error) to `POST /api/ops/errors` (`server/routes/ops.js`, rate-limited), which writes `error_events`. The Express error handler logs 5xx errors there too. Admins read and resolve them in the panel.
+- **Catalog monitoring** (`server/data-access/monitor.js`, around every `/api/catalog` route). In production, database failures (Turso unreachable, an expired token, a missing column) and queries over 2s go to `error_events`, so a broken catalog shows under /admin → Errors instead of as silently empty rows. Each problem is logged at most once per 10 minutes per server instance. Mistakes in the request itself (a table that isn't media, a write, a bad filter) aren't logged, and neither is `PGRST116`. Previews and local servers only print (`VERCEL_ENV`).
 - **Server uptime** (`checkServers` in `server/routes/cron.js`, table `server_status`):
   - Probes each embed server with TMDB id 550 every 15 min, from the reminders job (or `/api/cron/health`), and merges the last 24h of viewer reports.
   - A 401/403/429 counts as "unknown" (bot protection), not down.
@@ -435,6 +436,11 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 
 The rest of Up Next: the player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
 
+**Sleep timer** (`player/useSleepTimer.js`, `SleepTimer.js`; the TV apps' choices: 15 / 30 min, 1 hour, End of episode). A pill in the computer's bar, a row of chips on phones.
+- **Stopping.** Most servers can't be paused from outside, so when it runs out the player saves the position the way closing does (`saveNow` from `usePlaybackMessages`) and takes the player away. The video's place says so, with Resume, which reloads at the saved second.
+- **End of episode** (series, on servers that report playback) turns our Up Next off and stops within 5s of the end. If VidRift moves on by itself near the end, that counts as the end. The site then moves to the next episode, so the button plays it.
+- **While stopped,** `paused` keeps failover, the buffering switch, the sandbox check and Up Next from acting on the missing playback.
+
 **Intro/credits markers** (`utils/episodeMarkers.js`, TV `Data/EpisodeMarkers.swift`; table `episode_markers` + the `episode_marker_summary` RPC; migration `20261014120000_markers_shares.sql`, APPLIED). We don't own the video files, so markers come from two places:
 - **AniSkip, for anime.** The MAL id comes via AniList, which must confirm a Japanese title of that exact name; the catalog's `original_language` is often null.
 - **Viewers.** An early 15s–3.5min forward jump reports the intro, and moving on in the last 15% reports the credits. The median shows once 2+ viewers agree, and a show's usual intro covers untimed episodes.
@@ -654,7 +660,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **`react-router-dom` v7 can't be resolved by this Jest setup.** Test pure logic in `src/utils/*` modules, or mock the router as the page tests do.
 
 **E2E** (`npm run test:e2e`, Playwright, `e2e/`), run locally only:
-- **Coverage.** Sign-up (the Supabase call is intercepted, so no account is created), play/resume, rate (cleans up after itself), the TV remote flow, import, and axe.
+- **Coverage.** Sign-up (the Supabase call is intercepted, so no account is created), play/resume, rate (cleans up after itself), the TV remote flow, import, and axe. Also the database split (`catalog.spec.js`: Home and Movies rows have catalog titles, and `/api/catalog` never failed) and profile PINs (`profile-pin.spec.js`: wrong PIN refused, right PIN opens; removes the PIN after).
 - **Accounts.** Signed-in specs need `E2E_EMAIL`/`E2E_PASSWORD` for a dedicated test account; otherwise they skip.
 - **Against a preview.** `E2E_BASE_URL` points it at a deployed preview. A protected preview needs `VERCEL_AUTOMATION_BYPASS_SECRET`, set once as a cookie in `e2e/auth.setup.js`.
 - The per-preview E2E workflow and the Neon preview-branch workflow were removed (2026-11-04): they failed on nearly every run, and nothing used the branches.

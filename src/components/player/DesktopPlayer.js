@@ -2,9 +2,10 @@ import { ArrowsIn, Check, Plus, X } from '@phosphor-icons/react';
 import PlaybackOptions from '../PlaybackOptions';
 import { EmbedFrame } from './PlayerOverlays';
 import { EpisodeSelector } from './EpisodePickers';
+import { SleepTimerMenu } from './SleepTimer';
 
-// Desktop layout: a full-window black stage. Our bar (title, episode, Servers,
-// close) sits above the video, never over it: the server's own
+// Desktop layout: a full-window black stage. Our bar (title, episode, sleep
+// timer, Servers, close) sits above the video, never over it: the server's own
 // controls live inside its iframe, along its top and bottom edges, so anything
 // of ours on the video covers them. The video is as big as fits at 16:9, and
 // notices get one quiet line under it. Only in our fullscreen (F) does the bar
@@ -12,7 +13,7 @@ import { EpisodeSelector } from './EpisodePickers';
 export default function DesktopPlayer({
   item, isTV, season, episode, onClose, modalRef, frameWrapRef, frame, frameKey, overlays,
   failoverBar, lookupState, lookupError, metadataWarning, episodes, watchedNow, canTrackEpisodes,
-  markingWatched, onMarkWatched, playbackOptionProps, fullscreen, controls, episodeSelector,
+  markingWatched, onMarkWatched, playbackOptionProps, fullscreen, controls, episodeSelector, sleep,
 }) {
   const { isFullscreen, toggleFullscreen } = fullscreen;
   const bar = (
@@ -42,6 +43,7 @@ export default function DesktopPlayer({
         )}
       </div>
       <div className="player-bar-actions">
+        <SleepTimerMenu sleep={sleep} />
         <PlaybackOptions {...playbackOptionProps} />
         {isFullscreen && (
           <button className="player-close" onClick={toggleFullscreen} title="Exit fullscreen" aria-label="Exit fullscreen" type="button">
