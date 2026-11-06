@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -95,6 +96,7 @@ fun HomeScreen() {
     var spotlight by remember { mutableStateOf(HomeCache.spotlight) }
     var loading by remember { mutableStateOf(rows.isEmpty()) }
     var menuFor by remember { mutableStateOf<ContinueItem?>(null) }
+    var refocusId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     ReportTop(listState)
@@ -160,7 +162,7 @@ fun HomeScreen() {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(bottom = 40.dp)) {
             item(key = "hero") { if (hero != null) Hero(hero, listState) else HeroSkeleton() }
             if (continueItems.isNotEmpty()) item(key = "continue") {
-                ContinueRow("Continue Watching for $name", continueItems, onLongClick = { menuFor = it })
+                ContinueRow("Continue Watching for $name", continueItems, onLongClick = { menuFor = it }, refocusId = refocusId, onRefocused = { refocusId = null })
             }
             items(feed, key = { it.id }) { row -> TitleRow(row, Nav::open) }
             if (loading && rows.isEmpty()) items(3) { RowSkeleton() }
@@ -173,9 +175,13 @@ fun HomeScreen() {
     menuFor?.let { item ->
         ActionSheet(item.title.name, onDismiss = { menuFor = null }) {
             Pill("Resume", icon = Icons.Rounded.PlayArrow) { menuFor = null; Nav.play(item.playRequest) }
-            Pill("Details & episodes", icon = Icons.Rounded.Info) { menuFor = null; Nav.open(item.title) }
+            Pill(if (item.title.kind == com.binge.tv.data.MediaKind.TV) "Details & episodes" else "Details", icon = Icons.Rounded.Info) { menuFor = null; Nav.open(item.title) }
             Pill("Remove from row", icon = Icons.Rounded.Close) {
                 menuFor = null
+                // Focus stays in the row, on the card next to the removed one
+                // (it used to jump up to the spotlight's Play button).
+                val index = continueItems.indexOfFirst { it.id == item.id }
+                refocusId = (continueItems.getOrNull(index + 1) ?: continueItems.getOrNull(index - 1))?.id
                 continueItems = continueItems.filter { it.id != item.id }; HomeCache.continueItems = continueItems
                 scope.launch { AppModel.removeFromContinue(item.title) }
             }
@@ -253,15 +259,23 @@ private fun HeroSkeleton() {
 }
 
 @Composable
-fun ContinueRow(heading: String, items: List<ContinueItem>, onLongClick: (ContinueItem) -> Unit) {
+fun ContinueRow(heading: String, items: List<ContinueItem>, onLongClick: (ContinueItem) -> Unit, refocusId: String? = null, onRefocused: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var warm by remember { mutableStateOf<Job?>(null) }
+    val refocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(refocusId) {
+        if (refocusId == null) return@LaunchedEffect
+        delay(150) // the sheet's own focus restore runs first
+        runCatching { refocus.requestFocus() }
+        onRefocused()
+    }
     Column {
         SectionTitle(heading)
         PivotScroll(offset = Dimens.edge) {
             LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap)) {
                 items(items, key = { it.id }) { item ->
-                    ContinueCard(item, onClick = { Nav.play(item.playRequest) }, onLongClick = { onLongClick(item) }, onFocus = {
+                    ContinueCard(item, modifier = if (item.id == refocusId) Modifier.focusRequester(refocus) else Modifier,
+                        onClick = { Nav.play(item.playRequest) }, onLongClick = { onLongClick(item) }, onFocus = {
                         // Resting on a card for a moment preloads it.
                         warm?.cancel()
                         warm = scope.launch { delay(700); Warmup.prepare(item.playRequest) }
@@ -274,8 +288,8 @@ fun ContinueRow(heading: String, items: List<ContinueItem>, onLongClick: (Contin
 }
 
 @Composable
-fun ContinueCard(item: ContinueItem, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onFocus: (() -> Unit)? = null) {
-    FocusCard(onClick = onClick, onLongClick = onLongClick, onFocus = onFocus, modifier = Modifier.width(Dimens.wideW).height(Dimens.wideH)) {
+fun ContinueCard(item: ContinueItem, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, onFocus: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+    FocusCard(onClick = onClick, onLongClick = onLongClick, onFocus = onFocus, modifier = modifier.width(Dimens.wideW).height(Dimens.wideH)) {
         Art(item.title.backdrop ?: item.title.poster, item.title.name, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.88f))))
         Column(Modifier.align(Alignment.BottomStart).padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
