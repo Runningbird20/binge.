@@ -7,6 +7,7 @@ import { EVENT_PROVIDERS } from '../../utils/embedProviders';
 // play/pause/ended; see utils/playbackMessages) and keeps playbackRef current.
 // Each reading also confirms the server, feeds intro learning and failover,
 // and saves the position locally (every 10s) and for other devices (30s).
+// Returns saveNow: the same save as closing the player (the sleep timer).
 export default function usePlaybackMessages({
   provider, item, mediaType, season, episode, iframeRef, playbackRef,
   confirmServer, failover, intro, syncPosition,
@@ -65,4 +66,12 @@ export default function usePlaybackMessages({
     // saves its position under the previous one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, confirmServer, season, episode, item?.id, mediaType]);
+
+  function saveNow() {
+    const state = playbackRef.current;
+    if (!item?.id || !(state.time > 0)) return;
+    savePosition(positionKey(mediaType, item.id, season, episode), state.time, state.duration);
+    if (state.time > 30) syncPosition(state.time, state.duration);
+  }
+  return { saveNow };
 }

@@ -3,13 +3,14 @@ import useDeviceType from '../hooks/useDeviceType';
 import { isTvMode } from '../utils/tvMode';
 import { getResumePosition, positionKey } from '../utils/playbackPositions';
 import { setCaptionCapableServers } from '../utils/streamPreferences';
-import { PROVIDERS, SERVER_LABELS, buildUrl, normalizeStartAt, prefersLowBandwidth } from '../utils/embedProviders';
+import { EVENT_PROVIDERS, PROVIDERS, SERVER_LABELS, buildUrl, normalizeStartAt, prefersLowBandwidth } from '../utils/embedProviders';
 import useEmbedId from './player/useEmbedId';
 import useServerChoice from './player/useServerChoice';
 import useEpisodeGuide from './player/useEpisodeGuide';
 import useWatchedEpisodes from './player/useWatchedEpisodes';
 import useIntroMarkers from './player/useIntroMarkers';
 import useServerEpisode from './player/useServerEpisode';
+import useSleepTimer from './player/useSleepTimer';
 import useUpNext from './player/useUpNext';
 import usePositionSync from './player/usePositionSync';
 import useFailover from './player/useFailover';
@@ -73,6 +74,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   // switch, Skip intro) applies to the next load; bumping resumeNonce reloads.
   const pendingStartRef = useRef(Number(initialPosition) > 0 ? Math.floor(Number(initialPosition)) : null);
   const [resumeNonce, setResumeNonce] = useState(0);
+  // The sleep timer stopped playback ({ reason, at, advanced }): the player is
+  // taken away (most servers can't be paused from outside) until Resume.
+  const [asleep, setAsleep] = useState(null);
   const frozenStartRef = useRef({ key: '', value: null });
   const modalRef = useRef(null);
   const epSelectorRef = useRef(null);
@@ -101,12 +105,20 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   const frameSeason = followingPlayer ? inPlayer.frameSeason : season;
   const frameEpisode = followingPlayer ? inPlayer.frameEpisode : episode;
   function followPlayerEpisode(next) {
+    // With "End of episode" on, VidRift moving on by itself near the end is the
+    // episode ending: stop instead of playing on.
+    const state = playbackRef.current;
+    const nearEnd = state.ended || (state.duration > 0 && state.duration - state.time <= 300);
+    const stopHere = sleepTimer.stopAfterEpisode && nearEnd;
+    if (stopHere) sleepTimer.turnOff();
     inPlayerRef.current = { ...next, frameSeason, frameEpisode, provider, nonce: resumeNonce };
     setEpPopoverOpen(false);
+    if (stopHere) fallAsleep('episode', { advanced: true }); // saves the episode it leaves
     setSeason(next.season);
     setEpisode(next.episode);
   }
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
+  const sleepTimer = useSleepTimer({ isTV, canTellEnd: EVENT_PROVIDERS.has(provider), playbackRef, onSleep: (reason) => fallAsleep(reason) });
 
   const { seasonEpisodeCounts, totalSeasons, metadataWarning } = useEpisodeGuide({ item, isTV, tmdbId, season, resetKey });
   const { watched, setWatched, markingWatched, markWatched } = useWatchedEpisodes({ item, isTV, season, episode, resetKey });
@@ -114,6 +126,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   const upNext = useUpNext({
     isTV, item, tmdbId, season, episode, setSeason, setEpisode, totalSeasons,
     seasonEpisodeCounts, markers: intro.markers, playbackRef, watched, setWatched,
+    paused: Boolean(asleep) || sleepTimer.stopAfterEpisode,
   });
   const { syncPosition } = usePositionSync({
     item, mediaType, isTV, season, episode, provider, externalId, subtitleLang,
@@ -121,15 +134,37 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   });
   const failover = useFailover({
     item, mediaType, tmdbId, season, episode, externalId, playbackRef, pendingStartRef, servers: serverChoice,
+    paused: Boolean(asleep),
   });
-  usePlaybackMessages({
+  const playback = usePlaybackMessages({
     provider, item, mediaType, season, episode, iframeRef, playbackRef,
     confirmServer: serverChoice.confirmServer, failover, intro, syncPosition,
   });
   useServerEpisode({ isTV, tmdbId, season, episode, iframeRef, onEpisode: followPlayerEpisode });
   // Pop-ups blocked by sandboxing the player, where the server allows it. One
   // check per load, so it goes by the episode the frame loaded.
-  const popups = usePopupSandbox({ provider, itemId: item?.id, season: frameSeason, episode: frameEpisode, playbackRef });
+  const popups = usePopupSandbox({ provider, itemId: item?.id, season: frameSeason, episode: frameEpisode, playbackRef, paused: Boolean(asleep) });
+
+  // The sleep timer ran out ('timer'), or the episode ended with "End of
+  // episode" on ('episode'). Save the position as closing does and take the
+  // player away. After an episode, move on to the next one, so Resume starts it.
+  function fallAsleep(reason, { advanced = false } = {}) {
+    const state = playbackRef.current;
+    playback.saveNow();
+    state.playing = false;
+    let movedOn = advanced;
+    if (reason === 'episode' && !advanced && upNext.nextEpisode) {
+      setSeason(upNext.nextEpisode.season);
+      setEpisode(upNext.nextEpisode.episode);
+      movedOn = true;
+    }
+    setAsleep({ reason, at: reason === 'timer' ? state.time : 0, advanced: movedOn });
+  }
+  // Resume: load the player again; it starts at the position saved when it stopped.
+  function wakeUp() {
+    setAsleep(null);
+    setResumeNonce((value) => value + 1);
+  }
 
   const fullscreen = useFullscreen({ isMobile, modalRef, frameWrapRef });
   usePlayerKeyboard({
@@ -191,7 +226,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   const preloadUrl = upNext.preloadNext && upNext.nextEpisode
     ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang, { noAutoplay: silentPreload })
     : null;
-  const overlays = (
+  const overlays = asleep ? null : (
     <>
       {intro.showSkipIntro && <SkipIntroButton onSkip={intro.skipIntro} onHide={intro.hideSkipIntro} />}
       {upNext.upNext && upNext.nextEpisode && (
@@ -221,7 +256,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   };
   const layout = {
     item, isTV, season, episode, onClose, modalRef,
-    frame: { embedUrl, frameRef: iframeRef, title: `Watch ${item.title}`, onLoad: handleFrameLoad, sandbox: popups.sandbox },
+    frame: {
+      embedUrl: asleep ? null : embedUrl, frameRef: iframeRef, title: `Watch ${item.title}`, onLoad: handleFrameLoad,
+      sandbox: popups.sandbox, asleep: asleep && { ...asleep, onResume: wakeUp },
+    },
+    sleep: sleepTimer,
     frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${frameSeason}-${frameEpisode}-${resumeNonce}-${popups.sandboxed ? 'sb' : 'open'}`,
     overlays, failoverBar, lookupState, lookupError, episodes,
     watchedNow: watched.has(currentEpisodeKey),

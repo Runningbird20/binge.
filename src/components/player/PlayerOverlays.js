@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { SkipForward, X } from '@phosphor-icons/react';
+import { MoonStars, SkipForward, X } from '@phosphor-icons/react';
 import LoadingBar from '../LoadingBar';
 import { formatClock } from '../../utils/playbackPositions';
 import { RESUMABLE, SERVER_LABELS } from '../../utils/embedProviders';
@@ -11,8 +11,22 @@ const label = (id) => SERVER_LABELS[id]?.label || id;
 // The server's player, or, while there's no URL yet, a loading bar (finding a
 // stream) or `emptyText`. Give it a `key` that changes per load (and when
 // `sandbox` changes): a new key remounts the iframe. `sandbox` blocks the
-// player's pop-ups (usePopupSandbox).
-export function EmbedFrame({ embedUrl, frameRef, title, onLoad, sandbox, className, emptyClassName, emptyText, loading }) {
+// player's pop-ups (usePopupSandbox). `asleep` ({ reason, at, onResume }):
+// the sleep timer stopped playback, so the player is gone until Resume.
+export function EmbedFrame({ embedUrl, frameRef, title, onLoad, sandbox, className, emptyClassName, emptyText, loading, asleep }) {
+  if (asleep) {
+    return (
+      <div className={`${emptyClassName} player-asleep`} role="status">
+        <MoonStars size={30} weight="bold" aria-hidden="true" />
+        <p>{asleep.reason === 'episode'
+          ? 'The sleep timer stopped playback after the episode.'
+          : `The sleep timer stopped playback${asleep.at > 0 ? ` at ${formatClock(asleep.at)}` : ''}.`}</p>
+        <button type="button" className="st-btn st-btn--primary" onClick={asleep.onResume}>
+          {asleep.advanced ? 'Play the next episode' : 'Resume'}
+        </button>
+      </div>
+    );
+  }
   return embedUrl ? (
     <iframe
       ref={frameRef}

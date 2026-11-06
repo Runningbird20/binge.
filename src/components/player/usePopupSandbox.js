@@ -8,15 +8,16 @@ import { SANDBOX_CHECK_SECONDS, SANDBOX_FLAGS, forgetRefusal, popupsBlocked, rem
 // server unsandboxed; if that one plays, the server is remembered as
 // refusing the sandbox. This never changes the server, so it applies to
 // hand-picked servers too. Call it after usePlaybackMessages (it reads the
-// playbackRef that hook resets for each load).
-export default function usePopupSandbox({ provider, itemId, season, episode, playbackRef }) {
+// playbackRef that hook resets for each load). paused: the sleep timer has the
+// player stopped, so there's nothing to check until it loads again.
+export default function usePopupSandbox({ provider, itemId, season, episode, playbackRef, paused = false }) {
   const key = `${provider}|${itemId}|${season}|${episode}`;
   const [unsandboxedKey, setUnsandboxedKey] = useState(null);
   const retried = unsandboxedKey === key;
   const sandboxed = !retried && popupsBlocked(provider);
 
   useEffect(() => {
-    if (!EVENT_PROVIDERS.has(provider) || (!sandboxed && !retried)) return undefined;
+    if (paused || !EVENT_PROVIDERS.has(provider) || (!sandboxed && !retried)) return undefined;
     const startedAt = Date.now();
     const timer = setInterval(() => {
       const seen = playbackRef.current.time > 0;
@@ -33,7 +34,7 @@ export default function usePopupSandbox({ provider, itemId, season, episode, pla
     return () => clearInterval(timer);
     // One check per load (key) and sandbox state; playbackRef is a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, sandboxed, retried]);
+  }, [paused, key, sandboxed, retried]);
 
   return { sandboxed, sandbox: sandboxed ? SANDBOX_FLAGS : undefined };
 }

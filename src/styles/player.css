@@ -158,7 +158,8 @@
 .player-controls-overlay.visible,
 .player-controls-overlay:focus-within,
 .player-controls-overlay:has(.st-pb-panel),
-.player-controls-overlay:has(.player-ep-popover) { opacity: 1; transform: none; pointer-events: auto; }
+.player-controls-overlay:has(.player-ep-popover),
+.player-controls-overlay:has(.player-sleep-menu) { opacity: 1; transform: none; pointer-events: auto; }
 
 /* Notices: one quiet line under the video. The row keeps its height with or
    without one, so the video never jumps. */
@@ -259,6 +260,55 @@
 .player-ep-chip:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
 .player-ep-loading { color: var(--exp-text-faint); font-size: 0.85rem; }
+
+/* Sleep timer (SleepTimer.js): the bar's pill opens a short menu under it;
+   when it stops playback, the video's place says so, with Resume. */
+
+.player-sleep { position: relative; flex: none; }
+
+.player-sleep-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 200px;
+  padding: 0.4rem;
+  border-radius: 12px;
+  border: 1px solid var(--exp-border-strong);
+  background: rgba(14, 17, 24, 0.97);
+  box-shadow: var(--exp-shadow);
+}
+
+.player-sleep-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0 0.75rem 0 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--exp-text-dim);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-sleep-option:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+
+.player-sleep-option.active { color: #fff; font-weight: 700; }
+
+.player-sleep-option:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.player-sleep-check { flex: 0 0 16px; display: inline-flex; }
+
+.player-asleep { flex-direction: column; gap: 1rem; text-align: center; }
+
+.player-asleep p { margin: 0; max-width: 32ch; color: var(--exp-text); font-size: 1rem; line-height: 1.45; }
 
 /* ── Player: Servers ──────────────────────────────────────────── */
 

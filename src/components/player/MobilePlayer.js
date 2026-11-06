@@ -5,6 +5,7 @@ import { SERVER_LABELS } from '../../utils/embedProviders';
 import { popupsBlocked } from '../../utils/popupSandbox';
 import { EmbedFrame } from './PlayerOverlays';
 import { MobileEpisodeRows } from './EpisodePickers';
+import { SleepTimerRow } from './SleepTimer';
 
 // Phone layout, on the same black stage as the desktop one: a slim header,
 // the video at 16:9 (filling the screen in landscape, with corner buttons and
@@ -13,7 +14,7 @@ import { MobileEpisodeRows } from './EpisodePickers';
 export default function MobilePlayer({
   item, isTV, isLandscape, season, episode, onClose, modalRef, frame, frameKey, overlays,
   failoverBar, lookupState, lookupError, episodes, watchedNow, canTrackEpisodes, markingWatched,
-  onMarkWatched, servers, provider, onSelectServer, playbackOptionProps, fullscreen,
+  onMarkWatched, servers, provider, onSelectServer, playbackOptionProps, fullscreen, sleep,
 }) {
   const [lsControlsOpen, setLsControlsOpen] = useState(false);
   useEffect(() => {
@@ -167,6 +168,8 @@ export default function MobilePlayer({
 
         {/* Server, audio and subtitles — bottom sheets at thumb height. */}
         <MobilePlaybackPickers {...playbackOptionProps} />
+
+        <SleepTimerRow sleep={sleep} />
       </div>
     </div>
   );
