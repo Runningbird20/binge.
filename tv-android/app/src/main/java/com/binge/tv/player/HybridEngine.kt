@@ -23,6 +23,10 @@ class HybridEngine(
     private var page: WebEngine? = WebEngine(context, WebEngine.hostOf(url))
     private var native: NativeEngine? = null
     private var nativeStartedAt = 0L
+    // For rebuilding the native player once the page is gone.
+    private var source: StreamSource? = null
+    private var lastT = 0.0
+    private var rebuilds = 0
     // Native is the one on screen (the page is gone).
     var isNative = false
         private set
@@ -34,6 +38,13 @@ class HybridEngine(
     override var onProcessGone: (() -> Unit)? = null
         set(value) { field = value; page?.onProcessGone = value }
     override val muted get() = wantMuted
+    private var shown = false
+
+    override fun setShown(shown: Boolean) {
+        this.shown = shown
+        frame.alpha = if (shown) 1f else 0f
+        native?.setShown(shown)
+    }
 
     init {
         val web = page!!
@@ -45,22 +56,41 @@ class HybridEngine(
     private fun startNative(source: StreamSource) {
         if (destroyed || native != null) return
         Perf.mark("stream found (${WebEngine.hostOf(source.url)})")
+        this.source = source
         val engine = NativeEngine(context, source, live)
         engine.onFailed = { error -> Perf.mark("native failed: ${error.errorCodeName}"); fallBack() }
         native = engine
         nativeStartedAt = SystemClock.uptimeMillis()
         frame.addView(engine.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        engine.setShown(shown)
         if (!wantMuted) engine.send(MediaCommand.Unmute)
         if (!wantPlay) engine.send(MediaCommand.Pause)
         // The page goes quiet and stops fetching video while the native player starts.
         page?.let { it.send(MediaCommand.Mute); it.send(MediaCommand.Pause); it.blockMedia = true }
     }
 
-    // The native player couldn't play this stream: back to the page.
+    // The native player couldn't play this stream: back to the page, or,
+    // when the page is already gone, a fresh native player on the same stream
+    // from the same second (a decoder can fail once, e.g. when its surface moves).
     private fun fallBack() {
-        native?.destroy()
+        native?.let { frame.removeView(it.view); it.destroy() }
         native = null
-        val web = page ?: return
+        val web = page
+        if (web == null) {
+            val stream = source ?: return
+            if (destroyed || rebuilds >= 2) return
+            rebuilds++
+            Perf.mark("native rebuilt (${rebuilds})")
+            val engine = NativeEngine(context, stream, live)
+            engine.onFailed = { error -> Perf.mark("native failed: ${error.errorCodeName}"); fallBack() }
+            native = engine
+            frame.addView(engine.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            engine.setShown(shown)
+            if (!live && lastT > 1) engine.send(MediaCommand.SeekTo(lastT))
+            if (!wantMuted) engine.send(MediaCommand.Unmute)
+            if (!wantPlay) engine.send(MediaCommand.Pause)
+            return
+        }
         web.blockMedia = false
         if (!wantMuted) web.send(MediaCommand.Unmute)
         if (wantPlay) web.send(MediaCommand.Play)
@@ -70,6 +100,8 @@ class HybridEngine(
         if (destroyed) return null
         val engine = native ?: return page?.poll()
         val state = engine.poll()
+        if (state != null && state.t > 0) lastT = state.t
+        if (isNative && state == null && native == null) return null
         if (!isNative) {
             // Too slow to start: the page (already loaded) is the better bet.
             if (state == null || (!state.isPlaying && state.ready < 3 && SystemClock.uptimeMillis() - nativeStartedAt > NATIVE_START_MS)) {

@@ -97,7 +97,7 @@ class StreamRace(
         }
         val url = server.build(tmdbId, request.title.kind, request.season ?: 1, request.episode ?: 1)
         val engine = HybridEngine(context, url, request.isLive, NativePlayback.enabled)
-        engine.view.alpha = 0f
+        engine.setShown(false)
         container.addView(engine.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         Perf.mark("load ${server.name} (${request.key})")
         candidates = candidates + Candidate(server, engine, url)
@@ -112,7 +112,7 @@ class StreamRace(
 
     fun goLive() {
         mode = Mode.LIVE
-        winner?.let { if (!keepMuted) it.web.send(MediaCommand.Unmute); it.web.send(MediaCommand.Play) }
+        winner?.let { it.web.setShown(true); if (!keepMuted) it.web.send(MediaCommand.Unmute); it.web.send(MediaCommand.Play) }
         onChange?.invoke()
     }
 
@@ -140,7 +140,7 @@ class StreamRace(
                 if (!seekedToStart && !request.isLive) {
                     seekedToStart = true
                     val saved = request.startAt ?: 0.0
-                    w.web.send(MediaCommand.SeekTo(if (saved > 30) saved else 0.0))
+                    w.web.send(MediaCommand.SeekTo(if (saved > 5) saved else 0.0))
                 }
             }
             w.web.poll()
@@ -207,11 +207,11 @@ class StreamRace(
             if (current <= 0 || state.height < (current * 1.3).toInt() || !state.isPlaying) continue
             // Promote the sharper stream.
             if (!request.isLive) times[w.server.id]?.takeIf { it > 1 }?.let { other.web.send(MediaCommand.SeekTo(it)) }
-            w.web.view.alpha = 0f
+            w.web.setShown(false)
             w.web.destroy()
             candidates = candidates.filter { it.server != w.server }
             winner = other
-            other.web.view.alpha = 1f
+            other.web.setShown(true)
             if (!keepMuted) other.web.send(MediaCommand.Unmute)
             onChange?.invoke()
             return
@@ -238,7 +238,7 @@ class StreamRace(
             candidates = listOf(candidate)
             waiting.clear()
         }
-        candidate.web.view.alpha = 1f
+        if (mode == Mode.LIVE) candidate.web.setShown(true)
         if (!request.isLive) {
             StreamServer.rememberWorking(candidate.server, request.title)
             ServerSpeed.record(candidate.server.id, System.currentTimeMillis() - candidate.startedAt)
@@ -246,7 +246,7 @@ class StreamRace(
         else SportsMemory.record(candidate.server.name, worked = true)
         if (mode == Mode.LIVE) {
             val start = request.startAt ?: 0.0
-            if (start > 30 && !request.isLive) candidate.web.send(MediaCommand.SeekTo(start))
+            if (start > 5 && !request.isLive) candidate.web.send(MediaCommand.SeekTo(start))
             if (!keepMuted) candidate.web.send(MediaCommand.Unmute)
         }
         onChange?.invoke()

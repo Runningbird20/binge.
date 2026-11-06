@@ -78,7 +78,10 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     private var clockMovedAt = now()
     private var stateAt = now()
     private var recoveries = 0
-    private var handPicked = false
+    var handPicked = false
+        private set
+    // Playing in the native player (no page: "Picture" doesn't apply).
+    val isNative get() = (race?.winner?.web as? HybridEngine)?.isNative == true
     private var lastResume = 0L
     private var pausedSince: Long? = null
     private var raced = HashSet<String>()
@@ -196,10 +199,13 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         }
         race?.let { it.stop(); surface.removeView(it.container) }
         race = next
-        (next.container.parent as? ViewGroup)?.removeView(next.container)
-        surface.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        if (next.container.parent !== surface) {
+            (next.container.parent as? ViewGroup)?.removeView(next.container)
+            surface.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        } else next.container.bringToFront()
         next.onChange = { raceChanged() }
         racingNames = next.candidates.joinToString(", ") { it.server.name }
+        if (next.winner == null) server = null // the corner shows the new server once one plays
         started = false
         trimmed = false
         warmedNext = false
@@ -240,6 +246,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         handler.removeCallbacksAndMessages(null)
         race?.stop()
         race = null
+        dropSwitch()
         Warmup.cancel()
         Warmup.playingKey = null
     }
@@ -416,13 +423,53 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         startRace(list)
     }
 
-    // A hand-picked server plays alone, from where you were.
+    // A hand-picked server plays alone, from where you were. While something
+    // is playing it keeps playing: the new server loads hidden (a warm race)
+    // and takes over at the current second once it plays; if it can't, you
+    // stay where you were.
+    private var switching: StreamRace? = null
+
     fun choose(next: StreamServer) {
         saveProgress(force = true)
-        if (playback.t > 30 && !request.isLive) request = request.copy(startAt = playback.t)
         notice = null
         handPicked = true
-        startRace(listOf(next))
+        dropSwitch()
+        // Already playing on it: nothing to do.
+        if (started && next == server && race?.winner != null) { notice = null; return }
+        if (!started || race?.winner == null) {
+            if (playback.t > 5 && !request.isLive) request = request.copy(startAt = playback.t)
+            startRace(listOf(next))
+            return
+        }
+        val at = playback.t
+        val pending = StreamRace(context, if (!request.isLive && at > 5) request.copy(startAt = at) else request, listOf(next), StreamRace.Mode.WARM)
+        // Behind the current video, in the player itself: handing over then
+        // never moves a video surface (a MediaTek decoder fails when it does).
+        surface.addView(pending.container, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        switching = pending
+        raced.add(next.id)
+        notice = "Switching to ${next.name}… keep watching"
+        showHUD()
+    }
+
+    private fun dropSwitch() {
+        switching?.let { it.stop(); (it.container.parent as? ViewGroup)?.removeView(it.container) }
+        switching = null
+    }
+
+    private fun checkSwitch() {
+        val pending = switching ?: return
+        val winner = pending.winner
+        if (winner != null) {
+            switching = null
+            if (!request.isLive && playback.t > 1) winner.web.send(MediaCommand.SeekTo(playback.t))
+            adopt(pending)
+        } else if (pending.failed) {
+            val name = pending.candidates.firstOrNull()?.server?.name ?: "That server"
+            dropSwitch()
+            notice = "$name didn't play. Still on ${server?.name ?: "this server"}."
+            showHUD()
+        }
     }
 
     fun play(season: Int, episode: Int, automatic: Boolean = false) {
@@ -430,6 +477,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         autoAdvances = if (automatic) autoAdvances + 1 else 0
         skippedIntro = false; markedWatched = false; showSkipIntro = false; subsNoticeShown = false
         request = request.copy(season = season, episode = episode, startAt = null)
+        dropSwitch()
         upNextCountdown = null
         openedAt = now(); recoveries = 0; handPicked = false; raced.clear()
         markers = EpisodeMarkers(); introSeekFrom = null; ownIntroSkip = false
@@ -453,6 +501,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     // MARK: Polling
 
     private fun tick() {
+        checkSwitch()
         val w = web ?: return
         val state = w.poll()
         if (state != null) apply(state, w) else checkLost()
@@ -665,8 +714,9 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         fun displayName(track: MediaTrack): String {
             val label = track.label.replace(Regex("^\\d+\\.\\s*"), "")
             if (label.isNotEmpty()) return label
-            if (track.language.isNotEmpty()) return PlaybackPrefs.languageName(track.language.take(2))
-            return "Track ${track.index + 1}"
+            if (track.language.isNotEmpty() && track.language != "und") return PlaybackPrefs.languageName(track.language.take(2))
+            // Unlabeled (most native streams): the first is the film's own audio.
+            return if (track.index == 0) "Original audio" else "Track ${track.index + 1}"
         }
     }
 }
