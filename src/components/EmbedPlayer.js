@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import useDeviceType from '../hooks/useDeviceType';
 import { isTvMode } from '../utils/tvMode';
-import { useMiniPlayer } from '../contexts/MiniPlayerContext';
-import { getResumePosition, positionKey, savePosition } from '../utils/playbackPositions';
+import { getResumePosition, positionKey } from '../utils/playbackPositions';
 import { setCaptionCapableServers } from '../utils/streamPreferences';
-import { PROVIDERS, RESUMABLE, SERVER_LABELS, buildUrl, normalizeStartAt, prefersLowBandwidth } from '../utils/embedProviders';
+import { PROVIDERS, SERVER_LABELS, buildUrl, normalizeStartAt, prefersLowBandwidth } from '../utils/embedProviders';
 import useEmbedId from './player/useEmbedId';
 import useServerChoice from './player/useServerChoice';
 import useEpisodeGuide from './player/useEpisodeGuide';
 import useWatchedEpisodes from './player/useWatchedEpisodes';
 import useIntroMarkers from './player/useIntroMarkers';
+import useServerEpisode from './player/useServerEpisode';
 import useUpNext from './player/useUpNext';
 import usePositionSync from './player/usePositionSync';
 import useFailover from './player/useFailover';
 import usePlaybackMessages from './player/usePlaybackMessages';
+import usePopupSandbox from './player/usePopupSandbox';
 import useFullscreen from './player/useFullscreen';
 import usePlayerKeyboard from './player/usePlayerKeyboard';
 import useControlsAutoHide from './player/useControlsAutoHide';
@@ -30,9 +31,11 @@ setCaptionCapableServers(PROVIDERS.filter((entry) => entry.subtitles).map((entry
 // (usePlaybackMessages), when to move to another server (useFailover), and
 // the extras around the video (episodes, Up Next, Skip intro, position sync).
 // The layout is MobilePlayer on phones and DesktopPlayer elsewhere.
-export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, initialEpisode, initialPosition }) {
+//
+// Two ways out: the X (onClose) closes the player entirely, and Escape or a
+// TV remote's Back (onBack, onClose when not given) steps back one layer.
+export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose, initialSeason, initialEpisode, initialPosition }) {
   const { isMobile, isLandscape } = useDeviceType();
-  const { showMini, closeMini } = useMiniPlayer();
   const isTV = mediaType === 'tv_show';
   // Per-title state resets when the title (or the episode it opens on) changes.
   const resetKey = `${item?.id}|${item?.title}|${mediaType}|${initialSeason}|${initialEpisode}`;
@@ -83,6 +86,26 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
 
   const serverChoice = useServerChoice({ item, mediaType, externalId, resetKey });
   const { provider, prefs } = serverChoice;
+
+  // An episode change made inside the server's own player (VidRift's Next
+  // button, Episodes menu or own Up Next; see useServerEpisode). The player has
+  // already switched, so the site follows without reloading it: the frame keeps
+  // the URL it was loaded with, while season/episode (positions, watched marks,
+  // Up Next, the address, the episode shown) move to the episode now playing.
+  // Any reload of our own (another episode, another server, a resume) loads
+  // season/episode as usual.
+  const inPlayerRef = useRef(null); // { season, episode, frameSeason, frameEpisode, provider, nonce }
+  const inPlayer = inPlayerRef.current;
+  const followingPlayer = Boolean(inPlayer && inPlayer.season === season && inPlayer.episode === episode
+    && inPlayer.provider === provider && inPlayer.nonce === resumeNonce);
+  const frameSeason = followingPlayer ? inPlayer.frameSeason : season;
+  const frameEpisode = followingPlayer ? inPlayer.frameEpisode : episode;
+  function followPlayerEpisode(next) {
+    inPlayerRef.current = { ...next, frameSeason, frameEpisode, provider, nonce: resumeNonce };
+    setEpPopoverOpen(false);
+    setSeason(next.season);
+    setEpisode(next.episode);
+  }
   const subtitleLang = prefs.subtitles && prefs.subtitles !== 'off' ? prefs.subtitles : null;
 
   const { seasonEpisodeCounts, totalSeasons, metadataWarning } = useEpisodeGuide({ item, isTV, tmdbId, season, resetKey });
@@ -103,32 +126,29 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     provider, item, mediaType, season, episode, iframeRef, playbackRef,
     confirmServer: serverChoice.confirmServer, failover, intro, syncPosition,
   });
+  useServerEpisode({ isTV, tmdbId, season, episode, iframeRef, onEpisode: followPlayerEpisode });
+  // Pop-ups blocked by sandboxing the player, where the server allows it. One
+  // check per load, so it goes by the episode the frame loaded.
+  const popups = usePopupSandbox({ provider, itemId: item?.id, season: frameSeason, episode: frameEpisode, playbackRef });
 
   const fullscreen = useFullscreen({ isMobile, modalRef, frameWrapRef });
-  // Only one video should ever be audible at once — opening this (full)
-  // player always wins over whatever the mini-player widget was doing.
-  useEffect(() => {
-    closeMini();
-    // Once on mount: opening the full player closes the mini-player.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   usePlayerKeyboard({
-    isTV, onClose, season, episode, setSeason, setEpisode, totalSeasons, seasonEpisodeCounts,
+    isTV, onClose: onBack, season, episode, setSeason, setEpisode, totalSeasons, seasonEpisodeCounts,
     epPopoverOpen, setEpPopoverOpen, epSelectorRef, toggleFullscreen: fullscreen.toggleFullscreen,
   });
   const controls = useControlsAutoHide(item?.id, season, episode);
 
-  const loadKey = `${provider}|${item?.id}|${season}|${episode}|${resumeNonce}`;
+  const loadKey = `${provider}|${item?.id}|${frameSeason}|${frameEpisode}|${resumeNonce}`;
   if (frozenStartRef.current.key !== loadKey) {
     const pending = pendingStartRef.current;
     pendingStartRef.current = null;
     frozenStartRef.current = {
       key: loadKey,
-      value: pending ?? (item?.id ? getResumePosition(positionKey(mediaType, item.id, season, episode)) : null),
+      value: pending ?? (item?.id ? getResumePosition(positionKey(mediaType, item.id, frameSeason, frameEpisode)) : null),
     };
   }
   const startAt = frozenStartRef.current.value;
-  const embedUrl = buildUrl(provider, externalId, mediaType, season, episode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth() });
+  const embedUrl = buildUrl(provider, externalId, mediaType, frameSeason, frameEpisode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth() });
 
   // TV remote: hand the remote to the video once it loads, so OK plays and
   // pauses; Back steps out to the player's controls (KeyboardShortcuts).
@@ -138,41 +158,18 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     return () => clearTimeout(timer);
   }, [embedUrl]);
 
-  // VidRift takes its start position (and quality hint) as messages.
+  // VidRift takes its start position (and quality hint) as messages. Not the
+  // start position once it has switched episodes itself: that was for the
+  // episode in its URL.
   function handleFrameLoad() {
     if (provider !== 'vidrift') return;
     const frame = iframeRef.current;
+    const resumeAt = followingPlayer ? 0 : startAt;
     setTimeout(() => {
       if (!frame?.contentWindow) return;
-      if (startAt > 0) frame.contentWindow.postMessage({ type: 'vidrift:resume', currentTime: startAt }, 'https://embed.vidrift.net');
+      if (resumeAt > 0) frame.contentWindow.postMessage({ type: 'vidrift:resume', currentTime: resumeAt }, 'https://embed.vidrift.net');
       if (prefersLowBandwidth()) frame.contentWindow.postMessage({ type: 'vidrift:quality-preference', label: '720p' }, 'https://embed.vidrift.net');
     }, 1500);
-  }
-
-  // Hand off to the persistent global mini-player, then close this (full)
-  // view the same way the close button would — the mini widget carries on
-  // with its own copy of the embed, independent of this component now.
-  function handleMinimize() {
-    // Hand over the *current* second (not the one this load started at), and
-    // save it, so the corner player and a later Expand both pick up here.
-    const state = playbackRef.current;
-    const key = item?.id ? positionKey(mediaType, item.id, season, episode) : null;
-    if (key && state.time > 0) savePosition(key, state.time, state.duration);
-    const at = state.time > 0 ? Math.floor(state.time) : startAt;
-    const miniUrl = RESUMABLE.has(provider) && provider !== 'vidrift'
-      ? buildUrl(provider, externalId, mediaType, season, episode, subtitleLang, { startAt: at, lowBandwidth: prefersLowBandwidth() })
-      : embedUrl;
-    const base = mediaType === 'tv_show' ? `/tv-show/${item.id}?play=1&season=${season}&episode=${episode}` : `/movie/${item.id}?play=1`;
-    showMini({
-      embedUrl: miniUrl,
-      title: item.title,
-      subtitle: isTV ? `S${season} E${episode}` : (item.year || ''),
-      poster: item.poster_url || item.cover_url || item.image_url || null,
-      href: base,
-      positionKey: key,
-      vidriftResume: provider === 'vidrift' && at > 0 ? at : null,
-    });
-    onClose?.();
   }
 
   const playbackOptionProps = {
@@ -187,6 +184,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     onReportAudio: serverChoice.reportServerAudio,
     blockedCount: serverChoice.blockedIds.size,
     health: serverChoice.providerHealth,
+    popupsBlockedNow: popups.sandboxed,
   };
   // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
   const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
@@ -199,7 +197,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
       {upNext.upNext && upNext.nextEpisode && (
         <UpNextCard upNext={upNext.upNext} nextEpisode={upNext.nextEpisode} nextInfo={upNext.nextInfo} onPlay={upNext.playNextEpisode} onCancel={upNext.dismissUpNext} />
       )}
-      {preloadUrl && <PreloadFrame url={preloadUrl} silent={silentPreload} />}
+      {preloadUrl && <PreloadFrame url={preloadUrl} silent={silentPreload} sandbox={popups.sandbox} />}
     </>
   );
   const failoverBar = (
@@ -222,9 +220,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, initialSeason, i
     onPickEpisode: setEpisode,
   };
   const layout = {
-    item, isTV, season, episode, onClose, onMinimize: handleMinimize, modalRef,
-    frame: { embedUrl, frameRef: iframeRef, title: `Watch ${item.title}`, onLoad: handleFrameLoad },
-    frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${season}-${episode}-${resumeNonce}`,
+    item, isTV, season, episode, onClose, modalRef,
+    frame: { embedUrl, frameRef: iframeRef, title: `Watch ${item.title}`, onLoad: handleFrameLoad, sandbox: popups.sandbox },
+    frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${frameSeason}-${frameEpisode}-${resumeNonce}-${popups.sandboxed ? 'sb' : 'open'}`,
     overlays, failoverBar, lookupState, lookupError, episodes,
     watchedNow: watched.has(currentEpisodeKey),
     canTrackEpisodes,

@@ -80,10 +80,11 @@ function halfStars(value, outOf) {
 
 function parseLetterboxd(files) {
   const byKey = new Map();
-  const keyOf = (row) => row['Letterboxd URI'] || `${row.Name}|${row.Year}`;
+  // tmdbID is optional (Letterboxd's import format; binge.'s export fills it).
+  const keyOf = (row) => row['Letterboxd URI'] || (row.tmdbID ? `tmdb:${row.tmdbID}` : `${row.Name}|${row.Year}`);
   const upsert = (row, patch) => {
     const key = keyOf(row);
-    byKey.set(key, { source: 'letterboxd', kind: 'movie', title: row.Name, year: Number(row.Year) || null, ...(byKey.get(key) || {}), ...patch });
+    byKey.set(key, { source: 'letterboxd', kind: 'movie', title: row.Name, year: Number(row.Year) || null, tmdbId: Number(row.tmdbID) || null, ...(byKey.get(key) || {}), ...patch });
   };
   files.forEach(({ name, rows }) => {
     const base = name.split('/').pop().toLowerCase();
@@ -161,16 +162,40 @@ function parseNetflix(rows) {
   return [...byTitle.values()];
 }
 
+// binge.'s own "Download my data" export (utils/dataExport.js): ratings and
+// My List for films and series (books, history and episodes aren't imported).
+const BINGE_KIND = { movie: 'movie', tv: 'tv' };
+const BINGE_LIST = { plan_to_watch: 'watchlist', watching: 'watching', watched: 'watched' };
+
+function parseBingeExport(data) {
+  const records = [];
+  (data.ratings || []).forEach((row) => {
+    if (!BINGE_KIND[row.type] || !(row.stars > 0)) return;
+    records.push({ source: 'binge', kind: BINGE_KIND[row.type], title: row.title, year: row.year ?? null, tmdbId: row.tmdb_id || null, rating: halfStars(row.stars, 5), ratedAt: isoDate(row.rated_at), list: 'rated' });
+  });
+  (data.my_list || []).forEach((row) => {
+    const list = BINGE_LIST[row.status];
+    if (!BINGE_KIND[row.type] || !list) return;
+    records.push({ source: 'binge', kind: BINGE_KIND[row.type], title: row.title, year: row.year ?? null, tmdbId: row.tmdb_id || null, watchedAt: isoDate(row.updated_at || row.added_at), list });
+  });
+  return records;
+}
+
 // Recognise each file by its contents (not just its name) and parse it.
 export function parseImport(files) {
   const records = [];
   const sources = new Set();
   const letterboxd = [];
+  let bingeExport = false;
   files.forEach(({ name, text }) => {
     if (name.toLowerCase().endsWith('.json')) {
       let data = null;
       try { data = JSON.parse(text); } catch { return; }
-      if (Array.isArray(data) && data.some((item) => item?.movie || item?.show)) {
+      if (data?.format === 'binge-export') {
+        records.push(...parseBingeExport(data));
+        sources.add('binge.');
+        bingeExport = true;
+      } else if (Array.isArray(data) && data.some((item) => item?.movie || item?.show)) {
         records.push(...parseTrakt(name, data));
         sources.add('Trakt');
       }
@@ -190,7 +215,12 @@ export function parseImport(files) {
       sources.add('Netflix');
     }
   });
-  if (letterboxd.length) records.push(...parseLetterboxd(letterboxd));
+  // A binge. export carries Letterboxd copies of its films (letterboxd/*.csv);
+  // the JSON already has them, so they'd only be counted twice. A real
+  // Letterboxd export uploaded alongside still counts.
+  const letterboxdFiles = bingeExport ? letterboxd.filter(({ name }) => !/(^|\/)letterboxd\//i.test(name)) : letterboxd;
+  if (letterboxdFiles.length) records.push(...parseLetterboxd(letterboxdFiles));
+  else sources.delete('Letterboxd');
   return { records, sources: [...sources] };
 }
 

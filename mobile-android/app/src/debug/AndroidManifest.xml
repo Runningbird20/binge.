@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: may point at a local http:// site, e.g. a dev server or test page
+     (gradle assembleDebug -Pbinge.url=http://10.0.2.2:3000 from the emulator). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true" />
+</manifest>

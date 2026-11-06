@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getServerMemory, rankServers, rememberServer, submitStreamReport } from '../../utils/streamPreferences';
 import { expectedRuntimeSeconds, isWrongLength } from '../../utils/runtimeCheck';
 import { EVENT_PROVIDERS, FAILOVER_SECONDS, PAUSE_AWARE, RESUMABLE, STALL_SECONDS, STALL_SWITCH_SECONDS } from '../../utils/embedProviders';
@@ -131,9 +131,11 @@ export default function useFailover({
   }
   function noteAdvance() { setStall(null); }
   function markPlaybackSeen() { playbackSeenRef.current = true; }
+  // Stable, so the notice's own timer (FailoverBar) isn't restarted on every render.
+  const dismissFailover = useCallback(() => setFailoverNotice(null), []);
 
   return {
-    stall, failoverNotice, dismissFailover: () => setFailoverNotice(null),
+    stall, failoverNotice, dismissFailover,
     noteDuration, noteAdvance, markPlaybackSeen, switchServer, selectServer,
   };
 }

@@ -1,12 +1,12 @@
 import LoadingBar from '../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Info, X } from '@phosphor-icons/react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { FilmSlate, Info, MonitorPlay, X } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import PullToRefresh from '../components/PullToRefresh';
 import BrowseHero from '../components/BrowseHero';
 import TitleRow from '../components/TitleRow';
-import TitleCard from '../components/TitleCard';
+import TitleCard, { titleUrl } from '../components/TitleCard';
 import { computeStarRating } from '../components/RatingArtifact';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -15,19 +15,24 @@ import {
   fetchSupabaseRatings,
   fetchSupabaseWatchlist,
   fetchSupabaseContinueWatching,
+  fetchWatchedAmong,
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
 import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
 import { isChildLevel, maturityRestriction } from '../utils/kidsMode';
-import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
+import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft, hasSavedPosition, lastAiredEpisode } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { findNewEpisodes } from '../utils/newEpisodes';
 import { seasonStatus } from '../utils/seasonStatus';
 import { precacheUpNext } from '../utils/smartPrecache';
+import { pickSurprise, surpriseKey, surprisePool } from '../utils/surprise';
+import { loadWatchedKeys, titleKey, useWatchedKeys, withoutWatched } from '../utils/watchedTitles';
+import { haptic } from '../utils/haptics';
+import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 import { fetchSharedWithMe, markSharesSeen } from '../utils/profileShares';
 import { enableNewEpisodeAlerts, isSubscribed, pushSupported } from '../utils/pushNotifications';
 import { Bell, BellRinging } from '@phosphor-icons/react';
@@ -205,6 +210,52 @@ function ProfileStatsHeader({ user, activeProfile, watchlist, ratings }) {
   );
 }
 
+// "Surprise me with a movie" / "… a series": opens one of your picks of that
+// type, above Continue Watching, in the title popup's Trailer-button style.
+// personal === null means the picks are still loading.
+const SURPRISES = [
+  { mediaType: 'movie', label: 'Surprise me with a movie', Icon: FilmSlate },
+  { mediaType: 'tv_show', label: 'Surprise me with a series', Icon: MonitorPlay },
+];
+
+function SurpriseButtons({ personal, fallback }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const recent = useRef([]);
+  const watched = useWatchedKeys();
+  const pools = useMemo(
+    () => Object.fromEntries(SURPRISES.map(({ mediaType }) => [mediaType, watched ? surprisePool(personal, fallback, { mediaType, exclude: watched }) : []])),
+    [personal, fallback, watched],
+  );
+  // Loaded and nothing to offer of a type: that button goes.
+  const shown = SURPRISES.filter(({ mediaType }) => !personal || !watched || pools[mediaType].length > 0);
+  if (!shown.length) return null;
+
+  function surprise(mediaType) {
+    const item = pickSurprise(pools[mediaType], recent.current);
+    if (!item) return;
+    recent.current = [surpriseKey(item), ...recent.current].slice(0, 6);
+    haptic();
+    navigate(titleUrl(item), { state: { backgroundLocation: location } });
+  }
+
+  return (
+    <div className="st-surprise">
+      {shown.map(({ mediaType, label, Icon }) => (
+        <button
+          key={mediaType}
+          type="button"
+          className="st-btn td-resume-control td-play--compact"
+          onClick={() => surprise(mediaType)}
+          disabled={!pools[mediaType].length}
+        >
+          <Icon size={18} weight="bold" aria-hidden="true" /> {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const { user, authLoading, activeProfile, profilesLoading, profiles } = useAuth();
   const location = useLocation();
@@ -212,8 +263,12 @@ export default function Home() {
   const [ratingsItems, setRatingsItems] = useState([]);
   const [continueWatchingItems, setContinueWatchingItems] = useState([]);
   // "2 episodes left in Season 3" / "New season Friday" per show in
-  // Continue Watching (TMDB details are cached for 30 minutes).
+  // Continue Watching (TMDB details are cached for 30 minutes). The same
+  // details find finished shows: the newest aired episode is marked watched
+  // and nothing is saved partway through, so the show leaves Continue
+  // Watching (it comes back when a new episode airs).
   const [seasonNotes, setSeasonNotes] = useState({});
+  const [finishedShows, setFinishedShows] = useState(() => new Set());
   useEffect(() => {
     let cancelled = false;
     const shows = continueWatchingItems.filter((item) => item.media_type === 'tv_show').slice(0, 24);
@@ -222,13 +277,33 @@ export default function Home() {
       if (!tmdbId) return null;
       const details = await tmdbGet(`/tv/${tmdbId}`).catch(() => null);
       const note = seasonStatus(details, Number(item.current_season) || 1, Number(item.current_episode) || 1);
-      return note ? [`tv_show:${item.media_id ?? item.id}`, note] : null;
-    })).then((pairs) => { if (!cancelled) setSeasonNotes(Object.fromEntries(pairs.filter(Boolean))); });
+      return { item, key: `tv_show:${item.media_id ?? item.id}`, note, last: lastAiredEpisode(details) };
+    })).then(async (entries) => {
+      const found = entries.filter(Boolean);
+      if (cancelled) return;
+      setSeasonNotes(Object.fromEntries(found.filter((entry) => entry.note).map((entry) => [entry.key, entry.note])));
+      const candidates = found.filter((entry) => entry.last && !hasSavedPosition(entry.item));
+      const watched = candidates.length
+        ? await fetchWatchedAmong(candidates.map(({ item, last }) => ({ mediaId: item.media_id, ...last }))).catch(() => new Set())
+        : new Set();
+      if (cancelled) return;
+      const finished = candidates
+        .filter(({ item, last }) => watched.has(`${Number(item.media_id)}:${last.season}:${last.episode}`))
+        .map((entry) => entry.key);
+      // Only a real change re-renders (the spotlight rebuilds from this list).
+      setFinishedShows((current) => (finished.length === current.size && finished.every((key) => current.has(key)) ? current : new Set(finished)));
+    });
     return () => { cancelled = true; };
   }, [continueWatchingItems]);
+  // What the Continue Watching row and the spotlight show. New Episodes and
+  // the calendar keep using the full list.
+  const visibleContinueWatching = useMemo(
+    () => continueWatchingItems.filter((item) => !finishedShows.has(`${item.media_type}:${item.media_id ?? item.id}`)),
+    [continueWatchingItems, finishedShows],
+  );
 
   // Smart downloads: warm the next episodes' pages/art while idle.
-  useEffect(() => { precacheUpNext(continueWatchingItems); }, [continueWatchingItems]);
+  useEffect(() => { precacheUpNext(visibleContinueWatching); }, [visibleContinueWatching]);
   const jumpToContinue = new URLSearchParams(location.search).get('jump') === 'continue';
   const [dataLoading, setDataLoading] = useState(true);
   const [personal, setPersonal] = useState(null);
@@ -280,7 +355,7 @@ export default function Home() {
       const pick = (result) => (result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []);
       const nextRatings = pick(ratingsResult);
       const nextWatchlist = pick(watchlistResult);
-      const nextContinueWatching = pick(continueWatchingResult);
+      const nextContinueWatching = pick(continueWatchingResult).filter((item) => !isRemovalPending(`continue:${item.id}`));
       setWatchlistItems(nextWatchlist);
       setRatingsItems(nextRatings);
       setContinueWatchingItems(nextContinueWatching);
@@ -306,7 +381,7 @@ export default function Home() {
     if (cached) {
       setWatchlistItems(cached.watchlistItems);
       setRatingsItems(cached.ratingsItems);
-      setContinueWatchingItems(cached.continueWatchingItems);
+      setContinueWatchingItems(cached.continueWatchingItems.filter((item) => !isRemovalPending(`continue:${item.id}`)));
       setDataLoading(false);
     }
     fetchStats();
@@ -327,7 +402,8 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     async function buildHero() {
-      const resume = continueWatchingItems
+      const watchedKeys = await loadWatchedKeys();
+      const resume = visibleContinueWatching
         .filter((item) => item.media_type !== 'book')
         .slice(0, 1)
         .map((item) => ({ ...asTitle(item), _playUrl: resumeUrl(item), _playLabel: 'Resume', _reason: computeProgressBadge(item) ? `Continue ${computeProgressBadge(item)}` : 'Continue where you left off' }));
@@ -337,7 +413,7 @@ export default function Home() {
       const shuffled = (list) => list.map((item) => ({ item, r: Math.random() })).sort((a, b) => a.r - b.r).map(({ item }) => item);
       const seen = new Set();
       const picks = [];
-      for (const item of shuffled(personal?.topPicks?.slice(0, 12) || [])) {
+      for (const item of shuffled(withoutWatched(personal?.topPicks || [], watchedKeys).slice(0, 12))) {
         const flavour = `${item.original_language || ''}|${String(item.genre || '').split(',')[0].trim()}`;
         if (seen.has(flavour)) continue;
         seen.add(flavour);
@@ -347,7 +423,7 @@ export default function Home() {
       const trending = personal ? (await Promise.all([
         loadRowItems(rowsFor('tv_show', { kidsSafe })[0], 'tv_show', { kidsSafe }).catch(() => []),
         loadRowItems(rowsFor('movie', { kidsSafe })[0], 'movie', { kidsSafe }).catch(() => []),
-      ])).flatMap((list) => shuffled(list.slice(0, 8)).slice(0, picks.length ? 1 : 3)) : [];
+      ])).flatMap((list) => shuffled(withoutWatched(list, watchedKeys).slice(0, 8)).slice(0, picks.length ? 1 : 3)) : [];
       const mixed = [];
       const queues = [picks, shuffled(trending)];
       while (queues.some((queue) => queue.length)) queues.forEach((queue) => { if (queue.length) mixed.push(queue.shift()); });
@@ -357,7 +433,7 @@ export default function Home() {
     }
     buildHero();
     return () => { cancelled = true; };
-  }, [continueWatchingItems, personal, kidsSafe]);
+  }, [visibleContinueWatching, personal, kidsSafe]);
 
   // Shows in your list with an episode newer than where you are.
   useEffect(() => {
@@ -397,14 +473,33 @@ export default function Home() {
     return () => window.removeEventListener('binge:ratingSaved', onRatingSaved);
   }, []);
 
-  async function handleRemoveContinueWatching(id) {
-    setContinueWatchingItems(prev => prev.filter(item => item.id !== id));
-    try {
-      await removeSupabaseContinueWatching(id);
-    } catch {
-      // Re-fetching on next visit will reconcile if the delete failed.
-    }
+  // Off the row at once; deleted when the Undo popup runs out.
+  function handleRemoveContinueWatching(id) {
+    const index = continueWatchingItems.findIndex((item) => item.id === id);
+    const removed = continueWatchingItems[index];
+    if (!removed) return;
+    setContinueWatchingItems((prev) => prev.filter((item) => item.id !== id));
+    removeWithUndo({
+      key: `continue:${id}`,
+      message: `Removed “${removed.title || 'that'}” from Continue Watching.`,
+      onUndo: () => setContinueWatchingItems((prev) => (prev.some((item) => item.id === id)
+        ? prev
+        : [...prev.slice(0, index), removed, ...prev.slice(index)])),
+      onCommit: () => removeSupabaseContinueWatching(id),
+    });
   }
+
+  // The spotlight never recommends something already watched; its Resume
+  // slide (from Continue Watching) stays.
+  const watched = useWatchedKeys();
+  const shownHero = useMemo(
+    () => (heroItems && watched ? heroItems.filter((item) => item._playUrl || !watched.has(titleKey(item))) : null),
+    [heroItems, watched]
+  );
+
+  // "Surprise me" for a profile with no history yet: the spotlight's
+  // trending titles (not its Continue Watching slide).
+  const surpriseFallback = useMemo(() => (shownHero || []).filter((item) => !item._playUrl), [shownHero]);
 
   // Bottom-nav "For You" tab links to /home#for-you.
   useEffect(() => {
@@ -430,11 +525,11 @@ export default function Home() {
 
   // Home-screen shortcut "Continue Watching" (manifest) lands here.
   useEffect(() => {
-    if (!jumpToContinue || !continueWatchingItems.length) return;
+    if (!jumpToContinue || !visibleContinueWatching.length) return;
     const row = document.getElementById('continue-watching');
     row?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     row?.querySelector('.st-card')?.focus({ preventScroll: true });
-  }, [jumpToContinue, continueWatchingItems.length]);
+  }, [jumpToContinue, visibleContinueWatching.length]);
 
   return (
     <div className="app-layout">
@@ -445,14 +540,15 @@ export default function Home() {
           <LoadingBar label="Loading dashboard..." />
         ) : (
         <>
-        <BrowseHero items={heroItems} kicker={`Welcome back, ${name}`} />
+        <BrowseHero items={shownHero} kicker={`Welcome back, ${name}`} />
 
         <div className="st-rows">
-          {continueWatchingItems.length > 0 && (
+          <SurpriseButtons personal={personal} fallback={surpriseFallback} />
+          {visibleContinueWatching.length > 0 && (
             <div id="continue-watching" className="st-anchor">
             <TitleRow
               title={`Continue Watching for ${name}`}
-              items={continueWatchingItems}
+              items={visibleContinueWatching}
               eager
               renderItem={(item, index) => (
                 <ContinueWatchingCard item={item} onRemove={handleRemoveContinueWatching} priority={index < 6} note={seasonNotes[`${item.media_type}:${item.media_id ?? item.id}`]} />
@@ -488,6 +584,7 @@ export default function Home() {
               subtitle="Based on what you watch and how you rate it"
               items={personal.topPicks}
               eager
+              hideWatched
             />
           )}
           {personal && !personal.hasHistory && (
@@ -501,27 +598,31 @@ export default function Home() {
           )}
 
           {personal?.becauseYouWatched?.[0] && (
-            <TitleRow title={personal.becauseYouWatched[0].title} items={personal.becauseYouWatched[0].items} />
+            <TitleRow title={personal.becauseYouWatched[0].title} items={personal.becauseYouWatched[0].items} hideWatched />
           )}
 
           <TitleRow
             key={`top10-tv-${refreshKey}`}
             title={isChildLevel(kidsSafe) ? 'Popular Kids Series' : 'Top 10 Series This Week'}
             ranked={!isChildLevel(kidsSafe)}
-            load={() => loadRowItems(headlineRows.tv_show, 'tv_show', { kidsSafe }).then((items) => items.slice(0, isChildLevel(kidsSafe) ? 30 : 10))}
+            load={() => loadRowItems(headlineRows.tv_show, 'tv_show', { kidsSafe })}
+            limit={isChildLevel(kidsSafe) ? 30 : 10}
+            hideWatched
           />
 
           {myList.length > 0 && <TitleRow title="My List" items={myList} />}
 
           {personal?.becauseYouWatched?.slice(1, 3).map((row) => (
-            <TitleRow key={row.id} title={row.title} items={row.items} />
+            <TitleRow key={row.id} title={row.title} items={row.items} hideWatched />
           ))}
 
           <TitleRow
             key={`top10-movie-${refreshKey}`}
             title={isChildLevel(kidsSafe) ? 'Popular Kids Movies' : 'Top 10 Movies This Week'}
             ranked={!isChildLevel(kidsSafe)}
-            load={() => loadRowItems(headlineRows.movie, 'movie', { kidsSafe }).then((items) => items.slice(0, isChildLevel(kidsSafe) ? 30 : 10))}
+            load={() => loadRowItems(headlineRows.movie, 'movie', { kidsSafe })}
+            limit={isChildLevel(kidsSafe) ? 30 : 10}
+            hideWatched
           />
 
           {tasteRows.map((definition) => (
@@ -530,11 +631,12 @@ export default function Home() {
               title={definition.title}
               load={() => loadRowItems(definition, definition.mediaType, { kidsSafe })}
               minItems={5}
+              hideWatched
             />
           ))}
 
           {personal?.becauseYouWatched?.slice(3).map((row) => (
-            <TitleRow key={row.id} title={row.title} items={row.items} />
+            <TitleRow key={row.id} title={row.title} items={row.items} hideWatched />
           ))}
 
           {headlineRows.newMovies && (
@@ -543,6 +645,7 @@ export default function Home() {
               title="New Movies"
               load={() => loadRowItems(headlineRows.newMovies, 'movie', { kidsSafe })}
               minItems={5}
+              hideWatched
             />
           )}
 

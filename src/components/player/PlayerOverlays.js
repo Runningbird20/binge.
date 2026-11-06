@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SkipForward, X } from '@phosphor-icons/react';
+import LoadingBar from '../LoadingBar';
 import { formatClock } from '../../utils/playbackPositions';
 import { RESUMABLE, SERVER_LABELS } from '../../utils/embedProviders';
 import { readPlayback } from '../../utils/playbackMessages';
@@ -7,13 +8,16 @@ import { preloadIsPlaying } from '../../utils/preloadNext';
 
 const label = (id) => SERVER_LABELS[id]?.label || id;
 
-// The server's player, or a placeholder while there's no URL yet. Give it a
-// `key` that changes per load: a new key remounts the iframe.
-export function EmbedFrame({ embedUrl, frameRef, title, onLoad, className, emptyClassName, emptyText }) {
+// The server's player, or, while there's no URL yet, a loading bar (finding a
+// stream) or `emptyText`. Give it a `key` that changes per load (and when
+// `sandbox` changes): a new key remounts the iframe. `sandbox` blocks the
+// player's pop-ups (usePopupSandbox).
+export function EmbedFrame({ embedUrl, frameRef, title, onLoad, sandbox, className, emptyClassName, emptyText, loading }) {
   return embedUrl ? (
     <iframe
       ref={frameRef}
       src={embedUrl}
+      sandbox={sandbox}
       className={className}
       allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *; web-share *"
       allowFullScreen
@@ -23,7 +27,7 @@ export function EmbedFrame({ embedUrl, frameRef, title, onLoad, className, empty
     />
   ) : (
     <div className={emptyClassName}>
-      <p>{emptyText}</p>
+      {loading ? <LoadingBar label="Finding a stream…" /> : <p>{emptyText}</p>}
     </div>
   );
 }
@@ -47,7 +51,7 @@ export function SkipIntroButton({ onSkip, onHide }) {
 // can't be switched off only has its page prefetched; otherwise the frame
 // loads with autoplay off and denied, and removes itself if it reports
 // playback anyway (Safari ignores the autoplay permission).
-export function PreloadFrame({ url, silent }) {
+export function PreloadFrame({ url, silent, sandbox }) {
   const frameRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   useEffect(() => {
@@ -64,13 +68,30 @@ export function PreloadFrame({ url, silent }) {
   if (playing) return null;
   return (
     <iframe ref={frameRef} className="st-preload-frame" src={url} title="Next episode (loading)" aria-hidden="true" tabIndex={-1}
-      allow="autoplay 'none'" referrerPolicy="no-referrer-when-downgrade" />
+      allow="autoplay 'none'" referrerPolicy="no-referrer-when-downgrade" sandbox={sandbox} />
   );
 }
 
+// How long a server-switch notice stays up. It's held while the pointer or
+// focus is on it; the server can always be changed again from Servers.
+export const NOTICE_SECONDS = 15;
+
 // "Buffering on X… Switch to Y" while a server stalls, else the notice for
-// an automatic server switch, with a way back.
+// an automatic server switch, with a way back. One quiet line under the video.
 export function FailoverBar({ stall, notice, isTV, onSwitch, onTryAgain, onDismiss }) {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!notice || held) return undefined;
+    const timer = setTimeout(onDismiss, NOTICE_SECONDS * 1000);
+    return () => clearTimeout(timer);
+  }, [notice, held, onDismiss]);
+  const hold = {
+    onMouseEnter: () => setHeld(true),
+    onMouseLeave: () => setHeld(false),
+    onFocus: () => setHeld(true),
+    onBlur: () => setHeld(false),
+  };
+
   if (stall && !notice) {
     return (
       <div className="st-failover st-failover--stall" role="status">
@@ -84,7 +105,7 @@ export function FailoverBar({ stall, notice, isTV, onSwitch, onTryAgain, onDismi
   }
   if (!notice) return null;
   return (
-    <div className="st-failover" role="status">
+    <div className="st-failover" role="status" {...hold}>
       <span>
         {notice.reason === 'wrong'
           ? `${label(notice.from)} was playing a different video, so we switched to ${label(notice.to)}.`

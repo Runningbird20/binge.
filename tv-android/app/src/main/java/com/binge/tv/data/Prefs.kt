@@ -55,7 +55,6 @@ object PlaybackPrefs {
     val fillScreen get() = Prefs.bool("fillScreen", true)
     // Off by default where effects are lightened (its slow zoom costs frames).
     val ambient get() = Prefs.bool("ambient", !Performance.light)
-    val trailers get() = Prefs.bool("trailers", true)
     val largeText get() = Prefs.bool("largeText")
     val multiviewLayout get() = Prefs.string("multiviewLayout", "grid")!!
     // "smooth": pause the games this TV can't decode smoothly; "all": keep every game playing.

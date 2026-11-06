@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Framework theme (no AppCompat): the app is one full-screen WebView. The site's
+         own background colour, so nothing flashes white while a page loads. -->
+    <style name="Theme.Binge" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/binge_background</item>
+        <item name="android:colorBackground">@color/binge_background</item>
+        <item name="android:statusBarColor">@color/binge_background</item>
+        <item name="android:navigationBarColor">@color/binge_background</item>
+        <item name="android:colorAccent">@color/binge_gold</item>
+    </style>
+</resources>

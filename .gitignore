@@ -53,6 +53,15 @@ tv-android/build/
 tv-android/app/build/
 tv-android/local.properties
 tv-android/.idea/
+mobile-android/.gradle/
+mobile-android/build/
+mobile-android/app/build/
+mobile-android/local.properties
+mobile-android/.idea/
+mobile-ios/build/
+mobile-ios/DerivedData/
+mobile-ios/**/xcuserdata/
+mobile-ios/**/*.xcuserstate
 
 # Playwright
 e2e/.auth/
@@ -66,6 +75,6 @@ test-results/
 supabase/.temp/
 
 # Generated data, kept out of git: scraper output/checkpoints (scripts/scrapers/)
-# and catalog exports (the catalog lives in Neon, with backup branches).
+# and catalog exports (data/turso/catalog.db is a local copy of the Turso catalog).
 /data/
 /backups/

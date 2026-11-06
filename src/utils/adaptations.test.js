@@ -1,7 +1,14 @@
-import { splitBookTitle } from './adaptations';
+import { findAdaptations, splitBookTitle } from './adaptations';
+import { resolveTmdbItems } from './catalogLookup';
+import { searchTmdbMulti, tmdbGet } from './tmdb';
 
 jest.mock('./supabase', () => ({ requireSupabaseClient: jest.fn() }));
 jest.mock('./catalogLookup', () => ({ resolveTmdbItems: jest.fn() }));
+jest.mock('./tmdb', () => ({
+  searchTmdbMulti: jest.fn(),
+  tmdbGet: jest.fn(),
+  tmdbKind: (mediaType) => (mediaType === 'tv_show' ? 'tv' : 'movie'),
+}));
 
 describe('splitBookTitle', () => {
   it('separates Goodreads series info from the title', () => {
@@ -13,5 +20,16 @@ describe('splitBookTitle', () => {
   it('leaves standalone titles alone', () => {
     expect(splitBookTitle('The Martian')).toEqual({ main: 'The Martian', series: '', number: null });
     expect(splitBookTitle('Fire & Blood (Targaryen History)')).toEqual({ main: 'Fire & Blood (Targaryen History)', series: '', number: null });
+  });
+});
+
+describe('findAdaptations', () => {
+  it('only offers adaptations within the profile’s maturity level', async () => {
+    searchTmdbMulti.mockResolvedValue([{ mediaType: 'movie', tmdbId: 7, title: 'Dune' }]);
+    tmdbGet.mockResolvedValue({ credits: { crew: [{ job: 'Novel', name: 'Frank Herbert' }] } });
+    resolveTmdbItems.mockResolvedValue([]);
+    await findAdaptations({ title: 'Dune (Dune, #1)', author: 'Frank Herbert' }, { kidsSafe: 'kids' });
+    expect(resolveTmdbItems).toHaveBeenCalledWith([expect.objectContaining({ tmdbId: 7 })], 'movie', { kidsSafe: 'kids' });
+    expect(resolveTmdbItems).toHaveBeenCalledWith([], 'tv_show', { kidsSafe: 'kids' });
   });
 });

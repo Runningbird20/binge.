@@ -6,27 +6,35 @@ import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
-import { MiniPlayerProvider } from './contexts/MiniPlayerContext';
+import { UndoToaster } from './components/UndoToast';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
-import AdBlocker from './components/AdBlocker';
 import ErrorBoundary, { PageError } from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
+import { captureInstallPrompt } from './utils/installApp';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import PasswordReset from './pages/PasswordReset';
 import Signup from './pages/Signup';
 // Stylesheets, in cascade order: App.css (base + design tokens), then
 // mobile.css (small-screen adaptations), then streaming.css (rows, hero,
-// sports, player), whose rules win over both.
+// cards, search, shared controls), whose rules win over both, then one file
+// per area. The area files come last, so at equal specificity their rules win
+// over streaming.css; keep this order.
 import './styles/App.css';
 import './styles/mobile.css';
 import './styles/streaming.css';
+import './styles/player.css';
+import './styles/title.css';
+import './styles/sports.css';
+import './styles/profile.css';
+import './styles/wrapped.css';
+import './styles/admin.css';
 
 // Every page's code, fetched in the background once the first screen is up,
 // so moving between pages never waits on a download (no loading skeleton
@@ -45,6 +53,7 @@ const PAGE_LOADERS = [
   () => import('./pages/Settings'),
   () => import('./pages/ReleaseCalendar'),
   () => import('./pages/Wrapped'),
+  () => import('./pages/Person'),
 ];
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => {
@@ -58,6 +67,10 @@ if (typeof window !== 'undefined') {
     idle(next);
   }, { once: true });
 }
+
+// Chrome's offer to install the site can come before any header is on screen:
+// hold on to it for the Install button (utils/installApp.js).
+captureInstallPrompt();
 
 const Home           = lazyWithReload(() => import('./pages/Home'));
 const Movies         = lazyWithReload(() => import('./pages/Movies'));
@@ -75,10 +88,9 @@ const Wrapped        = lazyWithReload(() => import('./pages/Wrapped'));
 const Settings       = lazyWithReload(() => import('./pages/Settings'));
 const ShareTarget    = lazyWithReload(() => import('./pages/ShareTarget'));
 const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
+const Person         = lazyWithReload(() => import('./pages/Person'));
 const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
-// TEMP (UI preview only — do not commit)
-const UIPreview      = lazyWithReload(() => import('./pages/__UIPreview'));
 
 // Routes where we never show the bottom nav
 const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];
@@ -160,13 +172,12 @@ function AppRoutes() {
         <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
         <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
+        <Route path="/person/:id" element={<ProtectedRoute><Person /></ProtectedRoute>} />
         <Route path="/import"    element={<ProtectedRoute><ImportHistory /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         {/* Old address for user management — now a tab in the admin panel. */}
         <Route path="/admin/users"      element={<Navigate to="/admin?tab=users" replace />} />
         <Route path="/admin"            element={<ProtectedRoute allowedUserTypes={['admin']}><AdminHome /></ProtectedRoute>} />
-        {/* TEMP (UI preview only — do not commit) */}
-        <Route path="/ui-preview" element={<UIPreview />} />
         <Route path="/sports"  element={<ProtectedRoute><Sports /></ProtectedRoute>} />
         {MediaOverlayRoutes()}
         <Route path="*" element={
@@ -199,30 +210,29 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <BrowserRouter>
-          <MiniPlayerProvider>
-            <Suspense fallback={<AppRouteFallback />}>
-              <AppShell>
-                <AdBlocker />
-                <AppRoutes />
-              </AppShell>
-            </Suspense>
+          <Suspense fallback={<AppRouteFallback />}>
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </Suspense>
 
-            {/* Sonner toasts — positioned above bottom nav on mobile */}
-            <Toaster
-              theme="dark"
-              position="bottom-center"
-              offset={{ bottom: 80 }}
-              toastOptions={{
-                style: {
-                  background: '#1c1c1e',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#fff',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                },
-              }}
-            />
-          </MiniPlayerProvider>
+          {/* "Removed · Undo" popups, bottom right. */}
+          <UndoToaster />
+          {/* Sonner toasts — positioned above bottom nav on mobile */}
+          <Toaster
+            theme="dark"
+            position="bottom-center"
+            offset={{ bottom: 80 }}
+            toastOptions={{
+              style: {
+                background: '#1c1c1e',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff',
+                borderRadius: '12px',
+                fontSize: '14px',
+              },
+            }}
+          />
         </BrowserRouter>
       </ToastProvider>
       <Analytics />

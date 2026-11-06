@@ -1,9 +1,10 @@
 import LoadingBar from './LoadingBar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import useRowScroll from '../hooks/useRowScroll';
 import TitleCard from './TitleCard';
 import ErrorBoundary from './ErrorBoundary';
+import { useWatchedKeys, withoutWatched } from '../utils/watchedTitles';
 
 // One horizontally scrolling row. Built to be usable with any input:
 //   - mouse: always-visible ‹ › buttons whenever there's more to scroll
@@ -15,6 +16,10 @@ import ErrorBoundary from './ErrorBoundary';
 // Pass either `items` directly or a `load()` that resolves to items; a
 // loader only runs once the row is near the viewport, so a page with 20
 // rows doesn't fire 20 requests up front.
+//
+// Recommendation rows pass `hideWatched`: titles this profile has watched are
+// left out (utils/watchedTitles.js) before `limit` cuts the list, so a Top 10
+// still shows ten.
 function TitleRowInner({
   title,
   subtitle,
@@ -26,11 +31,19 @@ function TitleRowInner({
   action,
   minItems = 1,
   loading = false,
+  hideWatched = false,
+  limit,
   className = '',
 }) {
-  const [items, setItems] = useState(providedItems || null);
+  const [loadedItems, setItems] = useState(providedItems || null);
   const [state, setState] = useState(providedItems ? 'done' : 'idle');
   const sectionRef = useRef(null);
+  const watched = useWatchedKeys(hideWatched);
+  const items = useMemo(() => {
+    if (!loadedItems) return loadedItems;
+    const shown = hideWatched ? withoutWatched(loadedItems, watched) : loadedItems;
+    return limit ? shown.slice(0, limit) : shown;
+  }, [loadedItems, hideWatched, watched, limit]);
   const { ref: trackRef, canLeft, canRight, scrollBy } = useRowScroll(items);
 
   useEffect(() => {
@@ -70,7 +83,7 @@ function TitleRowInner({
   }, [providedItems, load, state, eager]);
 
   if (state === 'error') return <RowProblem title={title} onRetry={() => setState('idle')} />;
-  const showSkeleton = loading || state !== 'done' || !items;
+  const showSkeleton = loading || state !== 'done' || !items || (hideWatched && !watched);
   if (!showSkeleton && items.length < minItems) return null;
 
   return (

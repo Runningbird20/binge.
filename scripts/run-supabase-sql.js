@@ -43,10 +43,12 @@ async function main() {
     );
   }
 
-  const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+  // Only SUPABASE_DB_URL: a generic DATABASE_URL was the Neon catalog's, and
+  // falling back to it could run Supabase SQL against the wrong database.
+  const connectionString = process.env.SUPABASE_DB_URL;
   if (!connectionString) {
     throw new Error(
-      'Missing SUPABASE_DB_URL (or DATABASE_URL). Add your Supabase Postgres connection string to .env or .env.local.'
+      'Missing SUPABASE_DB_URL. Add your Supabase Postgres connection string (Supabase → Connect → Session pooler) to .env or .env.local.'
     );
   }
 

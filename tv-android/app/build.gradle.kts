@@ -1,8 +1,9 @@
 import java.io.File
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
+    // AGP 9 has Kotlin built in: no org.jetbrains.kotlin.android here.
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
@@ -27,11 +28,11 @@ val tmdbKey = setting("REACT_APP_TMDB_API_KEY")
 
 android {
     namespace = "com.binge.tv"
-    compileSdk = 35
+    compileSdk = 37 // Compose 1.12 and OkHttp 5.5 require it; minSdk/targetSdk are separate
 
     defaultConfig {
         applicationId = "com.binge.tv"
-        minSdk = 22 // Fire OS 5 (oldest Fire TV sticks still in use)
+        minSdk = 23 // Compose 1.12 / tv-material 1.1 need it: Fire OS 6+ (Fire OS 5 sticks dropped 2026-11)
         targetSdk = 34
         versionCode = 2
         versionName = "2.0"
@@ -59,29 +60,31 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
-            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-            "-opt-in=androidx.tv.material3.ExperimentalTvMaterial3Api",
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        optIn.addAll(
+            "androidx.compose.ui.ExperimentalComposeUiApi",
+            "androidx.compose.foundation.ExperimentalFoundationApi",
+            "androidx.tv.material3.ExperimentalTvMaterial3Api",
         )
     }
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2025.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.tv:tv-material:1.0.0")
+    implementation("androidx.tv:tv-material:1.1.0")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 }

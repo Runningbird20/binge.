@@ -1,0 +1,1048 @@
+/* The title popup (movies, series, books): hero, facts, episodes, cast, ratings, franchise order.
+   Split out of streaming.css; App.js imports it after streaming.css. */
+
+/* ═══════════════════════════════════════════════════════════════
+   TITLE DETAIL MODAL (td-*)
+═══════════════════════════════════════════════════════════════ */
+
+.td-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(0px, 3vh, 40px) 16px 40px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: rgba(4, 6, 10, 0.78);
+  backdrop-filter: blur(6px);
+  animation: td-fade 0.18s ease;
+}
+
+.td-modal {
+  position: relative;
+  width: min(980px, 100%);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #12151d;
+  color: var(--exp-text);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  outline: none;
+  animation: td-rise 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.td-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 6;
+}
+
+.td-close:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+/* Hero */
+
+.td-hero {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-height: 560px;
+  width: 100%;
+  background: #0b0d12;
+  overflow: hidden;
+}
+
+.td-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.td-hero-img--poster { object-fit: cover; filter: blur(18px) saturate(1.2); transform: scale(1.15); opacity: 0.55; }
+
+.td-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, #12151d 0%, rgba(18, 21, 29, 0.55) 30%, rgba(18, 21, 29, 0) 60%),
+    linear-gradient(90deg, rgba(18, 21, 29, 0.75) 0%, rgba(18, 21, 29, 0) 55%);
+}
+
+.td-trailer { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+.td-trailer-close { position: absolute; left: 20px; bottom: 20px; z-index: 3; }
+
+.td-hero-content {
+  position: absolute;
+  left: clamp(20px, 4vw, 48px);
+  right: clamp(20px, 4vw, 48px);
+  bottom: clamp(18px, 4vw, 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.td-logo-title { margin: 0; }
+
+.td-logo-title img {
+  display: block;
+  max-width: min(420px, 60%);
+  max-height: 150px;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.6));
+}
+
+.td-title {
+  margin: 0;
+  white-space: normal;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+  max-width: 70%;
+}
+
+.td-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+
+.td-play { min-width: 130px; font-size: 1.05rem; }
+
+.td-round-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.td-round-btn:hover { border-color: #fff; background: rgba(255, 255, 255, 0.12); transform: scale(1.05); }
+
+.td-round-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.td-round-btn:disabled { opacity: 0.5; cursor: default; }
+
+.td-status {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 0.85rem;
+  height: 44px;
+  border-radius: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(30, 33, 42, 0.6);
+}
+
+.td-status .themed-select,
+.td-status-select { border: none !important; background: transparent !important; color: #fff !important; min-height: 40px; }
+
+/* Body */
+
+.td-body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 2rem;
+  padding: 0.5rem clamp(20px, 4vw, 48px) 1.25rem;
+}
+
+.td-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--exp-text-dim);
+  font-size: 0.95rem;
+  margin-bottom: 0.9rem;
+}
+
+.td-score { display: inline-flex; align-items: center; gap: 0.25rem; color: #f5c451; font-weight: 700; }
+
+/* Where to watch: a row under the info line, each service's mark alone on the
+   popup background (no tile, no chip). */
+
+.td-watch { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.1rem; margin: -0.2rem 0 0.9rem; }
+
+.td-watch-item { display: inline-flex; }
+
+/* Each logo's size is set inline by displaySize() so wide and narrow marks
+   look even; the row keeps one height so it doesn't jump as logos arrive. */
+
+.td-watch { min-height: 28px; }
+
+.td-watch-logo { display: block; flex: none; object-fit: contain; }
+
+.td-watch-logo--tile,
+.td-watch-logo--pending { width: 22px; height: 22px; }
+
+.td-watch-logo--tile { border-radius: 6px; }
+
+.td-cert {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 3px;
+  font-size: 0.8rem;
+  color: var(--exp-text);
+}
+
+.td-hd {
+  padding: 0 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--exp-text-dim);
+}
+
+.td-tagline { margin: 0 0 0.5rem; font-style: italic; color: var(--exp-text-dim); }
+
+.td-overview { margin: 0; font-size: 1.02rem; line-height: 1.6; color: var(--exp-text); }
+
+.td-reason { margin: 0.8rem 0 0; color: var(--st-match); font-weight: 600; font-size: 0.92rem; }
+
+.td-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.45rem 0.75rem;
+  align-content: start;
+  font-size: 0.88rem;
+}
+
+.td-facts dt { color: var(--exp-text-faint); }
+
+.td-facts dd { margin: 0; color: var(--exp-text); }
+
+/* The side column: the facts, then (movies) your rating under them. */
+
+.td-aside { display: flex; flex-direction: column; min-width: 0; }
+
+/* Lined up with the facts (.td-section's own padding comes later in this file). */
+
+.td-section.td-rate--aside { margin-top: 1.25rem; padding: 1.1rem 0 0; }
+
+.td-rate--aside .td-section-head { flex-wrap: wrap; gap: 0.35rem 1rem; }
+
+/* "Rate in detail" in the narrow column: the 1–5 buttons line up on the right. */
+
+.td-rate--aside .rating-input-row { flex-wrap: nowrap; }
+
+.td-rate--aside .rating-input-label-group { flex: 1 1 0; min-width: 0; }
+
+.td-rate--aside .rating-input-buttons { flex: none; }
+
+.td-muted { color: var(--exp-text-faint); font-size: 0.88rem; }
+
+/* Sections */
+
+.td-section { padding: 1.25rem clamp(20px, 4vw, 48px) 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+
+.td-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.td-section-head h3 { margin: 0; font-size: 1.3rem; font-weight: 700; }
+
+.td-season-select { min-width: 200px; }
+
+/* Marking episodes: "Mark season watched" beside the season picker (same
+   pill), a check per episode ("Watched up to here"), and a note with Undo. */
+
+.td-episodes-tools { display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+
+.td-mark-season {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.td-mark-season:hover:not(:disabled) { border-color: #fff; background: rgba(255, 255, 255, 0.12); }
+
+.td-mark-season.on svg { color: var(--st-match); }
+
+.td-mark-season:disabled { cursor: default; opacity: 0.6; }
+
+.td-mark-status { margin: 0; font-size: 0.9rem; color: var(--exp-text-dim); }
+
+.td-mark-status:not(:empty) { margin: -0.4rem 0 0.75rem; }
+
+.td-mark-undo {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  background: none;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.td-episode-item { display: flex; align-items: center; gap: 0.25rem; }
+
+.td-episode-item > .td-episode { flex: 1 1 auto; min-width: 0; }
+
+.td-episode-mark {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--exp-text-dim);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.td-episode-mark:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.08); }
+
+.td-episode-mark.on { color: var(--st-match); }
+
+.td-episode-mark:disabled { cursor: default; opacity: 0.5; }
+
+/* Episodes */
+
+.td-episodes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.td-episode {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px 180px minmax(0, 1fr);
+  align-items: center;
+  gap: 1.1rem;
+  padding: 1rem 0.75rem;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.td-episode:hover { background: rgba(255, 255, 255, 0.05); }
+
+.td-episode:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.td-episode:disabled { cursor: default; opacity: 0.6; }
+
+.td-episode-num { font-size: 1.5rem; font-weight: 600; color: var(--exp-text-dim); text-align: center; }
+
+.td-episode-still {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1c2130;
+}
+
+.td-episode-still img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.td-episode-still-empty { display: block; width: 100%; height: 100%; background: linear-gradient(135deg, #1f2533, #141823); }
+
+.td-episode-play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.td-episode:hover .td-episode-play,
+.td-episode:focus-visible .td-episode-play { opacity: 1; }
+
+.td-episode-watched {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--st-match);
+}
+
+.td-episode.watched .td-episode-still img { opacity: 0.7; }
+
+.td-episode-body { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+
+.td-episode-title { display: flex; justify-content: space-between; gap: 1rem; }
+
+.td-episode-title strong { font-weight: 600; }
+
+.td-episode-title .td-muted { white-space: nowrap; flex-shrink: 0; }
+
+.td-episode-overview {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--exp-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* More like this */
+
+.td-more-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.td-more-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1b1f2a;
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.td-more-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+
+.td-more-card:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.td-more-art { position: relative; aspect-ratio: 16 / 9; background: #10131a; overflow: hidden; }
+
+.td-more-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.td-more-body { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.8rem 0.9rem 1rem; }
+
+.td-more-title { font-weight: 700; font-size: 0.95rem; }
+
+.td-more-overview {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--exp-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Rating */
+
+.td-rate .rate-review-panel { max-width: 640px; }
+
+.td-status-msg { margin: 0.8rem 0 0; color: var(--exp-text-dim); font-size: 0.9rem; }
+
+.td-footer-cta { padding: 0 clamp(20px, 4vw, 48px) 1.75rem; }
+
+/* Phones: full-screen sheet */
+
+@media (max-width: 768px) {
+  /* Block layout, not a stretched flex item: stretch pins the sheet to the
+     screen height and its overflow: hidden then clips everything below the
+     fold (episodes, facts, rating), leaving nothing to scroll. */
+  .td-overlay { display: block; padding: 0; }
+  .td-modal { border-radius: 0; min-height: 100%; }
+  /* Close stays reachable while the sheet scrolls. */
+  .td-close { position: fixed; z-index: 5; }
+  .td-hero { aspect-ratio: 4 / 3; max-height: none; }
+  .td-logo-title img { max-width: 70%; max-height: 90px; }
+  .td-title { max-width: 100%; font-size: 1.9rem; }
+  .td-play { flex: 1 1 100%; }
+  .td-body { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  /* Phones: description, cast, then the facts (and a movie's rating). */
+  .td-body > .td-main { order: 1; }
+  .td-body > .td-cast { order: 2; }
+  .td-body > .td-aside { order: 3; }
+  .td-more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .td-episode { grid-template-columns: 120px minmax(0, 1fr); gap: 0.8rem; padding: 0.8rem 0.25rem; }
+  .td-episode-num { display: none; }
+  .td-episode-overview { -webkit-line-clamp: 2; }
+  .td-season-select { min-width: 0; }
+  .td-episodes-head { flex-wrap: wrap; }
+  /* Two full-width pills, the button first: side by side they don't fit. */
+  .td-episodes-tools { width: 100%; }
+  .td-episodes-tools > * { flex: 1 1 100%; }
+  .td-mark-season { justify-content: center; }
+}
+
+/* ── Books: modal hero, shelves, tabs ─────────────────────────── */
+
+.td-book-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  align-items: end;
+  padding: clamp(28px, 5vw, 56px) clamp(20px, 4vw, 48px) 1.75rem;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.td-book-hero-bg {
+  position: absolute;
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: cover;
+  filter: blur(40px) saturate(1.4);
+  opacity: 0.45;
+  z-index: -2;
+}
+
+.td-book-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, #12151d 0%, rgba(18, 21, 29, 0.5) 60%, rgba(18, 21, 29, 0.2) 100%);
+  z-index: -1;
+}
+
+.td-book-cover {
+  width: clamp(140px, 18vw, 220px);
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1c2130;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.td-book-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.td-book-head { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+
+.td-book-head .td-title { max-width: 100%; font-size: clamp(1.6rem, 3.2vw, 2.5rem); }
+
+.td-book-head .td-meta { margin-bottom: 0.2rem; }
+
+.td-book-author { margin: 0; font-size: 1.1rem; color: var(--exp-text); }
+
+.td-downloads { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1.25rem; }
+
+.td-shelf {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: clamp(96px, 11vw, 128px);
+  gap: 0.9rem;
+  overflow-x: auto;
+  padding-bottom: 0.4rem;
+  scrollbar-width: thin;
+}
+
+.td-shelf-item { display: flex; flex-direction: column; gap: 0.4rem; color: var(--exp-text-dim); text-decoration: none; font-size: 0.78rem; }
+
+.td-shelf-item img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #1c2130;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.td-shelf-item:hover img { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5); }
+
+.td-shelf-item span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.td-shelf-item:focus-visible { outline: none; }
+
+.td-shelf-item:focus-visible img { box-shadow: var(--st-focus); }
+
+@media (max-width: 768px) {
+  .td-book-hero { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+  .td-book-cover { width: 140px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LANDING, AUTH & GLOBAL BUTTON POLISH
+═══════════════════════════════════════════════════════════════ */
+
+/* Detail modal: the saved-status pill IS the dropdown (no box inside a box). */
+
+.td-status {
+  gap: 0;
+  padding: 0 0.15rem 0 0.95rem;
+  color: var(--st-match);
+}
+
+.td-status .themed-select { min-width: 0; background: none; border: none; }
+
+.td-status:hover { border-color: #fff; background: rgba(255, 255, 255, 0.12); }
+
+/* Installed app (iOS black-translucent status bar): keep fixed controls in
+   full-screen sheets clear of the notch / home indicator. */
+
+.td-close { top: calc(14px + env(safe-area-inset-top, 0px)); }
+
+@media (max-width: 768px) {
+  .td-modal { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .td-hero-content { bottom: 18px; }
+  .td-actions { gap: 0.5rem; }
+  .td-actions .st-btn { min-height: 44px; }
+  .td-round-btn { width: 44px; height: 44px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOK READER (br-*)
+═══════════════════════════════════════════════════════════════ */
+
+.td-availability { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--exp-text-dim); }
+
+.td-availability--free { color: var(--st-match); }
+
+.td-availability--preview,
+.td-availability--borrow { color: var(--st-soon); }
+
+/* ── "Previously on…" catch-up ────────────────────────────────── */
+
+.td-recap {
+  position: fixed;
+  inset: 0;
+  z-index: 1150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.td-recap-card {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1.6rem;
+  border-radius: 16px;
+  background: #16181f;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  animation: td-rise 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.td-recap-note { margin: 0.2rem 0 0; display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.72); }
+
+.td-recap-card h3 { margin: 0.3rem 0 1rem; font-size: 1.7rem; font-weight: 900; font-style: italic; }
+
+.td-recap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+
+.td-recap-list li { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 0.9rem; align-items: start; }
+
+.td-recap-list li:not(:has(img)) { grid-template-columns: minmax(0, 1fr); }
+
+.td-recap-list img { width: 132px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; }
+
+.td-recap-ep { margin: 0 0 0.25rem; font-weight: 800; font-size: 0.92rem; }
+
+.td-recap-text { margin: 0; font-size: 0.88rem; line-height: 1.45; color: rgba(255, 255, 255, 0.75); }
+
+.td-recap-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.3rem; }
+
+@media (max-width: 600px) {
+  .td-recap-list li { grid-template-columns: 96px minmax(0, 1fr); }
+  .td-recap-list img { width: 96px; }
+  .td-recap-actions .st-btn { flex: 1; }
+}
+
+/* ── Book ↔ screen links ──────────────────────────────────────── */
+
+.td-adapt-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; }
+
+.td-adapt {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.6rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.td-adapt:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
+
+.td-adapt:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.td-adapt img, .td-adapt-fallback { width: 72px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
+
+.td-adapt-fallback { display: flex; align-items: center; justify-content: center; }
+
+.td-adapt--screen { grid-template-columns: 128px minmax(0, 1fr); }
+
+.td-adapt--screen img { width: 128px; aspect-ratio: 16 / 9; }
+
+.td-adapt-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+
+.td-adapt-body .td-muted { font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.td-adapt-title { font-weight: 800; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.td-adapt-cta { margin-top: 0.3rem; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+
+@media (max-width: 600px) { .td-adapt-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── Mobile: one-handed reach ─────────────────────────────────── */
+
+.td-mobile-bar { display: none; }
+
+@media (max-width: 768px) {
+  /* Play / My List sit at the bottom of the title sheet, under the thumb. */
+  .td-mobile-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    /* Solid behind the buttons (the page used to scroll through them),
+       with the fade above the bar instead. */
+    background: #12151d;
+    order: 99;
+  }
+  .td-mobile-bar::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    height: 24px;
+    background: linear-gradient(0deg, #12151d, rgba(18, 21, 29, 0));
+    pointer-events: none;
+  }
+  .td-mobile-bar .st-btn { flex: 1; min-height: 48px; font-size: 1.02rem; }
+  .td-mobile-bar .st-btn.td-resume-control, .td-mobile-bar .td-round-btn { background: #1e222c; }
+  .td-modal { display: flex; flex-direction: column; overflow: clip; }
+  .td-hero .td-play { display: none; }
+}
+
+/* ── Wide screens ─────────────────────────────────────────────── */
+
+@media (min-width: 1400px) {
+  .td-modal { width: min(1280px, 100%); }
+  .td-split--tv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+    column-gap: 2.5rem;
+    padding-right: clamp(20px, 4vw, 48px);
+  }
+  .td-split--tv > .td-body { display: contents; }
+  .td-split--tv .td-main { grid-column: 1; grid-row: 1; padding: 0.5rem 0 1.25rem clamp(20px, 4vw, 48px); }
+  .td-split--tv .td-aside { grid-column: 2; grid-row: 1; padding: 0.75rem 0 1.25rem; }
+  .td-split--tv .td-cast { grid-column: 1 / -1; grid-row: 2; padding: 0 0 1.4rem clamp(20px, 4vw, 48px); }
+  .td-split--tv > .td-episodes-section { grid-column: 1; grid-row: 3; padding-right: 0; }
+  .td-split--tv > .td-rate { grid-column: 2; grid-row: 3; align-self: start; padding-left: 0; padding-right: 0; }
+  .td-split--tv > :not(.td-body):not(.td-episodes-section):not(.td-rate):not(.td-cast) { grid-column: 1 / -1; margin-right: calc(-1 * clamp(20px, 4vw, 48px)); }
+}
+
+/* ── Remind me ────────────────────────────────────────────────── */
+
+.td-remind { position: relative; }
+
+.td-round-btn.active { background: #fff; color: #0b0d12; }
+
+.td-remind-menu {
+  /* Opens upward: the hero clips anything below it (it crops the art). */
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 10; min-width: 200px;
+  padding: 0.4rem; border-radius: 12px; background: #1b1e27; border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.td-remind-menu p { margin: 0.3rem 0.6rem 0.4rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.5); }
+
+.td-remind-menu button { display: block; width: 100%; min-height: 40px; padding: 0 0.7rem; border: 0; border-radius: 8px; background: none; color: #fff; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+
+.td-remind-menu button:hover, .td-remind-menu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
+
+@media (max-width: 768px) { .td-remind-menu { left: auto; right: 0; transform: none; } }
+
+/* ── Outside ratings ──────────────────────────────────────────── */
+
+.or-strip { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.7rem 0 0.2rem; }
+
+.or-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem; min-height: 30px; padding: 0 0.65rem; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.85rem; font-weight: 700; color: #fff;
+}
+
+.or-chip small { font-weight: 500; color: rgba(255, 255, 255, 0.55); font-size: 0.75rem; }
+
+.or-chip--imdb b { background: #f5c518; color: #000; padding: 0 0.3rem; border-radius: 3px; font-size: 0.72rem; font-weight: 900; }
+
+.or-chip--rt b { background: #fa320a; color: #fff; padding: 0 0.3rem; border-radius: 3px; font-size: 0.72rem; font-weight: 900; }
+
+.or-chip--rt.rotten b { background: #5f7d2a; }
+
+.or-mc { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 22px; border-radius: 4px; color: #fff; font-size: 0.78rem; }
+
+.or-mc--good { background: #00ce7a; color: #00180d; }
+
+.or-mc--mixed { background: #ffbd3f; color: #241600; }
+
+.or-mc--bad { background: #ff6874; color: #2a0005; }
+
+/* ── Episode heatmap ──────────────────────────────────────────── */
+
+.hm-source { display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.18); }
+
+.hm-source button { min-height: 34px; padding: 0 0.8rem; border: 0; background: transparent; color: rgba(255, 255, 255, 0.7); font: inherit; font-weight: 700; font-size: 0.82rem; cursor: pointer; }
+
+.hm-source button.active { background: #fff; color: #0b0d12; }
+
+.hm-summary { margin: -0.25rem 0 0.9rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.75); }
+
+.hm-summary strong { color: #fff; }
+
+.hm-scroll { overflow-x: auto; padding-bottom: 0.4rem; overscroll-behavior-x: contain; }
+
+.hm-grid { border-collapse: separate; border-spacing: 3px; font-variant-numeric: tabular-nums; }
+
+.hm-grid th { font-size: 0.72rem; font-weight: 700; color: rgba(255, 255, 255, 0.55); padding: 0 0.25rem; white-space: nowrap; }
+
+.hm-grid thead th { padding-bottom: 0.25rem; }
+
+.hm-grid tbody th, .hm-grid tfoot th { text-align: right; padding-right: 0.4rem; }
+
+.hm-grid td { padding: 0; }
+
+.hm-cell, .hm-avg {
+  display: flex; align-items: center; justify-content: center; width: 44px; height: 30px; border-radius: 5px; border: 0;
+  font: inherit; font-size: 0.78rem; font-weight: 800; color: #0b0d12; cursor: pointer;
+}
+
+.hm-avg { cursor: default; margin-top: 4px; outline: 1px solid rgba(255, 255, 255, 0.35); outline-offset: -1px; }
+
+.hm-cell:hover:not(:disabled) { transform: scale(1.12); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); position: relative; z-index: 1; }
+
+.hm-cell:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.hm-cell.best { box-shadow: 0 0 0 2px #fff; }
+
+.hm-cell--great { background: #1b9e5a; color: #fff; }
+
+.hm-cell--good { background: #6fcf6b; }
+
+.hm-cell--ok { background: #e8d44d; }
+
+.hm-cell--meh { background: #f29a3e; }
+
+.hm-cell--bad { background: #e2483d; color: #fff; }
+
+.hm-cell--none { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.6); }
+
+.hm-cell--future { background: transparent; border: 1px dashed rgba(255, 255, 255, 0.2); cursor: default; }
+
+.hm-empty { width: 44px; }
+
+.hm-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; margin-top: 0.75rem; font-size: 0.75rem; color: rgba(255, 255, 255, 0.6); }
+
+.hm-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+
+.hm-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+
+.hm-legend-note { margin-left: auto; }
+
+@media (max-width: 600px) { .hm-cell, .hm-avg, .hm-empty { width: 38px; height: 28px; font-size: 0.72rem; } .hm-legend-note { margin-left: 0; } }
+
+/* ── Franchise order ──────────────────────────────────────────── */
+
+.fr-progress { display: flex; align-items: center; gap: 0.6rem; margin: 0.25rem 0 0; font-size: 0.85rem; }
+
+.fr-bar { width: 120px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+
+.fr-bar span { display: block; height: 100%; background: var(--st-match); }
+
+/* "Mark all watched" (the series' "Mark season watched" pill) sits left of
+   the order toggle (the Profile's segmented tabs), both 44px tall. */
+
+.fr-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.6rem; }
+
+.fr-mark-all { justify-content: center; }
+
+/* "All watched" is a state, not a button. */
+
+.fr-mark-all.on, .fr-mark-all.on:hover { cursor: default; border-color: rgba(255, 255, 255, 0.55); background: rgba(30, 33, 42, 0.6); }
+
+.fr-note { margin: 0; font-size: 0.88rem; color: var(--exp-text-dim); }
+
+.fr-note:not(:empty) { margin: -0.25rem 0 0.8rem; }
+
+.fr-next { display: inline-flex; gap: 0.45rem; margin: -0.25rem 0 1rem; padding: 0.55rem 0.9rem; border-radius: 10px; background: rgba(255, 255, 255, 0.08); color: #fff; text-decoration: none; font-size: 0.9rem; }
+
+.fr-next:hover { background: rgba(255, 255, 255, 0.14); }
+
+.fr-list { list-style: none; margin: 0; padding: 0 0 0.5rem; display: flex; gap: 0.75rem; overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
+
+.fr-list li { flex: 0 0 120px; scroll-snap-align: start; }
+
+.fr-item { display: flex; flex-direction: column; gap: 0.25rem; color: #fff; text-decoration: none; }
+
+.fr-num { font-size: 0.72rem; font-weight: 800; color: rgba(255, 255, 255, 0.5); }
+
+.fr-poster { position: relative; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; background: #1a1f2b; border: 1px solid rgba(255, 255, 255, 0.08); }
+
+.fr-poster img { width: 100%; height: 100%; object-fit: cover; }
+
+.fr-check { position: absolute; right: 6px; bottom: 6px; color: var(--st-match); background: #0b0d12; border-radius: 50%; }
+
+.fr-started { position: absolute; left: 6px; bottom: 6px; padding: 0.1rem 0.4rem; border-radius: 4px; background: rgba(0, 0, 0, 0.75); font-size: 0.65rem; font-weight: 800; }
+
+.fr-title { font-size: 0.8rem; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.fr-year { font-size: 0.72rem; }
+
+.fr-list li.watched .fr-poster img { opacity: 0.55; }
+
+.fr-list li.current .fr-poster { box-shadow: 0 0 0 2px #fff; }
+
+.fr-list li.missing { opacity: 0.45; }
+
+.fr-item:hover .fr-poster, .fr-item:focus-visible .fr-poster { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7); }
+
+.fr-item:focus-visible { outline: none; }
+
+/* ── Ask binge. (AI search) ───────────────────────────────────── */
+
+.fr .td-section-head { flex-wrap: wrap; align-items: flex-start; }
+
+.fr-progress { white-space: nowrap; }
+
+.fr-next { align-items: flex-start; line-height: 1.35; }
+
+.fr-next svg { flex: none; margin-top: 0.15rem; }
+
+@media (max-width: 600px) {
+  .fr-tools { width: 100%; }
+  .fr-mark-all { flex: 1 1 100%; }
+  .fr .fr-order { width: 100%; box-sizing: border-box; }
+  .fr .fr-order .st-tab { flex: 1; justify-content: center; }
+  .fr-list li { flex-basis: 104px; }
+}
+
+/* Heatmap with seasons as rows: compact cells, average at the end. */
+
+.hm-grid--rows .hm-cell { width: 40px; height: 30px; }
+
+.hm-grid--rows thead th { font-size: 0.68rem; }
+
+.hm-grid--rows .hm-avg-cell { padding-left: 8px; }
+
+.hm-grid--rows .hm-avg { margin-top: 0; }
+
+.hm-cell.fallback { outline: 2px dotted rgba(0, 0, 0, 0.45); outline-offset: -4px; }
+
+/* ── Ticket book (/wrapped?view=book): monthly stubs, passport, awards ── */
+
+/* Shared pill styling for playback and profile actions. */
+
+.st-btn.td-resume-control {
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(30, 33, 42, 0.6);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.st-btn.td-resume-control:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.st-btn.td-resume-control.td-play--compact {
+  min-width: 0;
+  width: auto;
+  flex: 0 0 auto;
+  padding-inline: 1rem;
+}
+
+/* ── Cast & crew photo row (title popup) ────────────────────────── */
+
+.td-body > .td-cast { grid-column: 1 / -1; min-width: 0; }
+
+.td-cast-title { margin: 0 0 0.75rem; font-size: 1.1rem; font-weight: 700; }
+
+.td-cast-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.2rem 0 0.4rem;
+  display: flex;
+  gap: 0.9rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.td-cast-list::-webkit-scrollbar { display: none; }
+
+.td-cast-list li { flex: 0 0 96px; scroll-snap-align: start; }
+
+.td-cast-item { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; color: #fff; text-align: center; text-decoration: none; }
+
+.td-cast-photo {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1f2b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--exp-text-faint);
+  transition: box-shadow 0.15s;
+}
+
+.td-cast-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+
+.td-cast-item:hover .td-cast-photo, .td-cast-item:focus-visible .td-cast-photo { box-shadow: 0 0 0 2px #fff; }
+
+.td-cast-item:focus-visible { outline: none; }
+
+.td-cast-name, .td-cast-role { width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+
+.td-cast-name { font-size: 0.82rem; font-weight: 700; }
+
+.td-cast-role { font-size: 0.74rem; color: var(--exp-text-faint); }
+
+.td-cast .hs-arrow { top: 42px; }

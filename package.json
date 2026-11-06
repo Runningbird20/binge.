@@ -7,39 +7,39 @@
     "node": "24.x"
   },
   "dependencies": {
-    "@neon/config": "^1.9.2",
-    "@neon/env": "^1.6.3",
+    "@libsql/client": "^0.18.0",
     "@phosphor-icons/react": "^2.1.10",
-    "@supabase/supabase-js": "^2.103.0",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
+    "@supabase/supabase-js": "^2.118.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^13.5.0",
     "@vercel/analytics": "^2.0.1",
-    "axios": "^1.15.2",
-    "concurrently": "^9.2.1",
+    "axios": "^1.21.0",
+    "concurrently": "^9.2.5",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.0",
-    "express": "^5.2.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.3.0",
     "fflate": "^0.8.3",
-    "framer-motion": "^12.38.0",
-    "helmet": "^8.1.0",
-    "pg": "^8.20.0",
-    "playwright": "1.59.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.2",
+    "framer-motion": "^12.43.0",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.1",
+    "playwright": "1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
     "react-scripts": "5.0.1",
-    "sonner": "^2.0.7",
-    "supabase": "^2.90.0",
+    "sonner": "^2.0.8",
+    "supabase": "^2.122.0",
     "web-push": "^3.6.7",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
+    "prestart": "node scripts/check-branch.js",
     "start": "concurrently \"npm run start:client\" \"npm run server\"",
     "start:client": "react-scripts start",
-    "server": "node server/index.js",
+    "server": "node --watch --watch-preserve-output server/index.js",
     "dev": "npm start",
     "import:backfill-catalog": "node scripts/backfill-catalog-fields.js",
     "import:goodreads": "node scripts/scrapers/goodreads_scraper.js",
@@ -64,6 +64,7 @@
     "supabase:sql": "node scripts/run-supabase-sql.js",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "lint": "eslint --max-warnings=0 server api scripts src e2e",
     "eject": "react-scripts eject",
     "import:tmdb": "node scripts/scrapers/tmdb_scraper.js --type both --pages 20",
     "import:tmdb:movies": "node scripts/scrapers/tmdb_scraper.js --type movie --pages 20",
@@ -74,16 +75,38 @@
     "import:openlibrary:large": "node scripts/scrapers/openlibrary_scraper.js --pages 20",
     "import:openlibrary:resume": "node scripts/scrapers/openlibrary_scraper.js --pages 20 --resume",
     "import:tmdb:max": "node scripts/scrapers/tmdb_scraper.js --type both --pages 500",
-    "import:language": "node scripts/sync-language-to-neon.js",
-    "import:language:preview": "node scripts/sync-language-to-neon.js --dry-run",
+    "import:language": "node scripts/sync-language-to-turso.js",
+    "import:language:preview": "node scripts/sync-language-to-turso.js --dry-run",
     "clean:adult": "node scripts/scrapers/clean_adult_content.js",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report e2e-report"
   },
   "eslintConfig": {
     "extends": [
-      "react-app",
-      "react-app/jest"
+      "react-app"
+    ],
+    "overrides": [
+      {
+        "files": [
+          "src/**/*.js"
+        ],
+        "extends": [
+          "react-app/jest"
+        ]
+      },
+      {
+        "files": [
+          "server/**/*.js",
+          "api/**/*.js",
+          "scripts/**/*.js"
+        ],
+        "parserOptions": {
+          "sourceType": "script"
+        },
+        "rules": {
+          "strict": "off"
+        }
+      }
     ]
   },
   "browserslist": {
@@ -99,8 +122,8 @@
     ]
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.13.0",
-    "@playwright/test": "1.59.1",
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "1.64.1",
     "patch-package": "^8.0.1"
   }
 }

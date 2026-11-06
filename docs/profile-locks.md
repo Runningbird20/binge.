@@ -17,7 +17,6 @@ account-scoped RPC with a five-minute cooldown after five incorrect attempts.
 This is a profile-selection lock inside a shared authenticated account, not an
 independent authorization boundary. Existing database policies remain scoped to
 the account, and direct navigation/API access is not protected by the PIN.
-Accounts using only Neon Auth do not support these Supabase RPCs.
 
 Validation: component tests cover failed/successful PIN verification and failed
 account reauthentication; the production build passes. Live migration execution

@@ -6,6 +6,7 @@ import { FilmSlate, MonitorPlay, BookOpen, X, Star, PencilSimple, Users, ClockCo
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
+import DownloadDataButton from '../components/DownloadDataButton';
 import ThemedSelect from '../components/ThemedSelect';
 import RatingArtifact, { computeStarRating, computeNormalizedScore } from '../components/RatingArtifact';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,10 +18,11 @@ import {
 } from '../utils/supabaseData';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
 import { computeProgressBadge } from '../utils/continueWatching';
-import { excludeRated, countCompleted, computeWatchMinutes } from '../utils/libraryStats';
+import { excludeRated, countCompleted, computeWatchMinutes, describeWatchTime, formatWatchTime, isFinished, splitFinished } from '../utils/libraryStats';
 import { posterSrc, posterSrcSet } from '../utils/imageQuality';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
+import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 
 const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
 
@@ -37,9 +39,12 @@ const TYPE_FILTERS = [
   { value: 'book', label: 'Books', Icon: BookOpen },
 ];
 
+// My List's status filter: finished titles have their own Watched tab.
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'All Statuses' },
-  ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
+  ...Object.entries(STATUS_LABELS)
+    .filter(([value]) => !isFinished({ status: value }))
+    .map(([value, label]) => ({ value, label })),
 ];
 
 function getMediaUrl(item) {
@@ -160,16 +165,22 @@ function PaginationBar({ page, totalPages, onPageChange }) {
   );
 }
 
+// My List and Watched share this grid. statusOptions: the status filter
+// (none on Watched, where everything is finished); empty: what to say when
+// there's nothing at all, and hint: a line under the count.
 function WatchlistTab({
   items,
   loading,
   location,
   typeFilter,
   onTypeFilterChange,
-  statusFilter,
+  statusFilter = '',
   onStatusFilterChange,
+  statusOptions = null,
   onStatusChange,
   onRemove,
+  empty = null,
+  hint = '',
 }) {
   const [page, setPage] = useState(0);
 
@@ -191,22 +202,28 @@ function WatchlistTab({
     <>
       <div className="pf-controls">
         <TypeFilterBar value={typeFilter} onChange={onTypeFilterChange} />
-        <ThemedSelect
-          className="filter-input"
-          aria-label="Filter by status"
-          value={statusFilter}
-          options={STATUS_FILTER_OPTIONS}
-          onChange={(event) => onStatusFilterChange(event.target.value)}
-        />
+        {statusOptions && (
+          <ThemedSelect
+            className="filter-input"
+            aria-label="Filter by status"
+            value={statusFilter}
+            options={statusOptions}
+            onChange={(event) => onStatusFilterChange(event.target.value)}
+          />
+        )}
       </div>
-      <p className="pf-count">{filtered.length} title{filtered.length === 1 ? '' : 's'}</p>
+      <p className="pf-count">
+        {filtered.length} title{filtered.length === 1 ? '' : 's'}
+        {hint && filtered.length > 0 ? ` · ${hint}` : ''}
+      </p>
 
       {loading ? (
         <LoadingBar label="Loading your library..." />
       ) : filtered.length === 0 ? (
         <div className="pf-empty">
-          <p>{items.length === 0 ? 'Your list is empty.' : 'No saved titles match this filter.'}</p>
-          {items.length === 0 && (
+          <p>{items.length === 0 ? (empty?.title || 'Your list is empty.') : 'No saved titles match this filter.'}</p>
+          {items.length === 0 && empty?.text && <p className="td-muted">{empty.text}</p>}
+          {items.length === 0 && !empty && (
             <div className="pf-empty-actions">
               <Link to="/movies" className="st-btn st-btn--ghost">Browse movies</Link>
               <Link to="/tv-shows" className="st-btn st-btn--ghost">Browse series</Link>
@@ -320,6 +337,7 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState('watchlist');
   const [wlTypeFilter, setWlTypeFilter] = useState('');
   const [wlStatusFilter, setWlStatusFilter] = useState('');
+  const [watchedTypeFilter, setWatchedTypeFilter] = useState('');
   const [ratingsTypeFilter, setRatingsTypeFilter] = useState('');
   const [ratingsSort, setRatingsSort] = useState('recent');
 
@@ -334,7 +352,7 @@ export default function Profile() {
     // then always still fetch fresh in the background to self-heal.
     const cached = getCached(cacheKey);
     if (cached) {
-      setWatchlist(cached.watchlist);
+      setWatchlist(cached.watchlist.filter((entry) => !isRemovalPending(`watchlist:${entry.id}`)));
       setRatings(cached.ratings);
       setLoading(false);
     } else {
@@ -347,7 +365,8 @@ export default function Profile() {
         fetchSupabaseRatings(),
       ]);
       if (cancelled) return;
-      const nextWatchlist = watchlistResult.status === 'fulfilled' ? watchlistResult.value : [];
+      const nextWatchlist = (watchlistResult.status === 'fulfilled' ? watchlistResult.value : [])
+        .filter((entry) => !isRemovalPending(`watchlist:${entry.id}`));
       const nextRatings = ratingsResult.status === 'fulfilled' ? ratingsResult.value : [];
       setWatchlist(nextWatchlist);
       setRatings(nextRatings);
@@ -371,15 +390,27 @@ export default function Profile() {
     });
   }
 
+  // Off the page at once (no confirm: the popup has Undo); deleted when the
+  // popup runs out.
   function handleRemove(item) {
-    if (!window.confirm(`Remove "${item.title}" from your library?`)) return;
+    const index = watchlist.findIndex((entry) => entry.id === item.id);
     setWatchlist((current) => current.filter((entry) => entry.id !== item.id));
-    removeSupabaseWatchlistItem(item.id).catch((error) => window.alert(error.message));
+    removeWithUndo({
+      key: `watchlist:${item.id}`,
+      message: `Removed “${item.title || 'that'}” from your library.`,
+      onUndo: () => setWatchlist((current) => (current.some((entry) => entry.id === item.id)
+        ? current
+        : [...current.slice(0, Math.max(0, index)), item, ...current.slice(Math.max(0, index))])),
+      onCommit: () => removeSupabaseWatchlistItem(item.id),
+    });
   }
 
   // Rated titles move to the Ratings & Reviews tab, so exclude them from the
   // watchlist tab (display, count, and the in-progress stat).
   const libraryWatchlist = useMemo(() => excludeRated(watchlist, ratings), [watchlist, ratings]);
+  // Finished but unrated titles have their own Watched tab, so My List keeps
+  // to what's still to watch, read, or in progress.
+  const { list: myList, finished: watchedUnrated } = useMemo(() => splitFinished(libraryWatchlist), [libraryWatchlist]);
 
   const stats = useMemo(() => {
     const completed = countCompleted(watchlist, ratings);
@@ -442,18 +473,24 @@ export default function Profile() {
             </div>
           </div>
           <dl className="pf-stats">
-            <div><dt>Minutes watched</dt><dd>{stats.minutes.toLocaleString()}</dd></div>
+            <div className="pf-stat--time">
+              <dt>Time watched:</dt>
+              <dd><span aria-hidden="true">{formatWatchTime(stats.minutes)}</span><span className="sr-only">{describeWatchTime(stats.minutes)}</span></dd>
+            </div>
             <div><dt>Completed</dt><dd>{stats.completed}</dd></div>
             <div><dt>In progress</dt><dd>{stats.inProgress}</dd></div>
             <div><dt>Ratings</dt><dd>{stats.totalRatings}</dd></div>
             <div><dt>Avg score</dt><dd>{stats.avg}</dd></div>
           </dl>
-          {taste.length > 0 && (
-            <div className="pf-taste">
-              <span className="pf-taste-label">Your taste</span>
-              {taste.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}
-            </div>
-          )}
+          <div className="pf-hero-foot">
+            {taste.length > 0 && (
+              <div className="pf-taste">
+                <span className="pf-taste-label">Your taste</span>
+                {taste.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}
+              </div>
+            )}
+            <DownloadDataButton profileName={displayName} />
+          </div>
         </header>
 
         <section className="pf-section">
@@ -465,7 +502,16 @@ export default function Profile() {
               className={`st-tab ${activeTab === 'watchlist' ? 'active' : ''}`}
               onClick={() => setActiveTab('watchlist')}
             >
-              My List <span className="pf-tab-count">{libraryWatchlist.length}</span>
+              My List <span className="pf-tab-count">{myList.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'watched'}
+              className={`st-tab ${activeTab === 'watched' ? 'active' : ''}`}
+              onClick={() => setActiveTab('watched')}
+            >
+              Watched <span className="pf-tab-count">{watchedUnrated.length}</span>
             </button>
             <button
               type="button"
@@ -474,23 +520,42 @@ export default function Profile() {
               className={`st-tab ${activeTab === 'ratings' ? 'active' : ''}`}
               onClick={() => setActiveTab('ratings')}
             >
-              Ratings &amp; Reviews <span className="pf-tab-count">{ratings.length}</span>
+              {/* "Ratings" on phones, where three full labels don't fit. */}
+              <span className="pf-tab-full">Ratings &amp; Reviews</span><span className="pf-tab-short">Ratings</span> <span className="pf-tab-count">{ratings.length}</span>
             </button>
           </SlidingTabs>
 
-          {activeTab === 'watchlist' ? (
+          {activeTab === 'watchlist' && (
             <WatchlistTab
-              items={libraryWatchlist}
+              items={myList}
               loading={loading}
               location={location}
               typeFilter={wlTypeFilter}
               onTypeFilterChange={setWlTypeFilter}
               statusFilter={wlStatusFilter}
               onStatusFilterChange={setWlStatusFilter}
+              statusOptions={STATUS_FILTER_OPTIONS}
               onStatusChange={handleStatusChange}
               onRemove={handleRemove}
             />
-          ) : (
+          )}
+          {activeTab === 'watched' && (
+            <WatchlistTab
+              items={watchedUnrated}
+              loading={loading}
+              location={location}
+              typeFilter={watchedTypeFilter}
+              onTypeFilterChange={setWatchedTypeFilter}
+              onStatusChange={handleStatusChange}
+              onRemove={handleRemove}
+              hint="rate one to move it to Ratings & Reviews"
+              empty={{
+                title: 'Nothing watched and unrated.',
+                text: 'Titles you mark Watched (or books you mark Read) wait here until you rate them.',
+              }}
+            />
+          )}
+          {activeTab === 'ratings' && (
             <RatingsTab
               items={ratings}
               loading={loading}

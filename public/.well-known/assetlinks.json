@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.binge.mobile",
+      "sha256_cert_fingerprints": [
+        "FA:95:02:F5:23:6B:BE:C2:FC:EF:8A:2F:57:0A:FE:A8:A8:1E:A9:21:BC:B6:6D:00:F5:B2:1A:DF:24:3C:23:5E"
+      ]
+    }
+  }
+]
