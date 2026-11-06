@@ -573,7 +573,7 @@ Rules that apply every time:
 
 ## Phone apps (`mobile-android/`, `mobile-ios/`)
 
-Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `mobile-android/scripts/build-apk.sh` and `mobile-ios/scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`.
+Both apps are the website's phone layout in a full-screen web view (no native screens), opening `https://binge-26.vercel.app` (`binge.url` / `BINGE_URL` on Android, `BINGE_SITE_URL` on iOS). Each folder's README covers building and installing. `mobile-android/scripts/build-apk.sh` and `mobile-ios/scripts/build-ipa.sh` write `dist/mobile/binge.apk` and `dist/mobile/binge.ipa`. CI builds both (`mobile-apps.yml`); a `mobile-v*` tag publishes them (see Testing notes).
 - **What they add over the browser:**
   - **Every pop-up and tab redirect from the players is refused.** Players' frames may load anything inside themselves, but only binge.'s own top-level page may open windows or leave the site. Its links to other sites open in the phone's browser.
   - **Alerts from other origins' frames (ad traps) are dropped.**
@@ -661,6 +661,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 **TV and data workflows:**
 - **Apple TV.** `apple-tv.yml` builds the Apple TV app and runs its unit suites on a macOS runner with the newest Xcode. `tv-apple/scripts/ci-simulator.sh` boots a simulator, and `Secrets.xcconfig` is written from the repo variables because `SmokeTests` needs the keys. `run-tests.sh` exits with xcodebuild's status.
 - **Fire TV.** `tv-apk.yml` runs on PRs and pushes to main that touch `tv-android/`. A `tv-v*` tag publishes the APK as `binge-tv.apk` on a GitHub Release, signed with the `TV_DEBUG_KEYSTORE` secret so it installs over earlier builds.
+- **Phone apps.** `mobile-apps.yml` builds `binge.apk` (Linux, same signing secret) and an unsigned `binge.ipa` (macOS) on PRs and pushes to main that touch `mobile-android/` or `mobile-ios/`. A `mobile-v*` tag puts both on a Release of that name and replaces the `mobile-latest` release, the fixed download address (`releases/download/mobile-latest/binge.apk`). Phone releases are never marked "latest": the Fire TV stick installs from `releases/latest/download/binge-tv.apk`.
 - **Migrations.** `supabase-migrations.yml` (PRs touching migrations + the 1st of every month) runs `scripts/check-supabase-migrations.js`: every public table/view/function the migrations leave behind must be exposed by Supabase's REST API. Anything removed by hand must also be dropped in a migration (see `20261029120000_record_removed_tables.sql`), or the check expects it.
 - **Weekly (Mondays): database split.** `database-split.yml` checks that the site serves the catalog, and runs `scripts/check-database-split.js`: Turso holds only the catalog, and Supabase serves none of it. Keep its `MEDIA` list in sync with `turso/schema.sql`. It opens or updates an issue when it fails.
 - **Catalog workflows** (`sync-tmdb.yml`, `sync-languages.yml`, `catalog-health.yml`, `database-split.yml`) need the `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` secrets. The syncs end with `turso-catalog.js refresh`.

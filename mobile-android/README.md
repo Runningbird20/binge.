@@ -22,4 +22,4 @@ Needs JDK 17+, the Android SDK (`ANDROID_HOME` or `sdk.dir` in `local.properties
 
 ## Install
 
-Copy `binge.apk` to the phone, open it, and allow installing from that app when Android asks. Or `adb install -r binge.apk`.
+Download the newest build on the phone from https://github.com/Runningbird20/binge./releases/download/mobile-latest/binge.apk (CI publishes it when a `mobile-v*` tag is pushed, `.github/workflows/mobile-apps.yml`), open it, and allow installing from your browser when Android asks. Or copy a `binge.apk` you built to the phone and open it the same way, or `adb install -r binge.apk`.
