@@ -196,12 +196,17 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 - Cards and title/book popups are single responsive components (`TitleCard`, `MediaDetailsModal`, `BookDetailsModal`). The old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone.
 - **The player is the one split.** `EmbedPlayer.js` renders `components/player/MobilePlayer.js` or `DesktopPlayer.js`, chosen by `useDeviceType().isMobile` (`src/hooks/useDeviceType.js`). A phone is a screen whose short side is ≤ 768 px: a landscape phone counts, a tablet doesn't, and TV mode never does. When you change a player control, change both layouts; they don't share markup.
+- **The player is a black stage, and nothing of ours goes on the video.** The server's own controls are inside its iframe, along its top and bottom edges, so anything over the video covers them.
+  - **Computer** (`DesktopPlayer`): our bar above the video (title, the "S1 · E1" episode picker, Mark as watched, Servers, Close), the video as big as fits at 16:9, and one quiet line for notices under it. Only in our fullscreen (F) does the bar go over the video, on hover.
+  - **Phone** (`MobilePlayer`): the same in portrait. In landscape our buttons are a narrow column beside the video, in the space a 16:9 picture leaves.
+  - Switch notices clear themselves after 15s (`NOTICE_SECONDS`), held while the pointer or focus is on them.
 - **Phones:**
   - The bottom nav is Home · Sports · Browse · Search · Me. Browse and Me open `BottomSheet`s, and `html.has-bottom-nav` hides the top search/profile.
   - Title/book sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
   - The player's server/audio/subtitle pickers are bottom sheets (`MobilePlaybackPickers`).
   - Fullscreen + landscape lock only works on Android; iPhones get a "turn your phone" hint.
 - **Mini-player:**
+  - Nothing opens it at the moment: the player's Minimize button was removed (2026-11-06), and that was its only way in.
   - On computers it's a draggable corner PiP (`MiniPlayerWidget`); on phones, a dock.
   - Both keep saving positions from the embed's messages (`utils/playbackMessages.js`).
   - `MiniPlayerProvider` must sit inside `BrowserRouter`, because Expand navigates.
@@ -397,7 +402,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 
   Server health (see Admin) and the admin's on/off switches also apply.
 - **Code layout.** `EmbedPlayer.js` is wiring only. The logic is hooks in `src/components/player/` (`useServerChoice`, `useFailover`, `usePlaybackMessages`, `useUpNext`, `useIntroMarkers`, `usePositionSync`…) and the layouts `MobilePlayer`/`DesktopPlayer`. Behaviour is pinned by `EmbedPlayer.test.js` snapshots.
-- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The "Audio & Subtitles" panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
+- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
 - **Failover.**
   - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy `PLAYER_EVENT`) are confirmed working by real playback rather than a timer.
   - Server catalogs differ per title: a server can load fine but not have that episode, identical on the provider's own site. So if an automatically chosen `events` server reports no playback time within `FAILOVER_SECONDS`, it's marked dead for that title and the next ranked server loads, with a notice and a "try it anyway" undo.
@@ -421,7 +426,12 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
   - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.
 
-**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs. The player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
+**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it.
+- **Episode changes inside VidRift** (its Next button, Episodes menu or own Up Next) are followed: it posts `vidrift:episode` just before switching, and every VidRift message carries `tmdbId`, `season` and `episode`, which also catches a missed switch (`useServerEpisode`, `readServerEpisode`).
+- The site moves to that episode without reloading the player: the frame keeps the URL it loaded until a reload of ours (another episode, server or resume), and the start position isn't re-sent to it.
+- For 10s after a switch, the old episode's late progress messages are ignored.
+
+The rest of Up Next: the player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
 
 **Intro/credits markers** (`utils/episodeMarkers.js`, TV `Data/EpisodeMarkers.swift`; table `episode_markers` + the `episode_marker_summary` RPC; migration `20261014120000_markers_shares.sql`, APPLIED). We don't own the video files, so markers come from two places:
 - **AniSkip, for anime.** The MAL id comes via AniList, which must confirm a Japanese title of that exact name; the catalog's `original_language` is often null.

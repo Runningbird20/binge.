@@ -41,3 +41,23 @@ export function readPlayback(raw) {
   }
   return null;
 }
+
+// The episode a server's message says is playing: VidRift sends tmdbId, season
+// and episode with every message, and vidrift:episode just before it switches
+// episodes inside its own player (its Next button, Episodes menu or own Up
+// Next). Null for other servers, movies, another title, and
+// vidrift:nextup-play (which names the episode that just finished).
+export function readServerEpisode(raw, tmdbId) {
+  let data = raw;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch { return null; }
+  }
+  if (!data || typeof data !== 'object') return null;
+  const type = String(data.type || '');
+  if (!type.startsWith('vidrift:') || type === 'vidrift:nextup-play') return null;
+  if (tmdbId != null && data.tmdbId != null && String(data.tmdbId) !== String(tmdbId)) return null;
+  const season = Number(data.season);
+  const episode = Number(data.episode);
+  if (!Number.isInteger(season) || !Number.isInteger(episode) || season < 1 || episode < 1) return null;
+  return { season, episode, switching: type === 'vidrift:episode' };
+}

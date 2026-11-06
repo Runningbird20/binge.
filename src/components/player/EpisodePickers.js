@@ -1,3 +1,5 @@
+import { CaretDown, Check } from '@phosphor-icons/react';
+
 // Season and episode pickers. Seasons are marked done/partial from the
 // watched set ("season:episode" keys); watched episodes are marked too.
 
@@ -64,13 +66,13 @@ export function EpisodeSelector({
     <div className="player-ep-selector" ref={selectorRef}>
       <button
         type="button"
-        className="player-ep-trigger"
+        className="player-pill player-ep-trigger"
         onClick={onToggle}
         aria-haspopup="true"
         aria-expanded={open}
       >
         <span>S{season} · E{episode}</span>
-        <span className={`player-ep-trigger-caret${open ? ' open' : ''}`}>⌄</span>
+        <CaretDown size={14} weight="bold" className={`player-ep-trigger-caret${open ? ' open' : ''}`} aria-hidden="true" />
       </button>
 
       {open && (
@@ -115,7 +117,7 @@ export function EpisodeSelector({
                       className={`player-ep-chip${isCurrent ? ' active' : ''}${isWatchedEp && !isCurrent ? ' watched' : ''}`}
                       onClick={() => onPickEpisode(value)}
                     >
-                      {isWatchedEp ? '✓ ' : ''}{value}
+                      {isWatchedEp && <Check size={12} weight="bold" aria-label="watched" />}{value}
                     </button>
                   );
                 })

@@ -133,7 +133,7 @@ test('phone TV player, portrait and landscape with the episode picker open', asy
   expect(container.innerHTML).toMatchSnapshot('portrait');
   unmount();
   const landscape = await setup({ mobile: true, landscape: true });
-  fireEvent.click(screen.getByTitle('Episodes'));
+  fireEvent.click(screen.getByRole('button', { name: 'Episodes and servers' }));
   expect(landscape.container.innerHTML).toMatchSnapshot('landscape');
 });
 
@@ -177,14 +177,6 @@ test('buffering offers a switch, then switches on its own', async () => {
   expect(screen.getByRole('status').textContent).toMatchSnapshot('offer');
   await flush(18000);
   expect(screen.getByRole('status').textContent).toMatchSnapshot('switched');
-});
-
-test('minimize hands the current second to the mini-player and closes', async () => {
-  const { onClose } = await setup();
-  post(vidrift(321.4));
-  fireEvent.click(screen.getByRole('button', { name: 'Minimize player' }));
-  expect(mini.showMini.mock.calls).toMatchSnapshot();
-  expect(onClose).toHaveBeenCalled();
 });
 
 test('keyboard: arrows change episode, Escape closes the popover then the player', async () => {
@@ -248,4 +240,32 @@ test('a server playing a different-length video is replaced', async () => {
   await flush();
   expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(submitStreamReport).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 42, works: false }));
+});
+
+// VidRift's own Next button, Episodes menu or Up Next: it switches episodes itself and says so.
+const vidriftEpisode = (season, episode) => ({ type: 'vidrift:episode', tmdbId: 1399, mediaType: 'tv', season, episode });
+
+test('an episode picked inside VidRift becomes the one the site tracks, without reloading the player', async () => {
+  await setup({ watched: [] });
+  const src = frame().getAttribute('src');
+  post(vidriftEpisode(1, 4));
+  await flush();
+  expect(screen.getByRole('button', { name: /S1 · E4/ })).toBeInTheDocument();
+  expect(frame().getAttribute('src')).toBe(src);
+  // A late message from the episode it left doesn't switch the site back.
+  post({ ...vidrift(600), tmdbId: 1399, mediaType: 'tv', season: 1, episode: 1 });
+  await flush();
+  expect(screen.getByRole('button', { name: /S1 · E4/ })).toBeInTheDocument();
+  // Picking an episode on the site loads it, as always.
+  fireEvent.click(screen.getByRole('button', { name: /S1 · E4/ }));
+  fireEvent.click(screen.getByRole('button', { name: '6' }));
+  await flush();
+  expect(frame().getAttribute('src')).toMatch(/[?&]e=6\b/);
+});
+
+test('a switch inside VidRift whose message was missed is caught from its next progress message', async () => {
+  await setup();
+  post({ ...vidrift(30), tmdbId: 1399, mediaType: 'tv', season: 2, episode: 1 });
+  await flush();
+  expect(screen.getByRole('button', { name: /S2 · E1/ })).toBeInTheDocument();
 });
