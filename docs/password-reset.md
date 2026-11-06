@@ -3,8 +3,7 @@
 The login page links to `/forgot-password`, which calls Supabase Auth's
 `resetPasswordForEmail`. Email links return to `/reset-password`, where the
 Supabase SDK restores the session and `updateUser` saves the new password.
-No database migration is required. This resets Supabase Auth accounts only;
-accounts that exist only in Neon Auth are not affected.
+No database migration is required.
 
 In Supabase Dashboard → Authentication → URL Configuration:
 

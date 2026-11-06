@@ -2,20 +2,12 @@
 // watch history and hidden recommendations.
 import { getSupabaseUser, isSupabaseConfigured, supabase } from '../supabase';
 import { getActiveProfileId } from '../activeProfile';
-import { api } from '../../api';
 import { RATING_TABLES, enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
 
 // ─── Episode Progress (watched tracking) ──────────────────────────────────────
 
 export async function fetchEpisodeProgress(mediaId) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem(`ep_progress_${mediaId}`);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
@@ -40,16 +32,7 @@ export async function fetchWatchedAmong(episodes) {
   const key = (mediaId, season, episode) => `${Number(mediaId)}:${Number(season)}:${Number(episode)}`;
   const wanted = (episodes || []).slice(0, 30);
   if (!wanted.length) return new Set();
-  if (!isSupabaseConfigured || !supabase) {
-    const found = new Set();
-    wanted.forEach(({ mediaId, season, episode }) => {
-      try {
-        const list = JSON.parse(window.localStorage.getItem(`ep_progress_${mediaId}`) || '[]');
-        if (list.some((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode))) found.add(key(mediaId, season, episode));
-      } catch {}
-    });
-    return found;
-  }
+  if (!isSupabaseConfigured || !supabase) return new Set();
 
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
@@ -145,19 +128,6 @@ export async function fetchWatchedTitleKeys() {
 }
 
 export async function markEpisodeWatched({ mediaId, season, episode }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const key = `ep_progress_${mediaId}`;
-      const stored = window.localStorage.getItem(key);
-      const list = stored ? JSON.parse(stored) : [];
-      if (!list.some((e) => e.season === season && e.episode === episode)) {
-        list.push({ season, episode, watched_at: new Date().toISOString() });
-        window.localStorage.setItem(key, JSON.stringify(list));
-      }
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
@@ -170,17 +140,6 @@ export async function markEpisodeWatched({ mediaId, season, episode }) {
 }
 
 export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const key = `ep_progress_${mediaId}`;
-      const stored = window.localStorage.getItem(key);
-      const list = stored ? JSON.parse(stored) : [];
-      const updated = list.filter((e) => !(e.season === season && e.episode === episode));
-      window.localStorage.setItem(key, JSON.stringify(updated));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
@@ -205,19 +164,6 @@ export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
 // episodes: [{ season, episode, watchedAt? }]
 export async function markEpisodesWatched({ mediaId, episodes }) {
   if (!episodes?.length) return;
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const key = `ep_progress_${mediaId}`;
-      const stored = window.localStorage.getItem(key);
-      const list = stored ? JSON.parse(stored) : [];
-      episodes.forEach(({ season, episode, watchedAt }) => {
-        if (!list.some((e) => e.season === season && e.episode === episode)) list.push({ season, episode, watched_at: watchedAt || null });
-      });
-      window.localStorage.setItem(key, JSON.stringify(list));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Sign in to keep track of episodes.');
@@ -240,17 +186,6 @@ export async function markEpisodesWatched({ mediaId, episodes }) {
 // without a profile, which it shows as its own).
 export async function unmarkEpisodesWatched({ mediaId, episodes }) {
   if (!episodes?.length) return;
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const key = `ep_progress_${mediaId}`;
-      const stored = window.localStorage.getItem(key);
-      const list = stored ? JSON.parse(stored) : [];
-      const drop = new Set(episodes.map(({ season, episode }) => `${season}:${episode}`));
-      window.localStorage.setItem(key, JSON.stringify(list.filter((e) => !drop.has(`${e.season}:${e.episode}`))));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Sign in to keep track of episodes.');
@@ -275,22 +210,6 @@ export async function unmarkEpisodesWatched({ mediaId, episodes }) {
 // ─── Watchlist Progress Update ─────────────────────────────────────────────────
 
 export async function updateWatchlistProgress({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, status, notes }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      await api.patch('/watchlist/progress', {
-        media_type: mediaType,
-        media_id: mediaId,
-        current_season: currentSeason,
-        current_episode: currentEpisode,
-        current_page: currentPage,
-        current_chapter: currentChapter,
-        status,
-        notes,
-      });
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
@@ -331,14 +250,7 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 // action (addSupabaseWatchlistItem).
 
 export async function fetchSupabaseContinueWatching() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
@@ -360,33 +272,6 @@ export async function fetchSupabaseContinueWatching() {
 }
 
 export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, positionSeconds, durationSeconds }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      const list = stored ? JSON.parse(stored) : [];
-      const idx = list.findIndex((x) => x.media_type === mediaType && Number(x.media_id) === Number(mediaId));
-      const row = {
-        id: idx >= 0 ? list[idx].id : Date.now(),
-        media_type: mediaType,
-        media_id: Number(mediaId),
-        updated_at: new Date().toISOString(),
-      };
-      if (currentSeason !== undefined)  row.current_season = currentSeason;
-      if (currentEpisode !== undefined) row.current_episode = currentEpisode;
-      if (currentPage !== undefined)    row.current_page = currentPage;
-      if (currentChapter !== undefined) row.current_chapter = currentChapter;
-      if (positionSeconds !== undefined) row.position_seconds = Math.max(0, Math.floor(positionSeconds));
-      if (durationSeconds !== undefined && durationSeconds > 0) row.duration_seconds = Math.floor(durationSeconds);
-      if (idx >= 0) {
-        list[idx] = { ...list[idx], ...row };
-      } else {
-        list.unshift(row);
-      }
-      window.localStorage.setItem('continue_watching', JSON.stringify(list.slice(0, 50)));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -442,17 +327,6 @@ export async function fetchSupabaseResumePoint({ mediaType, mediaId }) {
 }
 
 export async function removeSupabaseContinueWatching(id) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      if (stored) {
-        const list = JSON.parse(stored).filter((x) => x.id !== id);
-        window.localStorage.setItem('continue_watching', JSON.stringify(list));
-      }
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { error } = await client
     .from('continue_watching')
@@ -467,17 +341,6 @@ export async function removeSupabaseContinueWatching(id) {
 // One title's Continue Watching row, by title (Undo after marking episodes
 // put a show there that wasn't before).
 export async function removeContinueWatchingFor({ mediaType, mediaId }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      if (stored) {
-        const list = JSON.parse(stored).filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
-        window.localStorage.setItem('continue_watching', JSON.stringify(list));
-      }
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -524,19 +387,6 @@ export async function fetchEpisodeHistory(limit = 300) {
 // the removal 10 seconds later, maybe after a profile switch); the active
 // profile when left out.
 export async function removeTitleFromHistory({ mediaType, mediaId, profileId: forProfile }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      if (stored) {
-        const list = JSON.parse(stored).filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
-        window.localStorage.setItem('continue_watching', JSON.stringify(list));
-      }
-      window.localStorage.removeItem(`ep_progress_${mediaId}`);
-      window.dispatchEvent(new CustomEvent('binge:historyChanged'));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = forProfile !== undefined ? forProfile : getActiveProfileId();
@@ -565,23 +415,6 @@ export async function fetchHiddenRecommendations() {
 }
 
 export async function setRecommendationHidden({ mediaType, mediaId, hidden }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('hidden_recs');
-      let list = stored ? JSON.parse(stored) : [];
-      if (hidden) {
-        if (!list.some((x) => x.media_type === mediaType && Number(x.media_id) === Number(mediaId))) {
-          list.push({ media_type: mediaType, media_id: Number(mediaId) });
-        }
-      } else {
-        list = list.filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
-      }
-      window.localStorage.setItem('hidden_recs', JSON.stringify(list));
-      window.dispatchEvent(new CustomEvent('binge:historyChanged'));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();

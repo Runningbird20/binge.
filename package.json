@@ -64,6 +64,7 @@
     "supabase:sql": "node scripts/run-supabase-sql.js",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "lint": "eslint --max-warnings=0 server api scripts",
     "eject": "react-scripts eject",
     "import:tmdb": "node scripts/scrapers/tmdb_scraper.js --type both --pages 20",
     "import:tmdb:movies": "node scripts/scrapers/tmdb_scraper.js --type movie --pages 20",
@@ -84,6 +85,21 @@
     "extends": [
       "react-app",
       "react-app/jest"
+    ],
+    "overrides": [
+      {
+        "files": [
+          "server/**/*.js",
+          "api/**/*.js",
+          "scripts/**/*.js"
+        ],
+        "parserOptions": {
+          "sourceType": "script"
+        },
+        "rules": {
+          "strict": "off"
+        }
+      }
     ]
   },
   "browserslist": {
