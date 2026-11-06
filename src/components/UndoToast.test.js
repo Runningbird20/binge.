@@ -25,9 +25,10 @@ afterEach(() => { flushPendingRemovals(); jest.restoreAllMocks(); });
 function advance(ms, step = 250) {
   for (let t = 0; t < ms; t += step) {
     now += step;
+    const at = now;
     const due = frames;
     frames = [];
-    act(() => { due.forEach((callback) => callback(now)); });
+    act(() => { due.forEach((callback) => callback(at)); });
   }
 }
 
@@ -48,6 +49,8 @@ test('the removal happens when the 10 seconds run out, with the bar running down
   expect(screen.getByRole('status')).toHaveTextContent('Removed “Dune” from your library.');
   expect(isRemovalPending('watchlist:1')).toBe(true);
   advance(5000);
+  // The bar is decorative (aria-hidden), so no query finds it; its width is the check.
+  // eslint-disable-next-line testing-library/no-node-access
   expect(document.querySelector('.undo-toast-bar').style.transform).toBe('scaleX(0.5)');
   expect(onCommit).not.toHaveBeenCalled();
   advance(5000);

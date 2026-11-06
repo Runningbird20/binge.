@@ -4,8 +4,7 @@ name: Database split (Turso media, Supabase accounts)
 #   Turso    keeps movies, tv_shows, books, their genre views, title_ratings,
 #            episode_ratings_cache, subtitle_cache and catalog search.
 #   Supabase keeps Auth and every user-owned table.
-# It checks the deployed site serves media at /api/catalog and at its old
-# name /api/neon-data (installed TV builds still use it), then runs
+# It checks the deployed site serves media at /api/catalog, then runs
 # scripts/check-database-split.js (Turso holds only the catalog, Supabase
 # serves none of it). A failed Monday run opens or updates an issue. Read-only.
 #
@@ -52,12 +51,9 @@ jobs:
       - name: Deployed site serves the media catalog
         run: |
           # BINGE_URL may end in "/"; "//api" gets a 308 "Redirecting..." page.
-          # /api/neon-data is the old name, kept for installed TV builds.
-          for path in catalog neon-data; do
-            url="${SITE_URL%/}/api/$path/rest/movies?select=id&limit=1"
-            body=$(curl -fsSL "$url")
-            echo "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let rows;try{rows=JSON.parse(s)}catch{console.error("Not JSON from "+process.argv[1]+": "+s.slice(0,200));process.exit(1)}if(!Array.isArray(rows)||!rows.length){console.error("Expected catalog rows from "+process.argv[1]);process.exit(1)}console.log("ok:",s)})' "$url"
-          done
+          url="${SITE_URL%/}/api/catalog/rest/movies?select=id&limit=1"
+          body=$(curl -fsSL "$url")
+          echo "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let rows;try{rows=JSON.parse(s)}catch{console.error("Not JSON from "+process.argv[1]+": "+s.slice(0,200));process.exit(1)}if(!Array.isArray(rows)||!rows.length){console.error("Expected catalog rows from "+process.argv[1]);process.exit(1)}console.log("ok:",s)})' "$url"
 
       - name: Turso holds only the catalog; Supabase serves none of it
         run: node scripts/check-database-split.js

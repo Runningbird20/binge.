@@ -1,3 +1,5 @@
+import { signInWithSupabase } from './supabaseData';
+
 let mockSupabaseClient;
 
 jest.mock('./supabase', () => ({
@@ -6,8 +8,6 @@ jest.mock('./supabase', () => ({
     return mockSupabaseClient;
   },
 }));
-
-import { signInWithSupabase } from './supabaseData';
 
 function flushPromises() {
   return Promise.resolve();

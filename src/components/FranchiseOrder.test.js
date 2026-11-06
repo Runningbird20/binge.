@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import FranchiseOrder from './FranchiseOrder';
 import * as data from '../utils/supabaseData';
 import { findFranchise } from '../utils/franchises';
@@ -118,12 +118,14 @@ describe('a restricted profile', () => {
   test('only sees the movies within its level, numbered among themselves', async () => {
     // A and C pass the Kids filter; B is over it, D isn't on binge., E isn't out.
     resolveTmdbItems.mockResolvedValue(CATALOG.filter((item) => [1, 3].includes(item._tmdb.tmdbId)));
-    const { container } = open();
+    open();
     expect(await screen.findByText(/1 of 2 watched/)).toBeInTheDocument();
     expect(resolveTmdbItems).toHaveBeenCalledWith(RELEASE, 'movie', { kidsSafe: 'kids' });
     // Story order (the reverse of release): C then A.
-    expect([...container.querySelectorAll('.fr-title')].map((node) => node.textContent)).toEqual(['C', 'A']);
-    expect([...container.querySelectorAll('.fr-num')].map((node) => node.textContent)).toEqual(['1', '2']);
+    const list = within(screen.getByRole('list'));
+    expect(list.getAllByText(/^[A-E]$/).map((node) => node.textContent)).toEqual(['C', 'A']);
+    // Positions, not the 4-digit years.
+    expect(list.getAllByText(/^\d{1,3}$/).map((node) => node.textContent)).toEqual(['1', '2']);
     expect(screen.queryByText(/not on binge\./)).toBeNull();
   });
 

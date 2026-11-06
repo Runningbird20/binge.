@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import MediaDetailsModal from './MediaDetailsModal';
+import { goBackTo, historyMark } from '../utils/historyBack';
 import { BookDetailsModal } from './books/BookDetailsModal';
 import {
   addSupabaseWatchlistItem,
@@ -99,8 +100,15 @@ export default function MediaOverlay({ mediaType }) {
     return () => { cancelled = true; };
   }, [mediaType, numericId, libraryVersion]);
 
+  // Where this popup was opened from, so closing goes back there even after a
+  // video's player has added its own history entries (utils/historyBack.js).
+  const historyStartRef = useRef(null);
+  if (backgroundLocation && historyStartRef.current?.locationKey !== location.key) {
+    historyStartRef.current = { ...historyMark(), locationKey: location.key };
+  }
+
   function goBack() {
-    if (backgroundLocation) navigate(-1);
+    if (backgroundLocation) goBackTo(historyStartRef.current);
     else navigate(config.homePath);
   }
 

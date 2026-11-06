@@ -81,7 +81,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Sleep timer, "Still watching?" | — | — | ✓ | ✓ | On the website's TODO. |
 | Audio description first, Larger text | — | — | ✓ | ✓ | |
 | Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Fire TV has an on/off switch; on Apple TV it's always on. |
-| Mini player | ✓ | ✓ | ◐ | — | Computer: a draggable corner window. Phone: a dock. Apple TV: only a live game in the corner. |
+| Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
 | Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
@@ -113,13 +113,14 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 ## Only on one app
 
-**Computer**: hover trailer previews, keyboard shortcuts, the draggable mini player.
+**Computer**: hover trailer previews, keyboard shortcuts.
 
 **Phone**:
 - Bottom nav (Home · Sports · Browse · Search · Me) with Browse and Me as bottom sheets.
 - Swipe down to close title and book pages, plus a sticky Play bar.
 - Server, audio and subtitle pickers as bottom sheets.
-- The player dock, pull to refresh, and haptics.
+- Pull to refresh and haptics.
+- An Install button at the top right of the header: Add to Home Screen, or download the Android / iPhone app.
 
 **Apple TV**:
 - Top Shelf (Continue Watching / Top Picks) and `binge://` deep links.

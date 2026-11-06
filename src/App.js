@@ -7,7 +7,6 @@ import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { UndoToaster } from './components/UndoToast';
-import { MiniPlayerProvider } from './contexts/MiniPlayerContext';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import BottomNav from './components/BottomNav';
@@ -17,6 +16,7 @@ import AnnouncementBanner from './components/AnnouncementBanner';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
+import { captureInstallPrompt } from './utils/installApp';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import PasswordReset from './pages/PasswordReset';
@@ -67,6 +67,10 @@ if (typeof window !== 'undefined') {
     idle(next);
   }, { once: true });
 }
+
+// Chrome's offer to install the site can come before any header is on screen:
+// hold on to it for the Install button (utils/installApp.js).
+captureInstallPrompt();
 
 const Home           = lazyWithReload(() => import('./pages/Home'));
 const Movies         = lazyWithReload(() => import('./pages/Movies'));
@@ -206,31 +210,29 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <BrowserRouter>
-          <MiniPlayerProvider>
-            <Suspense fallback={<AppRouteFallback />}>
-              <AppShell>
-                <AppRoutes />
-              </AppShell>
-            </Suspense>
+          <Suspense fallback={<AppRouteFallback />}>
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </Suspense>
 
-            {/* "Removed · Undo" popups, bottom right. */}
-            <UndoToaster />
-            {/* Sonner toasts — positioned above bottom nav on mobile */}
-            <Toaster
-              theme="dark"
-              position="bottom-center"
-              offset={{ bottom: 80 }}
-              toastOptions={{
-                style: {
-                  background: '#1c1c1e',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#fff',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                },
-              }}
-            />
-          </MiniPlayerProvider>
+          {/* "Removed · Undo" popups, bottom right. */}
+          <UndoToaster />
+          {/* Sonner toasts — positioned above bottom nav on mobile */}
+          <Toaster
+            theme="dark"
+            position="bottom-center"
+            offset={{ bottom: 80 }}
+            toastOptions={{
+              style: {
+                background: '#1c1c1e',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff',
+                borderRadius: '12px',
+                fontSize: '14px',
+              },
+            }}
+          />
         </BrowserRouter>
       </ToastProvider>
       <Analytics />

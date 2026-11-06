@@ -1,3 +1,9 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import MangaTab from './MangaTab';
+import { getProvider } from '../utils/mangaProviders';
+import { findWhereToRead } from '../utils/anilist';
+import { upsertMangaListItem } from '../utils/mangaLibrary';
+
 jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
 jest.mock('../utils/mangaProviders', () => {
   const provider = {
@@ -14,12 +20,6 @@ jest.mock('../utils/mangaProviders', () => {
   return { DEFAULT_PROVIDER: 'mangadex', PROVIDER_LIST: [provider], getProvider: () => provider, providerFor: () => provider };
 });
 jest.mock('../utils/anilist', () => ({ findWhereToRead: jest.fn() }));
-
-import { fireEvent, render, screen } from '@testing-library/react';
-import MangaTab from './MangaTab';
-import { getProvider } from '../utils/mangaProviders';
-import { findWhereToRead } from '../utils/anilist';
-import { upsertMangaListItem } from '../utils/mangaLibrary';
 
 const SERIES = { id: 'op', provider: 'mangadex', title: 'One Piece', author: 'Eiichiro Oda', cover: null, tags: ['Adventure'], description: 'Pirates.' };
 const ROW = [SERIES, ...['Berserk', 'Monster', 'Vagabond'].map((title) => ({ ...SERIES, id: title.toLowerCase(), title }))];

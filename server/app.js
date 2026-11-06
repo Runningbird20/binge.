@@ -92,11 +92,8 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
-// The media catalog (Turso). /api/neon-data is the old name, still served for
-// installed TV builds and cached website bundles that request it.
-const catalogRoutes = require('./routes/catalog');
-app.use('/api/catalog', catalogRoutes);
-app.use('/api/neon-data', catalogRoutes);
+// The media catalog (Turso), read-only.
+app.use('/api/catalog', require('./routes/catalog'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/sports',      require('./routes/sports'));
 app.use('/api/admin', require('./routes/admin'));

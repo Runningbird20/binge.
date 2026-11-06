@@ -539,7 +539,11 @@ export default function MediaDetailsModal({
         <EmbedPlayer
           item={item}
           mediaType={mediaType}
-          onClose={() => (closeOnPlayerExit && !playerStart ? onClose() : setShowPlayer(false))}
+          // The X closes the player and this popup, back to the page underneath;
+          // Escape / a TV remote's Back step back to this popup (unless it was
+          // opened just to play, from Continue Watching or a preview).
+          onClose={() => { setShowPlayer(false); onClose(); }}
+          onBack={() => { setShowPlayer(false); if (closeOnPlayerExit && !playerStart) onClose(); }}
           initialSeason={playerStart?.season ?? resumeSeason}
           initialEpisode={playerStart?.episode ?? resumeEpisode}
           initialPosition={playerStart || resumeOverride ? undefined : initialPosition}

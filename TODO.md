@@ -12,7 +12,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## UI and UX
 
-- [ ] **"Install binge." prompt.** The site is a PWA (manifest, service worker, shortcuts), but nothing handles `beforeinstallprompt`, so most people never install it. Offer Install in the Me sheet / Settings on Chrome and Android, and an "Add to Home Screen" how-to sheet on iPhone.
 - [ ] **Link previews for shared titles.** `/movie/:id`, `/tv-show/:id` and `/book/:id` are rendered in the browser, so iMessage, Discord and Slack show the generic site card. Serve `og:title` / `og:description` / `og:image` (the TMDB backdrop) for those paths from a small Vercel function before the app loads.
 - [ ] **Notification inbox.** New-episode, reminder, game and admin push alerts disappear once dismissed, and nothing in the app lists them. Add a bell in the navbar with the last 30 days of alerts (one table both crons write to), with unread dots.
 
@@ -23,16 +22,10 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 - [ ] **E2E for profile PINs** (set PIN → switch away → wrong PIN → right PIN) once a test account exists.
 - [ ] **Watch `/api/catalog` in production.** Log slow queries and errors to `error_events` so a broken catalog shows on `/admin` instead of as silently empty rows.
 
-## Code cleanup and organization
-
-- [ ] **Drop the old `/api/neon-data` path** (`server/app.js`, `server/routes/catalog.test.js`, and its probe in `database-split.yml`) once no TV build from before 2026-11 is installed. Everything else uses `/api/catalog`.
-- [ ] **Lint the test files.** Nothing lints `src/**/*.test.js` or `e2e/`: `npx eslint src e2e` finds 77 problems (`testing-library/*` and `jest/*` rules, and `import/first` after the `jest.mock` calls; babel-jest hoists those anyway, so the imports can move up). Fix them, then add `src` and `e2e` to `npm run lint`.
-
 ## Mobile
 
-The phone apps exist (`mobile-android/`, `mobile-ios/`; each builds with its own `scripts/build-apk.sh` / `scripts/build-ipa.sh`). Next:
+The phone apps exist (`mobile-android/`, `mobile-ios/`; each builds with its own `scripts/build-apk.sh` / `scripts/build-ipa.sh`, and CI builds both in `mobile-apps.yml`). Next:
 
-- [ ] **Build them in CI.** A `tv-apk.yml`-style workflow for `mobile-android/` (reusing the `TV_DEBUG_KEYSTORE` signing), and an unsigned `.ipa` on a macOS runner, both attached to a GitHub Release on a `mobile-v*` tag.
 - [ ] **A signed iPhone app.** Without an Apple Developer account the `.ipa` has to be re-signed with a personal Apple ID (installs expire after 7 days). A paid account can sign it (ad hoc / TestFlight) in `mobile-ios/scripts/build-ipa.sh` or CI.
 - [ ] **Notifications in the apps.** Web push doesn't reach the web views. Register for FCM / APNs natively, and have the crons (`server/routes/cron.js`) send to those tokens as well as to `push_subscriptions`.
-- [ ] **Open binge. links in the app.** Android needs `public/.well-known/assetlinks.json` (with the APK's signing fingerprint) and `autoVerify`. iOS needs Associated Domains (`apple-app-site-association`) and a signed build.
+- [ ] **Open binge. links in the iPhone app.** Android does already (a verified App Link: `autoVerify` in its manifest + `public/.well-known/assetlinks.json`). iOS needs the Associated Domains entitlement (`applinks:binge-26.vercel.app`) and `public/.well-known/apple-app-site-association` with the Team ID, served as `application/json` (a `headers` entry in `vercel.json`, since the file has no extension). A free Apple ID's personal team can't use Associated Domains, so this waits on "A signed iPhone app".

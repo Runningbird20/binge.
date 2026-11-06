@@ -8,9 +8,9 @@ import { UP_NEXT_COUNTDOWN, UP_NEXT_SECONDS, prefersLowBandwidth } from '../../u
 
 // Up Next / binge mode. Near the end of an episode (last UP_NEXT_SECONDS,
 // at the credits marker, or on 'ended'), show the next episode with a 10s
-// countdown. Players' own auto-next is turned off in their URLs so this
-// stays the one source of truth; the server you're on carries over to the
-// next episode.
+// countdown; the server you're on carries over to the next episode. Players'
+// own auto-next is turned off in their URLs, except VidRift's (no switch for
+// it): when VidRift moves on by itself the site follows (useServerEpisode).
 export default function useUpNext({
   isTV, item, tmdbId, season, episode, setSeason, setEpisode, totalSeasons,
   seasonEpisodeCounts, markers, playbackRef, watched, setWatched,
