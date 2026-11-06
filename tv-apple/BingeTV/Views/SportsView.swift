@@ -581,7 +581,7 @@ struct SportThumbCard: View {
             }
             .background(FocusProbe(onFocus: onFocus))
         }
-        .buttonStyle(.card)
+        .buttonStyle(.focusCard)
     }
 }
 
@@ -722,6 +722,6 @@ struct GameCard: View {
             .frame(width: 460, height: 260, alignment: .topLeading)
             .background(Theme.surface)
         }
-        .buttonStyle(.card)
+        .buttonStyle(.focusCard)
     }
 }

@@ -194,7 +194,7 @@ fun SportsScreen() {
                 games.firstOrNull { it.streams.isNotEmpty() && it.isLive && it.title.lowercase().contains(wanted) }?.let { com.binge.tv.DebugLaunch.live = null; play(it) }
             }
             com.binge.tv.DebugLaunch.multi?.lowercase()?.let { wanted ->
-                val live = games.filter { it.streams.isNotEmpty() && it.isLive && !it.is247 }
+                val live = games.filter { it.streams.isNotEmpty() && (it.isLive || it.is247) }
                 val picks = wanted.split(",").mapNotNull { word -> live.firstOrNull { it.title.lowercase().contains(word.trim()) } }.distinct()
                 if (picks.size >= 2) { com.binge.tv.DebugLaunch.multi = null; Nav.push(Screen.Multiview(picks)) }
             }

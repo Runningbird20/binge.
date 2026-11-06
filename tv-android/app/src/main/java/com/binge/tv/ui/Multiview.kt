@@ -176,9 +176,17 @@ class MultiviewTile(val game: SportGame, context: Context) {
         // Ad and tracker frames go once the game plays (memory and CPU on a Fire TV).
         if (!trimmed && now - startedAt > 8_000) { trimmed = true; web.send(MediaCommand.Trim) }
         measure(state, now)
+        if (com.binge.tv.BuildConfig.DEBUG && now - lastStatAt > 5_000) {
+            lastStatAt = now
+            android.util.Log.i("binge-mv", "${game.title.take(24)} | ${serverName} t=${"%.1f".format(state.t)} paused=${state.paused} h=${state.height} " +
+                "drop=${(dropRate * 100).toInt()}% frames=${state.frames} audible=$audible muted=${web.muted} native=${(web as? com.binge.tv.player.HybridEngine)?.isNative}")
+        }
         // A playing tile whose clock stops is buffering: jump to the live edge,
         // and if that doesn't help, move this tile to another server.
-        if (state.paused || userPaused) { lastMoveAt = now; return }
+        // Paused (by the viewer, or the live cushion refilling): no new pictures is
+        // expected, so the frozen-picture clock starts over. Otherwise a cushion
+        // hold looked like an overloaded decoder and the game was paused for good.
+        if (state.paused || userPaused) { lastMoveAt = now; lastFramesAt = now; frozenMs = 0L; return }
         // Clock running but no new picture: Multiview decides (decoder
         // starved by the other games → pause one; alone → another server).
         frozenMs = if (lastFrames >= 0 && now - lastMoveAt < 2_000) now - lastFramesAt else 0L
@@ -189,6 +197,7 @@ class MultiviewTile(val game: SportGame, context: Context) {
     }
 
     private var startedAt = 0L
+    private var lastStatAt = 0L
 
     private fun measure(state: com.binge.tv.player.MediaState, now: Long) {
         if (state.frames < 0) return
@@ -443,14 +452,16 @@ fun MultiviewScreen(games: List<SportGame>) {
                     Text("Press OK to watch this game", style = Type.caption, color = Palette.muted)
                 }
                 if (showFocus || !tile.started) Row(
-                    Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+                    // Nearly solid: the broadcast's own score ticker sits right there.
+                    Modifier.align(Alignment.BottomStart).fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Black.copy(alpha = 0.9f))))
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Box(Modifier.size(6.dp).background(Palette.live, CircleShape))
                     Text(tile.game.title, style = Type.callout.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     // The server playing; on the focused tile, how to change it.
-                    tile.serverName?.let { Text(if (isFocused && expanded == null) "$it · hold OK to change" else it, style = Type.caption, color = Palette.muted, maxLines = 1) }
+                    // The focused tile only (elsewhere it's clutter).
+                    if (isFocused && expanded == null) tile.serverName?.let { Text("$it · hold OK to change", style = Type.caption, color = Palette.muted, maxLines = 1) }
                     if (tile.paused && tile.started) Icon(Icons.Rounded.Pause, null, modifier = Modifier.size(14.dp))
                     Icon(if (tile.audible) Icons.AutoMirrored.Rounded.VolumeUp else Icons.AutoMirrored.Rounded.VolumeOff, null,
                         tint = if (tile.audible) Palette.gold else Palette.muted, modifier = Modifier.size(14.dp))
@@ -520,9 +531,22 @@ private fun layout(ids: List<String>, width: Dp, height: Dp, expanded: String?, 
 
 // How many games this TV decodes smoothly at once, learned from Multiview
 // sessions (Fire TV models differ: a 4K Max handles about two 60fps games).
+// A lowered limit lasts a day: one bad stream (or evening) mustn't keep a
+// game paused for good. The key changed with native playback (hardware
+// decoding of every game): limits learned with web pages don't apply.
 object MultiviewCapacity {
-    private const val KEY = "multiviewCapacity"
-    val games get() = com.binge.tv.data.Prefs.int(KEY, 4).coerceIn(1, 4)
-    fun lower(to: Int) { if (to in 1 until games) com.binge.tv.data.Prefs.set(KEY, to) }
+    private const val KEY = "multiviewCapacity.native"
+    private const val AT = "multiviewCapacity.native.at"
+    private const val LOWER_FOR_MS = 24 * 60 * 60 * 1000L
+    val games: Int get() {
+        val at = com.binge.tv.data.Prefs.string(AT)?.toLongOrNull() ?: 0L
+        if (System.currentTimeMillis() - at > LOWER_FOR_MS) return 4
+        return com.binge.tv.data.Prefs.int(KEY, 4).coerceIn(1, 4)
+    }
+    fun lower(to: Int) {
+        if (to !in 1 until games) return
+        com.binge.tv.data.Prefs.set(KEY, to)
+        com.binge.tv.data.Prefs.set(AT, System.currentTimeMillis().toString())
+    }
     fun raise(to: Int) { if (to > games) com.binge.tv.data.Prefs.set(KEY, to.coerceAtMost(4)) }
 }

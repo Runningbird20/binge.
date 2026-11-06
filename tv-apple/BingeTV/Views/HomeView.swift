@@ -413,7 +413,7 @@ struct ContinueCard: View {
                 if let fresh = item.newEpisode { Badge(text: "New \(fresh)").padding(12) }
             }
         }
-        .buttonStyle(.card)
+        .buttonStyle(.focusCard)
     }
 }
 
