@@ -45,8 +45,7 @@ object Supabase {
     enum class Auth { REQUIRED, OPTIONAL }
 
     /** The media catalog lives in Turso and is read through the site's /api/catalog
-     *  (read-only, public; builds before 2026-11 use its old name, /api/neon-data, which the
-     *  site still serves). Accounts and user data stay on Supabase. */
+     *  (read-only, public). Accounts and user data stay on Supabase. */
     private val mediaTables = setOf("movies", "tv_shows", "books", "movie_genres", "tv_show_genres", "book_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache")
 
     private lateinit var prefs: SharedPreferences

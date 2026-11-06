@@ -26,8 +26,8 @@ stored in both. (The catalog moved from Neon Postgres to Turso on 2026-11-04.)
   `{site}/api/catalog/rest/{table}` (PostgREST-style, read-only, no Supabase
   credentials sent); every other request goes to Supabase.
 - `/api/catalog` (`server/routes/catalog.js`) only serves the media tables and
-  rejects writes. It's also served at its Neon-era name, `/api/neon-data`,
-  because TV builds from before 2026-11 call that.
+  rejects writes. Its Neon-era name, `/api/neon-data`, was dropped in 2026-11:
+  TV builds from before then get no catalog and need reinstalling.
 
 Catalog ids are shared: Supabase user rows refer to catalog ids (`media_id`), so
 anything that needs a title name next to user data (e.g. the admin overview's
@@ -61,7 +61,7 @@ offsets), an uncached search ~1–15k (cached 10 min). The one-time load wrote
 
 `.github/workflows/database-split.yml` runs every Monday (or Actions → Database
 split → Run workflow). It checks that the deployed site answers
-`/api/catalog/rest/movies` (and the old `/api/neon-data` path), then runs `scripts/check-database-split.js`
+`/api/catalog/rest/movies`, then runs `scripts/check-database-split.js`
 (Turso holds only the catalog, Supabase exposes none of it). A failed scheduled
 run opens or updates an issue. Secrets: `TURSO_DATABASE_URL`,
 `TURSO_AUTH_TOKEN`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. The catalog sync

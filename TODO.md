@@ -25,7 +25,6 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Code cleanup and organization
 
-- [ ] **Drop the old `/api/neon-data` path** (`server/app.js`, `server/routes/catalog.test.js`, and its probe in `database-split.yml`) once no TV build from before 2026-11 is installed. Everything else uses `/api/catalog`.
 - [ ] **Lint the test files.** Nothing lints `src/**/*.test.js` or `e2e/`: `npx eslint src e2e` finds 77 problems (`testing-library/*` and `jest/*` rules, and `import/first` after the `jest.mock` calls; babel-jest hoists those anyway, so the imports can move up). Fix them, then add `src` and `e2e` to `npm run lint`.
 
 ## Mobile
