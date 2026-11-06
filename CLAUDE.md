@@ -80,7 +80,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 ### Two databases: Turso = media catalog, Supabase = accounts + user data
 
 Nothing lives in both (see `docs/database-split.md`). The `supabase` client exported by `src/utils/supabase.js` is split:
-- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only. It's also served at its Neon-era name, `/api/neon-data`, because TV builds from before 2026-11 call that; drop it once those are gone.
+- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only. Its Neon-era name, `/api/neon-data`, is gone: a TV build from before 2026-11 calls it and gets no catalog, so reinstall it.
 - Everything else is real Supabase.
 
 Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/catalog/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
