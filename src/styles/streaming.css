@@ -1577,6 +1577,57 @@
 .has-bottom-nav .navbar-search-wrap,
 .has-bottom-nav .navbar-profile-wrap { display: none !important; }
 
+/* "Install binge." (InstallApp.js): the phone header's top right, and its sheet. */
+
+.navbar-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--exp-border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.navbar-install:active { background: rgba(255, 255, 255, 0.14); }
+
+.navbar-install:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.install-sheet { display: flex; flex-direction: column; gap: 0.75rem; padding-bottom: 0.25rem; }
+
+.install-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--exp-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.install-choice h3 { display: flex; align-items: center; gap: 0.5rem; margin: 0; color: var(--exp-text); font-size: 1rem; font-weight: 700; }
+
+.install-choice p { margin: 0; color: var(--exp-text-dim); font-size: 0.9rem; line-height: 1.45; }
+
+.install-choice .install-action { width: 100%; margin-top: 0.25rem; }
+
+.install-choice .install-how { font-size: 0.85rem; }
+
+.install-choice strong { color: var(--exp-text); }
+
+.install-steps { margin: 0; padding-left: 1.25rem; color: var(--exp-text-dim); font-size: 0.9rem; line-height: 1.7; }
+
+.install-inline-icon { vertical-align: -3px; }
+
+.install-url { overflow-wrap: anywhere; font-size: 0.78rem !important; }
+
 .bn-browse { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
 
 .bn-browse-item {
