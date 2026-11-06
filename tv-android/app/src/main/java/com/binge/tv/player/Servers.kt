@@ -74,11 +74,19 @@ class StreamServer(val id: String, val name: String, val build: (tmdbId: Int, ki
 
         // The server that last worked for this title goes first (so episode 2
         // starts where episode 1 ended up), like the site's streamPreferences.
+        // The rest: fastest to start on this TV first (ServerSpeed); servers
+        // not timed yet keep the default order, between fast and slow ones.
         fun ranked(title: Title): List<StreamServer> {
-            val last = Prefs.string("server.${title.id}") ?: return all
-            val hit = all.firstOrNull { it.id == last } ?: return all
-            return listOf(hit) + all.filter { it != hit }
+            val bySpeed = all.sortedBy { server -> ServerSpeed.of(server.id) ?: (UNTIMED_MS + DEFAULT_ORDER.indexOf(server.id).coerceAtLeast(0) * 100) }
+            val last = Prefs.string("server.${title.id}") ?: return bySpeed
+            val hit = all.firstOrNull { it.id == last } ?: return bySpeed
+            return listOf(hit) + bySpeed.filter { it != hit }
         }
+
+        private const val UNTIMED_MS = 9_000L
+        // Before anything is timed: the servers whose stream the native player
+        // takes over first (they start ~3x faster on a stick than page-only ones).
+        private val DEFAULT_ORDER = listOf("vidy", "cinesrc", "vidlink", "vidrift", "videasy", "vidsrc-ru")
 
         fun rememberWorking(server: StreamServer, title: Title) = Prefs.set("server.${title.id}", server.id)
     }
@@ -89,20 +97,40 @@ object ServerPlan {
     @Serializable private data class Report(val provider: String, val worksCount: Int? = null, val brokenCount: Int? = null,
                                             val audioLang: String? = null, val audioCount: Int? = null)
 
+    // Never holds up a start for long: the admin switches (cached 2 min) and
+    // the audio reports each get ~0.8s, then the plan goes with what it has.
     suspend fun servers(title: Title, originalLanguage: String?): List<StreamServer> {
-        val disabled = ServerSwitches.disabledServers()
+        val disabled = kotlinx.coroutines.withTimeoutOrNull(800) { ServerSwitches.disabledServers() } ?: ServerSwitches.lastKnown
         var list = StreamServer.ranked(title).filter { it.id !in disabled }
         com.binge.tv.DebugLaunch.server?.let { only -> list = list.filter { it.id == only } }
-        val original = originalLanguage ?: OriginalLanguage.of(title)
+        val original = originalLanguage ?: kotlinx.coroutines.withTimeoutOrNull(800) { OriginalLanguage.of(title) }
         val wanted = if (PlaybackPrefs.audio == "original") original else PlaybackPrefs.audio
         if (wanted.isNullOrEmpty()) return list
-        val reports = runCatching {
-            json.decodeFromString<List<Report>>(Supabase.rpc("stream_report_summary", mapOf("p_media_type" to title.kind.raw, "p_media_id" to title.dbId)))
-        }.getOrDefault(emptyList())
+        val reports = kotlinx.coroutines.withTimeoutOrNull(800) {
+            runCatching {
+                json.decodeFromString<List<Report>>(Supabase.rpc("stream_report_summary", mapOf("p_media_type" to title.kind.raw, "p_media_id" to title.dbId)))
+            }.getOrDefault(emptyList())
+        } ?: emptyList()
         val audio = reports.mapNotNull { r -> r.audioLang?.let { r.provider to it } }.toMap()
         val matching = list.filter { audio[it.id] == wanted }
         if (matching.isNotEmpty()) return matching + list.filter { audio[it.id] == null }
         list = list.filter { audio[it.id] == null || audio[it.id] == wanted }
         return list.ifEmpty { StreamServer.ranked(title).filter { it.id !in disabled } }
     }
+}
+
+// How long each server takes to start playing on this TV (a running average,
+// in Prefs), measured from its page starting to load. On a Fire TV stick the
+// difference is large: a server whose stream the native player can take
+// (Vidy) starts in ~5s; one that only plays in its page (VidRift) in ~15s.
+object ServerSpeed {
+    fun of(id: String): Long? = Prefs.int("speed.$id", -1).takeIf { it > 0 }?.toLong()
+
+    fun record(id: String, ms: Long) {
+        val old = of(id)
+        Prefs.set("speed.$id", (if (old == null) ms else (old * 2 + ms) / 3).toInt())
+    }
+
+    // Gave up without playing: counts as very slow.
+    fun failed(id: String) = record(id, 40_000)
 }

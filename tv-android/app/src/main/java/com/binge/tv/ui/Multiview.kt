@@ -162,7 +162,7 @@ class MultiviewTile(val game: SportGame, context: Context) {
         val now = System.currentTimeMillis()
         lastStateAt = now
         paused = state.paused
-        if (!started && state.t > 0.4 && !state.paused) {
+        if (!started && state.isPlaying) {
             started = true
             serverName = race?.winner?.server?.name
             startedAt = System.currentTimeMillis()
