@@ -33,6 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.binge.tv.data.Surprise
+import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -161,6 +164,9 @@ fun HomeScreen() {
     PivotScroll(fraction = 0.22f) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().focusRestorer(), contentPadding = PaddingValues(bottom = 40.dp)) {
             item(key = "hero") { if (hero != null) Hero(hero, listState) else HeroSkeleton() }
+            if (!loading || rows.isNotEmpty()) item(key = "surprise") {
+                SurpriseButtons(personal, rows.firstOrNull()?.items.orEmpty(), continueItems.map { it.id }.toSet() + myList.map { it.id })
+            }
             if (continueItems.isNotEmpty()) item(key = "continue") {
                 ContinueRow("Continue Watching for $name", continueItems, onLongClick = { menuFor = it }, refocusId = refocusId, onRefocused = { refocusId = null })
             }
@@ -320,5 +326,22 @@ fun ActionSheet(heading: String, onDismiss: () -> Unit, content: @Composable () 
         }
         // Focus starts on the first action.
         LaunchedEffect(Unit) { delay(80); focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Enter) }
+    }
+}
+
+// "Surprise me with a movie" / "… a series" (as on the website's Home): opens
+// one of your picks of that kind. A kind with nothing to offer has no button.
+@Composable
+private fun SurpriseButtons(personal: Personal.Rows, fallback: List<Title>, exclude: Set<String>) {
+    val kinds = listOf(
+        Triple(MediaKind.MOVIE, "Surprise me with a movie", Icons.Rounded.Movie),
+        Triple(MediaKind.TV, "Surprise me with a series", Icons.Rounded.Tv),
+    ).map { (kind, label, icon) -> Triple(label, icon, Surprise.pool(personal, fallback, kind, exclude)) }
+        .filter { it.third.isNotEmpty() }
+    if (kinds.isEmpty()) return
+    Row(Modifier.padding(start = Dimens.edge, end = Dimens.edge, top = 6.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        kinds.forEach { (label, icon, pool) ->
+            Pill(label, icon = icon) { Surprise.pick(pool)?.let(Nav::open) }
+        }
     }
 }
