@@ -577,6 +577,7 @@ Both apps are the website's phone layout in a full-screen web view (no native sc
 - **What they add over the browser:**
   - **Every pop-up and tab redirect from the players is refused.** Players' frames may load anything inside themselves, but only binge.'s own top-level page may open windows or leave the site. Its links to other sites open in the phone's browser.
   - **Alerts from other origins' frames (ad traps) are dropped.**
+  - **binge. links open in the Android app** (a verified App Link): `autoVerify` in its manifest + `public/.well-known/assetlinks.json`, which must list the SHA-256 of the key the APK is signed with (the Android debug key; `mobile-apps.yml` warns when a build's isn't listed). Not on iOS yet: Associated Domains need a paid Apple account.
   - **Files saved through `<a download>` blob links reach the phone.** Android saves them to Downloads; iOS opens the share sheet via `WKDownload`.
   - **The web views present as plain Chrome / Safari** (Android drops `; wv` and `X-Requested-With`, as Fire TV does). The UA ends in `BingeApp/1.0`, which must never contain `BingeTV`, the website's TV-mode trigger.
 - **What they don't have:** web push (web views don't get it), and a sign-in shared with the browser.

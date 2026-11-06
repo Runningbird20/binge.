@@ -13,7 +13,8 @@
 # Signing: the APK uses the shared debug key, the TV_DEBUG_KEYSTORE secret also
 # used by tv-apk.yml (base64 ~/.android/debug.keystore | pbcopy), so CI and local
 # builds install over each other. Without it each run makes a one-off key, and
-# an update needs an uninstall first. The .ipa is unsigned: Sideloadly, AltStore
+# an update needs an uninstall first, and binge. links don't open in the app
+# (public/.well-known/assetlinks.json lists that key). The .ipa is unsigned: Sideloadly, AltStore
 # or Xcode signs it on its way to the phone (mobile-ios/README.md).
 #
 # Both apps only need the site's address: vars.BINGE_URL, else the live site.
@@ -73,6 +74,17 @@ jobs:
           echo "$TV_DEBUG_KEYSTORE" | base64 --decode > ~/.android/debug.keystore
       - name: Build binge.apk
         run: mobile-android/scripts/build-apk.sh
+      - name: Check binge. links will open in it
+        # Android opens the site's links in the app only when the key the APK is
+        # signed with is listed in the site's public/.well-known/assetlinks.json.
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          sha=$("$apksigner" verify --print-certs dist/mobile/binge.apk | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          if grep -q "\"$sha\"" public/.well-known/assetlinks.json; then
+            echo "binge. links will open in this APK: its key ($sha) is in public/.well-known/assetlinks.json."
+          else
+            echo "::warning::This APK's key ($sha) isn't in public/.well-known/assetlinks.json, so binge. links won't open in it automatically. Set the TV_DEBUG_KEYSTORE secret."
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: binge-apk
