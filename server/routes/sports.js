@@ -2,8 +2,16 @@ const crypto = require('crypto');
 const express = require('express');
 const { serviceClient, userFromRequest } = require('../middleware/supabaseAdmin');
 const router = express.Router();
-// The feeds' fetch + normalize, shared with the browser (src/utils/sportsFeeds.mjs).
-const { fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized } = require('../../src/utils/sportsFeeds.mjs');
+// The feeds' fetch + normalize, shared with the browser (src/utils/sportsFeeds.js,
+// an ES module; Vercel's build compiles it to CommonJS). Loaded on first use, not
+// at startup, so that if it ever fails to load only this fallback route fails.
+// After it became a top-level require of an .mjs, every /api route on Vercel
+// returned FUNCTION_INVOCATION_FAILED (2026-11-06).
+let feeds = null;
+const loadFeeds = () => {
+  if (!feeds) feeds = require('../../src/utils/sportsFeeds');
+  return feeds;
+};
 
 // Server-side proxy + cache for the three sports providers. Returns the
 // normalized but UNMERGED list ({ raw }); src/utils/sportsProviders.js's
@@ -16,7 +24,7 @@ let cacheTime = 0;
 const RESOLVE_CACHE_TTL = 30 * 1000;
 const resolveCache = new Map();
 
-// Only fetching + normalizing happens here (sportsFeeds.mjs, the same code the
+// Only fetching + normalizing happens here (sportsFeeds.js, the same code the
 // browser runs); the fuzzy one-entry-per-game merge runs client-side on this raw
 // list, so that matching logic exists in exactly one place. The server waits
 // less than a browser (8s, inside the function's time limit), and PPV.st gets a
@@ -27,6 +35,7 @@ const PPV_OPTIONS = { ...FEED_OPTIONS, headers: { 'User-Agent': 'Mozilla/5.0 (co
 async function fetchRawStreams() {
   if (cache && Date.now() - cacheTime < CACHE_TTL) return cache;
 
+  const { fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized } = loadFeeds();
   const [ppv, streamed, streamfree] = await Promise.allSettled([
     fetchPpvNormalized(PPV_OPTIONS),
     fetchStreamedNormalized(FEED_OPTIONS),

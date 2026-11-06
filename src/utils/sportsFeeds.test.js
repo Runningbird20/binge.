@@ -1,4 +1,4 @@
-import { fetchPpvNormalized, fetchStreamfreeNormalized } from './sportsFeeds.mjs';
+import { fetchPpvNormalized, fetchStreamfreeNormalized } from './sportsFeeds';
 
 const now = Math.floor(Date.now() / 1000);
 const reply = (body) => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });

@@ -2,8 +2,9 @@
 // into one shape: one entry per listing, each with a single provider as its server.
 // One copy, used by the browser (utils/sportsProviders.js, which merges the
 // listings into one entry per game) and by the server's fallback proxy
-// (server/routes/sports.js, which returns them unmerged). An ES module, so the
-// server loads it with require() (Node 24).
+// (server/routes/sports.js, which returns them unmerged). A plain .js ES module,
+// never .mjs: Vercel's build compiles .js ES modules to CommonJS for the API
+// function, and the server requires it inside the route, not at startup.
 //
 // Each fetch takes { timeoutMs, headers }: the server waits less (it has a
 // function time limit) and sends a User-Agent, which a page can't set.
