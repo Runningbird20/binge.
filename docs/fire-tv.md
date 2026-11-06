@@ -36,6 +36,8 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Measured.** Cold start Fight Club 22s → 9s; live game 4.5s; Play after a preload 0.02–0.09s; two live games in Multiview at 0% dropped frames (the second web-page game used to fall to 2–3 fps). Release builds use R8 (12.8 MB → 3.2 MB APK).
 - **Debugging.** `Perf` marks (logcat tag `binge-perf`, release builds too); debug builds log the media requests each page makes (`binge-media`, `--ez logall true` for every request) and Multiview tile stats (`binge-mv`). `--es profile <name>` skips the profile picker. Fire OS drops `Log.d`, so use `Log.i`.
 
+- **Surprise me** (Home, above Continue Watching; `data/Surprise.kt`, the website's `utils/surprise.js`): a movie or a series from Top Picks and the "Because you watched" rows (15 / 6 per row, weighted toward the top, not one of the last 6 surprises), or a trending title for a profile with no history; opens its title page. A kind with nothing to offer has no button.
+
 ## Measured on a Fire Stick, and stability
 
 - **Fire Stick 4K Max (measured 2026-10-10).**
