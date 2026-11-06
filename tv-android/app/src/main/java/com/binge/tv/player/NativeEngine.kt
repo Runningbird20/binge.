@@ -108,6 +108,18 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
         player.prepare()
     }
 
+    // Live: ExoPlayer's position is relative to a sliding window and jumps
+    // around; the player's stall checks need a clock that only moves forward
+    // while it plays, so live reports the stream's wall-clock time (seconds).
+    private val window = androidx.media3.common.Timeline.Window()
+    private fun liveClock(): Double {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return player.currentPosition / 1000.0
+        timeline.getWindow(player.currentMediaItemIndex, window)
+        val start = window.windowStartTimeMs
+        return if (start == C.TIME_UNSET) player.currentPosition / 1000.0 else (start + player.currentPosition) / 1000.0
+    }
+
     private fun flatten(tracks: Tracks, type: Int) = tracks.groups.filter { it.type == type }
         .flatMap { group -> (0 until group.length).filter { group.isTrackSupported(it) }.map { group to it } }
 
@@ -117,7 +129,9 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
         val counters = player.videoDecoderCounters
         val duration = player.duration
         return MediaState(
-            t = player.currentPosition / 1000.0,
+            // No clock until the first picture: a live stream's position is
+            // already far along before it shows anything.
+            t = if (!firstFrame) 0.0 else if (isLive) liveClock() else player.currentPosition / 1000.0,
             d = if (isLive || duration == C.TIME_UNSET) 0.0 else duration / 1000.0,
             paused = !player.playWhenReady,
             ended = state == Player.STATE_ENDED,

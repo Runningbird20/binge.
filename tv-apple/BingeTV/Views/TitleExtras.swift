@@ -60,7 +60,7 @@ struct RateView: View {
                         }
                         .frame(width: 200, height: 170)
                     }
-                    .buttonStyle(.card)
+                    .buttonStyle(.focusCard)
                     .focused($focused, equals: stars)
                     .disabled(busy)
                 }
@@ -239,7 +239,7 @@ struct PreviouslyOn: View {
                             .frame(width: 520, height: 230, alignment: .topLeading)
                             .background(Theme.surface)
                         }
-                        .buttonStyle(.card)
+                        .buttonStyle(.focusCard)
                     }
                 }
                 .padding(.vertical, 30)

@@ -85,6 +85,16 @@ class StreamRace(
 
     private fun startNext() {
         val server = waiting.removeFirstOrNull() ?: return
+        // At most two pages at once: a third makes all of them crawl on a
+        // stick. The oldest one that hasn't found its stream makes room.
+        if (!request.isLive && candidates.size >= MAX_PAGES_AT_ONCE) {
+            candidates.firstOrNull { (it.web as? HybridEngine)?.isStartingNative != true }?.let { stuck ->
+                Perf.mark("closing ${stuck.server.name} (no stream yet)")
+                stuck.web.destroy()
+                candidates = candidates.filter { it !== stuck }
+                ServerSpeed.failed(stuck.server.id)
+            }
+        }
         val url = server.build(tmdbId, request.title.kind, request.season ?: 1, request.episode ?: 1)
         val engine = HybridEngine(context, url, request.isLive, NativePlayback.enabled)
         engine.view.alpha = 0f
@@ -152,7 +162,8 @@ class StreamRace(
             if (expected != null && ExpectedRuntime.isWrong(state.d, expected)) { reject(candidate); continue }
             if (!state.isPlaying) continue
             Perf.mark("playing ${candidate.server.name}")
-            if (!shopping) { crown(candidate); break }
+            // Native: the player adapts its quality by itself, nothing to shop for.
+            if (!shopping || (candidate.web as? HybridEngine)?.isNative == true) { crown(candidate); break }
             playingHeights[candidate.server.id] = state.height
             if (firstPlayAt == null) firstPlayAt = System.currentTimeMillis()
             // Already HD: nothing sharper is worth the wait on a TV this size.
@@ -218,7 +229,9 @@ class StreamRace(
     private fun crown(candidate: Candidate) {
         winner = candidate
         Perf.mark("winner ${candidate.server.name} (${mode})")
-        if (request.isLive && mode == Mode.LIVE && !keepMuted && candidates.size > 1 && QualityPreference.current == QualityPreference.BEST) {
+        // A native winner already in HD needs no sharper runner-up (each one is a hardware decoder).
+        val nativeHd = (candidate.web as? HybridEngine)?.isNative == true && (candidate.web.poll()?.height ?: 0) >= 1000
+        if (request.isLive && mode == Mode.LIVE && !keepMuted && candidates.size > 1 && QualityPreference.current == QualityPreference.BEST && !nativeHd) {
             upgradeUntil = System.currentTimeMillis() + 6000
         } else {
             candidates.filter { it.server != candidate.server }.forEach { it.web.destroy() }
@@ -247,6 +260,7 @@ class StreamRace(
         const val MAX_VOD = 3
         // How long one server gets alone before the next one joins.
         const val STAGGER_MS = 5_000L
+        const val MAX_PAGES_AT_ONCE = 2
         const val LIVE_STAGGER_MS = 4_000L
     }
 }

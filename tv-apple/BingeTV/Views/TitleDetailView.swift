@@ -388,7 +388,7 @@ struct EpisodeCard: View {
                     if isCurrent { Badge(text: "Up next").padding(14) }
                 }
             }
-            .buttonStyle(.card)
+            .buttonStyle(.focusCard)
             Text("\(episode.episodeNumber). \(episode.name ?? "Episode \(episode.episodeNumber)")")
                 .font(.callout.weight(.semibold))
                 .lineLimit(1)

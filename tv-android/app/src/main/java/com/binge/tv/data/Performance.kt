@@ -6,7 +6,8 @@ import android.content.Context
 // What this TV can afford. Fire TV sticks have 1–2 GB shared by the app, its
 // WebView video pages and the picture cache, and slow CPUs: there, focus
 // zoom and ambient mode's slow pan cost frames that scrolling and video need.
-// "Lighter effects" (Settings) is on by default on those devices.
+// "Lighter effects" (Settings) is on by default on those devices: no glow
+// and ambient mode off; the focus zoom stays, a little smaller.
 object Performance {
     var lowMemory = false
         private set
@@ -19,6 +20,8 @@ object Performance {
 
     val light get() = Prefs.bool("lightEffects", lowMemory)
 
-    // How much a focused card/button grows (none with lighter effects).
-    fun focusScale(normal: Float) = if (light) 1f else normal
+    // How much a focused card/button grows. Always some: on a TV the zoom is
+    // what shows where you are (viewers found a border alone hard to see),
+    // and it's drawn by the GPU, so it costs a stick almost nothing.
+    fun focusScale(normal: Float) = if (light) 1f + (normal - 1f) * 0.75f else normal
 }
