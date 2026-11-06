@@ -16,7 +16,7 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Tests and reliability
 
-- [ ] **Unit tests for the untested utils.** 42 of 64 `src/utils` modules have no test file. Start with logic that silently changes what users see: `catalogLookup`, `browseRows`, `continueWatching`, `kidsMode`, `releaseCalendar`, `playbackPositions`, `newEpisodes`.
+- [ ] **Unit tests for the untested utils.** 34 of 82 `src/utils` modules have no test file. Next, logic that changes what users see: `recommendations`, `embedProviders`, `catalogQueries`, `franchises`, `profileSettings`, `watchlistStatus`, `aiSearch`.
 - [ ] **Run the signed-in E2E specs.** Create a dedicated test account and set `E2E_EMAIL`/`E2E_PASSWORD` (`.env`). `e2e/catalog.spec.js` (Home and Movies rows have titles from the catalog) and `e2e/profile-pin.spec.js` (PIN set → wrong PIN refused → right PIN opens; removes the PIN after) have never run signed in, nor have the older signed-in specs here.
 
 ## Mobile
