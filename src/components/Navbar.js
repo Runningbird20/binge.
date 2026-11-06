@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import ProfileAvatar from './ProfileAvatar';
 import GlobalSearch from './GlobalSearch';
+import InstallApp from './InstallApp';
 
 const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
@@ -124,6 +125,8 @@ export default function Navbar() {
             </div>
 
             <div className="navbar-right">
+              {/* Phones only: the header's top right (search and profile move to the bottom nav). */}
+              <InstallApp />
               <div className="navbar-search-wrap">
                 <GlobalSearch />
               </div>

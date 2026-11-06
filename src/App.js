@@ -16,6 +16,7 @@ import AnnouncementBanner from './components/AnnouncementBanner';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
+import { captureInstallPrompt } from './utils/installApp';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import PasswordReset from './pages/PasswordReset';
@@ -66,6 +67,10 @@ if (typeof window !== 'undefined') {
     idle(next);
   }, { once: true });
 }
+
+// Chrome's offer to install the site can come before any header is on screen:
+// hold on to it for the Install button (utils/installApp.js).
+captureInstallPrompt();
 
 const Home           = lazyWithReload(() => import('./pages/Home'));
 const Movies         = lazyWithReload(() => import('./pages/Movies'));

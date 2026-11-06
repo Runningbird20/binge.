@@ -120,6 +120,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 - Swipe down to close title and book pages, plus a sticky Play bar.
 - Server, audio and subtitle pickers as bottom sheets.
 - Pull to refresh and haptics.
+- An Install button at the top right of the header: Add to Home Screen, or download the Android / iPhone app.
 
 **Apple TV**:
 - Top Shelf (Continue Watching / Top Picks) and `binge://` deep links.

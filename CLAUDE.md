@@ -212,6 +212,11 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 - **PWA:**
   - Manifest `shortcuts`: Continue Watching (`/home?jump=continue`), Sports, Search.
   - `share_target` → `/share` (`pages/ShareTarget.js`): binge./TMDB/IMDb links open the title; anything else searches.
+  - **Install button** (`InstallApp`, the phone header's top right; logic in `utils/installApp.js`). Its sheet offers two ways to have binge. as an app, each saying what it gets you:
+    - **Add to Home Screen:** Chrome's own dialog (the `beforeinstallprompt` offer is held from startup, `captureInstallPrompt` in `App.js`), else where to find it in the browser menu; on iPhone, the Share steps.
+    - **The phone apps:** `binge.apk` / `binge.ipa` from the `mobile-latest` release (`APP_DOWNLOADS`).
+    - **Hidden** on computers, in a Home Screen install (`display-mode: standalone`) and inside the phone apps (`BingeApp/` in the user agent).
+    - **The sheet is portaled to `document.body`.** The phone header's `backdrop-filter` makes it the containing block for `position: fixed`, so an overlay rendered inside the header covers only the header.
 - **Website TV mode** (for smart-TV browsers; the TV apps don't use it):
   - `src/utils/tvMode.js` turns on `html.tv-mode` for `BingeTV` in the UA, TV browser UAs, or `?tv=1` (`?tv=0` turns it off; remembered per device).
   - `useDeviceType` reports desktop in TV mode. A 1080p TV WebView is 960×540 CSS px and would otherwise get the phone layout.
