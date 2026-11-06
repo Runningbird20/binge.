@@ -4,17 +4,8 @@
 import { fetchSupabaseContinueWatching, fetchSupabaseWatchlist } from './supabaseData';
 import { fetchDiscover, tmdbGet, tmdbIdFromItem } from './tmdb';
 import { resolveTmdbItems } from './catalogLookup';
-import { comingSoonCutoffIso } from './releaseWindow';
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function plusDays(days) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
+// Local calendar dates, like TMDB's air dates (releaseWindow.js).
+import { comingSoonCutoffIso, daysAheadIso, todayIso } from './releaseWindow';
 
 function titlePath(item) {
   return item.media_type === 'tv_show' ? `/tv-show/${item.media_id ?? item.id}` : `/movie/${item.media_id ?? item.id}`;
@@ -72,7 +63,11 @@ export async function loadReleaseCalendar({ kidsSafe = false } = {}) {
           image,
         }));
       if (!next && data.status === 'Returning Series' && data.in_production) {
-        renewed.push({ id: `renewed:${row.media_id}`, title: row.title || data.name, detail: `Season ${(data.number_of_seasons || 0) + 1} confirmed — date not announced`, url: titlePath(row), image });
+        // The season after the last one that aired. Not number_of_seasons + 1:
+        // TMDB often lists the announced season already, without dates.
+        const lastAired = data.last_episode_to_air?.season_number;
+        const confirmed = (lastAired > 0 ? lastAired : (data.number_of_seasons || 0)) + 1;
+        renewed.push({ id: `renewed:${row.media_id}`, title: row.title || data.name, detail: `Season ${confirmed} confirmed — date not announced`, url: titlePath(row), image });
       }
     } else {
       const data = await tmdbGet(`/movie/${tmdbId}`);
@@ -94,7 +89,7 @@ export async function loadReleaseCalendar({ kidsSafe = false } = {}) {
   events.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
 
   const upcoming = await fetchDiscover('movie', {
-    'primary_release_date.gte': plusDays(1),
+    'primary_release_date.gte': daysAheadIso(1),
     'primary_release_date.lte': comingSoonCutoffIso(),
     sort_by: 'popularity.desc',
   }).catch(() => null);

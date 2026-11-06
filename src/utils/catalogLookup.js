@@ -23,10 +23,13 @@ function isKidsSafe(row, result, kidsSafe) {
 async function lookup(mediaType, tmdbIds) {
   const missing = tmdbIds.filter((id) => !matchCache.has(`${mediaType}:${id}`));
   if (missing.length) {
-    const found = await fetchCatalogByTmdbIds(mediaType, missing).catch(() => new Map());
+    // null: the catalog didn't answer. Nothing is remembered then, so the next
+    // list asks again; one failed request used to hide those titles from every
+    // TMDB row until a reload.
+    const found = await fetchCatalogByTmdbIds(mediaType, missing).catch(() => null);
     // Cache misses too (as null) so an unmatched TMDB title isn't re-queried
     // every time it shows up in a list.
-    missing.forEach((id) => matchCache.set(`${mediaType}:${id}`, found.get(id) || null));
+    if (found) missing.forEach((id) => matchCache.set(`${mediaType}:${id}`, found.get(id) || null));
   }
   return tmdbIds.map((id) => matchCache.get(`${mediaType}:${id}`) || null);
 }

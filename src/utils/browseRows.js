@@ -5,7 +5,7 @@ import { fetchDiscover, fetchTrending } from './tmdb';
 import { isChildLevel } from './kidsMode';
 import { fetchCatalogBrowseRow } from './catalogQueries';
 import { prepareCatalogItems, resolveTmdbItems } from './catalogLookup';
-import { comingSoonCutoffIso, daysAgoIso, todayIso } from './releaseWindow';
+import { comingSoonCutoffIso, daysAgoIso, daysAheadIso, todayIso } from './releaseWindow';
 import { seasonFor } from './seasonal';
 
 const MIN_ROW_ITEMS = 6;
@@ -30,12 +30,6 @@ function hiddenGemsRow(mediaType) {
     { sort: 'rating' },
     { subtitle: 'Loved by the few who found them' }
   );
-}
-
-function tomorrowIso() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return date.toISOString().slice(0, 10);
 }
 
 function dateParams(mediaType, from, to) {
@@ -91,11 +85,11 @@ function languageRow(mediaType, language, title, extraParams = {}, fallbackGenre
 
 export const MOVIE_ROWS = [
   row('trending', 'Trending Now', () => fetchTrending('movie', 'week'), { sort: 'popularity' }, { ranked: true }),
-  row('new', 'New Releases', () => fetchDiscover('movie', { ...dateParams('movie', daysAgoIso(75), todayIso()), 'vote_count.gte': '15' }), { sort: 'newest', releasedAfter: daysAgoIso(75) }),
+  row('new', 'New Releases', () => fetchDiscover('movie', { ...dateParams('movie', daysAgoIso(75), todayIso()), 'vote_count.gte': '15' }), () => ({ sort: 'newest', releasedAfter: daysAgoIso(75) })),
   row('popular', 'Popular on binge.', () => fetchDiscover('movie', { 'vote_count.gte': '300', ...dateParams('movie', null, todayIso()) }), { sort: 'popularity' }),
   row('top-rated', 'Critically Acclaimed', () => fetchDiscover('movie', { sort_by: 'vote_average.desc', 'vote_count.gte': '3000' }), { sort: 'rating' }),
   hiddenGemsRow('movie'),
-  row('coming-soon', 'Coming Soon', () => fetchDiscover('movie', { ...dateParams('movie', tomorrowIso(), comingSoonCutoffIso()), sort_by: 'popularity.desc' }), null, { comingSoon: true }),
+  row('coming-soon', 'Coming Soon', () => fetchDiscover('movie', { ...dateParams('movie', daysAheadIso(1), comingSoonCutoffIso()), sort_by: 'popularity.desc' }), null, { comingSoon: true }),
   languageRow('movie', 'ko', 'Korean Movies'),
   languageRow('movie', 'hi', 'Bollywood Hits'),
   languageRow('movie', 'ja', 'Anime Films', { with_genres: '16', 'vote_count.gte': '300' }, 'Animation'),
@@ -116,7 +110,7 @@ export const MOVIE_ROWS = [
 
 export const TV_ROWS = [
   row('trending', 'Trending Now', () => fetchTrending('tv_show', 'week'), { sort: 'popularity' }, { ranked: true }),
-  row('new', 'New Series', () => fetchDiscover('tv_show', { ...dateParams('tv_show', daysAgoIso(120), todayIso()), 'vote_count.gte': '5' }), { sort: 'newest', releasedAfter: daysAgoIso(365) }),
+  row('new', 'New Series', () => fetchDiscover('tv_show', { ...dateParams('tv_show', daysAgoIso(120), todayIso()), 'vote_count.gte': '5' }), () => ({ sort: 'newest', releasedAfter: daysAgoIso(365) })),
   row('popular', 'Popular on binge.', () => fetchDiscover('tv_show', { 'vote_count.gte': '200' }), { sort: 'popularity' }),
   row('top-rated', 'Bingeworthy Classics', () => fetchDiscover('tv_show', { sort_by: 'vote_average.desc', 'vote_count.gte': '1500' }), { sort: 'rating' }),
   hiddenGemsRow('tv_show'),
@@ -139,19 +133,21 @@ export const TV_ROWS = [
 // Kids profiles get their own row set: every TMDB query is restricted to
 // family/kids content (and US certification <= PG for movies), and the
 // catalog fallback applies the same age_rating allowlist as the old pages.
+// params may be a function: dates worked out when the row loads, not when this
+// module does (a tab or the installed app can stay open for days).
 function kidsRow(mediaType, id, title, params, fallback = {}) {
   return row(id, title, () => fetchDiscover(mediaType, {
     ...kidsParams(mediaType),
     ...dateParams(mediaType, null, todayIso()),
     'vote_count.gte': '30',
-    ...params,
+    ...(typeof params === 'function' ? params() : params),
   }), fallback);
 }
 
 export const KIDS_MOVIE_ROWS = [
   kidsRow('movie', 'kids-popular', 'Popular with Kids', {}, { sort: 'popularity' }),
   kidsRow('movie', 'kids-animated', 'Animated Adventures', { with_genres: '16' }, { genre: 'Animation' }),
-  kidsRow('movie', 'kids-new', 'New for Kids', dateParams('movie', daysAgoIso(365), todayIso()), { sort: 'newest' }),
+  kidsRow('movie', 'kids-new', 'New for Kids', () => dateParams('movie', daysAgoIso(365), todayIso()), { sort: 'newest' }),
   kidsRow('movie', 'kids-top', 'Family Favorites', { sort_by: 'vote_average.desc', 'vote_count.gte': '1000' }, { genre: 'Family' }),
   kidsRow('movie', 'kids-fantasy', 'Magic & Fantasy', { with_genres: '14' }, { genre: 'Fantasy' }),
   kidsRow('movie', 'kids-comedy', 'Laugh Out Loud', { with_genres: '35' }, { genre: 'Comedy' }),
@@ -161,7 +157,7 @@ export const KIDS_TV_ROWS = [
   kidsRow('tv_show', 'kids-popular', 'Popular with Kids', {}, { sort: 'popularity' }),
   kidsRow('tv_show', 'kids-animated', 'Cartoons', { with_genres: '10762,16' }, { genre: 'Animation' }),
   kidsRow('tv_show', 'kids-top', 'Family Favorites', { sort_by: 'vote_average.desc', 'vote_count.gte': '200' }, { genre: 'Family' }),
-  kidsRow('tv_show', 'kids-new', 'New Episodes for Kids', dateParams('tv_show', daysAgoIso(365), todayIso()), { sort: 'newest' }),
+  kidsRow('tv_show', 'kids-new', 'New Episodes for Kids', () => dateParams('tv_show', daysAgoIso(365), todayIso()), { sort: 'newest' }),
 ];
 
 // This time of year's row (Halloween, Christmas, Valentine's…), from
@@ -258,8 +254,9 @@ async function fetchRowItems(definition, mediaType, { kidsSafe = false } = {}) {
     }
   }
 
-  if (items.length < MIN_ROW_ITEMS && definition.fallback) {
-    const fallbackRows = await fetchCatalogBrowseRow(mediaType, { ...definition.fallback, kidsSafe, limit: 30 }).catch(() => []);
+  const fallback = fallbackFor(definition);
+  if (items.length < MIN_ROW_ITEMS && fallback) {
+    const fallbackRows = await fetchCatalogBrowseRow(mediaType, { ...fallback, kidsSafe, limit: 30 }).catch(() => []);
     const fallbackItems = prepareCatalogItems(fallbackRows, mediaType);
     const seen = new Set(items.map((item) => item.id));
     items = [...items, ...fallbackItems.filter((item) => !seen.has(item.id))];
@@ -277,8 +274,12 @@ async function fetchRowItems(definition, mediaType, { kidsSafe = false } = {}) {
 const rowCache = new Map();
 const rowInflight = new Map();
 const ROW_CACHE_TTL = 2 * 60 * 1000;
+// The catalog fallback for a row: its settings, worked out now if it's a
+// function (for dates that move with the calendar).
+const fallbackFor = (definition) => (typeof definition.fallback === 'function' ? definition.fallback() : definition.fallback);
+
 export function loadRowItems(definition, mediaType, { kidsSafe = false } = {}) {
-  const key = JSON.stringify([mediaType, definition.id, definition.fallback, kidsSafe]);
+  const key = JSON.stringify([mediaType, definition.id, fallbackFor(definition), kidsSafe]);
   const cached = rowCache.get(key);
   if (cached && Date.now() - cached.time < ROW_CACHE_TTL) return Promise.resolve(cached.items);
   if (rowInflight.has(key)) return rowInflight.get(key);

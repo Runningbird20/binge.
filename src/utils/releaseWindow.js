@@ -55,15 +55,33 @@ export function formatReleaseDay(item) {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-// ISO date strings for query filters.
+// ISO date strings for query filters: the viewer's own calendar date, like
+// TMDB's release and air dates. Never toISOString(), which gives the UTC date:
+// a day ahead in a US evening, and a day behind east of UTC all day.
+export function localIsoDate(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// Calendar days from today (setDate, so a clock change can't shift the day).
+function dayFromToday(days) {
+  const date = startOfToday();
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
 export function todayIso() {
-  return startOfToday().toISOString().slice(0, 10);
+  return localIsoDate(startOfToday());
 }
 
 export function comingSoonCutoffIso() {
-  return new Date(startOfToday().getTime() + COMING_SOON_DAYS * DAY_MS).toISOString().slice(0, 10);
+  return localIsoDate(dayFromToday(COMING_SOON_DAYS));
 }
 
 export function daysAgoIso(days) {
-  return new Date(startOfToday().getTime() - days * DAY_MS).toISOString().slice(0, 10);
+  return localIsoDate(dayFromToday(-days));
+}
+
+export function daysAheadIso(days) {
+  return localIsoDate(dayFromToday(days));
 }

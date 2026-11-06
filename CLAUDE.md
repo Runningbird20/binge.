@@ -246,6 +246,9 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Sorting.** The row is re-sorted by the profile's taste (`sortForTaste` / `Seasonal.sorted`): top genres + language share, popularity breaks ties. The scoring is the same on all three.
   - Keyword ids are TMDB's; re-check coverage if you change one.
 - **Release window** (`src/utils/releaseWindow.js`): released → shown; releasing within 30 days → shown with a "Coming Soon" badge; later → hidden. Apply it to any new browse surface.
+  - **Dates for TMDB queries and the calendar are the viewer's local calendar date** (`todayIso`, `daysAgoIso`, `daysAheadIso`, `localIsoDate`). Never `toISOString().slice(0, 10)`: that's the UTC date, which made tonight's episodes vanish from the calendar from about 7pm Eastern and put tomorrow's movies in no row.
+  - **Dates that move with the calendar are worked out when a row loads,** not when the module loads (a row's `fallback` and a kids row's params may be functions). A tab can stay open for days.
+  - **A catalog lookup that fails is never remembered** (`catalogLookup`; `fetchCatalogByTmdbIds` rejects instead of answering "nothing found"). It once hid those titles from every TMDB row until a reload.
 - **Watched titles are never recommended** (`src/utils/watchedTitles.js`). Watched means rated, marked Watched/Watching, in Continue Watching, or any episode watched.
   - **Where they're left out:** every row and the spotlight on Movies/TV (`BrowseView`); Home's spotlight, Top Picks, Because you watched, Top 10, taste rows and New Movies; More Like This; search's "More like {title}"; Surprise me.
   - **Where they still show:** search results (title matches, synopsis matches, Ask binge. picks), the `?view=all` grid, person pages, franchises, the calendar, and the profile's own rows (Continue Watching, My List, New Episodes, Sent to you).

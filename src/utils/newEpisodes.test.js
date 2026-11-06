@@ -81,7 +81,7 @@ test('only episodes from the last three weeks count as new', async () => {
     continueWatching: [100, 200, 300, 400, 500].map((tmdbId) => show(tmdbId / 100, tmdbId, { current_season: 1, current_episode: 2 })),
   });
 
-  expect(result.map((entry) => entry.id).sort()).toEqual([1, 3]);
+  expect(result.map((entry) => entry.id)).toEqual([3, 1]);
 });
 
 test('a show in both Continue Watching and My List is listed once, from where you are in Continue Watching', async () => {
@@ -112,10 +112,8 @@ test('a show on My List you haven’t started counts its latest episode as new',
     ],
   });
 
-  expect(result.map((entry) => [entry.id, entry.current_season, entry.current_episode, entry.poster_url])).toEqual([
-    [1, 1, 3, '/p1.jpg'],
-    [2, 4, 2, undefined],
-  ]);
+  expect(result.map((entry) => [entry.id, entry.current_season, entry.current_episode])).toEqual([[1, 1, 3], [2, 4, 2]]);
+  expect(result[0].poster_url).toBe('/p1.jpg');
 });
 
 test('a show marked Watched on My List gets no badge', async () => {
@@ -172,4 +170,10 @@ test('only the first 40 shows are checked, Continue Watching before My List', as
   expect(tmdbGet).toHaveBeenCalledTimes(40);
   expect(tmdbGet).not.toHaveBeenCalledWith('/tv/5000');
   expect(result.map((entry) => entry.id)).not.toContain(99);
+});
+
+test('a special (season 0) is never a new episode, even for a show not started yet', async () => {
+  tmdbReturns({ 100: lastAired(0, 2, daysAgo(3)) });
+  const result = await findNewEpisodes({ watchlist: [show(10, 100, { status: 'plan_to_watch' })] });
+  expect(result).toEqual([]);
 });
