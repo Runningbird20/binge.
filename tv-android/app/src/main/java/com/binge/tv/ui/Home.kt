@@ -124,7 +124,9 @@ fun HomeScreen() {
             val loved = async { AppModel.lovedTitles() }
             val rated = async { AppModel.ratedIds() }
             continueItems = cw.await(); HomeCache.continueItems = continueItems
-            continueItems.firstOrNull()?.let { Warmup.prepare(it.playRequest) }
+            // Only while Home is what you see: loading in the background under a
+            // title page, this replaced that page's preload of what Play will play.
+            if (Nav.stack.isEmpty()) continueItems.firstOrNull()?.let { Warmup.prepare(it.playRequest) }
             myList = list.await(); HomeCache.myList = myList
             rows = general.await(); HomeCache.rows = rows
             loading = false
