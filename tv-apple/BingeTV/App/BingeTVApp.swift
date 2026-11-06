@@ -59,6 +59,10 @@ struct RootView: View {
             if phase == .ready, app.isSignedIn { TeamCenter.shared.start(app: app) }
             if phase == .signedOut { TeamCenter.shared.stop(); PiPController.shared.close() }
         }
+        // Another profile: its own followed teams.
+        .onChange(of: app.profile?.id) { _, _ in
+            if app.phase == .ready, app.isSignedIn { TeamCenter.shared.start(app: app) }
+        }
     }
 }
 

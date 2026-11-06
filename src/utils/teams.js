@@ -23,7 +23,8 @@ export const FOLLOWABLE_LEAGUES = [
   ['soccer/mex.1', 'Liga MX'],
 ];
 
-let cache = null; // Promise<rows>
+let cache = null; // Promise<rows> for cacheProfile
+let cacheProfile;
 
 function notify() {
   cache = null;
@@ -37,7 +38,12 @@ async function userId() {
 }
 
 export function listFollowedTeams() {
+  // Per profile: switching from one profile to another must not keep showing
+  // the first one's teams (the cache outlived profile switches).
+  const profileId = getActiveProfileId() || null;
+  if (cache && cacheProfile !== profileId) cache = null;
   if (!cache) {
+    cacheProfile = profileId;
     cache = (async () => {
       const id = await userId();
       if (!id) return [];
@@ -75,4 +81,45 @@ export async function unfollowTeam(rowId) {
 export async function setTeamAlerts(rowId, alerts) {
   await supabase.from('followed_teams').update({ alerts }).eq('id', rowId);
   notify();
+}
+
+// Whether a game is one of these followed teams'. ESPN's team id when the
+// game has a scoreboard (exact, and right across sports: the Kings are an NBA
+// and an NHL team); otherwise the same league family and a strict name match
+// (same nickname, or one name the other's short form). The general teamsMatch
+// also accepts any shared word, which made "New York Knicks" match every New
+// York team.
+export function followedTeamPlays(followed, stream, teams) {
+  const sport = (path) => String(path || '').split('/')[0];
+  const espnTeams = stream.score?.teams || [];
+  return followed.some((team) => {
+    const ids = espnTeams.map((t) => t.id).filter(Boolean);
+    if (ids.length && stream.score?.path) {
+      return stream.score.path === team.league_path && ids.includes(String(team.team_id));
+    }
+    if (!teams) return false;
+    if (stream.score?.path && sport(stream.score.path) !== sport(team.league_path)) return false;
+    return [teams.home, teams.away].some((name) => sameTeamName(team.team_name, name));
+  });
+}
+
+const CLUB_SUFFIX = new Set(['fc', 'cf', 'sc', 'afc', 'ac', 'cfc', 'ssc', 'bk', 'if', 'sv']);
+const words = (name) => String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((word) => word && !CLUB_SUFFIX.has(word));
+
+export function sameTeamName(followedName, gameName) {
+  const a = words(followedName);
+  const b = words(gameName);
+  if (!a.length || !b.length) return false;
+  if (a.join(' ') === b.join(' ')) return true;
+  // Every word of the shorter name is in the longer one ("Real Madrid" /
+  // "Real Madrid CF"). A shared last word alone isn't enough: "Atlético
+  // Madrid", "Newcastle United". One word counts only as the other name's
+  // nickname ("Knicks" / "New York Knicks") or as the whole followed name.
+  const shorter = a.length <= b.length ? a : b;
+  const longer = shorter === a ? b : a;
+  if (!shorter.every((word) => longer.includes(word))) return false;
+  if (shorter.length >= 2) return true;
+  const word = shorter[0];
+  return word.length >= 4 && (word === longer[longer.length - 1] || shorter === a);
 }
