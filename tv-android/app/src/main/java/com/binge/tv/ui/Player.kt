@@ -114,12 +114,13 @@ fun PlayerScreen(request: PlayRequest) {
         }
     }
 
-    BackHandler {
+    val back = {
         when {
             (model.upNextCountdown ?: -1) > 0 -> model.cancelUpNext()
             else -> { model.close(); Nav.pop() }
         }
     }
+    BackHandler { back() }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(factory = { model.surface }, modifier = Modifier.fillMaxSize())
@@ -128,6 +129,13 @@ fun PlayerScreen(request: PlayRequest) {
         Box(
             Modifier.fillMaxSize().focusRequester(surfaceFocus).focusable()
                 .onPreviewKeyEvent { event ->
+                    // Back is handled here: this focused layer keeps the key from
+                    // ever becoming Android's back action (Back did nothing in the
+                    // player; only the double-Back escape hatch got out).
+                    if (!panelOpen && event.key.nativeKeyCode == AndroidKeyEvent.KEYCODE_BACK) {
+                        if (event.type == KeyEventType.KeyUp) back()
+                        return@onPreviewKeyEvent true
+                    }
                     if (panelOpen || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key.nativeKeyCode) {
                         AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,

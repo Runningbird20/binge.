@@ -66,7 +66,7 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             .setTargetBufferBytes(48 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(false)
             .build()
-        val renderers = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+        val renderers = StickRenderers(context).setEnableDecoderFallback(true)
         player = ExoPlayer.Builder(context, renderers)
             .setLoadControl(load)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http))
@@ -185,13 +185,11 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
         player.trackSelectionParameters = params.build()
     }
 
+    // Hidden: moved off screen at full size. Its video layer ignores alpha
+    // (a hidden one covered the video on screen), and shrinking it instead made
+    // the MediaTek decoder fail when it grew back for the hand-over.
     override fun setShown(shown: Boolean) {
-        val params = surface.layoutParams ?: return
-        val size = if (shown) android.view.ViewGroup.LayoutParams.MATCH_PARENT else 1
-        if (params.width == size && params.height == size) return
-        params.width = size
-        params.height = size
-        surface.layoutParams = params
+        surface.translationX = if (shown) 0f else OFF_SCREEN
     }
 
     override fun destroy() {
@@ -204,8 +202,29 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
     }
 
     companion object {
+        private const val OFF_SCREEN = 20_000f
         // Native players alive right now (each holds a hardware decoder).
         var live = 0
             private set
+    }
+}
+
+// A Fire TV Stick 4K Max's MediaTek decoder can't move to another surface
+// mid-stream (DECODING_FAILED whenever a preloaded video was handed to the
+// player). Media3 knows this for some devices; here it's on for all, so a
+// surface change re-creates the decoder instead (~0.1s).
+@OptIn(UnstableApi::class)
+private class StickRenderers(context: Context) : DefaultRenderersFactory(context) {
+    @Suppress("DEPRECATION")
+    override fun buildVideoRenderers(
+        context: Context, extensionRendererMode: Int, mediaCodecSelector: androidx.media3.exoplayer.mediacodec.MediaCodecSelector,
+        enableDecoderFallback: Boolean, eventHandler: android.os.Handler, eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long, out: ArrayList<androidx.media3.exoplayer.Renderer>,
+    ) {
+        out.add(object : androidx.media3.exoplayer.video.MediaCodecVideoRenderer(
+            context, mediaCodecSelector, allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY,
+        ) {
+            override fun codecNeedsSetOutputSurfaceWorkaround(name: String) = true
+        })
     }
 }
