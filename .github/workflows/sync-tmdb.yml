@@ -2,7 +2,7 @@ name: Sync TMDB Catalog
 
 # Runs twice a week (Mon/Thu) on GitHub's servers
 # Each run downloads TMDB's bulk export files, finds new content,
-# fetches full details, and upserts them directly into Neon.
+# fetches full details, and upserts them into the Turso catalog.
 #
 # TMDB publishes each day's export around 08:00 UTC, so this is scheduled
 # for 09:00 UTC to give it an hour of buffer (the script also falls back to
@@ -13,16 +13,22 @@ name: Sync TMDB Catalog
 #
 #   TMDB_API_KEY              v3 API key  — themoviedb.org/settings/api
 #   TMDB_READ_TOKEN           v4 Read Access Token (the long eyJ… JWT on the same page)
-#   DATABASE_URL              Neon Postgres connection string
+#   TURSO_DATABASE_URL        libsql://<db>.turso.io (the media catalog)
+#   TURSO_AUTH_TOKEN          turso db tokens create <db>
 
 on:
   schedule:
     - cron: '0 9 * * 1,4'   # Monday and Thursday at 09:00 UTC
   workflow_dispatch:          # run manually from the Actions tab any time
 
+env:
+  TURSO_DATABASE_URL:         ${{ secrets.TURSO_DATABASE_URL }}
+  TURSO_AUTH_TOKEN:           ${{ secrets.TURSO_AUTH_TOKEN }}
+  NODE_PATH:                  ${{ github.workspace }}/scripts/node_modules
+
 jobs:
   sync:
-    name: TMDB → Neon
+    name: TMDB → Turso
     runs-on: ubuntu-24.04
     timeout-minutes: 90       # hard stop — each run processes MAX_DETAILS_PER_RUN items
 
@@ -41,11 +47,9 @@ jobs:
         run: npm install
         working-directory: scripts
 
-      - name: Run TMDB → Neon sync (movies)
-        run: node scripts/sync-tmdb-to-neon.js
+      - name: Run TMDB → Turso sync (movies)
+        run: node scripts/sync-tmdb-to-turso.js
         env:
-          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
-          NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
           TMDB_READ_TOKEN:           ${{ secrets.TMDB_READ_TOKEN }}
           TYPE:                      movie
@@ -53,11 +57,9 @@ jobs:
           # MIN_POPULARITY: '0'      ← uncomment for every film ever (requires sufficient database capacity)
           MIN_POPULARITY:            '1'
 
-      - name: Run TMDB → Neon sync (TV shows)
-        run: node scripts/sync-tmdb-to-neon.js
+      - name: Run TMDB → Turso sync (TV shows)
+        run: node scripts/sync-tmdb-to-turso.js
         env:
-          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
-          NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
           TMDB_READ_TOKEN:           ${{ secrets.TMDB_READ_TOKEN }}
           TYPE:                      tv
@@ -71,7 +73,11 @@ jobs:
       - name: Backfill missing catalog fields
         run: node scripts/backfill-catalog-fields.js
         env:
-          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
-          NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
           MAX_ROWS:                  '3000'      # per table; ~3000 lookups at ~15/s ≈ 3-4 min
+
+      # Genre lists and row counts the app reads instead of scanning every row,
+      # and clears the stored filter counts the sync made stale.
+      - name: Refresh genre lists and counts
+        if: always()
+        run: node scripts/turso-catalog.js refresh

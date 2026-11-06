@@ -1,0 +1,138 @@
+# Builds the phone apps, binge.apk (mobile-android/) and binge.ipa (mobile-ios/),
+# and attaches both to the run. Runs on PRs and pushes to main that touch them,
+# or from the Actions tab ("Build phone apps" → Run workflow).
+#
+# Releases: push a tag like mobile-v1.0 and both files go on a GitHub Release of
+# that name, and on the mobile-latest release, which every tagged build replaces.
+# Link downloads to that one, a fixed address:
+#   https://github.com/<owner>/<repo>/releases/download/mobile-latest/binge.apk
+#   https://github.com/<owner>/<repo>/releases/download/mobile-latest/binge.ipa
+# Phone releases are never marked "latest": the Fire TV stick installs from
+# releases/latest/download/binge-tv.apk (tv-apk.yml).
+#
+# Signing: the APK uses the shared debug key, the TV_DEBUG_KEYSTORE secret also
+# used by tv-apk.yml (base64 ~/.android/debug.keystore | pbcopy), so CI and local
+# builds install over each other. Without it each run makes a one-off key, and
+# an update needs an uninstall first, and binge. links don't open in the app
+# (public/.well-known/assetlinks.json lists that key). The .ipa is unsigned: Sideloadly, AltStore
+# or Xcode signs it on its way to the phone (mobile-ios/README.md).
+#
+# Both apps only need the site's address: vars.BINGE_URL, else the live site.
+name: Build phone apps
+
+on:
+  workflow_dispatch:
+  push:
+    # Pushes to main build when the apps change (other branches are covered by
+    # their PR); tag pushes always build (GitHub doesn't apply path filters to tags).
+    branches: [main]
+    paths:
+      - 'mobile-android/**'
+      - 'mobile-ios/**'
+      - '.github/workflows/mobile-apps.yml'
+    tags:
+      - 'mobile-v*'
+  pull_request:
+    paths:
+      - 'mobile-android/**'
+      - 'mobile-ios/**'
+      - '.github/workflows/mobile-apps.yml'
+
+concurrency:
+  group: mobile-apps-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+env:
+  BINGE_URL: ${{ vars.BINGE_URL || 'https://binge-26.vercel.app' }}
+
+jobs:
+  android:
+    name: Android (binge.apk)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.8.2'   # AGP 9.5 needs Gradle 9.6+
+      - name: Use the shared signing key
+        env:
+          TV_DEBUG_KEYSTORE: ${{ secrets.TV_DEBUG_KEYSTORE }}
+        run: |
+          if [ -z "$TV_DEBUG_KEYSTORE" ]; then
+            echo "::warning::TV_DEBUG_KEYSTORE isn't set; this APK gets a one-off key and won't install over other builds."
+            exit 0
+          fi
+          mkdir -p ~/.android
+          echo "$TV_DEBUG_KEYSTORE" | base64 --decode > ~/.android/debug.keystore
+      - name: Build binge.apk
+        run: mobile-android/scripts/build-apk.sh
+      - name: Check binge. links will open in it
+        # Android opens the site's links in the app only when the key the APK is
+        # signed with is listed in the site's public/.well-known/assetlinks.json.
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          sha=$("$apksigner" verify --print-certs dist/mobile/binge.apk | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          if grep -q "\"$sha\"" public/.well-known/assetlinks.json; then
+            echo "binge. links will open in this APK: its key ($sha) is in public/.well-known/assetlinks.json."
+          else
+            echo "::warning::This APK's key ($sha) isn't in public/.well-known/assetlinks.json, so binge. links won't open in it automatically. Set the TV_DEBUG_KEYSTORE secret."
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binge-apk
+          path: dist/mobile/binge.apk
+
+  ios:
+    name: iOS (binge.ipa, unsigned)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use the newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          echo "Using $xcode"
+      - name: Build binge.ipa
+        run: BINGE_SITE_URL="$BINGE_URL" mobile-ios/scripts/build-ipa.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binge-ipa
+          path: dist/mobile/binge.ipa
+
+  release:
+    name: Publish the Release
+    if: startsWith(github.ref, 'refs/tags/mobile-v')
+    needs: [android, ios]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write   # the Releases
+      actions: read     # this run's artifacts
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Fetch both apps from this run
+        run: |
+          gh run download "$GITHUB_RUN_ID" -n binge-apk -n binge-ipa -D out
+          find out -name binge.apk -exec mv {} . \;
+          find out -name binge.ipa -exec mv {} . \;
+          ls -l binge.apk binge.ipa
+      - name: Release for this tag
+        run: gh release create "$TAG" binge.apk binge.ipa --title "binge. phone apps $TAG" --generate-notes --latest=false
+      - name: Replace mobile-latest (the fixed download address)
+        run: |
+          gh release delete mobile-latest --cleanup-tag --yes || true
+          gh release create mobile-latest binge.apk binge.ipa --target "$GITHUB_SHA" --latest=false \
+            --title "binge. phone apps (newest)" \
+            --notes "The newest phone apps, currently $TAG. binge.apk: open it on an Android phone and allow installing from your browser. binge.ipa: unsigned; install it with Sideloadly or AltStore from a computer (a free Apple ID's install lasts 7 days)."

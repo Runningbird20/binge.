@@ -29,9 +29,7 @@ const DELAY_MS = parseInt(getArg('--delay', '260'), 10);
 const RESUME   = hasFlag('--resume');
 
 // ── Adult content exclusion ───────────────────────────────────────────────────
-// TMDB genre IDs to EXCLUDE from all results
-const EXCLUDED_MOVIE_GENRES = []; // TMDB doesn't have an explicit adult genre in standard list
-const EXCLUDED_TV_GENRES    = []; // We use include_adult=false + certification filters instead
+// TMDB has no adult genre to exclude: include_adult=false + certification filters do it.
 
 // Keywords that indicate adult content — filter at record level
 // Minimum vote count — filters out spam/fake/low-quality uploads
@@ -330,7 +328,6 @@ function formatTvRecord(item, details, genreMap) {
 async function scrape({ mediaType, endpoints, outFile, ckptFile, genreMap, formatRecord }) {
   const checkpoint   = RESUME ? loadCheckpoint(ckptFile) : { completedLabels: [], seenIds: [] };
   const seenIds      = new Set(checkpoint.seenIds || []);
-  let   written      = seenIds.size;
   let   adultSkipped = 0;
   const stream       = fs.createWriteStream(outFile, { flags: RESUME ? 'a' : 'w' });
   const totalEp      = endpoints.length;
@@ -352,7 +349,6 @@ async function scrape({ mediaType, endpoints, outFile, ckptFile, genreMap, forma
       await sleep(DELAY_MS);
 
       const pageAdult = await processPage(first.results || [], seenIds, stream, genreMap, formatRecord, mediaType);
-      written = seenIds.size - adultSkipped;
       adultSkipped += pageAdult;
     } catch (err) {
       console.error(`  ⚠️  Failed page 1: ${err.message}`);

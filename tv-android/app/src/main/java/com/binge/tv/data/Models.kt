@@ -1,6 +1,9 @@
 package com.binge.tv.data
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -69,11 +72,18 @@ data class AccountProfile(
     val isDefault: Boolean = false,
     val audioPref: String? = null,
     val subtitlePref: String? = null,
+    // account_profiles.settings (jsonb, the website's): read as raw JSON so a
+    // value of an unexpected shape can't stop the profiles from loading.
+    val settings: JsonElement? = null,
 ) {
     val avatarImageUrl: String?
         get() = avatarUrl?.takeIf { it.isNotEmpty() }?.let { if (it.startsWith("/")) Config.siteUrl + it else it }
 
-    companion object { const val COLUMNS = "id,name,avatar_url,avatar_color,is_kids,is_default,audio_pref,subtitle_pref" }
+    // The profile's maturity level, as on the website (Edit Profile).
+    val maturity: Maturity
+        get() = Maturity.of(isKids, ((settings as? JsonObject)?.get("maturity") as? JsonPrimitive)?.takeIf { it.isString }?.content)
+
+    companion object { const val COLUMNS = "id,name,avatar_url,avatar_color,is_kids,is_default,audio_pref,subtitle_pref,settings" }
 }
 
 @Serializable
@@ -138,8 +148,37 @@ object ReleaseWindow {
     fun isComingSoon(value: String?): Boolean = daysUntil(value)?.let { it > 0 && it <= 30 } ?: false
 }
 
+// Maturity levels, the same as the website's (src/utils/kidsMode.js):
+// is_kids is the master switch and settings.maturity picks the level (Kids
+// when it's missing). Toddler and Kids get the kids-only rows; Teens browse
+// the normal rows, filtered by rating; No restrictions sees everything.
+enum class Maturity(val label: String?, val ratings: Set<String>?) {
+    TODDLER("Toddler", setOf("G", "TV-Y")),
+    KIDS("Kids", KidsFilter.allowed),
+    TEENS("Teens", KidsFilter.allowed + setOf("PG-13", "TV-14")),
+    ALL(null, null);
+
+    // Toddler and Kids: the kids-only rows (no Sports tab).
+    val isChild get() = this == TODDLER || this == KIDS
+
+    // Unknown ratings are left out on every restricted level.
+    fun allows(rating: String?): Boolean {
+        val allowed = ratings ?: return true
+        return rating != null && rating.trim().uppercase() in allowed
+    }
+
+    companion object {
+        fun of(isKids: Boolean, level: String?): Maturity = when {
+            !isKids -> ALL
+            level == "toddler" -> TODDLER
+            level == "teens" -> TEENS
+            else -> KIDS
+        }
+    }
+}
+
 // Kids profiles only see titles rated for kids (unknown ratings are left out).
 object KidsFilter {
-    private val allowed = setOf("G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG")
-    fun allows(rating: String?) = rating != null && rating.uppercase() in allowed
+    val allowed = setOf("G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG")
+    fun allows(rating: String?, maturity: Maturity = Maturity.KIDS) = maturity.allows(rating)
 }

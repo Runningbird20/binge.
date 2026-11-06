@@ -1,18 +1,23 @@
 name: Sync regional new releases
 
-# Daily: adds new and upcoming titles in the listed original languages
+# Monthly (the 1st): adds new and upcoming titles in the listed original languages
 # (Malayalam by default) and refreshes ones released in the last 120 days.
 # The twice-weekly bulk sync (sync-tmdb.yml) misses small new releases because
 # it works by popularity. Uses the same repo secrets as sync-tmdb.yml.
 
 on:
   schedule:
-    - cron: '30 10 * * *'   # every day at 10:30 UTC
+    - cron: '30 10 1 * *'   # the 1st of every month at 10:30 UTC
   workflow_dispatch:
+
+env:
+  TURSO_DATABASE_URL:         ${{ secrets.TURSO_DATABASE_URL }}
+  TURSO_AUTH_TOKEN:           ${{ secrets.TURSO_AUTH_TOKEN }}
+  NODE_PATH:                  ${{ github.workspace }}/scripts/node_modules
 
 jobs:
   sync:
-    name: TMDB discover → Neon
+    name: TMDB discover → Turso
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
@@ -32,9 +37,11 @@ jobs:
         working-directory: scripts
 
       - name: Run language sync
-        run: node scripts/sync-language-to-neon.js
+        run: node scripts/sync-language-to-turso.js
         env:
-          DATABASE_URL:              ${{ secrets.DATABASE_URL }}
-          NODE_PATH:                 ${{ github.workspace }}/scripts/node_modules
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
           LANGUAGES:                 ml
+
+      - name: Refresh genre lists and counts
+        if: always()
+        run: node scripts/turso-catalog.js refresh

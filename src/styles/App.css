@@ -467,250 +467,12 @@ body {
   margin: 0;
 }
 
-.books-page-subtitle {
-  margin: 0;
-  color: #8f8f8f;
-  max-width: 720px;
-  font-size: 0.98rem;
-  line-height: 1.7;
-}
-
 /* ─── Home ──────────────────────────────────────────────────────────────── */
 
 .home-sections {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-}
-
-/* ─── Auth pages ────────────────────────────────────────────────────────── */
-
-.books-page-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.books-page-subtitle {
-  margin-top: 0.1rem;
-}
-
-.books-top-search {
-  margin-bottom: 1.5rem;
-}
-
-.books-top-search-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.books-top-search-label > span {
-  color: #c8c8c8;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.books-top-search-input {
-  width: 100%;
-  padding: 0.95rem 1.1rem;
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(24, 24, 24, 0.98) 0%, rgba(16, 16, 16, 0.98) 100%);
-  border-color: #242424;
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
-}
-
-.books-shell {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 1.75rem;
-  align-items: start;
-}
-
-.books-filter-sidebar {
-  position: sticky;
-  top: 84px;
-  align-self: start;
-}
-
-.books-filter-card {
-  background:
-    linear-gradient(180deg, rgba(24, 24, 24, 0.98) 0%, rgba(16, 16, 16, 0.98) 100%);
-  border: 1px solid #232323;
-  border-radius: 24px;
-  padding: 1.35rem;
-  box-shadow: 0 22px 40px rgba(0, 0, 0, 0.24);
-}
-
-.books-filter-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.2rem;
-}
-
-.books-filter-card-header h2 {
-  margin: 0.25rem 0 0 0;
-  color: #f7f3ea;
-  font-size: 1.2rem;
-}
-
-.books-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-bottom: 1.2rem;
-}
-
-.books-filter-group:last-child {
-  margin-bottom: 0;
-}
-
-.books-filter-group > span {
-  color: #c8c8c8;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.books-slider-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  color: #e7e0cf;
-}
-
-.books-slider-header strong {
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.books-slider-header small {
-  color: #747474;
-  font-size: 0.8rem;
-}
-
-.books-year-slider {
-  width: 100%;
-  accent-color: #f4f6f8;
-  cursor: pointer;
-}
-
-.books-slider-caption,
-.books-filter-empty {
-  margin: 0;
-  color: #7c7c7c;
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
-
-.books-filter-select {
-  width: 100%;
-  padding: 0.75rem 0.9rem;
-  border-radius: 12px;
-  border: 1px solid #2a2a2a;
-  font-size: 0.9rem;
-  outline: none;
-}
-
-.books-filter-select:focus {
-  border-color: #f4f6f8;
-}
-
-.books-filter-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.books-filter-chip {
-  background-color: #151515;
-  border: 1px solid #2b2b2b;
-  border-radius: 999px;
-  color: #a8a8a8;
-  cursor: pointer;
-  font-size: 0.84rem;
-  padding: 0.45rem 0.8rem;
-  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
-}
-
-.books-filter-chip:hover {
-  border-color: #4a4a4a;
-  color: #ededed;
-}
-
-.books-filter-chip.active {
-  background-color: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #ffffff;
-}
-
-.books-results-panel {
-  min-width: 0;
-}
-
-.books-results-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.4rem;
-}
-
-.books-results-count,
-.books-results-summary {
-  margin: 0;
-}
-
-.books-results-count {
-  color: #f2efe7;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.books-results-summary {
-  color: #7f7f7f;
-  font-size: 0.88rem;
-}
-
-.books-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.books-pagination-copy {
-  margin: 0;
-  color: #9a9a9a;
-  font-size: 0.9rem;
-}
-
-.books-pagination-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  border-color: #242424;
-}
-
-.books-infinite-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 72px;
-  margin-top: 1.75rem;
-}
-
-.books-load-trigger {
-  width: 100%;
-  height: 1px;
 }
 
 .books-scroll-top {
@@ -753,6 +515,8 @@ body {
 
 /* Status dropdown shown once a title is already in the library — sized to
    match the "Add to Library" btn-primary it replaces. */
+
+/* ─── Auth pages ────────────────────────────────────────────────────────── */
 
 .auth-card {
   background-color: #141414;
@@ -1337,28 +1101,12 @@ body {
 
 @media (max-width: 900px) {
   .nav { padding: 1rem 2rem; }
-  .books-shell { grid-template-columns: minmax(0, 1fr); }
-  .books-filter-sidebar {
-    position: static;
-  }
-  .books-filter-card {
-    overflow: visible;
-  }
   .settings-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 600px) {
   .navbar { padding-left: 1rem; padding-right: 1rem; gap: 0.75rem; }
   .page-content { padding: 1.5rem 1rem; }
-  .books-filter-card-header,
-  .books-results-header,
-  .books-slider-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .books-pagination {
-    flex-direction: column;
-  }
   .books-scroll-top {
     right: 1rem;
     bottom: 1rem;
@@ -1376,162 +1124,6 @@ body {
   }
   .avatar-upload-status { text-align: left; }
 }
-
-/* ══════════════════════════════════════════════
-   FOR YOU — Personalized Recommendations
-   ══════════════════════════════════════════════ */
-
-.foryou-section { display: flex; flex-direction: column; gap: 1.25rem; }
-
-/* Idle / empty state */
-.foryou-idle {
-  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-  border: 1px dashed rgba(255,255,255,0.25);
-  border-radius: 16px;
-  padding: 2.5rem 2rem;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.25rem;
-}
-.foryou-idle-text { color: #888; margin: 0; max-width: 480px; line-height: 1.6; }
-
-.foryou-generate-btn {
-  padding: 0.7rem 1.75rem;
-  border: none;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: opacity 0.15s, transform 0.15s;
-  box-shadow: 0 4px 16px rgba(255,255,255,0.3);
-}
-.foryou-generate-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-
-.foryou-refresh-btn {
-  background: none;
-  border: 1px solid #2a2a2a;
-  color: #888;
-  font-size: 0.8rem;
-  padding: 0.3rem 0.8rem;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.foryou-refresh-btn:hover { border-color: #555; color: #e8e8e8; }
-
-/* Loading */
-.foryou-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 2.5rem;
-  color: #666;
-}
-.foryou-loading-owl { font-size: 2.5rem; animation: owlBob 1.5s ease-in-out infinite; }
-@keyframes owlBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-.foryou-loading p { margin: 0; font-size: 0.9rem; }
-.foryou-loading-dots { display: flex; gap: 5px; }
-.foryou-loading-dots span {
-  width: 6px; height: 6px;
-  background: #f4f6f8;
-  border-radius: 50%;
-  animation: dotPulse 1.2s infinite;
-}
-.foryou-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-.foryou-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes dotPulse { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
-
-/* Error */
-.foryou-error {
-  background: rgba(240,128,128,0.08);
-  border: 1px solid rgba(240,128,128,0.2);
-  border-radius: 12px;
-  padding: 1.5rem;
-  text-align: center;
-  color: #f08080;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-.foryou-error p { margin: 0; }
-
-/* Taste profile */
-.foryou-taste-profile {
-  padding: 1rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-.foryou-taste-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #f4f6f8;
-}
-.foryou-taste-profile p { margin: 0; color: #b8b8b8; font-size: 0.9rem; line-height: 1.55; }
-/* Horizontal scroll row — one row, scroll sideways */
-.foryou-grid {
-  flex-direction: row;
-  overflow-y: visible;
-  /* Horizontal padding gives edge cards room for their hover
-     scale/shadow, so they don't get cut off. */
-  scrollbar-color: rgba(255,255,255,0.1) transparent;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-}
-.foryou-grid::-webkit-scrollbar { height: 4px; }
-.foryou-grid::-webkit-scrollbar-track { background: transparent; }
-.foryou-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
-
-.foryou-card {
-  color: inherit;
-  flex-direction: column;
-  /* Fixed width matching .poster-tile's grid minimum (Movies/TV/Books pages) */
-  width: 160px;
-  scroll-snap-align: start;
-}
-
-.foryou-card-poster {
-  width: 100%;
-  aspect-ratio: 2/3;
-  overflow: hidden;
-  background: #1a1a1a;
-  flex-shrink: 0;
-}
-.foryou-card-poster img { display: block; }
-.foryou-card-placeholder {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2.5rem;
-  background: linear-gradient(135deg, #1e1e1e, #2a2a2a);
-}
-
-.foryou-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  flex: 1;
-}
-.foryou-card-type {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.foryou-card-year { font-weight: 400; }
-.foryou-card-title {
-  /* Allow up to 2 lines */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.foryou-card-genre { margin: 0; }
 
 /* ══════════════════════════════════════════════
    WATCH BUTTON
@@ -1552,314 +1144,12 @@ body {
 }
 .btn-watch:hover { opacity: 0.9; transform: translateY(-1px); }
 
-/* ══════════════════════════════════════════════
-   EMBED PLAYER
-   ══════════════════════════════════════════════ */
-
-.player-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  background: rgba(0,0,0,0.92);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-
-.player-modal {
-  background: #0f0f0f;
-  border: 1px solid #2a2a2a;
-  border-radius: 16px;
-  width: min(960px, 100%);
-  max-height: 95vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 30px 80px rgba(0,0,0,0.8);
-}
-
-.player-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.9rem 1.25rem;
-  border-bottom: 1px solid #1e1e1e;
-  flex-shrink: 0;
-}
-.player-title {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #fff;
-}
-.player-year {
-  font-weight: 400;
-}
-.player-close {
-  font-size: 1.1rem;
-  padding: 0.25rem 0.5rem;
-  transition: color 0.15s, background 0.15s;
-}
-
-/* Top row of the controls overlay: sources pinned left, season/episode
-   dropdowns pinned right. */
-.player-controls-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-/* Season/episode selector — a trigger button that opens a popover with a
-   season row and a full episode grid, replacing the previous pair of native
-   <select> dropdowns (which forced a slow one-at-a-time scroll through
-   episodes on desktop). */
-.player-ep-selector {
-  position: relative;
-  flex-shrink: 0;
-}
-.player-ep-trigger {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #e0e0e0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.35rem 0.75rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-.player-ep-trigger:hover { border-color: #555; }
-.player-ep-trigger-caret {
-  display: inline-block;
-  font-size: 0.85rem;
-  color: #999;
-  transition: transform 0.15s;
-}
-.player-ep-trigger-caret.open { transform: rotate(180deg); }
-
-.player-ep-popover {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  z-index: 10;
-  width: min(360px, 80vw);
-  max-height: min(420px, 60vh);
-  overflow-y: auto;
-  background: #161616;
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  padding: 0.85rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
-.player-ep-section-label {
-  display: block;
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #8a8a8a;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.5rem;
-}
-
-.player-ep-season-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-.player-ep-season-chip,
-.player-ep-chip {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid #2a2a2a;
-  color: #d0d0d0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  border-radius: 7px;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.player-ep-season-chip {
-  min-width: 2.4rem;
-  padding: 0.4rem 0.6rem;
-}
-.player-ep-season-chip.partial { border-color: rgba(108, 190, 119, 0.35); }
-.player-ep-season-chip.done {
-  border-color: rgba(108, 190, 119, 0.45);
-  color: #9be0a3;
-}
-
-.player-ep-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr));
-  gap: 0.4rem;
-}
-.player-ep-chip {
-  padding: 0.45rem 0.3rem;
-  text-align: center;
-}
-.player-ep-chip.watched { opacity: 0.55; }
-
-.player-ep-season-chip.active,
-.player-ep-chip.active {
-  background: #f4f6f8;
-  border-color: #f4f6f8;
-  color: #0c0e13;
-}
-.player-ep-season-chip:hover:not(.active),
-.player-ep-chip:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-}
-
-.player-ep-loading {
-  color: #8a8a8a;
-  font-size: 0.8rem;
-}
-
-/* iframe */
-.player-frame-wrap {
-  position: relative;
-  flex: 1;
-  min-height: 400px;
-  background: #000;
-}
-.player-frame {
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-  min-height: 480px;
-}
-
-/* Floating controls overlay — sits over the video, fades in on mouse-enter
-   and auto-hides a few seconds later (see EmbedPlayer's revealControls). A
-   cross-origin iframe swallows mousemove once the cursor is over it, so the
-   small toggle button below is the reliable fallback for bringing it back. */
-.player-controls-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.9rem 1.25rem 2.5rem;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.72) 55%, transparent 100%);
-  opacity: 0;
-  transform: translateY(-10px);
-  pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-.player-controls-overlay.visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-@media (max-width: 600px) {
-  .player-frame { min-height: 240px; }
-}
-
-/* Player lookup bar */
-.player-lookup-bar {
-  padding: 0.5rem 1.25rem;
-  font-size: 0.8rem;
-  color: #888;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid #1a1a1a;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-.player-lookup-bar--warn { color: #f4f6f8; background: rgba(255,255,255,0.05); }
-.player-lookup-bar a { color: #f4f6f8; }
-.player-lookup-bar code { background: #1a1a1a; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.75rem; }
-.player-lookup-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #4ade80; box-shadow: 0 0 6px #4ade80;
-  animation: chatPulse 1s infinite;
-  flex-shrink: 0;
-}
-.player-no-url {
-  width: 100%; height: 100%; min-height: 480px;
-  display: flex; align-items: center; justify-content: center;
-  color: #555; font-size: 0.9rem;
-}
-
-/* Fullscreen player — the frame wrap (iframe + our overlay) is what
-   actually goes fullscreen, not the modal, so the overlay stays part of
-   the fullscreen element's own subtree and can still be shown/hidden. */
-.player-frame-wrap:fullscreen {
-  width: 100vw;
-  height: 100vh;
-}
-.player-frame-wrap:fullscreen .player-frame {
-  min-height: 100vh;
-}
-/* Fallback for the rare case frame-wrap fullscreen fails and the whole
-   modal goes fullscreen instead (see toggleFullscreen's .catch). */
-.player-modal:fullscreen {
-  width: 100vw;
-  max-height: 100vh;
-  border-radius: 0;
-  border: none;
-}
-.player-modal:fullscreen .player-frame {
-  min-height: calc(100vh - 160px);
-}
-
-.player-overlay-fs-btns {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 3;
-  display: flex;
-  gap: 0.4rem;
-}
-.player-overlay-fs-btns .player-close {
-  background: rgba(0,0,0,0.5);
-  border-radius: 6px;
-}
-
 /* ── Book download buttons ── */
 .book-download-error {
   margin: 0;
   font-size: 0.82rem;
   color: #f08080;
 }
-
-.player-mark-btn {
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.6);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.player-mark-btn:hover { border-color: rgba(74,222,128,0.4); color: #4ade80; }
-.player-mark-btn--watched {
-  background: rgba(74,222,128,0.12);
-  border-color: rgba(74,222,128,0.4);
-  color: #4ade80;
-}
-.player-mark-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ══════════════════════════════════════════════════════════════
    CURATED / NETFLIX-STYLE LAYOUT — Refined Dark Cinema Theme
@@ -2082,36 +1372,6 @@ body {
 /* ══════════════════════════════════════════════════════════════
    SKELETON LOADING
    ══════════════════════════════════════════════════════════════ */
-@keyframes skeleton-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   TRENDING PAGE
-   ══════════════════════════════════════════════════════════════ */
-.trending-skeleton { display: flex; flex-direction: column; gap: 0.75rem; }
-.trending-skeleton-card { height: 90px; border-radius: 12px; }
-.trending-list { display: flex; flex-direction: column; gap: 0.75rem; }
-.trending-card {
-  display: flex; align-items: flex-start; gap: 1rem;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 14px; padding: 1rem 1.25rem; transition: border-color 0.15s;
-}
-.trending-card:hover { border-color: rgba(255,255,255,0.25); }
-.trending-rank { font-size: 1.1rem; font-weight: 900; color: #333; min-width: 32px; padding-top: 0.1rem; }
-.trending-card:nth-child(1) .trending-rank { color: #f4f6f8; }
-.trending-card:nth-child(2) .trending-rank { color: #aaa; }
-.trending-card:nth-child(3) .trending-rank { color: #c87533; }
-.trending-poster { width: 48px; height: 72px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
-.trending-content { flex: 1; min-width: 0; }
-.trending-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
-.trending-title { font-size: 0.95rem; font-weight: 700; color: #e0e0e0; text-decoration: none; line-height: 1.4; display: block; margin-bottom: 0.4rem; }
-.trending-title:hover { color: #f4f6f8; }
-.trending-stats { display: flex; gap: 1rem; font-size: 0.75rem; color: #555; flex-wrap: wrap; }
-.trending-media-link { font-size: 0.75rem; color: #7ab8e8; text-decoration: none; display: inline-block; margin-top: 0.4rem; }
-.trending-media-link:hover { text-decoration: underline; }
-
 /* ══════════════════════════════════════════════════════════════
    ONBOARDING
    ══════════════════════════════════════════════════════════════ */
@@ -2213,8 +1473,7 @@ select optgroup {
   font-weight: 800;
 }
 
-select.filter-input,
-.books-filter-select {
+select.filter-input {
   background-color: #141414;
   background-image:
     linear-gradient(45deg, transparent 50%, #f4f6f8 50%),
@@ -2230,8 +1489,7 @@ select.filter-input,
   color: #f3f0e8;
 }
 
-select.filter-input,
-.books-filter-select {
+select.filter-input {
   padding-right: 2.45rem;
 }
 
@@ -2426,37 +1684,6 @@ select.filter-input,
     padding-bottom: calc(54px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* ── Video player ─────────────────────────────────────────── */
-  /* Sheet-style from bottom on phones */
-  .player-overlay {
-    align-items: flex-end;
-  }
-
-  .player-modal {
-    max-height: 96vh;
-    border-bottom: none;
-    border-left: none;
-    border-right: none;
-  }
-
-  .player-header {
-    padding: 0.75rem 1rem;
-  }
-
-  .player-frame-wrap {
-    min-height: 56vw;
-  }
-
-  .player-frame {
-    min-height: 56vw;
-  }
-
-  /* Bigger touch targets for episode/season buttons */
-
-  .player-mark-btn {
-    min-height: 44px;
-  }
-
   /* ── Media row (horizontal scroll) ───────────────────────── */
 
   /* ── General touch targets ────────────────────────────────── */
@@ -2483,11 +1710,6 @@ select.filter-input,
 /* ══════════════════════════════════════════════════════════════
    SKELETON LOADERS
    ══════════════════════════════════════════════════════════════ */
-
-@keyframes skeleton-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
 
 /* ══════════════════════════════════════════════════════════════
    TOAST NOTIFICATIONS
@@ -2556,24 +1778,6 @@ select.filter-input,
 /* On mobile the toast sits above the bottom nav */
 @media (max-width: 768px) {
   .toast-stack { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
-}
-
-/* ── EmbedPlayer: horizontal-scroll provider row ─────────── */
-@media (max-width: 768px) {
-
-  /* Prevent title from pushing buttons off-screen */
-  .player-title {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-  }
-  /* The inner div holds <strong> title + year */
-  .player-title > div {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
 }
 
 /* ── book-detail-modal: bottom-sheet on mobile ───────────── */
@@ -2763,35 +1967,6 @@ select.filter-input,
   background: linear-gradient(135deg, #f4f6f8 0%, #c7c7c7 100%);
   color: #0f0f0f;
   box-shadow: 0 4px 16px rgba(255,255,255,0.28);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   BOOKS TAB BAR
-═══════════════════════════════════════════════════════════════ */
-.books-tab-bar {
-  margin-bottom: 1.5rem;
-}
-.books-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: none;
-  border: none;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  white-space: nowrap;
-}
-.books-tab svg { flex: 0 0 auto; }
-
-.books-tab-bar--inline {
-  border-bottom: none;
-  margin-bottom: 0;
-}
-.books-tab-bar--inline .books-tab {
-  padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -3296,111 +2471,6 @@ body {
 /* Search: compact round trigger like a streaming app */
 .navbar-search-wrap { width: auto; flex: 0 0 auto; }
 
-/* ── Shared card language: every media-poster card shares the
-   same hover as .poster-tile (Movies/TV/Books pages) — the frame
-   scales up with a glow ring + shadow, its border fades out. ──── */
-
-.foryou-card {
-  border-radius: var(--exp-radius);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-}
-
-.foryou-card:hover {
-  box-shadow: var(--exp-ring), var(--exp-shadow);
-  border-color: transparent;
-}
-
-/* ── Recommended For You: poster-forward overlay cards ──────── */
-
-.foryou-grid {
-  display: flex !important;
-  gap: 1.1rem;
-  overflow-x: auto;
-  /* Generous top/bottom buffer — .foryou-card's hover lift + ring/shadow
-     need room to render without being clipped by this scroll container
-     (overflow-x: auto forces the y-axis to clip too, per spec). */
-  padding: 0.75rem 0.25rem 1.1rem;
-  scrollbar-width: none;
-  grid-template-columns: none !important;
-}
-.foryou-grid::-webkit-scrollbar { display: none; }
-
-.foryou-card {
-  position: relative;
-  flex: 0 0 160px;
-  aspect-ratio: 2 / 3;
-  display: block;
-  background: var(--exp-surface-2);
-  text-decoration: none;
-  transform: none;
-}
-.foryou-card:hover { transform: scale(1.04); }
-
-.foryou-card-poster {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  border-radius: 0;
-}
-.foryou-card-poster img { width: 100%; height: 100%; object-fit: cover; }
-
-.foryou-card-body {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 2.5rem 0.9rem 0.85rem;
-  background: linear-gradient(0deg, rgba(7, 9, 13, 0.95) 0%, rgba(7, 9, 13, 0.72) 55%, rgba(7, 9, 13, 0) 100%);
-}
-
-.foryou-card-title {
-  color: #fff;
-  font-size: 0.98rem;
-  font-weight: 700;
-  margin: 0 0 0.3rem;
-  line-height: 1.25;
-}
-
-.foryou-card-type {
-  color: var(--exp-text-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.25rem;
-}
-.foryou-card-year { color: var(--exp-text-dim); }
-.foryou-card-genre { color: var(--exp-text-faint); font-size: 0.72rem; }
-
-.foryou-card-reason {
-  color: var(--exp-text-dim);
-  font-size: 0.74rem;
-  line-height: 1.35;
-  margin: 0.35rem 0 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  transition: max-height 0.25s ease, opacity 0.25s ease;
-}
-.foryou-card:hover .foryou-card-reason { max-height: 3em; opacity: 1; }
-
-.foryou-generate-btn {
-  background: #f4f6f8;
-  color: #0c0e13;
-  border-radius: 8px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
-.foryou-taste-profile {
-  background: var(--exp-surface);
-  border: 1px solid var(--exp-border);
-  border-radius: var(--exp-radius);
-}
-
 /* ── Inputs / filters / segmented controls ──────────────────── */
 
 .filter-input {
@@ -3634,36 +2704,6 @@ body {
   text-align: center;
 }
 
-/* Books/Manga tab switcher — matches the Featured/Browse pill toggle */
-.books-tab-bar {
-  display: flex;
-  width: fit-content;
-  gap: 2px;
-  border-bottom: none;
-  margin: 0 auto 1.5rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--exp-border);
-  border-radius: 999px;
-  padding: 0.25rem;
-}
-.books-tab {
-  border-radius: 999px;
-  padding: 0.5rem 1.3rem;
-  margin-bottom: 0;
-  border-bottom: none;
-  color: var(--exp-text-dim);
-}
-.books-tab:hover { color: var(--exp-text); }
-.books-tab.active {
-  background: #f4f6f8;
-  color: #0c0e13;
-  border-bottom-color: transparent;
-}
-
-/* ── Media grid cards (Browse view) ─────────────────────────── */
-
-/* ── Details modal ──────────────────────────────────────────── */
-
 .btn-watch {
   background: #f4f6f8;
   color: #0c0e13;
@@ -3681,6 +2721,7 @@ body {
   border-radius: var(--exp-radius-lg);
   color: var(--exp-text-dim);
 }
+.empty-state > svg { display: block; margin: 0 auto 0.6rem; color: var(--exp-text-faint); }
 .empty-hint { color: var(--exp-text-faint); }
 
 /* ── Side panel + bottom nav polish ─────────────────────────── */
@@ -3901,24 +2942,6 @@ body {
   color: #ff8080;
 }
 
-/* ── Rating badge — compact "x.x / 5" pill, the layout-friendly
-   alternative to a full per-category radar chart. Same visual language
-   as the old .profile-wl-status-ind--rated indicator, generalized so it
-   isn't tied to the watchlist card's hover-only visibility. ────────── */
-
-.rating-badge--corner {
-  position: absolute;
-  bottom: 6px;
-  right: 6px;
-  z-index: 1;
-  padding: 0.15rem 0.4rem;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(4px);
-  pointer-events: none;
-}
-
 /* ── Rate & Review panel ───────────────────────────────────────── */
 
 .rate-review-panel {
@@ -3977,137 +3000,3 @@ body {
   text-align: center;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   MINI PLAYER  (mini-player-*)
-   Persists across route changes (mounted once by MiniPlayerProvider
-   at the app root) so a video keeps playing in a small corner widget
-   while the user browses elsewhere.
-═══════════════════════════════════════════════════════════════ */
-.mini-player--dock {
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1.25rem;
-  z-index: 1400;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 280px;
-  padding: 0.5rem;
-  background: var(--exp-surface-2);
-  border: 1px solid var(--exp-border-strong);
-  border-radius: var(--exp-radius-lg);
-  box-shadow: var(--exp-shadow);
-  cursor: pointer;
-  text-align: left;
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-}
-
-.mini-player-frame {
-  position: relative;
-  flex-shrink: 0;
-  width: 96px;
-  aspect-ratio: 16 / 9;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #000;
-}
-
-.mini-player-iframe,
-.mini-player-poster {
-  width: 100%;
-  height: 100%;
-  border: none;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-
-.mini-player-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.mini-player-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--exp-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mini-player-subtitle {
-  font-size: 0.72rem;
-  color: var(--exp-text-dim);
-}
-
-.mini-player-close {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--exp-text-dim);
-  cursor: pointer;
-}
-.mini-player-close:hover { background: rgba(255, 255, 255, 0.16); color: var(--exp-text); }
-
-.mini-player--full {
-  position: fixed;
-  inset: 0;
-  z-index: 1450;
-  background: #000;
-  display: flex;
-  flex-direction: column;
-}
-
-.mini-player-full-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: calc(0.6rem + env(safe-area-inset-top, 0px)) 1rem 0.6rem;
-  background: linear-gradient(180deg, rgba(9, 11, 16, 0.95) 0%, rgba(9, 11, 16, 0.85) 100%);
-}
-
-.mini-player-full-btn {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: var(--exp-text);
-  font-size: 1.1rem;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.mini-player-full-btn:hover { background: rgba(255, 255, 255, 0.16); }
-
-.mini-player-full-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--exp-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mini-player-full-frame {
-  flex: 1;
-  min-height: 0;
-  background: #000;
-}
-.mini-player-full-frame .mini-player-iframe { pointer-events: auto; }

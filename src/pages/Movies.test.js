@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import Movies from './Movies';
 import * as AuthContextModule from '../contexts/AuthContext';
 import * as supabaseDataModule from '../utils/supabaseData';
+import * as catalogQueriesModule from '../utils/catalogQueries';
 import { setMockSearchParams, mockMovieCatalog, installPageTestHooks } from '../testUtils/pageTestSetup';
 
 jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
@@ -117,13 +118,30 @@ test('uses a genre chip filter bar on the movies page', async () => {
   const genreBar = screen.getByRole('group', { name: /movie genres/i });
   await userEvent.click(within(genreBar).getByRole('button', { name: /fantasy & sci-fi/i }));
 
-  await waitFor(() => {
-    expect(screen.getByText('Arrival')).toBeInTheDocument();
-    expect(screen.getByText('Mad Max: Fury Road')).toBeInTheDocument();
-    expect(screen.queryByText('Heat')).not.toBeInTheDocument();
-  });
+  await waitFor(() => expect(screen.queryByText('Heat')).not.toBeInTheDocument());
+  expect(await screen.findByText('Arrival')).toBeInTheDocument();
+  expect(await screen.findByText('Mad Max: Fury Road')).toBeInTheDocument();
+  expect(screen.queryByText('Heat')).not.toBeInTheDocument();
 
   useAuthSpy.mockRestore();
   movieSegmentSpy.mockRestore();
   ratingMapSpy.mockRestore();
+});
+
+test('says so, with Retry, when the catalog can’t be reached', async () => {
+  setMockSearchParams('?view=all');
+  jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({ user: { id: 7, username: 'mediafan' }, authLoading: false });
+  jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
+  // The catalog and the legacy API (not configured in Jest) both fail.
+  jest.spyOn(catalogQueriesModule, 'fetchMovieCatalogSegment').mockRejectedValue(new Error('offline'));
+
+  render(<Movies />);
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load movies right now.');
+
+  mockMovieCatalog([{ id: 1, title: 'Arrival', year: 2016, genre: 'Drama', poster_url: 'https://example.com/arrival.jpg' }]);
+  await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+  expect(await screen.findByText('Arrival')).toBeInTheDocument();
+  expect(screen.queryByText('Couldn’t load movies right now.')).toBeNull();
 });

@@ -116,11 +116,11 @@ fun TitleScreen(title: Title, active: Boolean) {
         Warmup.prepare(PlayRequest(title, s, e, resume?.positionSeconds, loadedSeasons))
         val outsideTask = async { OutsideRatings.load(title) }
         val starsTask = async { AppModel.myRating(title) }
-        val franchiseTask = async { Franchises.find(title, AppModel.isKids) }
+        val franchiseTask = async { Franchises.find(title, AppModel.maturity) }
         val tmdbId = title.tmdbId
         if (title.kind == MediaKind.TV && tmdbId != null) previously = loadPreviously(tmdbId, resume)
         outside = outsideTask.await(); myStars = starsTask.await(); franchise = franchiseTask.await()
-        if (tmdbId != null) more = Catalog.load(RowSpec("more", "More Like This", title.kind, "${title.kind.tmdbPath}/$tmdbId/recommendations"), AppModel.isKids)
+        if (tmdbId != null) more = Catalog.load(RowSpec("more", "More Like This", title.kind, "${title.kind.tmdbPath}/$tmdbId/recommendations"), AppModel.maturity)
             ?.items.orEmpty().filter { it.id != title.id }
     }
     LaunchedEffect(season) {

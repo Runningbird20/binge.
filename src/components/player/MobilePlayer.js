@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsOut, CaretDown, DeviceRotate, LockSimple, LockSimpleOpen, X } from '@phosphor-icons/react';
+import { ArrowsOut, Check, DeviceRotate, ListNumbers, LockSimple, LockSimpleOpen, Plus, ShieldCheck, X } from '@phosphor-icons/react';
 import { MobilePlaybackPickers } from '../PlaybackOptions';
 import { SERVER_LABELS } from '../../utils/embedProviders';
+import { popupsBlocked } from '../../utils/popupSandbox';
 import { EmbedFrame } from './PlayerOverlays';
 import { MobileEpisodeRows } from './EpisodePickers';
 
-// Phone layout: header, the video (which fills the screen in landscape, with
-// corner buttons and a slide-up episode/server picker), then the season and
-// episode chips and the server/audio/subtitle pickers below it.
+// Phone layout, on the same black stage as the desktop one: a slim header,
+// the video at 16:9 (filling the screen in landscape, with corner buttons and
+// a slide-up episode/server picker), one quiet line for notices, then the
+// season and episode chips and the server/audio/subtitle pickers below it.
 export default function MobilePlayer({
-  item, isTV, isLandscape, season, episode, onClose, onMinimize, modalRef, frame, frameKey, overlays,
+  item, isTV, isLandscape, season, episode, onClose, modalRef, frame, frameKey, overlays,
   failoverBar, lookupState, lookupError, episodes, watchedNow, canTrackEpisodes, markingWatched,
   onMarkWatched, servers, provider, onSelectServer, playbackOptionProps, fullscreen,
 }) {
@@ -38,11 +40,10 @@ export default function MobilePlayer({
           {isTV && <span className="mp-title-ep">S{season} E{episode}</span>}
         </div>
         <div className="mp-header-btns">
-          <button className="mp-btn" onClick={onMinimize} type="button" title="Minimize" aria-label="Minimize player"><CaretDown size={16} weight="bold" /></button>
           <button className="mp-btn" onClick={toggleFullscreen} type="button" title="Full screen, landscape" aria-label="Full screen in landscape">
             <ArrowsOut size={16} weight="bold" />
           </button>
-          <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close"><X size={16} weight="bold" /></button>
+          <button className="mp-btn" onClick={onClose} type="button" title="Close" aria-label="Close player"><X size={16} weight="bold" /></button>
         </div>
       </div>
 
@@ -53,7 +54,8 @@ export default function MobilePlayer({
           {...frame}
           className="mp-iframe"
           emptyClassName="mp-no-url"
-          emptyText={lookupState === 'loading' ? 'Preparing stream…' : 'Stream unavailable.'}
+          loading={lookupState === 'loading'}
+          emptyText="Stream unavailable right now."
         />
         {overlays}
         {rotateHint && (
@@ -61,8 +63,9 @@ export default function MobilePlayer({
             <DeviceRotate size={22} weight="bold" aria-hidden="true" /> Turn your phone sideways for a bigger picture
           </div>
         )}
-        {/* Landscape overlay — top-right corner buttons, hidden in portrait via CSS */}
+        {/* Landscape: a column of buttons beside the video (hidden in portrait via CSS) */}
         <div className="mp-ls-overlay">
+          <button className="mp-btn" onClick={onClose} type="button" title="Close" aria-label="Close player"><X size={16} weight="bold" /></button>
           {canLockRotation && (
             <button
               className={`mp-btn${rotationLocked ? ' active' : ''}`}
@@ -77,16 +80,17 @@ export default function MobilePlayer({
           )}
           {isTV && (
             <button
-              className="mp-btn"
+              className={`mp-btn${lsControlsOpen ? ' active' : ''}`}
               onClick={() => setLsControlsOpen(v => !v)}
               type="button"
-              title="Episodes"
+              title="Episodes and servers"
+              aria-label="Episodes and servers"
+              aria-expanded={lsControlsOpen}
             >
-              {lsControlsOpen ? '✕' : '⋮'}
+              <ListNumbers size={16} weight="bold" aria-hidden="true" />
             </button>
           )}
           {isTV && <span className="mp-ls-ep-badge">S{season} E{episode}</span>}
-          <button className="mp-btn mp-btn-close" onClick={onClose} type="button" title="Close"><X size={16} weight="bold" /></button>
         </div>
 
         {/* Landscape episode/source picker — slides up from bottom of video area */}
@@ -105,30 +109,34 @@ export default function MobilePlayer({
             <div className="mp-row">
               <span className="mp-row-label">Server</span>
               <div className="mp-chips">
-                {servers.map((server) => (
-                  <button
-                    key={server.id}
-                    className={`mp-chip ${provider === server.id ? 'active' : ''}`}
-                    onClick={() => onSelectServer(server.id)}
-                    type="button"
-                  >{SERVER_LABELS[server.id]?.label || server.id}</button>
-                ))}
+                {servers.map((server) => {
+                  const label = SERVER_LABELS[server.id]?.label || server.id;
+                  const safe = provider === server.id ? playbackOptionProps.popupsBlockedNow : popupsBlocked(server.id);
+                  return (
+                    <button
+                      key={server.id}
+                      className={`mp-chip ${provider === server.id ? 'active' : ''}`}
+                      onClick={() => onSelectServer(server.id)}
+                      type="button"
+                      aria-label={safe ? `${label}, no pop-ups` : undefined}
+                    >{label}{safe && <ShieldCheck size={12} weight="fill" className="mp-chip-safe" aria-hidden="true" />}</button>
+                  );
+                })}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {failoverBar}
+      <div className="mp-notices">
+        {lookupState === 'error' && (
+          <p className="player-notice player-notice--warn">{lookupError || `Couldn't find a stream ID for "${item.title}".`}</p>
+        )}
+        {failoverBar}
+      </div>
 
       {/* Controls */}
       <div className="mp-controls">
-        {lookupState === 'loading' && (
-          <div className="mp-status">Looking up stream ID…</div>
-        )}
-        {lookupState === 'error' && (
-          <div className="mp-status mp-status--err">{lookupError || `Could not find stream for "${item.title}".`}</div>
-        )}
         {isTV && (
           <>
             <MobileEpisodeRows
@@ -147,7 +155,9 @@ export default function MobilePlayer({
                 disabled={!canTrackEpisodes || markingWatched}
                 type="button"
               >
-                {watchedNow ? '✓ Watched' : '+ Mark as watched'}
+                {watchedNow
+                  ? <><Check size={16} weight="bold" aria-hidden="true" /> Watched</>
+                  : <><Plus size={16} weight="bold" aria-hidden="true" /> Mark as watched</>}
               </button>
             </div>
           </>

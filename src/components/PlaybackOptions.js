@@ -2,13 +2,32 @@ import ThemedSelect from './ThemedSelect';
 import { useEffect, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
 import { haptic } from '../utils/haptics';
-import { CaretDown, Check, CheckCircle, HardDrives, SpeakerHigh, Subtitles, Warning, WarningCircle } from '@phosphor-icons/react';
+import { CaretDown, Check, CheckCircle, HardDrives, ShieldCheck, SpeakerHigh, Subtitles, Warning, WarningCircle } from '@phosphor-icons/react';
 import { AUDIO_CHOICES, SUBTITLE_CHOICES } from '../utils/streamPreferences';
 import { languageName } from '../utils/tmdb';
+import { popupsBlocked } from '../utils/popupSandbox';
 
-// Netflix-style "Audio & Subtitles" panel for the embed player: pick audio
-// and subtitle language without leaving the video, and see every server
-// ranked for those choices (with why it's recommended).
+// Servers whose pop-ups and redirects are blocked (utils/popupSandbox.js).
+// The one playing uses what actually happened on this load (popupsBlockedNow):
+// it may have been reloaded unsandboxed after refusing the sandbox.
+function popupFreeCheck(currentServer, popupsBlockedNow) {
+  return (id) => (id === currentServer && typeof popupsBlockedNow === 'boolean' ? popupsBlockedNow : popupsBlocked(id));
+}
+
+export function NoPopupsTag() {
+  return (
+    <span className="st-pb-tag st-pb-tag--safe">
+      <ShieldCheck size={11} weight="fill" aria-hidden="true" /> No pop-ups
+    </span>
+  );
+}
+
+const NO_POPUPS_HINT = 'Servers marked No pop-ups play with their pop-ups and redirects blocked. The others won’t play that way.';
+
+// The player's "Servers" panel: pick audio and subtitle language without
+// leaving the video, and see every server ranked for those choices (with why
+// it's recommended). Called Servers, not "Audio & Subtitles", because most
+// servers have their own menu by that name inside the video.
 export function PlaybackOptionsPanel({
   prefs,
   onPrefsChange,
@@ -21,11 +40,13 @@ export function PlaybackOptionsPanel({
   onReportAudio,
   blockedCount = 0,
   health = {},
+  popupsBlockedNow,
   onClose,
 }) {
   const originalName = languageName(originalLanguage);
   const current = servers.find((server) => server.id === currentServer);
   const downNames = servers.filter((server) => health[server.id]?.down).map((server) => serverLabels[server.id]?.label || server.id);
+  const noPopups = popupFreeCheck(currentServer, popupsBlockedNow);
 
   return (
     <div className="st-pb-panel" role="dialog" aria-label="Audio, subtitles and server">
@@ -85,6 +106,7 @@ export function PlaybackOptionsPanel({
                       {index === 0 && <span className="st-pb-tag st-pb-tag--best">Best match</span>}
                       {server.audio && <span className="st-pb-tag">{languageName(server.audio)} audio</span>}
                       {meta.subtitles && <span className="st-pb-tag">CC</span>}
+                      {noPopups(server.id) && <NoPopupsTag />}
                     </span>
                     {server.note && (
                       <span className={`st-pb-server-note st-pb-server-note--${server.status || 'unknown'}`}>
@@ -99,6 +121,7 @@ export function PlaybackOptionsPanel({
             );
           })}
         </ul>
+        {servers.some((server) => noPopups(server.id)) && <p className="st-pb-hint">{NO_POPUPS_HINT}</p>}
         {onReportAudio && (
           <label className="st-pb-report">
             <span>Audio on this server</span>
@@ -150,12 +173,12 @@ export default function PlaybackOptions(props) {
     <div className="st-pb" ref={wrapRef}>
       <button
         type="button"
-        className="st-pb-trigger"
+        className="player-pill st-pb-trigger"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <Subtitles size={18} weight="bold" /> Audio &amp; Subtitles
+        <HardDrives size={18} weight="bold" aria-hidden="true" /> Servers
       </button>
       {open && <PlaybackOptionsPanel {...props} onClose={() => setOpen(false)} />}
     </div>
@@ -166,7 +189,7 @@ export default function PlaybackOptions(props) {
 // sheet at thumb height, instead of one long inline panel.
 export function MobilePlaybackPickers({
   prefs, onPrefsChange, originalLanguage, servers, currentServer, serverLabels,
-  onSelectServer, onReportBroken, blockedCount = 0, health = {},
+  onSelectServer, onReportBroken, blockedCount = 0, health = {}, popupsBlockedNow,
 }) {
   const [sheet, setSheet] = useState(null); // 'server' | 'audio' | 'subs'
   const originalName = languageName(originalLanguage);
@@ -176,6 +199,7 @@ export function MobilePlaybackPickers({
   const downNames = servers.filter((server) => health[server.id]?.down).map((server) => serverLabels[server.id]?.label || server.id);
   const close = () => setSheet(null);
   const pick = (fn) => (value) => { haptic(); fn(value); close(); };
+  const noPopups = popupFreeCheck(currentServer, popupsBlockedNow);
 
   return (
     <>
@@ -208,13 +232,14 @@ export function MobilePlaybackPickers({
           return (
             <button key={server.id} type="button" className={`bsheet-option${active ? ' active' : ''}`} onClick={() => pick(onSelectServer)(server.id)}>
               <span className="mp-sheet-server">
-                <span>{meta.label || server.id}{index === 0 && <span className="st-pb-tag st-pb-tag--best">Best match</span>}{meta.subtitles && <span className="st-pb-tag">CC</span>}</span>
+                <span>{meta.label || server.id}{index === 0 && <span className="st-pb-tag st-pb-tag--best">Best match</span>}{meta.subtitles && <span className="st-pb-tag">CC</span>}{noPopups(server.id) && <NoPopupsTag />}</span>
                 {server.note && <span className={`st-pb-server-note st-pb-server-note--${server.status || 'unknown'}`}>{server.note}</span>}
               </span>
               {active && <Check size={18} weight="bold" className="bsheet-option-check" />}
             </button>
           );
         })}
+        {servers.some((server) => noPopups(server.id)) && <p className="st-pb-hint">{NO_POPUPS_HINT}</p>}
         {blockedCount > 0 && <p className="st-pb-hint">{blockedCount} server{blockedCount === 1 ? ' is' : 's are'} blocked on this network and hidden.</p>}
         <button type="button" className="st-btn st-btn--ghost mp-sheet-broken" onClick={() => { onReportBroken(); close(); }}>
           <WarningCircle size={16} weight="bold" /> Not playing? Try the next server

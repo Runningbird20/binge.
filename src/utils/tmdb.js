@@ -131,9 +131,21 @@ export const LANGUAGE_NAMES = {
   vi: 'Vietnamese', he: 'Hebrew', fa: 'Persian', uk: 'Ukrainian', fi: 'Finnish',
 };
 
+// Names for codes outside the list above, from the browser ("bg" → Bulgarian).
+let displayNames = null;
+function browserLanguageName(code) {
+  try {
+    displayNames = displayNames || new Intl.DisplayNames(['en'], { type: 'language' });
+    const name = displayNames.of(code);
+    return name && name.toLowerCase() !== code.toLowerCase() ? name : '';
+  } catch {
+    return '';
+  }
+}
+
 export function languageName(code) {
   if (!code) return '';
-  return LANGUAGE_NAMES[code] || code.toUpperCase();
+  return LANGUAGE_NAMES[code] || browserLanguageName(code) || code.toUpperCase();
 }
 
 // Normalized shape for a TMDB list result, before catalog matching.

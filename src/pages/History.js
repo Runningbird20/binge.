@@ -13,6 +13,8 @@ import {
 } from '../utils/supabaseData';
 import { computeStarRating } from '../components/RatingArtifact';
 import { posterSrc } from '../utils/imageQuality';
+import { getActiveProfileId } from '../utils/activeProfile';
+import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 
 function titleHref(entry) {
   if (entry.media_type === 'book') return `/book/${entry.media_id}`;
@@ -50,7 +52,9 @@ export default function History() {
       ...episodes.map((row) => ({ ...row, kind: 'episode', at: row.watched_at })),
       ...playing.map((row) => ({ ...row, kind: 'played', at: row.updated_at })),
       ...ratings.map((row) => ({ ...row, kind: 'rated', at: row.created_at })),
-    ].filter((row) => row.at && row.media_id);
+    ].filter((row) => row.at && row.media_id)
+      // Removed within the last 10 seconds (Undo still showing): stays out.
+      .filter((row) => row.kind === 'rated' || !isRemovalPending(`history:${row.media_type}:${row.media_id}`));
     list.sort((a, b) => new Date(b.at) - new Date(a.at));
     // Collapse consecutive episodes of the same show on the same day.
     const collapsed = [];
@@ -78,18 +82,21 @@ export default function History() {
     return [...map.entries()];
   }, [entries]);
 
-  async function remove(entry) {
-    if (!window.confirm(`Remove "${entry.title}" from your watch history? Your rating and My List aren’t affected.`)) return;
-    setBusy(`${entry.media_type}:${entry.media_id}`);
-    try {
-      await removeTitleFromHistory({ mediaType: entry.media_type, mediaId: entry.media_id });
-      setEntries((current) => current.filter((row) => !(row.media_id === entry.media_id && row.media_type === entry.media_type && row.kind !== 'rated')));
-      setMessage(`Removed “${entry.title}” from your history.`);
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy('');
-    }
+  // Off the page at once (no confirm: the popup has Undo); removed when the
+  // popup runs out, for the profile it was removed from. Ratings stay.
+  function remove(entry) {
+    const matches = (row) => row.media_id === entry.media_id && row.media_type === entry.media_type && row.kind !== 'rated';
+    const removed = (entries || []).filter(matches);
+    const profileId = getActiveProfileId();
+    setEntries((current) => (current || []).filter((row) => !matches(row)));
+    setMessage('');
+    removeWithUndo({
+      key: `history:${entry.media_type}:${entry.media_id}`,
+      message: `Removed “${entry.title || 'that'}” from your history.`,
+      onUndo: () => setEntries((current) => [...(current || []).filter((row) => !removed.includes(row)), ...removed]
+        .sort((a, b) => new Date(b.at) - new Date(a.at))),
+      onCommit: () => removeTitleFromHistory({ mediaType: entry.media_type, mediaId: entry.media_id, profileId }),
+    });
   }
 
   async function toggleHidden(entry) {

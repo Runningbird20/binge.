@@ -4,11 +4,15 @@ import { useAuth } from '../contexts/AuthContext';
 
 jest.mock(
   'react-router-dom',
-  () => ({
-    __esModule: true,
-    Link: ({ children, to, ...props }) => <a href={typeof to === 'string' ? to : '#'} {...props}>{children}</a>,
-    Navigate: ({ to }) => <div data-testid="navigate" data-to={to} />,
-  }),
+  () => {
+    // The href a real <Link> renders for a string or { pathname, search, hash } `to`.
+    const hrefOf = (to) => (typeof to === 'string' ? to : `${to?.pathname || ''}${to?.search || ''}${to?.hash || ''}`) || '/';
+    return {
+      __esModule: true,
+      Link: ({ children, to, ...props }) => <a href={hrefOf(to)} {...props}>{children}</a>,
+      Navigate: ({ to }) => <div data-testid="navigate" data-to={to} />,
+    };
+  },
   { virtual: true }
 );
 

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getEmbeddedId } from '../utils/embedPlayability';
-import { tmdbGet, tmdbImage, tmdbKind } from '../utils/tmdb';
+import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
+import { pickWatchProviders } from '../utils/watchProviders';
+import { titlePeople } from '../utils/people';
 
 function usCertification(data, mediaType) {
   if (mediaType === 'tv_show') {
@@ -27,24 +29,52 @@ function pickTrailer(videos) {
   return trailer?.key || null;
 }
 
+// The title's TMDB id. The source key comes first: getEmbeddedId prefers an
+// IMDb id, which most movie rows also carry, and TMDB needs its own.
+function tmdbIdOf(item) {
+  const fromKey = tmdbIdFromItem(item);
+  if (fromKey) return String(fromKey);
+  const embedded = getEmbeddedId(item);
+  return embedded?.kind === 'tmdb' ? embedded.value : null;
+}
+
+// The one TMDB request behind a title's popup (cached for the session).
+function requestTitleDetails(tmdbId, mediaType) {
+  const extra = mediaType === 'tv_show' ? 'content_ratings' : 'release_dates';
+  return tmdbGet(`/${tmdbKind(mediaType)}/${tmdbId}`, {
+    append_to_response: `credits,images,videos,watch/providers,${extra}`,
+    include_image_language: 'en,null',
+  });
+}
+
+// The title's logo art, the same one its popup shows (the spotlight uses
+// it as its headline). Resolves to a URL, or null when there is none (books,
+// titles without TMDB art, TMDB unreachable). Shares the popup's request, so
+// opening the popup afterwards needs nothing new.
+export async function fetchTitleLogo(item) {
+  if (!mayHaveTitleLogo(item)) return null;
+  const data = await requestTitleDetails(tmdbIdOf(item), item.media_type);
+  return data ? pickLogo(data.images) : null;
+}
+
+// Whether a title can have logo art at all (a movie or series with a TMDB id).
+export function mayHaveTitleLogo(item) {
+  return (item?.media_type === 'movie' || item?.media_type === 'tv_show') && Boolean(tmdbIdOf(item));
+}
+
 // TMDB enrichment for the detail modal (one cached request): high-res
 // backdrop, title logo art, cast, age rating, runtime/seasons and trailer.
 // Returns null fields when TMDB isn't reachable; the modal falls back to the
 // catalog row.
 export default function useTitleDetails(item, mediaType) {
   const [details, setDetails] = useState(null);
-  const embedded = getEmbeddedId(item);
-  const tmdbId = embedded?.kind === 'tmdb' ? embedded.value : null;
+  const tmdbId = tmdbIdOf(item);
 
   useEffect(() => {
     setDetails(null);
     if (!tmdbId || (mediaType !== 'movie' && mediaType !== 'tv_show')) return undefined;
     let cancelled = false;
-    const extra = mediaType === 'tv_show' ? 'content_ratings' : 'release_dates';
-    tmdbGet(`/${tmdbKind(mediaType)}/${tmdbId}`, {
-      append_to_response: `credits,images,videos,${extra}`,
-      include_image_language: 'en,null',
-    }).then((data) => {
+    requestTitleDetails(tmdbId, mediaType).then((data) => {
       if (cancelled || !data) return;
       const seasons = (data.seasons || []).filter((season) => season.season_number > 0 && season.episode_count > 0);
       setDetails({
@@ -62,11 +92,15 @@ export default function useTitleDetails(item, mediaType) {
         voteAverage: Number(data.vote_average) || 0,
         voteCount: Number(data.vote_count) || 0,
         cast: (data.credits?.cast || []).slice(0, 8).map((person) => person.name),
+        // The photo row under the description (director/creators, then cast).
+        people: titlePeople(data, mediaType),
         creators: mediaType === 'tv_show'
           ? (data.created_by || []).map((person) => person.name)
           : (data.credits?.crew || []).filter((person) => person.job === 'Director').map((person) => person.name),
         trailerKey: pickTrailer(data.videos),
         networks: (data.networks || data.production_companies || []).slice(0, 2).map((entry) => entry.name),
+        // Legal streaming / rent options in the viewer's country (JustWatch data).
+        watch: pickWatchProviders(data['watch/providers']),
       });
     });
     return () => { cancelled = true; };

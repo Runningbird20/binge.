@@ -1,11 +1,11 @@
-import LoadingBar from './LoadingBar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Check, ClockCounterClockwise, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
+import { Check, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
 import RemindButton from './RemindButton';
 import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
+import WhereToWatch from './WhereToWatch';
+import CastRow from './CastRow';
 import EpisodeHeatmap from './EpisodeHeatmap';
 import FranchiseOrder from './FranchiseOrder';
 import { haptic } from '../utils/haptics';
@@ -14,237 +14,27 @@ import RateReviewPanel from './RateReviewPanel';
 import ThemedSelect from './ThemedSelect';
 import { computeProgressBadge, computeResumeProgress, formatTimeLeft } from '../utils/continueWatching';
 import { getPositionEntry, positionKey } from '../utils/playbackPositions';
-import { fetchEpisodeProgress } from '../utils/supabaseData';
+import {
+  fetchEpisodeProgress,
+  markEpisodesWatched,
+  removeContinueWatchingFor,
+  unmarkEpisodesWatched,
+  updateWatchlistProgress,
+  upsertSupabaseContinueWatching,
+} from '../utils/supabaseData';
+import { episodeKey, isAfter, nextEpisode } from '../utils/episodeMarking';
 import { STATUS_LABELS, getStatusOptions } from '../utils/watchlistStatus';
-import useTitleDetails, { useSeasonEpisodes } from '../hooks/useTitleDetails';
+import useTitleDetails from '../hooks/useTitleDetails';
 import useSwipeDismiss from '../hooks/useSwipeDismiss';
 import useDeviceType from '../hooks/useDeviceType';
-import { fetchTmdbRecommendations, languageName } from '../utils/tmdb';
-import { resolveTmdbItems } from '../utils/catalogLookup';
+import { languageName } from '../utils/tmdb';
 import { backdropSrc, backdropSrcSet, posterSrc } from '../utils/imageQuality';
-import { titleUrl } from './TitleCard';
 import { isComingSoon, formatReleaseDay } from '../utils/releaseWindow';
-import { findSourceBooks, splitBookTitle } from '../utils/adaptations';
-
-function splitList(value) {
-  return String(value || '').split(',').map((entry) => entry.trim()).filter(Boolean);
-}
-
-function formatRuntime(minutes) {
-  if (!minutes) return '';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h ? `${h}h ${m}m` : `${m}m`;
-}
-
-function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay }) {
-  const [season, setSeason] = useState(currentSeason || seasons[0]?.season_number || 1);
-  const episodes = useSeasonEpisodes(tmdbId, season);
-
-  useEffect(() => {
-    if (currentSeason) setSeason(currentSeason);
-  }, [currentSeason]);
-
-  return (
-    <section className="td-section td-episodes-section" aria-label="Episodes">
-      <div className="td-section-head">
-        <h3>Episodes</h3>
-        {seasons.length > 1 ? (
-          <ThemedSelect
-            className="td-season-select"
-            variant="pill"
-            aria-label="Season"
-            value={String(season)}
-            options={seasons.map((entry) => ({ value: String(entry.season_number), label: `${entry.name || `Season ${entry.season_number}`} (${entry.episode_count} ep)` }))}
-            onChange={(event) => setSeason(Number(event.target.value))}
-          />
-        ) : (
-          <span className="td-muted">{seasons[0]?.name || 'Season 1'}</span>
-        )}
-      </div>
-
-      <ol className="td-episodes">
-        {!episodes && <li style={{ listStyle: 'none' }}><LoadingBar compact label="Loading episodes…" /></li>}
-        {episodes?.map((episode) => {
-          const isWatched = watched.has(`${season}:${episode.number}`);
-          const upcoming = episode.airDate && new Date(episode.airDate) > new Date();
-          return (
-            <li key={episode.number}>
-              <button
-                type="button"
-                className={`td-episode${isWatched ? ' watched' : ''}`}
-                onClick={() => !upcoming && onPlay(season, episode.number)}
-                disabled={upcoming}
-                aria-label={`Play episode ${episode.number}: ${episode.title}${isWatched ? ' (watched)' : ''}`}
-              >
-                <span className="td-episode-num">{episode.number}</span>
-                <span className="td-episode-still">
-                  {episode.still ? <img src={episode.still} alt="" loading="lazy" /> : <span className="td-episode-still-empty" />}
-                  {!upcoming && <span className="td-episode-play"><Play size={18} weight="fill" /></span>}
-                  {isWatched && <span className="td-episode-watched"><Check size={12} weight="bold" /> Watched</span>}
-                </span>
-                <span className="td-episode-body">
-                  <span className="td-episode-title">
-                    <strong>{episode.title}</strong>
-                    <span className="td-muted">{upcoming ? `Airs ${new Date(episode.airDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : formatRuntime(episode.runtime)}</span>
-                  </span>
-                  {episode.overview && <span className="td-episode-overview">{episode.overview}</span>}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
-// "Previously on…": after a long break, the summaries of the last few
-// episodes before the one you're resuming (TMDB season data).
-const RECAP_AFTER_DAYS = 14;
-
-function PreviouslyOn({ tmdbId, season, episode, daysAway, onPlay, onCancel }) {
-  const current = useSeasonEpisodes(tmdbId, season);
-  const previous = useSeasonEpisodes(tmdbId, episode <= 3 && season > 1 ? season - 1 : null);
-  const recap = useMemo(() => {
-    if (!current) return null;
-    const before = current.filter((ep) => ep.number < episode).map((ep) => ({ ...ep, season }));
-    const earlier = (previous || []).map((ep) => ({ ...ep, season: season - 1 }));
-    return [...earlier, ...before].filter((ep) => ep.overview).slice(-3);
-  }, [current, previous, season, episode]);
-
-  useEffect(() => {
-    // Nothing to recap (TMDB has no summaries) — go straight to playing.
-    if (recap && recap.length === 0) onPlay();
-  }, [recap, onPlay]);
-
-  return (
-    <div className="td-recap" role="dialog" aria-modal="true" aria-labelledby="td-recap-title">
-      <div className="td-recap-card">
-        <h3 id="td-recap-title">Previously on…</h3>
-        <p className="td-recap-note"><ClockCounterClockwise size={16} weight="bold" aria-hidden="true" /> You were last here {daysAway} days ago.</p>
-        {!recap && <LoadingBar compact label="Loading recap…" />}
-        <ol className="td-recap-list">
-          {recap?.map((ep) => (
-            <li key={`${ep.season}:${ep.number}`}>
-              {ep.still && <img src={ep.still} alt="" loading="lazy" />}
-              <div>
-                <p className="td-recap-ep">S{ep.season} · E{ep.number}{ep.title ? ` — ${ep.title}` : ''}</p>
-                <p className="td-recap-text">{ep.overview}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-        <div className="td-recap-actions">
-          <button type="button" className="st-btn st-btn--primary" onClick={onPlay} autoFocus>
-            <Play size={18} weight="fill" /> Continue S{season} · E{episode}
-          </button>
-          <button type="button" className="st-btn st-btn--ghost" onClick={onCancel}>Not now</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// "Read the book behind it" — the novel an adaptation is credited to.
-function SourceBooks({ mediaType, tmdbId, title }) {
-  const location = useLocation();
-  const [source, setSource] = useState(null);
-
-  useEffect(() => {
-    setSource(null);
-    if (!tmdbId) return undefined;
-    let cancelled = false;
-    findSourceBooks({ mediaType, tmdbId, title })
-      .then((result) => { if (!cancelled) setSource(result); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [mediaType, tmdbId, title]);
-
-  if (!source?.author) return null;
-  const background = location.state?.backgroundLocation || location;
-  const heading = source.exact ? 'Read the book behind it' : `Based on the work of ${source.author}`;
-
-  return (
-    <section className="td-section" aria-label={heading}>
-      <div className="td-section-head"><h3>{heading}</h3></div>
-      {source.books.length > 0 ? (
-        <div className="td-adapt-list">
-          {source.books.map((book) => {
-            const { main, series, number } = splitBookTitle(book.title);
-            return (
-              <Link key={book.id} to={`/book/${book.id}`} state={{ backgroundLocation: background }} className="td-adapt">
-                {book.cover_url ? <img src={posterSrc(book.cover_url)} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="td-adapt-fallback"><BookOpen size={22} /></span>}
-                <span className="td-adapt-body">
-                  <span className="td-adapt-title">{main}</span>
-                  <span className="td-muted">{[book.author, book.year].filter(Boolean).join(' · ')}</span>
-                  {series && <span className="td-muted">{series}{number ? ` · Book ${number}` : ''}</span>}
-                  <span className="td-adapt-cta"><BookOpen size={14} weight="bold" /> See the book</span>
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="td-muted">Based on a book by {source.author}. It isn’t in the binge. library yet.</p>
-      )}
-    </section>
-  );
-}
-
-function MoreLikeThis({ mediaType, tmdbId }) {
-  const location = useLocation();
-  const [items, setItems] = useState(null);
-
-  useEffect(() => {
-    setItems(null);
-    if (!tmdbId) return undefined;
-    let cancelled = false;
-    fetchTmdbRecommendations(mediaType, tmdbId)
-      .then((list) => resolveTmdbItems(list || [], mediaType))
-      .then((resolved) => { if (!cancelled) setItems(resolved.slice(0, 12)); })
-      .catch(() => { if (!cancelled) setItems([]); });
-    return () => { cancelled = true; };
-  }, [mediaType, tmdbId]);
-
-  if (items && items.length === 0) return null;
-  const background = location.state?.backgroundLocation || location;
-
-  return (
-    <section className="td-section" aria-label="More like this">
-      <div className="td-section-head"><h3>More Like This</h3></div>
-      <div className="td-more-grid">
-        {!items && <div style={{ gridColumn: '1 / -1' }}><LoadingBar compact label="Loading similar titles…" /></div>}
-        {items?.map((entry) => (
-          <Link
-            key={entry.id}
-            to={titleUrl(entry)}
-            state={{ backgroundLocation: background }}
-            replace={Boolean(location.state?.backgroundLocation)}
-            className="td-more-card"
-          >
-            <span className="td-more-art">
-              <img
-                src={backdropSrc(entry.backdrop_url, 'w780') || posterSrc(entry.poster_url)}
-                alt=""
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-              {entry._comingSoon && <span className="st-badge st-badge--soon">Coming {formatReleaseDay(entry)}</span>}
-            </span>
-            <span className="td-more-body">
-              <span className="td-more-title">{entry.title}</span>
-              <span className="td-muted">
-                {[entry.year || String(entry.release_date || '').slice(0, 4), splitList(entry.genre)[0]].filter(Boolean).join(' · ')}
-              </span>
-              {entry.overview && <span className="td-more-overview">{entry.overview}</span>}
-            </span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
+import { splitList, formatRuntime } from './title/format';
+import { EpisodeList } from './title/EpisodeList';
+import { RECAP_AFTER_DAYS, PreviouslyOn } from './title/PreviouslyOn';
+import { SourceBooks } from './title/SourceBooks';
+import { MoreLikeThis } from './title/MoreLikeThis';
 
 // Netflix-style title page, shared by desktop and mobile (it reflows to a
 // full-screen sheet on phones): backdrop + logo art, Play/Resume, Trailer,
@@ -261,19 +51,29 @@ export default function MediaDetailsModal({
   isAddingWatchlist,
   detailMessage,
   allowActions = true,
-  browseOnlyMessage = '',
   autoPlay = false,
   initialSeason,
   initialEpisode,
   initialPosition,
   closeOnPlayerExit = false,
+  // Called after this popup changes library rows itself (a franchise's
+  // "Mark all watched"), so the page can reload them.
+  onLibraryChange,
 }) {
   const [showPlayer, setShowPlayer] = useState(Boolean(autoPlay));
   const [playerStart, setPlayerStart] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
-  const [watched, setWatched] = useState(new Set());
+  // Watched episodes: "season:episode" -> when (null if marked by hand).
+  const [watched, setWatched] = useState(new Map());
   const [lastWatchedAt, setLastWatchedAt] = useState(0);
   const [showRecap, setShowRecap] = useState(false);
+  // Marking episodes from the list: where the show picks up afterwards (it
+  // moves forward when you catch up), a save in progress, and the last
+  // change's note with its Undo.
+  const [resumeOverride, setResumeOverride] = useState(null);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [markStatus, setMarkStatus] = useState(null);
   const dialogRef = useRef(null);
   const overlayRef = useRef(null);
   const { isMobile } = useDeviceType();
@@ -281,9 +81,13 @@ export default function MediaDetailsModal({
   const isTV = mediaType === 'tv_show';
   const comingSoon = item ? isComingSoon(item) : false;
 
-  const progressBadge = computeProgressBadge({ ...watchlistEntry, media_type: mediaType });
-  const resumeSeason = initialSeason ?? watchlistEntry?.current_season ?? undefined;
-  const resumeEpisode = initialEpisode ?? watchlistEntry?.current_episode ?? undefined;
+  const progressBadge = computeProgressBadge({
+    ...watchlistEntry,
+    ...(resumeOverride ? { current_season: resumeOverride.season, current_episode: resumeOverride.episode } : {}),
+    media_type: mediaType,
+  });
+  const resumeSeason = resumeOverride?.season ?? initialSeason ?? watchlistEntry?.current_season ?? undefined;
+  const resumeEpisode = resumeOverride?.episode ?? initialEpisode ?? watchlistEntry?.current_episode ?? undefined;
 
   useEffect(() => {
     setShowPlayer(Boolean(autoPlay));
@@ -293,15 +97,23 @@ export default function MediaDetailsModal({
   }, [autoPlay, item?.id]);
 
   useEffect(() => {
+    setResumeOverride(null);
+    setMarkStatus(null);
+    setProgressLoaded(false);
+  }, [item?.id]);
+
+  // Marking waits for this, so it never works from a stale list.
+  useEffect(() => {
     if (!isTV || !item?.id) return undefined;
     let cancelled = false;
     fetchEpisodeProgress(item.id)
       .then((rows) => {
         if (cancelled) return;
-        setWatched(new Set(rows.map((row) => `${row.season}:${row.episode}`)));
+        setWatched(new Map(rows.map((row) => [episodeKey(row.season, row.episode), row.watched_at || null])));
         setLastWatchedAt(rows.reduce((max, row) => Math.max(max, new Date(row.watched_at).getTime() || 0), 0));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setProgressLoaded(true); });
     return () => { cancelled = true; };
   }, [isTV, item?.id, showPlayer]);
 
@@ -339,8 +151,6 @@ export default function MediaDetailsModal({
   const facts = useMemo(() => {
     if (!item) return {};
     return {
-      cast: details?.cast?.length ? details.cast : splitList(item.cast_members).slice(0, 8),
-      creators: details?.creators?.length ? details.creators : splitList(item.director || item.creator),
       genres: details?.genres?.length ? details.genres : splitList(item.genre),
       language: languageName(details?.originalLanguage || item.original_language),
     };
@@ -374,6 +184,7 @@ export default function MediaDetailsModal({
   // Resuming a show after a long break gets a short catch-up first.
   const lastActivity = Math.max(
     lastWatchedAt,
+    resumeOverride?.at || 0,
     new Date(watchlistEntry?.updated_at || 0).getTime() || 0,
     isTV && resumeSeason ? getPositionEntry(positionKey(mediaType, item.id, resumeSeason, resumeEpisode))?.at || 0 : 0,
   );
@@ -386,6 +197,135 @@ export default function MediaDetailsModal({
     if (offerRecap) setShowRecap(true);
     else play();
   }
+
+  // ── Marking episodes from the list ──
+  const withEpisodes = (list, at) => (current) => {
+    const next = new Map(current);
+    list.forEach((entry) => next.set(episodeKey(entry.season, entry.episode), at === undefined ? entry.watchedAt ?? null : at));
+    return next;
+  };
+  const withoutEpisodes = (list) => (current) => {
+    const next = new Map(current);
+    list.forEach((entry) => next.delete(episodeKey(entry.season, entry.episode)));
+    return next;
+  };
+
+  // Continue Watching and the library row both carry where a show picks up.
+  async function setResumePoint(point) {
+    if (point) {
+      await upsertSupabaseContinueWatching({ mediaType, mediaId: item.id, currentSeason: point.season, currentEpisode: point.episode, positionSeconds: 0 });
+    } else {
+      await removeContinueWatchingFor({ mediaType, mediaId: item.id });
+    }
+    await updateWatchlistProgress({ mediaType, mediaId: item.id, currentSeason: point?.season ?? null, currentEpisode: point?.episode ?? null }).catch(() => {});
+  }
+
+  // Marks `list` watched. When that catches you up past where the show
+  // picked up, it now picks up at the next episode (Resume, Continue
+  // Watching). Undo puts both back.
+  async function markEpisodes(list, { last, episodes: seasonList }) {
+    if (!list.length || marking) return;
+    haptic();
+    // A season without an episode starts at its first (as the player does).
+    const before = resumeSeason ? { season: Number(resumeSeason), episode: Number(resumeEpisode) || 1 } : null;
+    const next = last ? nextEpisode(last, details?.seasons, seasonList) : null;
+    const moveTo = next && isAfter(next, before) ? next : null;
+    setMarking(true);
+    setWatched(withEpisodes(list, null));
+    try {
+      await markEpisodesWatched({ mediaId: item.id, episodes: list });
+      let moved = false;
+      if (moveTo) {
+        try {
+          await setResumePoint(moveTo);
+          setResumeOverride({ ...moveTo, at: Date.now() });
+          moved = true;
+        } catch {
+          // The episodes are saved; only the resume point stayed put.
+        }
+      }
+      const count = list.length === 1 ? '1 episode' : `${list.length} episodes`;
+      setMarkStatus({
+        text: `Marked ${count} watched.${moved ? ` Up next: S${moveTo.season} · E${moveTo.episode}.` : ''}`,
+        undo: () => undoMark(list, moved ? before : undefined),
+      });
+    } catch (error) {
+      setWatched(withoutEpisodes(list));
+      setMarkStatus({ text: error?.message || 'Couldn’t save that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  // previous: the resume point to restore (null = none), undefined = untouched.
+  async function undoMark(list, previous) {
+    setMarking(true);
+    setWatched(withoutEpisodes(list));
+    try {
+      await unmarkEpisodesWatched({ mediaId: item.id, episodes: list });
+      if (previous !== undefined) {
+        await setResumePoint(previous).catch(() => {});
+        setResumeOverride(previous ? { ...previous, at: Date.now() } : null);
+      }
+      setMarkStatus(null);
+    } catch (error) {
+      setWatched(withEpisodes(list, null));
+      setMarkStatus({ text: error?.message || 'Couldn’t undo that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  // Unmarks `list`; Undo puts the episodes back with their original watch times.
+  async function unmarkEpisodes(list, text) {
+    if (!list.length || marking) return;
+    haptic();
+    const saved = list.map((entry) => ({ ...entry, watchedAt: watched.get(episodeKey(entry.season, entry.episode)) ?? null }));
+    setMarking(true);
+    setWatched(withoutEpisodes(list));
+    try {
+      await unmarkEpisodesWatched({ mediaId: item.id, episodes: list });
+      setMarkStatus({ text, undo: () => restoreEpisodes(saved) });
+    } catch (error) {
+      setWatched(withEpisodes(saved));
+      setMarkStatus({ text: error?.message || 'Couldn’t save that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  async function restoreEpisodes(saved) {
+    setMarking(true);
+    setWatched(withEpisodes(saved));
+    try {
+      await markEpisodesWatched({ mediaId: item.id, episodes: saved });
+      setMarkStatus(null);
+    } catch (error) {
+      setWatched(withoutEpisodes(saved));
+      setMarkStatus({ text: error?.message || 'Couldn’t undo that. Try again.' });
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  // "Your Rating & Review": under the facts for movies, after the episodes
+  // for series.
+  const ratingSection = (
+    <section className={`td-section td-rate${isTV ? '' : ' td-rate--aside'}`} aria-label="Your rating">
+      <div className="td-section-head">
+        <h3>Your Rating &amp; Review</h3>
+        {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}
+      </div>
+      <RateReviewPanel
+        mediaType={mediaType}
+        value={userRating}
+        onSave={handleRatingSave}
+        allowActions={allowActions}
+        size="lg"
+      />
+      {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
+    </section>
+  );
 
   async function handleRatingSave(categories) {
     if (typeof onRate !== 'function') return;
@@ -522,21 +462,28 @@ export default function MediaDetailsModal({
                   : (details?.runtime ? <span>{formatRuntime(details.runtime)}</span> : null)}
                 <span className="td-hd">HD</span>
               </div>
-              <OutsideRatings item={item} tmdbScore={score} tmdbVotes={details?.voteCount || 0} />
+              <WhereToWatch watch={details?.watch} mediaType={mediaType} />
+              <OutsideRatings item={item} />
               {details?.tagline && <p className="td-tagline">{details.tagline}</p>}
               {overview && <p className="td-overview">{overview}</p>}
               {item._reason && <p className="td-reason">{item._reason}</p>}
             </div>
 
+            <div className="td-aside">
             <dl className="td-facts">
-              {facts.cast?.length > 0 && (<><dt>Cast</dt><dd>{facts.cast.slice(0, 5).join(', ')}</dd></>)}
-              {facts.creators?.length > 0 && (<><dt>{isTV ? 'Created by' : 'Director'}</dt><dd>{facts.creators.join(', ')}</dd></>)}
               {facts.genres?.length > 0 && (<><dt>Genres</dt><dd>{facts.genres.join(', ')}</dd></>)}
               {facts.language && (<><dt>Original language</dt><dd>{facts.language}</dd></>)}
               {details?.networks?.length > 0 && (<><dt>{isTV ? 'Network' : 'Studio'}</dt><dd>{details.networks.join(', ')}</dd></>)}
               {item.imdb_rating && (<><dt>IMDb</dt><dd>{item.imdb_rating}/10</dd></>)}
               {item.rotten_tomatoes_score && (<><dt>Rotten Tomatoes</dt><dd>{item.rotten_tomatoes_score}%</dd></>)}
             </dl>
+            {/* Movies: your rating right under the facts (series keep it
+                beside their episodes). */}
+            {!isTV && ratingSection}
+            </div>
+            {/* The whole width under the description (on phones straight
+                after it, before the facts). */}
+            <CastRow people={details?.people} />
           </div>
 
           {isTV && details?.seasons?.length > 0 && (
@@ -546,6 +493,10 @@ export default function MediaDetailsModal({
               watched={watched}
               currentSeason={resumeSeason ? Number(resumeSeason) : null}
               onPlay={play}
+              onMark={allowActions ? markEpisodes : undefined}
+              onUnmark={allowActions ? unmarkEpisodes : undefined}
+              busy={marking || !progressLoaded}
+              status={markStatus}
             />
           )}
 
@@ -553,27 +504,13 @@ export default function MediaDetailsModal({
             <EpisodeHeatmap tmdbId={details.tmdbId} seasons={details.seasons} onPlay={play} />
           )}
 
-          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} />}
+          {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} canMark={allowActions} onLibraryChange={onLibraryChange} />}
 
           <SourceBooks mediaType={mediaType} tmdbId={details?.tmdbId} title={item.title} />
 
           <MoreLikeThis mediaType={mediaType} tmdbId={details?.tmdbId} />
 
-          <section className="td-section td-rate" aria-label="Your rating">
-            <div className="td-section-head">
-              <h3>Your Rating &amp; Review</h3>
-              {saved && <span className="td-muted">In My List · {STATUS_LABELS[watchlistEntry.status]}</span>}
-            </div>
-            <RateReviewPanel
-              mediaType={mediaType}
-              value={userRating}
-              onSave={handleRatingSave}
-              allowActions={allowActions}
-              size="lg"
-            />
-            {!allowActions && browseOnlyMessage && <p className="td-status-msg">{browseOnlyMessage}</p>}
-            {detailMessage && <p className="td-status-msg" role="status">{detailMessage}</p>}
-          </section>
+          {isTV && ratingSection}
 
           {onWatchlist && !saved && allowActions && (
             <div className="td-footer-cta">
@@ -602,10 +539,14 @@ export default function MediaDetailsModal({
         <EmbedPlayer
           item={item}
           mediaType={mediaType}
-          onClose={() => (closeOnPlayerExit && !playerStart ? onClose() : setShowPlayer(false))}
+          // The X closes the player and this popup, back to the page underneath;
+          // Escape / a TV remote's Back step back to this popup (unless it was
+          // opened just to play, from Continue Watching or a preview).
+          onClose={() => { setShowPlayer(false); onClose(); }}
+          onBack={() => { setShowPlayer(false); if (closeOnPlayerExit && !playerStart) onClose(); }}
           initialSeason={playerStart?.season ?? resumeSeason}
           initialEpisode={playerStart?.episode ?? resumeEpisode}
-          initialPosition={playerStart ? undefined : initialPosition}
+          initialPosition={playerStart || resumeOverride ? undefined : initialPosition}
         />
       )}
     </>

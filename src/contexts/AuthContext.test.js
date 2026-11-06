@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
+import { AuthProvider, useAuth } from './AuthContext';
 
 var mockOnAuthStateChange = jest.fn();
 var mockGetSupabaseSessionProfile = jest.fn();
@@ -27,8 +28,6 @@ jest.mock('../utils/supabaseData', () => ({
   updateSupabasePassword: (...args) => mockUpdateSupabasePassword(...args),
   updateSupabaseProfile: (...args) => mockUpdateSupabaseProfile(...args),
 }));
-
-import { AuthProvider, useAuth } from './AuthContext';
 
 function RoleProbe() {
   const { authLoading, user } = useAuth();

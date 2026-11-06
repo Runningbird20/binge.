@@ -2,7 +2,6 @@
 import { isSupabaseConfigured, supabase } from '../supabase';
 import { cacheMediaMetadata, getCachedMediaMetadata } from '../mediaMetadataCache';
 import { getActiveProfileId } from '../activeProfile';
-import { api } from '../../api';
 import { RATING_TABLES, enrichMediaRecord, enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
 
 export function averageRatingValue(rating) {
@@ -23,18 +22,7 @@ export function averageRatingValue(rating) {
 }
 
 export async function fetchSupabaseWatchlist({ mediaType = '', status = '', userId = null } = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const params = new URLSearchParams();
-      if (mediaType) params.append('media_type', mediaType);
-      if (status) params.append('status', status);
-      const query = params.toString() ? `?${params.toString()}` : '';
-      const items = await api.get(`/watchlist${query}`);
-      return Array.isArray(items) ? items : [];
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const isOwnWatchlist = !userId;
@@ -89,22 +77,6 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
 }
 
 export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'plan_to_watch', media = null }) {
-  if (!isSupabaseConfigured || !supabase) {
-    const created = await api.post('/watchlist', {
-      media_type: mediaType,
-      media_id: Number(mediaId),
-      status,
-    });
-    const metadata = media ? cacheMediaMetadata(mediaType, media) : getCachedMediaMetadata(mediaType, mediaId);
-    return enrichMediaRecord({
-      id: created?.id || Date.now(),
-      media_type: mediaType,
-      media_id: Number(mediaId),
-      status,
-      added_at: new Date().toISOString(),
-    }, mediaType, metadata);
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -149,24 +121,7 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
 // each item's watchlist status inline (on the card itself) without a per-item
 // round trip or having to open the watchlist page.
 export async function fetchSupabaseWatchlistStatusMap(mediaType) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const items = await fetchSupabaseWatchlist({ mediaType });
-      return (items || []).reduce((accumulator, row) => {
-        accumulator[row.media_id] = {
-          id: row.id,
-          status: row.status,
-          current_season: row.current_season,
-          current_episode: row.current_episode,
-          current_page: row.current_page,
-          current_chapter: row.current_chapter,
-        };
-        return accumulator;
-      }, {});
-    } catch {
-      return {};
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return {};
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
@@ -198,11 +153,6 @@ export async function fetchSupabaseWatchlistStatusMap(mediaType) {
 }
 
 export async function updateSupabaseWatchlistStatus(id, status) {
-  if (!isSupabaseConfigured || !supabase) {
-    await api.patch(`/watchlist/${id}`, { status });
-    return;
-  }
-
   const client = requireSupabase();
   const { error } = await client
     .from('watchlist')
@@ -215,11 +165,6 @@ export async function updateSupabaseWatchlistStatus(id, status) {
 }
 
 export async function removeSupabaseWatchlistItem(id) {
-  if (!isSupabaseConfigured || !supabase) {
-    await api.delete(`/watchlist/${id}`);
-    return;
-  }
-
   const client = requireSupabase();
   const { error } = await client
     .from('watchlist')
@@ -231,22 +176,80 @@ export async function removeSupabaseWatchlistItem(id) {
   }
 }
 
+const SIGN_IN_TO_TRACK = 'Sign in to keep track of what you’ve watched.';
+
+// Puts library rows back to the statuses they had ([{ id, status }]).
+async function restoreStatuses(client, changed) {
+  const byStatus = new Map();
+  changed.forEach(({ id, status }) => byStatus.set(status, [...(byStatus.get(status) || []), id]));
+  const results = await Promise.all([...byStatus].map(([status, ids]) => client.from('watchlist').update({ status }).in('id', ids)));
+  const failed = results.find((result) => result.error);
+  if (failed) throw new Error(toFriendlyError(failed.error, 'Unable to update those library items.'));
+}
+
+// A franchise's "Mark all watched": the same as picking "Watched" on each
+// movie, in one go. Movies already in the library get the status; the rest
+// are added as watched. movies: [{ mediaId, entry }], entry being the row
+// from fetchSupabaseWatchlistStatusMap (or null).
+// → { added: [{ id, mediaId }], changed: [{ id, mediaId, status }] }: what
+// undoMarkMoviesWatched needs to put everything back.
+export async function markMoviesWatched(movies) {
+  const changed = movies.filter((movie) => movie.entry?.id)
+    .map((movie) => ({ id: movie.entry.id, mediaId: Number(movie.mediaId), status: movie.entry.status }));
+  const fresh = movies.filter((movie) => !movie.entry?.id).map((movie) => Number(movie.mediaId));
+
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser().catch(() => { throw new Error(SIGN_IN_TO_TRACK); });
+  const profileId = getActiveProfileId();
+  const now = new Date().toISOString();
+
+  if (changed.length) {
+    const { error } = await client.from('watchlist')
+      .update({ status: 'watched', completed_at: now })
+      .in('id', changed.map((row) => row.id));
+    if (error) throw new Error(toFriendlyError(error, 'Unable to update those library items.'));
+  }
+
+  let added = [];
+  if (fresh.length) {
+    const { data, error } = await client.from('watchlist')
+      .upsert(fresh.map((mediaId) => ({
+        user_id: authUser.id,
+        profile_id: profileId,
+        media_type: 'movie',
+        media_id: mediaId,
+        status: 'watched',
+        completed_at: now,
+      })), { onConflict: 'user_id,media_type,media_id,profile_id', ignoreDuplicates: true })
+      .select('id, media_id');
+    if (error) {
+      // All or nothing: the statuses already changed go back.
+      await restoreStatuses(client, changed).catch(() => {});
+      throw new Error(toFriendlyError(error, 'Unable to save those movies.'));
+    }
+    added = (data || []).map((row) => ({ id: row.id, mediaId: Number(row.media_id) }));
+  }
+  return { added, changed };
+}
+
+// Undo for markMoviesWatched: removes the rows it added and puts the
+// statuses it changed back.
+export async function undoMarkMoviesWatched({ added = [], changed = [] }) {
+  const client = requireSupabase();
+  if (added.length) {
+    const { error } = await client.from('watchlist').delete().in('id', added.map((row) => row.id));
+    if (error) throw new Error(toFriendlyError(error, 'Unable to remove those library items.'));
+  }
+  if (changed.length) await restoreStatuses(client, changed);
+}
+
 // isOwnRatings is passed explicitly by the caller rather than re-derived
 // from `userId` here — fetchSupabaseRatings' multi-type branch always
 // resolves a concrete userId before calling this (even for "my own"
 // lookups), so `!userId` alone can't distinguish "own" from "someone else's"
 // by the time it reaches this function.
 async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRatings = !userId) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const items = await api.get('/ratings/my');
-      return (items || [])
-        .filter((r) => !mediaType || r.media_type === mediaType)
-        .map((record) => ({ ...record, media_type: record.media_type || mediaType }));
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const schema = RATING_TABLES[mediaType];
@@ -301,17 +304,7 @@ export async function fetchSupabaseRatings({ mediaType = '', userId = null } = {
 }
 
 export async function fetchSupabaseRatingMap(mediaType) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const ratings = await fetchRawRatingsForMediaType(mediaType);
-      return ratings.reduce((accumulator, rating) => {
-        accumulator[rating.media_id] = rating;
-        return accumulator;
-      }, {});
-    } catch {
-      return {};
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return {};
 
   const ratings = await fetchRawRatingsForMediaType(mediaType);
   return ratings.reduce((accumulator, rating) => {
@@ -321,23 +314,6 @@ export async function fetchSupabaseRatingMap(mediaType) {
 }
 
 export async function saveSupabaseRating({ mediaType, mediaId, categories, media = null }) {
-  if (!isSupabaseConfigured || !supabase) {
-    await api.post('/ratings', {
-      media_type: mediaType,
-      media_id: Number(mediaId),
-      categories,
-    });
-
-    if (media) {
-      cacheMediaMetadata(mediaType, media);
-    }
-
-    window.dispatchEvent(new CustomEvent('binge:ratingSaved', {
-      detail: { mediaType, mediaId: Number(mediaId), categories },
-    }));
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const schema = RATING_TABLES[mediaType];
@@ -400,20 +376,7 @@ export async function saveSupabaseRating({ mediaType, mediaId, categories, media
 }
 
 export async function fetchSupabaseDashboardCounts() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const [watchlist, ratings] = await Promise.all([
-        api.get('/watchlist').catch(() => []),
-        api.get('/ratings/my').catch(() => []),
-      ]);
-      return {
-        watchlist: Array.isArray(watchlist) ? watchlist.length : 0,
-        ratings: Array.isArray(ratings) ? ratings.length : 0,
-      };
-    } catch {
-      return { watchlist: 0, ratings: 0 };
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return { watchlist: 0, ratings: 0 };
 
   const client = requireSupabase();
 

@@ -1,6 +1,6 @@
 import { splitDatabaseClient } from './mediaDatabase';
-import { createNeonQueryClient } from './neonQuery';
-import { getApiBaseUrl } from './neon';
+import { createCatalogQueryClient } from './catalogQuery';
+import { getApiBaseUrl } from './apiBaseUrl';
 import { trackedFetch } from './loadingProgress';
 import { createClient } from '@supabase/supabase-js';
 
@@ -57,21 +57,22 @@ const authClient = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseKey, { global: { fetch: trackedFetch } })
   : null;
 
-// Only catalog/media metadata queries go to Neon. User data and Auth stay Supabase.
-async function requestNeon(path, body) {
+// Only catalog/media metadata queries go to the media catalog (Turso, through
+// our API's /api/catalog). User data and Auth stay Supabase.
+async function requestCatalog(path, body) {
   const base = getApiBaseUrl();
   try {
-    const response = await trackedFetch(`${base}/api/neon-data/${path}`, {
+    const response = await trackedFetch(`${base}/api/catalog/${path}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     return await response.json();
-  } catch (error) { return { data: null, error: { message: error.message || 'Unable to reach the Neon media API.' } }; }
+  } catch (error) { return { data: null, error: { message: error.message || 'Unable to reach the media catalog.' } }; }
 }
-const neonMedia = createNeonQueryClient(
-  (spec) => requestNeon('query', spec), (name, args = {}) => requestNeon(`rpc/${encodeURIComponent(name)}`, args)
+const catalogMedia = createCatalogQueryClient(
+  (spec) => requestCatalog('query', spec), (name, args = {}) => requestCatalog(`rpc/${encodeURIComponent(name)}`, args)
 );
-export const supabase = authClient ? splitDatabaseClient(authClient, neonMedia) : null;
+export const supabase = authClient ? splitDatabaseClient(authClient, catalogMedia) : null;
 
 // A second client with session persistence off, used for one-shot signUp()
 // calls made on someone else's behalf (e.g. an admin creating an account).

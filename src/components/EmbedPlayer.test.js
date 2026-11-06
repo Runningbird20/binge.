@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import EmbedPlayer from './EmbedPlayer';
 import useDeviceType from '../hooks/useDeviceType';
-import { useMiniPlayer } from '../contexts/MiniPlayerContext';
 import * as supabaseData from '../utils/supabaseData';
 import * as streamPreferences from '../utils/streamPreferences';
 import { api } from '../api';
@@ -19,7 +18,6 @@ const { submitStreamReport } = streamPreferences;
 // the server ranking, URL building and message parsing real.
 
 jest.mock('../hooks/useDeviceType', () => jest.fn());
-jest.mock('../contexts/MiniPlayerContext', () => ({ useMiniPlayer: jest.fn() }));
 jest.mock('../api', () => ({
   api: { get: jest.fn() },
 }));
@@ -60,7 +58,6 @@ jest.mock('../utils/runtimeCheck', () => ({
 const SHOW = { id: 42, title: 'The Show', seasons: 2, source_key: 'tmdb:tv:1399', poster_url: 'https://img/p.jpg', original_language: 'en' };
 const MOVIE = { id: 7, title: 'The Film', year: 2010, source_key: 'tmdb:movie:27205', original_language: 'en' };
 
-let mini;
 async function flush(ms = 0) {
   await act(async () => {
     if (ms) jest.advanceTimersByTime(ms);
@@ -68,16 +65,17 @@ async function flush(ms = 0) {
     await Promise.resolve();
   });
 }
-async function setup({ item = SHOW, mediaType = 'tv_show', mobile = false, landscape = false, watched = [{ season: 1, episode: 1 }] } = {}) {
+async function setup({ item = SHOW, mediaType = 'tv_show', mobile = false, landscape = false, watched = [{ season: 1, episode: 1 }], onBack } = {}) {
   useDeviceType.mockReturnValue({ isMobile: mobile, isLandscape: landscape });
   fetchEpisodeProgress.mockResolvedValue(watched);
   const onClose = jest.fn();
-  const view = render(<EmbedPlayer item={item} mediaType={mediaType} onClose={onClose} initialSeason={1} initialEpisode={1} />);
+  const view = render(<EmbedPlayer item={item} mediaType={mediaType} onClose={onClose} onBack={onBack} initialSeason={1} initialEpisode={1} />);
   await flush();
   await flush();
   return { ...view, onClose };
 }
-const frame = () => document.querySelector('iframe:not(.st-preload-frame)');
+// The server's player (titled "Watch …"), not the next episode's hidden preload frame.
+const frame = () => screen.getByTitle(/^Watch /);
 function post(data) {
   act(() => {
     window.dispatchEvent(new MessageEvent('message', { data, source: frame().contentWindow }));
@@ -91,8 +89,6 @@ const vidrift = (time, duration = 2600) => ({ type: 'vidrift:progress', currentT
 beforeEach(() => {
   jest.useFakeTimers();
   window.localStorage.clear();
-  mini = { showMini: jest.fn(), closeMini: jest.fn() };
-  useMiniPlayer.mockReturnValue(mini);
   api.get.mockImplementation((path) => {
     if (path.startsWith('/media/tmdb-show')) return Promise.resolve({ numberOfSeasons: 2 });
     if (path.startsWith('/media/tmdb-season')) return Promise.resolve({ episodeCount: 10 });
@@ -132,27 +128,27 @@ test('phone TV player, portrait and landscape with the episode picker open', asy
   expect(container.innerHTML).toMatchSnapshot('portrait');
   unmount();
   const landscape = await setup({ mobile: true, landscape: true });
-  fireEvent.click(screen.getByTitle('Episodes'));
+  fireEvent.click(screen.getByRole('button', { name: 'Episodes and servers' }));
   expect(landscape.container.innerHTML).toMatchSnapshot('landscape');
 });
 
 test('picking an episode from the desktop popover loads it', async () => {
-  const { container } = await setup();
+  await setup();
   fireEvent.click(screen.getByRole('button', { name: /S1 · E1/ }));
-  expect(container.querySelector('.player-ep-popover').outerHTML).toMatchSnapshot();
+  expect(screen.getByRole('dialog', { name: 'Season and episode selector' }).outerHTML).toMatchSnapshot();
   fireEvent.click(screen.getByRole('button', { name: '3' }));
   await flush();
   expect(frame().getAttribute('src')).toMatchSnapshot();
-  expect(container.querySelector('.player-ep-popover')).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Season and episode selector' })).toBeNull();
 });
 
 test('Up Next appears near the end and plays the next episode after the countdown', async () => {
-  const { container } = await setup({ watched: [] });
+  await setup({ watched: [] });
   const firstSrc = frame().getAttribute('src');
   post(vidrift(100));
   post(vidrift(2590));
   await flush(1000);
-  expect(container.querySelector('.st-upnext').outerHTML).toMatchSnapshot();
+  expect(screen.getByRole('dialog', { name: 'Up next' }).outerHTML).toMatchSnapshot();
   for (let i = 0; i < 11; i += 1) await flush(1000);
   expect(markEpisodeWatched).toHaveBeenCalledWith({ mediaId: 42, season: 1, episode: 1 });
   expect(frame().getAttribute('src')).not.toBe(firstSrc);
@@ -160,30 +156,22 @@ test('Up Next appears near the end and plays the next episode after the countdow
 });
 
 test('a server that never reports playback fails over to the next one', async () => {
-  const { container } = await setup();
+  await setup();
   const before = frame().getAttribute('src');
   await flush(25000);
   expect(submitStreamReport).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 42, works: false }));
-  expect(container.querySelector('.st-failover').textContent).toMatchSnapshot();
+  expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(frame().getAttribute('src')).not.toBe(before);
 });
 
 test('buffering offers a switch, then switches on its own', async () => {
-  const { container } = await setup();
+  await setup();
   post(vidrift(100));
   post({ type: 'vidrift:unpaused', currentTime: 100 });
   await flush(14000);
-  expect(container.querySelector('.st-failover--stall').textContent).toMatchSnapshot('offer');
+  expect(screen.getByRole('status').textContent).toMatchSnapshot('offer');
   await flush(18000);
-  expect(container.querySelector('.st-failover').textContent).toMatchSnapshot('switched');
-});
-
-test('minimize hands the current second to the mini-player and closes', async () => {
-  const { onClose } = await setup();
-  post(vidrift(321.4));
-  fireEvent.click(screen.getByRole('button', { name: 'Minimize player' }));
-  expect(mini.showMini.mock.calls).toMatchSnapshot();
-  expect(onClose).toHaveBeenCalled();
+  expect(screen.getByRole('status').textContent).toMatchSnapshot('switched');
 });
 
 test('keyboard: arrows change episode, Escape closes the popover then the player', async () => {
@@ -208,40 +196,77 @@ test('mark as watched toggles the current episode', async () => {
   expect(screen.getByRole('button', { name: /Watched/ })).toBeInTheDocument();
 });
 
-test('opening the player closes the mini-player', async () => {
-  await setup({ item: MOVIE, mediaType: 'movie' });
-  expect(mini.closeMini).toHaveBeenCalled();
-});
-
 test('seen playback (PLAYER_EVENT) cancels failover; a frozen clock is buffering instead', async () => {
-  const { container } = await setup({ item: MOVIE, mediaType: 'movie' });
+  await setup({ item: MOVIE, mediaType: 'movie' });
   const before = frame().getAttribute('src');
   post(progress(50, 6000, 'play'));
   await flush(25000);
-  expect(container.querySelector('.st-failover:not(.st-failover--stall)')).toBeNull();
-  expect(container.querySelector('.st-failover--stall').textContent).toMatchSnapshot();
+  // One notice only: the buffering offer, no failover.
+  expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(frame().getAttribute('src')).toBe(before);
 });
 
 test('Skip intro shows inside the intro and jumps to its end', async () => {
   episodeMarkers.fetchEpisodeMarkers.mockResolvedValue({ intro: { start: 60, end: 150 } });
-  const { container } = await setup();
+  await setup();
   const before = frame().getAttribute('src');
   post(vidrift(70));
   await flush(500);
-  expect(container.querySelector('.st-skip-intro-wrap').outerHTML).toMatchSnapshot();
-  fireEvent.click(screen.getByRole('button', { name: /^Skip intro$/ }));
+  const skip = screen.getByRole('button', { name: /^Skip intro$/ });
+  const hide = screen.getByRole('button', { name: 'Hide Skip intro' });
+  expect([skip.outerHTML, hide.outerHTML]).toMatchSnapshot();
+  fireEvent.click(skip);
   await flush();
-  expect(container.querySelector('.st-skip-intro-wrap')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Skip intro$/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Hide Skip intro' })).toBeNull();
   expect(frame().getAttribute('src')).not.toBe(before);
   expect(frame().getAttribute('src')).toMatchSnapshot();
 });
 
 test('a server playing a different-length video is replaced', async () => {
   expectedRuntimeSeconds.mockResolvedValue(2700);
-  const { container } = await setup();
+  await setup();
   post(vidrift(100, 900));
   await flush();
-  expect(container.querySelector('.st-failover').textContent).toMatchSnapshot();
+  expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(submitStreamReport).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 42, works: false }));
+});
+
+// VidRift's own Next button, Episodes menu or Up Next: it switches episodes itself and says so.
+const vidriftEpisode = (season, episode) => ({ type: 'vidrift:episode', tmdbId: 1399, mediaType: 'tv', season, episode });
+
+test('an episode picked inside VidRift becomes the one the site tracks, without reloading the player', async () => {
+  await setup({ watched: [] });
+  const src = frame().getAttribute('src');
+  post(vidriftEpisode(1, 4));
+  await flush();
+  expect(screen.getByRole('button', { name: /S1 · E4/ })).toBeInTheDocument();
+  expect(frame().getAttribute('src')).toBe(src);
+  // A late message from the episode it left doesn't switch the site back.
+  post({ ...vidrift(600), tmdbId: 1399, mediaType: 'tv', season: 1, episode: 1 });
+  await flush();
+  expect(screen.getByRole('button', { name: /S1 · E4/ })).toBeInTheDocument();
+  // Picking an episode on the site loads it, as always.
+  fireEvent.click(screen.getByRole('button', { name: /S1 · E4/ }));
+  fireEvent.click(screen.getByRole('button', { name: '6' }));
+  await flush();
+  expect(frame().getAttribute('src')).toMatch(/[?&]e=6\b/);
+});
+
+test('a switch inside VidRift whose message was missed is caught from its next progress message', async () => {
+  await setup();
+  post({ ...vidrift(30), tmdbId: 1399, mediaType: 'tv', season: 2, episode: 1 });
+  await flush();
+  expect(screen.getByRole('button', { name: /S2 · E1/ })).toBeInTheDocument();
+});
+
+test('the X closes the player entirely; Escape (a TV remote’s Back) only steps back', async () => {
+  const onBack = jest.fn();
+  const { onClose } = await setup({ onBack });
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(onBack).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Close player' }));
+  expect(onClose).toHaveBeenCalledTimes(1);
+  expect(onBack).toHaveBeenCalledTimes(1);
 });

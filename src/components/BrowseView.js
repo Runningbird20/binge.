@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { maturityRestriction } from '../utils/kidsMode';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor, sortForTaste } from '../utils/browseRows';
+import { useWatchedKeys, withoutWatched } from '../utils/watchedTitles';
 
 const TYPE_COPY = {
   movie: { noun: 'Movies', path: '/movies' },
@@ -16,6 +17,8 @@ const TYPE_COPY = {
 // The default Movies / TV landing: spotlight + personalized rows + curated
 // rows ordered by the profile's taste. "Browse all" switches the page to
 // the filterable grid (CatalogView) for people who do want to dig.
+// Everything here is a recommendation, so titles the profile has watched are
+// left out (the grid and search still list them).
 export default function BrowseView({ mediaType, refreshKey = 0 }) {
   const { activeProfile, profilesLoading } = useAuth();
   const kidsSafe = maturityRestriction(activeProfile);
@@ -51,9 +54,11 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
   }, [headline, mediaType, kidsSafe, refreshKey]);
 
   // Trending can paint while the more expensive personalized rows finish.
-  const heroItems = personal?.hasHistory && personal.topPicks.length >= 3
-    ? personal.topPicks
-    : trending;
+  const watched = useWatchedKeys();
+  const heroItems = useMemo(() => {
+    const pool = personal?.hasHistory && personal.topPicks.length >= 3 ? personal.topPicks : trending;
+    return pool && watched ? withoutWatched(pool, watched) : null;
+  }, [personal, trending, watched]);
 
   const loaders = useMemo(() => {
     const map = new Map();
@@ -86,20 +91,23 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
             subtitle="Based on what you watch and how you rate it"
             items={personal.topPicks}
             eager
+            hideWatched
           />
         )}
 
         <TitleRow
           key={`${headline.id}-${refreshKey}`}
           title={headline.title}
-          items={trending ? trending.slice(0, headline.ranked ? 10 : undefined) : undefined}
+          items={trending || undefined}
+          limit={headline.ranked ? 10 : undefined}
           loading={!trending}
           ranked={headline.ranked}
           eager
+          hideWatched
         />
 
         {personal?.becauseYouWatched?.map((row) => (
-          <TitleRow key={row.id} title={row.title} items={row.items} />
+          <TitleRow key={row.id} title={row.title} items={row.items} hideWatched />
         ))}
 
         {definitions.slice(1).map((definition) => (
@@ -110,6 +118,7 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
             subtitle={definition.subtitle}
             load={loaders.get(definition.id)}
             minItems={definition.comingSoon ? 1 : 5}
+            hideWatched
           />
         ))}
       </div>

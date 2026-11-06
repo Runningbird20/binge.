@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import MediaDetailsModal from './MediaDetailsModal';
-import { BookDetailsModal } from '../pages/Books';
-import { loadFallbackBooks, loadFallbackMovies, loadFallbackTvShows } from '../utils/catalogFallback';
+import { goBackTo, historyMark } from '../utils/historyBack';
+import { BookDetailsModal } from './books/BookDetailsModal';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
@@ -19,9 +19,9 @@ import {
 } from '../utils/catalogQueries';
 
 const CONFIG = {
-  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    loadFallback: loadFallbackMovies,  homePath: '/movies' },
-  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', loadFallback: loadFallbackTvShows, homePath: '/tv-shows' },
-  book:     { fetchById: fetchBookById,   apiPath: 'books',    loadFallback: loadFallbackBooks,   homePath: '/books' },
+  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    homePath: '/movies' },
+  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', homePath: '/tv-shows' },
+  book:     { fetchById: fetchBookById,   apiPath: 'books',    homePath: '/books' },
 };
 
 // Renders a movie/TV/book details modal as an overlay on top of whatever
@@ -42,7 +42,6 @@ export default function MediaOverlay({ mediaType }) {
   const config = CONFIG[mediaType];
 
   const [item, setItem] = useState(null);
-  const [browseOnly, setBrowseOnly] = useState(false);
   const [userRating, setUserRating] = useState(null);
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [watchlistEntry, setWatchlistEntry] = useState(null);
@@ -52,7 +51,6 @@ export default function MediaOverlay({ mediaType }) {
   useEffect(() => {
     let cancelled = false;
     setItem(null);
-    setBrowseOnly(false);
     setDetailMessage('');
 
     async function load() {
@@ -63,14 +61,8 @@ export default function MediaOverlay({ mediaType }) {
 
       try {
         const result = await api.get(`/media/${config.apiPath}/${numericId}`);
-        if (!cancelled && result?.id) { setItem(result); return; }
-      } catch { /* fall through */ }
-
-      try {
-        const items = await config.loadFallback();
-        const match = items.find((entry) => entry.id === numericId);
-        if (!cancelled && match) { setItem(match); setBrowseOnly(true); }
-      } catch { /* ignore missing fallback data */ }
+        if (!cancelled && result?.id) setItem(result);
+      } catch { /* nothing to open */ }
     }
 
     if (numericId) load();
@@ -96,6 +88,9 @@ export default function MediaOverlay({ mediaType }) {
     return () => { cancelled = true; };
   }, [mediaType, numericId]);
 
+  // libraryVersion: bumped when the popup changes library rows itself (a
+  // franchise's "Mark all watched" can include this title).
+  const [libraryVersion, setLibraryVersion] = useState(0);
   useEffect(() => {
     if (mediaType === 'book') return undefined;
     let cancelled = false;
@@ -103,10 +98,17 @@ export default function MediaOverlay({ mediaType }) {
       .then((map) => { if (!cancelled) setWatchlistEntry(map[numericId] || null); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [mediaType, numericId]);
+  }, [mediaType, numericId, libraryVersion]);
+
+  // Where this popup was opened from, so closing goes back there even after a
+  // video's player has added its own history entries (utils/historyBack.js).
+  const historyStartRef = useRef(null);
+  if (backgroundLocation && historyStartRef.current?.locationKey !== location.key) {
+    historyStartRef.current = { ...historyMark(), locationKey: location.key };
+  }
 
   function goBack() {
-    if (backgroundLocation) navigate(-1);
+    if (backgroundLocation) goBackTo(historyStartRef.current);
     else navigate(config.homePath);
   }
 
@@ -174,8 +176,6 @@ export default function MediaOverlay({ mediaType }) {
         onRate={handleRate}
         userRating={userRating}
         detailMessage={detailMessage}
-        allowActions={!browseOnly}
-        browseOnlyMessage="Fallback catalog mode is browse-only."
       />
     );
   }
@@ -185,15 +185,13 @@ export default function MediaOverlay({ mediaType }) {
       item={item}
       mediaType={mediaType}
       onClose={goBack}
-      onRate={browseOnly ? undefined : handleRate}
-      onWatchlist={browseOnly ? undefined : handleWatchlist}
+      onRate={handleRate}
+      onWatchlist={handleWatchlist}
       watchlistEntry={watchlistEntry}
-      onStatusChange={browseOnly ? undefined : handleStatusChange}
+      onStatusChange={handleStatusChange}
       userRating={userRating}
       isAddingWatchlist={isAddingWatchlist}
       detailMessage={detailMessage}
-      allowActions={!browseOnly}
-      browseOnlyMessage="Fallback catalog mode is browse-only."
       autoPlay={playImmediately}
       initialSeason={initialSeason}
       initialEpisode={initialEpisode}
@@ -201,6 +199,7 @@ export default function MediaOverlay({ mediaType }) {
       // Opened from a Play button somewhere (Continue Watching, previews):
       // closing the player returns there instead of to a details page.
       closeOnPlayerExit={playImmediately && Boolean(backgroundLocation)}
+      onLibraryChange={() => setLibraryVersion((version) => version + 1)}
     />
   );
 }

@@ -1,11 +1,15 @@
-// Search quality check for Neon's search_catalog (neon/search_catalog.sql):
+// Search quality check for the catalog search (server/catalogSearch.js):
 // runs hard queries (accents, punctuation, "the", typos) and prints the rank
-// of the expected title
-// (1 = first) and the time. Usage: node scripts/search-benchmark.js [function]
+// of the expected title (1 = first) and the time. At the move to Turso every
+// query found its title at the same rank as Neon's old search_catalog().
+//   node scripts/search-benchmark.js                  against TURSO_DATABASE_URL
+//   node scripts/search-benchmark.js --db file:data/turso/catalog.db
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env.local'), quiet: true });
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), quiet: true });
-const { Pool } = require('pg');
-const fn = process.argv[2] || 'search_catalog';
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 2 });
+const dbArg = process.argv.indexOf('--db');
+if (dbArg > 0) process.env.TURSO_DATABASE_URL = process.argv[dbArg + 1];
+const { searchCatalog } = require('../server/catalogSearch');
+
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
 // [query, expected title (normalized compare: result title starts with it), type]
 const CASES = [
@@ -39,23 +43,29 @@ const CASES = [
   ['money heist', 'money heist', 'tv'],
   ['the godfather', 'the godfather', 'movie'],
   ['godfather', 'the godfather', 'movie'],
+  ['stranger thigns', 'stranger things', 'tv'],
+  ['gane of thrones', 'game of thrones', 'tv'],
+  ['love', 'love', null],
+  ['star', 'star', null],
 ];
+
+function evaluate(res, expected, type) {
+  // Same order the client uses: best score first, one row per id.
+  const seen = new Set();
+  const ranked = [...res].sort((a, b) => b.score - a.score).filter((r) => { const k = r.result_type + r.id; if (seen.has(k)) return false; seen.add(k); return true; });
+  const hit = ranked.findIndex((r) => (!type || r.result_type === type) && (expected ? norm(r.title).startsWith(expected) : /tolkien|garcia marquez/.test(norm(r.author))));
+  return { rank: hit < 0 ? '—' : hit + 1, top: ranked.slice(0, 3).map((r) => `${r.result_type}:${r.title}`).join(' | ').slice(0, 80) };
+}
+
 (async () => {
   const rows = [];
-  let total = 0;
   for (const [q, expected, type] of CASES) {
     const t0 = Date.now();
-    const { rows: res } = await pool.query(`select * from public.${fn}($1, 24)`, [q]);
-    const ms = Date.now() - t0;
-    total += ms;
-    // Same order the client uses: best score first, one row per id.
-    const seen = new Set();
-    const ranked = res.sort((a, b) => b.score - a.score).filter((r) => { const k = r.result_type + r.id; if (seen.has(k)) return false; seen.add(k); return true; });
-    const hit = ranked.findIndex((r) => (!type || r.result_type === type) && (expected ? norm(r.title).startsWith(expected) : /tolkien|garcia marquez/.test(norm(r.author))));
-    rows.push({ q, rank: hit < 0 ? '—' : hit + 1, ms, top: ranked.slice(0, 3).map((r) => `${r.result_type}:${r.title}`).join(' | ').slice(0, 90) });
+    const result = evaluate(await searchCatalog(q, 24), expected, type);
+    rows.push({ q, ms: Date.now() - t0, ...result });
   }
   for (const r of rows) console.log(`${String(r.rank).padStart(3)}  ${String(r.ms).padStart(5)}ms  ${r.q.padEnd(24)} ${r.top}`);
   const found = rows.filter((r) => r.rank !== '—');
+  const total = rows.reduce((sum, r) => sum + r.ms, 0);
   console.log(`\nfound ${found.length}/${rows.length}, top-3 ${found.filter((r) => r.rank <= 3).length}, total ${total}ms, slowest ${Math.max(...rows.map((r) => r.ms))}ms`);
-  await pool.end();
 })();

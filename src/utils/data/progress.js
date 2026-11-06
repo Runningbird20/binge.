@@ -2,20 +2,12 @@
 // watch history and hidden recommendations.
 import { getSupabaseUser, isSupabaseConfigured, supabase } from '../supabase';
 import { getActiveProfileId } from '../activeProfile';
-import { api } from '../../api';
-import { enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
+import { RATING_TABLES, enrichMediaRecords, getAuthenticatedUser, requireSupabase, scopeToProfile, toFriendlyError } from './shared';
 
 // ─── Episode Progress (watched tracking) ──────────────────────────────────────
 
 export async function fetchEpisodeProgress(mediaId) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem(`ep_progress_${mediaId}`);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
@@ -30,6 +22,36 @@ export async function fetchEpisodeProgress(mediaId) {
   const { data, error } = await query;
   if (error) throw toFriendlyError(error, 'Failed to fetch episode progress');
   return data || [];
+}
+
+// Which of these episodes are marked watched, as a Set of
+// "mediaId:season:episode" (Home checks each Continue Watching show's newest
+// episode). One small query per episode; Home asks for a handful.
+// episodes: [{ mediaId, season, episode }]
+export async function fetchWatchedAmong(episodes) {
+  const key = (mediaId, season, episode) => `${Number(mediaId)}:${Number(season)}:${Number(episode)}`;
+  const wanted = (episodes || []).slice(0, 30);
+  if (!wanted.length) return new Set();
+  if (!isSupabaseConfigured || !supabase) return new Set();
+
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) return new Set();
+  const profileId = getActiveProfileId();
+  const results = await Promise.all(wanted.map(async ({ mediaId, season, episode }) => {
+    let query = client
+      .from('episode_progress')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('media_id', Number(mediaId))
+      .eq('season', Number(season))
+      .eq('episode', Number(episode))
+      .limit(1);
+    if (profileId) query = scopeToProfile(query, profileId);
+    const { data, error } = await query;
+    return !error && data?.length ? key(mediaId, season, episode) : null;
+  }));
+  return new Set(results.filter(Boolean));
 }
 
 // media_id -> number of episodes watched, across every show — an engagement
@@ -59,20 +81,53 @@ export async function fetchEpisodeProgressCounts() {
   return counts;
 }
 
-export async function markEpisodeWatched({ mediaId, season, episode }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const key = `ep_progress_${mediaId}`;
-      const stored = window.localStorage.getItem(key);
-      const list = stored ? JSON.parse(stored) : [];
-      if (!list.some((e) => e.season === season && e.episode === episode)) {
-        list.push({ season, episode, watched_at: new Date().toISOString() });
-        window.localStorage.setItem(key, JSON.stringify(list));
-      }
-    } catch {}
-    return;
-  }
+// Every movie and series this profile has watched, as "movie:12" /
+// "tv_show:34" keys: rated, marked Watched (or Watching) in the library, in
+// Continue Watching, or with any episode watched. Ids only, paged past
+// Supabase's 1000-row cap, so it stays cheap. A table that fails to load is
+// left out rather than failing the rest. Keeps watched titles out of
+// recommendations (utils/watchedTitles.js).
+const WATCHED_STATUSES = ['watched', 'watching'];
+const PAGE = 1000;
 
+export async function fetchWatchedTitleKeys() {
+  const keys = new Set();
+  if (!isSupabaseConfigured || !supabase) return keys;
+  try {
+    const { data: { user } = {} } = await getSupabaseUser();
+    if (!user) return keys;
+    const client = requireSupabase();
+    const profileId = getActiveProfileId();
+
+    async function allRows(table, columns, refine = (query) => query) {
+      const rows = [];
+      for (let page = 0; page < 20; page += 1) {
+        let query = refine(client.from(table).select(columns).eq('user_id', user.id));
+        if (profileId) query = scopeToProfile(query, profileId);
+        // eslint-disable-next-line no-await-in-loop
+        const { data, error } = await query.order('id').range(page * PAGE, page * PAGE + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
+    }
+
+    const add = (mediaType) => (rows) => rows.forEach((row) => keys.add(`${row.media_type || mediaType}:${Number(row.media_id)}`));
+    await Promise.allSettled([
+      allRows(RATING_TABLES.movie.table, 'id, media_id').then(add('movie')),
+      allRows(RATING_TABLES.tv_show.table, 'id, media_id').then(add('tv_show')),
+      allRows('watchlist', 'id, media_type, media_id', (query) => query.in('media_type', ['movie', 'tv_show']).in('status', WATCHED_STATUSES)).then(add()),
+      allRows('continue_watching', 'id, media_type, media_id', (query) => query.in('media_type', ['movie', 'tv_show'])).then(add()),
+      allRows('episode_progress', 'id, media_id').then(add('tv_show')),
+    ]);
+  } catch {
+    // Signed out or offline: nothing is known to be watched.
+  }
+  return keys;
+}
+
+export async function markEpisodeWatched({ mediaId, season, episode }) {
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
@@ -85,17 +140,6 @@ export async function markEpisodeWatched({ mediaId, season, episode }) {
 }
 
 export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const key = `ep_progress_${mediaId}`;
-      const stored = window.localStorage.getItem(key);
-      const list = stored ? JSON.parse(stored) : [];
-      const updated = list.filter((e) => !(e.season === season && e.episode === episode));
-      window.localStorage.setItem(key, JSON.stringify(updated));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
@@ -112,25 +156,60 @@ export async function unmarkEpisodeWatched({ mediaId, season, episode }) {
   if (error) throw toFriendlyError(error, 'Failed to unmark episode');
 }
 
+// Several episodes at once, from the episode list ("Mark season watched",
+// "Watched up to here"). They were watched somewhere else at a time we don't
+// know, so watched_at stays empty unless given (Undo puts back the original
+// times): History and Wrapped only count what was watched here. Episodes
+// already marked are left as they are (their watch times are kept).
+// episodes: [{ season, episode, watchedAt? }]
+export async function markEpisodesWatched({ mediaId, episodes }) {
+  if (!episodes?.length) return;
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) throw new Error('Sign in to keep track of episodes.');
+  const profileId = getActiveProfileId();
+  const rows = episodes.map(({ season, episode, watchedAt }) => ({
+    user_id: user.id,
+    profile_id: profileId,
+    media_id: mediaId,
+    season,
+    episode,
+    watched_at: watchedAt || null,
+  }));
+  const { error } = await client
+    .from('episode_progress')
+    .upsert(rows, { onConflict: 'user_id,media_id,season,episode,profile_id', ignoreDuplicates: true });
+  if (error) throw new Error(toFriendlyError(error, 'Couldn\'t save those episodes.'));
+}
+
+// The opposite, for several episodes (also the profile's older rows saved
+// without a profile, which it shows as its own).
+export async function unmarkEpisodesWatched({ mediaId, episodes }) {
+  if (!episodes?.length) return;
+  const client = requireSupabase();
+  const { data: { user } } = await getSupabaseUser();
+  if (!user) throw new Error('Sign in to keep track of episodes.');
+  const profileId = getActiveProfileId();
+  const bySeason = new Map();
+  episodes.forEach(({ season, episode }) => bySeason.set(season, [...(bySeason.get(season) || []), episode]));
+  const results = await Promise.all([...bySeason].map(([season, numbers]) => {
+    let query = client
+      .from('episode_progress')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('media_id', mediaId)
+      .eq('season', season)
+      .in('episode', numbers);
+    if (profileId) query = scopeToProfile(query, profileId);
+    return query;
+  }));
+  const failed = results.find((result) => result.error);
+  if (failed) throw new Error(toFriendlyError(failed.error, 'Couldn\'t update those episodes.'));
+}
+
 // ─── Watchlist Progress Update ─────────────────────────────────────────────────
 
 export async function updateWatchlistProgress({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, status, notes }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      await api.patch('/watchlist/progress', {
-        media_type: mediaType,
-        media_id: mediaId,
-        current_season: currentSeason,
-        current_episode: currentEpisode,
-        current_page: currentPage,
-        current_chapter: currentChapter,
-        status,
-        notes,
-      });
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) throw new Error('Not signed in');
@@ -171,14 +250,7 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 // action (addSupabaseWatchlistItem).
 
 export async function fetchSupabaseContinueWatching() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
@@ -200,33 +272,6 @@ export async function fetchSupabaseContinueWatching() {
 }
 
 export async function upsertSupabaseContinueWatching({ mediaType, mediaId, currentSeason, currentEpisode, currentPage, currentChapter, positionSeconds, durationSeconds }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      const list = stored ? JSON.parse(stored) : [];
-      const idx = list.findIndex((x) => x.media_type === mediaType && Number(x.media_id) === Number(mediaId));
-      const row = {
-        id: idx >= 0 ? list[idx].id : Date.now(),
-        media_type: mediaType,
-        media_id: Number(mediaId),
-        updated_at: new Date().toISOString(),
-      };
-      if (currentSeason !== undefined)  row.current_season = currentSeason;
-      if (currentEpisode !== undefined) row.current_episode = currentEpisode;
-      if (currentPage !== undefined)    row.current_page = currentPage;
-      if (currentChapter !== undefined) row.current_chapter = currentChapter;
-      if (positionSeconds !== undefined) row.position_seconds = Math.max(0, Math.floor(positionSeconds));
-      if (durationSeconds !== undefined && durationSeconds > 0) row.duration_seconds = Math.floor(durationSeconds);
-      if (idx >= 0) {
-        list[idx] = { ...list[idx], ...row };
-      } else {
-        list.unshift(row);
-      }
-      window.localStorage.setItem('continue_watching', JSON.stringify(list.slice(0, 50)));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();
@@ -282,17 +327,6 @@ export async function fetchSupabaseResumePoint({ mediaType, mediaId }) {
 }
 
 export async function removeSupabaseContinueWatching(id) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      if (stored) {
-        const list = JSON.parse(stored).filter((x) => x.id !== id);
-        window.localStorage.setItem('continue_watching', JSON.stringify(list));
-      }
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const { error } = await client
     .from('continue_watching')
@@ -304,9 +338,28 @@ export async function removeSupabaseContinueWatching(id) {
   }
 }
 
+// One title's Continue Watching row, by title (Undo after marking episodes
+// put a show there that wasn't before).
+export async function removeContinueWatchingFor({ mediaType, mediaId }) {
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+  let query = client
+    .from('continue_watching')
+    .delete()
+    .eq('user_id', authUser.id)
+    .eq('media_type', mediaType)
+    .eq('media_id', Number(mediaId));
+  if (profileId) query = scopeToProfile(query, profileId);
+  const { error } = await query;
+  if (error) throw new Error(toFriendlyError(error, 'Unable to remove that from continue watching.'));
+}
+
 // ─── Watch history & hidden recommendations ───────────────────────────
 
 // Recently watched episodes (episode_progress), newest first, with titles.
+// Episodes marked by hand from the episode list have no watch time and
+// aren't part of the history.
 export async function fetchEpisodeHistory(limit = 300) {
   if (!isSupabaseConfigured || !supabase) {
     return [];
@@ -319,6 +372,7 @@ export async function fetchEpisodeHistory(limit = 300) {
     .from('episode_progress')
     .select('media_id, season, episode, watched_at')
     .eq('user_id', authUser.id)
+    .not('watched_at', 'is', null)
     .order('watched_at', { ascending: false })
     .limit(limit);
   if (profileId) query = scopeToProfile(query, profileId);
@@ -329,23 +383,13 @@ export async function fetchEpisodeHistory(limit = 300) {
 
 // Remove a title from watch history: its Continue Watching row and, for
 // shows, its watched-episode records. Ratings and My List are untouched.
-export async function removeTitleFromHistory({ mediaType, mediaId }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('continue_watching');
-      if (stored) {
-        const list = JSON.parse(stored).filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
-        window.localStorage.setItem('continue_watching', JSON.stringify(list));
-      }
-      window.localStorage.removeItem(`ep_progress_${mediaId}`);
-      window.dispatchEvent(new CustomEvent('binge:historyChanged'));
-    } catch {}
-    return;
-  }
-
+// profileId: the profile it was removed from (the Undo popup carries out
+// the removal 10 seconds later, maybe after a profile switch); the active
+// profile when left out.
+export async function removeTitleFromHistory({ mediaType, mediaId, profileId: forProfile }) {
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
-  const profileId = getActiveProfileId();
+  const profileId = forProfile !== undefined ? forProfile : getActiveProfileId();
   const scope = (query) => (profileId ? query.eq('profile_id', profileId) : query);
   const tasks = [
     scope(client.from('continue_watching').delete().eq('user_id', authUser.id).eq('media_type', mediaType).eq('media_id', Number(mediaId))),
@@ -371,23 +415,6 @@ export async function fetchHiddenRecommendations() {
 }
 
 export async function setRecommendationHidden({ mediaType, mediaId, hidden }) {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const stored = window.localStorage.getItem('hidden_recs');
-      let list = stored ? JSON.parse(stored) : [];
-      if (hidden) {
-        if (!list.some((x) => x.media_type === mediaType && Number(x.media_id) === Number(mediaId))) {
-          list.push({ media_type: mediaType, media_id: Number(mediaId) });
-        }
-      } else {
-        list = list.filter((x) => !(x.media_type === mediaType && Number(x.media_id) === Number(mediaId)));
-      }
-      window.localStorage.setItem('hidden_recs', JSON.stringify(list));
-      window.dispatchEvent(new CustomEvent('binge:historyChanged'));
-    } catch {}
-    return;
-  }
-
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
   const profileId = getActiveProfileId();

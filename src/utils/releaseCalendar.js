@@ -21,7 +21,8 @@ function titlePath(item) {
 }
 
 // { events: [{ id, date, kind, title, detail, url, image }], renewed: [...], comingSoon: [items] }
-export async function loadReleaseCalendar() {
+// comingSoon (titles not on your list) keeps to the profile's maturity level.
+export async function loadReleaseCalendar({ kidsSafe = false } = {}) {
   const [watchlist, playing] = await Promise.all([
     fetchSupabaseWatchlist().catch(() => []),
     fetchSupabaseContinueWatching().catch(() => []),
@@ -97,7 +98,7 @@ export async function loadReleaseCalendar() {
     'primary_release_date.lte': comingSoonCutoffIso(),
     sort_by: 'popularity.desc',
   }).catch(() => null);
-  const comingSoon = upcoming ? (await resolveTmdbItems(upcoming, 'movie').catch(() => []))
+  const comingSoon = upcoming ? (await resolveTmdbItems(upcoming, 'movie', { kidsSafe }).catch(() => []))
     .filter((item) => !followed.has(`movie:${item.id}`))
     .slice(0, 12) : [];
 
