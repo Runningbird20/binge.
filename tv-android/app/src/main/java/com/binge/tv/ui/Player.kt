@@ -322,7 +322,13 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
         if (model.isEpisode && id != null) episodes = runCatching { Tmdb.get<TmdbSeason>("tv/$id/season/${model.request.season ?: 1}") }.getOrNull()?.episodes.orEmpty()
     }
     // Focus the selected option (or the item we came back from) whenever the list changes.
-    LaunchedEffect(pane) { kotlinx.coroutines.delay(40); runCatching { firstFocus.requestFocus() } }
+    // If the pane has no selected item to land on, its first item: focus must
+    // never leave the sidebar (OK then opened whatever was behind the player).
+    val paneFocus = remember { FocusRequester() }
+    LaunchedEffect(pane) {
+        kotlinx.coroutines.delay(40)
+        if (runCatching { firstFocus.requestFocus() }.isFailure) runCatching { paneFocus.requestFocus() }
+    }
     androidx.activity.compose.BackHandler { if (pane == Pane.MENU) close() else { from = pane; pane = Pane.MENU } }
     fun open(next: Pane) { from = Pane.MENU; pane = next }
 
@@ -337,7 +343,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f))))
         Column(
             Modifier.align(Alignment.CenterEnd).width(380.dp).fillMaxHeight().background(Palette.raised.copy(alpha = 0.97f))
-                .focusGroup().focusProperties { this.exit = { FocusRequester.Cancel } }
+                .focusRequester(paneFocus).focusGroup().focusProperties { this.exit = { FocusRequester.Cancel } }
                 .padding(top = 28.dp, bottom = 18.dp),
         ) {
             Text(pane.title, style = Type.section.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(horizontal = 22.dp))
@@ -382,7 +388,10 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                             else -> "From OpenSubtitles, drawn the same on every server."
                         }) }
                         items(PlaybackPrefs.subtitleChoices, key = { "l:" + it.first }) { (code, label) ->
-                            val selected = if (code == "off") !model.useExternal && model.textTracks.none { it.on } else model.useExternal && model.subtitleLanguage == code
+                            // "Off" whenever no language is chosen and no server track is on: with
+                            // nothing selected, focus fell out of the sidebar onto the page behind.
+                            val selected = if (code == "off") (!model.useExternal || model.subtitleLanguage == "off") && model.textTracks.none { it.on }
+                                else model.useExternal && model.subtitleLanguage == code
                             SideItem(label, selected = selected, modifier = if (selected) Modifier.focusRequester(firstFocus) else Modifier) { model.chooseSubtitleLanguage(code); close() }
                         }
                         if (model.textTracks.isNotEmpty()) {
