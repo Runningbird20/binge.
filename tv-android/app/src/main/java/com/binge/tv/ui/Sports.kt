@@ -324,8 +324,8 @@ private fun ScoreChip(event: Scoreboard.Event) {
 }
 
 @Composable
-private fun GameCard(game: SportGame, event: Scoreboard.Event?, busy: Boolean, inMulti: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, onFocus: () -> Unit) {
-    FocusCard(onClick = onClick, onLongClick = onLongClick, onFocus = onFocus, modifier = Modifier.width(232.dp).height(178.dp)) {
+internal fun GameCard(game: SportGame, event: Scoreboard.Event?, busy: Boolean, inMulti: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, onFocus: () -> Unit, modifier: Modifier = Modifier) {
+    FocusCard(onClick = onClick, onLongClick = onLongClick, onFocus = onFocus, modifier = modifier.width(232.dp).height(178.dp)) {
         Column {
             Box(Modifier.fillMaxWidth().height(130.dp)) {
                 SportArt(game, Modifier.fillMaxSize())
