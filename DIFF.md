@@ -84,7 +84,8 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
-| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
+| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift, CineSrc, VidSpark, VidCore and EmbedWave, not Sports (`utils/popupSandbox.js`). |
+| Servers VixSrc, VidSpark, VidCore, EmbedWave | ✓ | ✓ | — | — | Added to the website 2026-11-09 (`embedProviders.js`). Not tried in the TV apps yet; Apple TV can only use servers that play without MSE. |
 
 ## Sports
 
@@ -118,7 +119,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 **Phone**:
 - Bottom nav (Home · Sports · Browse · Search · Me) with Browse and Me as bottom sheets.
 - Swipe down to close title and book pages, plus a sticky Play bar.
-- Server, audio and subtitle pickers as bottom sheets.
+- The player's server picker as a bottom sheet.
 - Pull to refresh and haptics.
 - An Install button at the top right of the header: Add to Home Screen, or download the Android / iPhone app.
 

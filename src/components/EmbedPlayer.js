@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import useDeviceType from '../hooks/useDeviceType';
 import { isTvMode } from '../utils/tvMode';
 import { getResumePosition, positionKey } from '../utils/playbackPositions';
+import { readPlayback } from '../utils/playbackMessages';
 import { setCaptionCapableServers } from '../utils/streamPreferences';
 import { EVENT_PROVIDERS, PROVIDERS, SERVER_LABELS, buildUrl, normalizeStartAt, prefersLowBandwidth } from '../utils/embedProviders';
 import useEmbedId from './player/useEmbedId';
@@ -195,10 +196,28 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
 
   // VidRift takes its start position (and quality hint) as messages. Not the
   // start position once it has switched episodes itself: that was for the
-  // episode in its URL.
+  // episode in its URL. VidSpark never starts by itself: it's told to play,
+  // a few times while it's still loading, until this load reports play or
+  // pause (so a pause of the viewer's own is never undone).
   function handleFrameLoad() {
-    if (provider !== 'vidrift') return;
     const frame = iframeRef.current;
+    if (provider === 'vidspark') {
+      const thisLoad = { reported: false };
+      const onMessage = (event) => {
+        if (event.source !== frame?.contentWindow) return;
+        const state = readPlayback(event.data)?.state;
+        if (state === 'play' || state === 'pause') thisLoad.reported = true;
+      };
+      window.addEventListener('message', onMessage);
+      for (const delay of [1500, 4000, 8000]) {
+        setTimeout(() => {
+          if (!thisLoad.reported) frame?.contentWindow?.postMessage({ action: 'play' }, 'https://vidspark.to');
+        }, delay);
+      }
+      setTimeout(() => window.removeEventListener('message', onMessage), 9000);
+      return;
+    }
+    if (provider !== 'vidrift') return;
     const resumeAt = followingPlayer ? 0 : startAt;
     setTimeout(() => {
       if (!frame?.contentWindow) return;
@@ -208,9 +227,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   }
 
   const playbackOptionProps = {
-    prefs,
-    onPrefsChange: serverChoice.changePrefs,
-    originalLanguage: serverChoice.originalLanguage,
     servers: serverChoice.rankedServers,
     currentServer: provider,
     serverLabels: SERVER_LABELS,

@@ -9,6 +9,14 @@ export function readPlayback(raw) {
     try { data = JSON.parse(data); } catch { return null; }
   }
   if (!data || typeof data !== 'object') return null;
+  // VidSpark: { source, event, currentTime, duration }, no type.
+  if (data.source === 'vidspark-player') {
+    const reading = { time: Number(data.currentTime), duration: Number(data.duration) };
+    if (data.event === 'play') reading.state = 'play';
+    if (data.event === 'pause') reading.state = 'pause';
+    if (data.event === 'ended') reading.state = 'ended';
+    return reading;
+  }
   const type = data.type || '';
   if (type.startsWith('vidrift:')) {
     if (type === 'vidrift:progress') return { time: Number(data.currentTime), duration: Number(data.duration) };
@@ -26,7 +34,8 @@ export function readPlayback(raw) {
     return null;
   }
   if (type === 'PLAYER_EVENT') {
-    const event = data.data || {};
+    // Vidy, VidLink and Videasy put the event under `data`; VixSrc under `event`.
+    const event = data.data || data.event || {};
     const reading = { time: Number(event.currentTime), duration: Number(event.duration) };
     if (event.event === 'play') reading.state = 'play';
     if (event.event === 'pause') reading.state = 'pause';
