@@ -313,7 +313,8 @@ fun SettingsScreen() {
             item { OnOff("Audio description", "Picks a described audio track automatically when a server has one.", PlaybackPrefs.audioDescription) { Prefs.set("audioDescription", it) } }
             item { OnOff("Larger text", "Bigger text across the whole app.", PlaybackPrefs.largeText) { Prefs.set("largeText", it) } }
             item { OnOff("Ambient mode", "Artwork from your rows after a few idle minutes, or a long pause.", PlaybackPrefs.ambient) { Prefs.set("ambient", it) } }
-            item { OnOff("Lighter effects", "No zoom on focused cards and buttons, and ambient mode off unless you turn it on. Smoother on Fire TV sticks; on by default when this TV has little memory.", Performance.light) { Prefs.set("lightEffects", it) } }
+            item { OnOff("Native player", "Plays the stream in Fire TV's own video player: starts faster, seeks instantly and is far lighter than the server's page. Turn it off only if a video won't play.", com.binge.tv.player.NativePlayback.enabled) { Prefs.set("nativePlayer", it) } }
+            item { OnOff("Lighter effects", "Smaller focus zoom, no glow, ambient mode off by default. Smoother on Fire TV sticks (on for them automatically).", Performance.light) { Prefs.set("lightEffects", it) } }
         }
     }
 }

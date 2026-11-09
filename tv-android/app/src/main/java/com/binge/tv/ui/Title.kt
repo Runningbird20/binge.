@@ -186,10 +186,14 @@ fun TitleScreen(title: Title, active: Boolean) {
                 }
                 if (title.kind == MediaKind.TV && seasons.isNotEmpty()) {
                     item(key = "seasons") {
+                        // Coming up from the episodes lands on the season they belong
+                        // to, not whichever chip happens to sit above.
+                        val selectedSeason = remember { androidx.compose.ui.focus.FocusRequester() }
                         PivotScroll(offset = Dimens.edge) {
-                            LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            LazyRow(Modifier.focusRestorer(selectedSeason), contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 items(seasons, key = { it.seasonNumber }) { s ->
-                                    Pill(s.name ?: "Season ${s.seasonNumber}", selected = season == s.seasonNumber) { season = s.seasonNumber }
+                                    val chosen = season == s.seasonNumber
+                                    Pill(s.name ?: "Season ${s.seasonNumber}", if (chosen) Modifier.focusRequester(selectedSeason) else Modifier, selected = chosen) { season = s.seasonNumber }
                                 }
                             }
                         }
@@ -199,7 +203,8 @@ fun TitleScreen(title: Title, active: Boolean) {
                     }
                 }
                 franchise?.let { order -> item(key = "franchise") { FranchiseSection(order) } }
-                if (more.isNotEmpty()) item(key = "more") { TitleRow(LoadedRow("more", "More Like This", more), Nav::open) }
+                // Breathing room under the buttons (movies have no season row between).
+                if (more.isNotEmpty()) item(key = "more") { Box(Modifier.padding(top = 24.dp)) { TitleRow(LoadedRow("more", "More Like This", more), Nav::open) } }
             }
         }
     }

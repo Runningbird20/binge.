@@ -6,9 +6,9 @@ import GenreScrollBar from '../components/GenreScrollBar';
 import TitleRow from '../components/TitleRow';
 import FantasyBoard from '../components/FantasyBoard';
 import useDeviceType from '../hooks/useDeviceType';
-import { loadSportsStreams, sameGame, splitTeamsFromTitle, teamsMatch } from '../utils/sportsProviders';
+import { loadSportsStreams, sameGame, splitTeamsFromTitle } from '../utils/sportsProviders';
 import { fetchScoreboards } from '../utils/liveScores';
-import { listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
+import { followedTeamPlays, listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
 import {
   MULTIVIEW_MAX,
   teamsInNameOrder,
@@ -172,8 +172,8 @@ export default function Sports() {
     return sortForRow(streams.filter((stream) => {
       if (stream.alwaysLive || getStatus(stream, nowMs) === 'replay') return false;
       const teams = stream.teams || splitTeamsFromTitle(stream.name);
-      if (!teams) return false;
-      return followedTeams.some((team) => teamsMatch(team.team_name, teams.home) || teamsMatch(team.team_name, teams.away));
+      if (!teams && !stream.score?.teams?.length) return false;
+      return followedTeamPlays(followedTeams, stream, teams);
     }), nowMs);
   }, [streams, followedTeams, nowMs]);
   const soon = useMemo(() => sortForRow(filtered.filter((stream) => getStatus(stream, nowMs) === 'upcoming'

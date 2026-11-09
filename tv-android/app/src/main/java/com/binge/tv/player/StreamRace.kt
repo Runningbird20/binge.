@@ -32,7 +32,7 @@ class StreamRace(
 ) {
     enum class Mode { WARM, LIVE }
 
-    class Candidate(val server: StreamServer, val web: WebEngine, val url: String)
+    class Candidate(val server: StreamServer, val web: Engine, val url: String, val startedAt: Long = System.currentTimeMillis())
 
     val container = FrameLayout(context).apply { setBackgroundColor(android.graphics.Color.BLACK) }
     var mode = mode
@@ -63,23 +63,45 @@ class StreamRace(
 
     val key get() = request.key
 
+    // Servers not started yet. A Fire TV's CPU makes every page slower when
+    // several load at once (6 pages: 20s to play; one alone: ~9s), so the
+    // best-ranked server starts alone and the next joins only when nothing
+    // plays within STAGGER_MS, up to MAX_VOD / MAX_LIVE pages at once.
+    private val waiting = ArrayDeque<StreamServer>()
+    private var tmdbId = 0
+    private val context = context
+    private var lastStartAt = 0L
+
     init {
-        val tmdbId = request.title.tmdbId ?: if (request.isLive) 0 else null
-        if (tmdbId == null) failed = true else {
-            // A Fire TV has far less memory than a computer: at most 3 pages
-            // at once (2 for live); the player keeps the rest as backups.
-            val limit = if (request.isLive) MAX_LIVE else MAX_VOD
-            candidates = servers.take(limit).map { server ->
-                val url = server.build(tmdbId, request.title.kind, request.season ?: 1, request.episode ?: 1)
-                val web = WebEngine(context, WebEngine.hostOf(url))
-                web.view.alpha = 0f
-                container.addView(web.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-                web.load(url)
-                Candidate(server, web, url)
-            }
+        val id = request.title.tmdbId ?: if (request.isLive) 0 else null
+        if (id == null) failed = true else {
+            tmdbId = id
+            waiting.addAll(servers.take(if (request.isLive) MAX_LIVE else MAX_VOD))
+            startNext()
             if (candidates.isEmpty()) failed = true
         }
         loop()
+    }
+
+    private fun startNext() {
+        val server = waiting.removeFirstOrNull() ?: return
+        // At most two pages at once: a third makes all of them crawl on a
+        // stick. The oldest one that hasn't found its stream makes room.
+        if (!request.isLive && candidates.size >= MAX_PAGES_AT_ONCE) {
+            candidates.firstOrNull { (it.web as? HybridEngine)?.isStartingNative != true }?.let { stuck ->
+                Perf.mark("closing ${stuck.server.name} (no stream yet)")
+                stuck.web.destroy()
+                candidates = candidates.filter { it !== stuck }
+                ServerSpeed.failed(stuck.server.id)
+            }
+        }
+        val url = server.build(tmdbId, request.title.kind, request.season ?: 1, request.episode ?: 1)
+        val engine = HybridEngine(context, url, request.isLive, NativePlayback.enabled)
+        engine.setShown(false)
+        container.addView(engine.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        Perf.mark("load ${server.name} (${request.key})")
+        candidates = candidates + Candidate(server, engine, url)
+        lastStartAt = System.currentTimeMillis()
     }
 
     private fun loop() {
@@ -90,12 +112,13 @@ class StreamRace(
 
     fun goLive() {
         mode = Mode.LIVE
-        winner?.let { if (!keepMuted) it.web.send(MediaCommand.Unmute); it.web.send(MediaCommand.Play) }
+        winner?.let { it.web.setShown(true); if (!keepMuted) it.web.send(MediaCommand.Unmute); it.web.send(MediaCommand.Play) }
         onChange?.invoke()
     }
 
     fun stop() {
         running = false
+        waiting.clear()
         handler.removeCallbacksAndMessages(null)
         candidates.forEach { it.web.destroy() }
         candidates = emptyList()
@@ -117,7 +140,7 @@ class StreamRace(
                 if (!seekedToStart && !request.isLive) {
                     seekedToStart = true
                     val saved = request.startAt ?: 0.0
-                    w.web.send(MediaCommand.SeekTo(if (saved > 30) saved else 0.0))
+                    w.web.send(MediaCommand.SeekTo(if (saved > 5) saved else 0.0))
                 }
             }
             w.web.poll()
@@ -137,18 +160,26 @@ class StreamRace(
             if (state.paused) candidate.web.send(MediaCommand.Play)
             val expected = expectedDuration
             if (expected != null && ExpectedRuntime.isWrong(state.d, expected)) { reject(candidate); continue }
-            if (state.t <= 0.4 || state.paused) continue
-            if (!shopping) { crown(candidate); break }
+            if (!state.isPlaying) continue
+            Perf.mark("playing ${candidate.server.name}")
+            // Native: the player adapts its quality by itself, nothing to shop for.
+            if (!shopping || (candidate.web as? HybridEngine)?.isNative == true) { crown(candidate); break }
             playingHeights[candidate.server.id] = state.height
             if (firstPlayAt == null) firstPlayAt = System.currentTimeMillis()
-            if (state.height >= 2000 || System.currentTimeMillis() - firstPlayAt!! > 1500) {
+            // Already HD: nothing sharper is worth the wait on a TV this size.
+            if (state.height >= 1000 || System.currentTimeMillis() - firstPlayAt!! > 1500) {
                 val best = candidates.maxByOrNull { playingHeights[it.server.id] ?: -1 }
                 crown(best ?: candidate)
                 break
             }
         }
+        // Nothing playing yet: bring in the next server.
+        // (Not while one is handing its stream to the native player: that start is seconds away.)
+        val handingOver = firstPlayAt != null || candidates.any { (it.web as? HybridEngine)?.isStartingNative == true }
+        if (winner == null && waiting.isNotEmpty() && !handingOver && System.currentTimeMillis() - lastStartAt > (if (request.isLive) LIVE_STAGGER_MS else STAGGER_MS)) startNext()
         if (winner == null && System.currentTimeMillis() - startedAt > (if (request.isLive) LIVE_GIVE_UP_MS else GIVE_UP_MS)) {
             if (request.isLive) candidates.forEach { SportsMemory.record(it.server.name, worked = false) }
+            else candidates.forEach { ServerSpeed.failed(it.server.id) }
             failed = true
             stop()
             onChange?.invoke()
@@ -173,14 +204,14 @@ class StreamRace(
             if (state.paused && state.ready >= 2) other.web.send(MediaCommand.Play)
             heights[other.server.id] = state.height
             val current = heights[w.server.id] ?: 0
-            if (current <= 0 || state.height < (current * 1.3).toInt() || state.paused || state.t <= 0.4) continue
+            if (current <= 0 || state.height < (current * 1.3).toInt() || !state.isPlaying) continue
             // Promote the sharper stream.
             if (!request.isLive) times[w.server.id]?.takeIf { it > 1 }?.let { other.web.send(MediaCommand.SeekTo(it)) }
-            w.web.view.alpha = 0f
+            w.web.setShown(false)
             w.web.destroy()
             candidates = candidates.filter { it.server != w.server }
             winner = other
-            other.web.view.alpha = 1f
+            other.web.setShown(true)
             if (!keepMuted) other.web.send(MediaCommand.Unmute)
             onChange?.invoke()
             return
@@ -192,23 +223,30 @@ class StreamRace(
         candidate.web.destroy()
         candidates = candidates.filter { it.server != candidate.server }
         playingHeights.remove(candidate.server.id)
-        if (candidates.isEmpty()) { failed = true; stop(); onChange?.invoke() }
+        if (candidates.isEmpty()) { if (waiting.isNotEmpty()) startNext() else { failed = true; stop(); onChange?.invoke() } }
     }
 
     private fun crown(candidate: Candidate) {
         winner = candidate
-        if (request.isLive && mode == Mode.LIVE && !keepMuted && candidates.size > 1 && QualityPreference.current == QualityPreference.BEST) {
+        Perf.mark("winner ${candidate.server.name} (${mode})")
+        // A native winner already in HD needs no sharper runner-up (each one is a hardware decoder).
+        val nativeHd = (candidate.web as? HybridEngine)?.isNative == true && (candidate.web.poll()?.height ?: 0) >= 1000
+        if (request.isLive && mode == Mode.LIVE && !keepMuted && candidates.size > 1 && QualityPreference.current == QualityPreference.BEST && !nativeHd) {
             upgradeUntil = System.currentTimeMillis() + 6000
         } else {
             candidates.filter { it.server != candidate.server }.forEach { it.web.destroy() }
             candidates = listOf(candidate)
+            waiting.clear()
         }
-        candidate.web.view.alpha = 1f
-        if (!request.isLive) StreamServer.rememberWorking(candidate.server, request.title)
+        if (mode == Mode.LIVE) candidate.web.setShown(true)
+        if (!request.isLive) {
+            StreamServer.rememberWorking(candidate.server, request.title)
+            ServerSpeed.record(candidate.server.id, System.currentTimeMillis() - candidate.startedAt)
+        }
         else SportsMemory.record(candidate.server.name, worked = true)
         if (mode == Mode.LIVE) {
             val start = request.startAt ?: 0.0
-            if (start > 30 && !request.isLive) candidate.web.send(MediaCommand.SeekTo(start))
+            if (start > 5 && !request.isLive) candidate.web.send(MediaCommand.SeekTo(start))
             if (!keepMuted) candidate.web.send(MediaCommand.Unmute)
         }
         onChange?.invoke()
@@ -220,6 +258,10 @@ class StreamRace(
         const val LIVE_GIVE_UP_MS = 20_000L
         const val MAX_LIVE = 3
         const val MAX_VOD = 3
+        // How long one server gets alone before the next one joins.
+        const val STAGGER_MS = 5_000L
+        const val MAX_PAGES_AT_ONCE = 2
+        const val LIVE_STAGGER_MS = 4_000L
     }
 }
 
@@ -233,11 +275,17 @@ object Warmup {
     private var pendingKey: String? = null
     private var expiry: Job? = null
 
-    fun prepare(request: PlayRequest) {
+    // The video the player is on: never preloaded a second time.
+    var playingKey: String? = null
+
+    fun prepare(request: PlayRequest, fromPlayer: Boolean = false) {
         val host = host ?: return
+        if (request.key == playingKey) return
+        // While a video plays, only the player itself preloads (its next episode).
+        if (playingKey != null && !fromPlayer) return
         if (request.title.tmdbId == null && !request.isLive) return
         // Optional work: skip when several video pages are already open.
-        if (race == null && WebEngine.live >= 4) return
+        if (race == null && WebEngine.live + NativeEngine.live >= 3) return
         val key = request.key
         if (race?.key == key || pendingKey == key) return
         cancel()
@@ -259,6 +307,9 @@ object Warmup {
 
     // Hands over the warm race if it matches (and hasn't given up).
     fun take(request: PlayRequest): StreamRace? {
+        // Still being planned for this video: the player starts its own race now
+        // (two of the same would compete for the CPU).
+        if (race == null && pendingKey == request.key) { pendingKey = null; return null }
         val r = race ?: return null
         if (r.key != request.key || r.failed) return null
         race = null
@@ -328,4 +379,18 @@ object SportsMemory {
     // Stable: feeds with equal scores keep the interleaved order.
     fun <T> rank(items: List<T>, label: (T) -> String): List<T> = items.withIndex()
         .sortedWith(compareBy({ -score(label(it.value)) }, { it.index })).map { it.value }
+}
+
+// Timing marks for startup measurements (logcat tag "binge-perf"): each line
+// says how long since the last Perf.start().
+object Perf {
+    private var t0 = System.currentTimeMillis()
+    fun start(what: String) { t0 = System.currentTimeMillis(); android.util.Log.i("binge-perf", "0ms start $what") }
+    fun mark(what: String) { android.util.Log.i("binge-perf", "${System.currentTimeMillis() - t0}ms $what") }
+}
+
+// Settings › Playback › "Native player" (on by default): streams found in a
+// server's page play in Android's own player instead of the page.
+object NativePlayback {
+    val enabled get() = com.binge.tv.data.Prefs.bool("nativePlayer", true)
 }

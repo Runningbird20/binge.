@@ -249,6 +249,7 @@ function eventScore(event, path) {
     clock: status.displayClock || '',
     broadcast: competition.broadcasts?.[0]?.names?.[0] || competition.geoBroadcasts?.[0]?.media?.shortName || '',
     teams: competitors.map((c) => ({
+      id: c.team?.id != null ? String(c.team.id) : null,
       name: c.team?.displayName || c.team?.name || '',
       short: c.team?.abbreviation || c.team?.shortDisplayName || '',
       logo: c.team?.logo || c.team?.logos?.[0]?.href || null,

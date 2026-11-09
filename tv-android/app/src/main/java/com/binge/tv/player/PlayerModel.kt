@@ -61,7 +61,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     val surface = FrameLayout(context).apply { setBackgroundColor(android.graphics.Color.BLACK) }
     private val handler = Handler(Looper.getMainLooper())
     private var race: StreamRace? = null
-    private val web: WebEngine? get() = race?.winner?.web
+    private val web: Engine? get() = race?.winner?.web
     private var sleepAt: Long? = null
     private var lastFill = 0L
     private var prefsAppliedFor: String? = null
@@ -78,7 +78,10 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     private var clockMovedAt = now()
     private var stateAt = now()
     private var recoveries = 0
-    private var handPicked = false
+    var handPicked = false
+        private set
+    // Playing in the native player (no page: "Picture" doesn't apply).
+    val isNative get() = (race?.winner?.web as? HybridEngine)?.isNative == true
     private var lastResume = 0L
     private var pausedSince: Long? = null
     private var raced = HashSet<String>()
@@ -137,7 +140,12 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     val usingExternalSubtitles get() = useExternal && external != null
 
     init {
+        Perf.start("player ${initial.key}")
+        Warmup.playingKey = initial.key
         val warm = Warmup.take(initial)
+        Perf.mark(if (warm != null) "took warm race (winner=${warm.winner?.server?.name})" else "no warm race")
+        // A preload for something else would compete with this video for the CPU.
+        if (warm == null) Warmup.cancel()
         if (warm != null) adopt(warm) else if (initial.isLive) startRace(initial.liveStreams) else startPlannedRace()
         loop()
         AppModel.scope.launch { originalLanguage = OriginalLanguage.of(request.title) }
@@ -167,6 +175,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         racingNames = ""
         AppModel.scope.launch {
             val list = ServerPlan.servers(planned.title, planned.title.originalLanguage)
+            Perf.mark("server plan ${list.joinToString { it.name }}")
             if (planned.key != request.key || closed) return@launch
             startRace(list.ifEmpty { StreamServer.all })
         }
@@ -178,6 +187,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     }
 
     private fun adopt(next: StreamRace) {
+        Warmup.playingKey = next.key
         raced.addAll(next.candidates.map { it.server.id })
         val req = request
         AppModel.scope.launch {
@@ -189,10 +199,13 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         }
         race?.let { it.stop(); surface.removeView(it.container) }
         race = next
-        (next.container.parent as? ViewGroup)?.removeView(next.container)
-        surface.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        if (next.container.parent !== surface) {
+            (next.container.parent as? ViewGroup)?.removeView(next.container)
+            surface.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        } else next.container.bringToFront()
         next.onChange = { raceChanged() }
         racingNames = next.candidates.joinToString(", ") { it.server.name }
+        if (next.winner == null) server = null // the corner shows the new server once one plays
         started = false
         trimmed = false
         warmedNext = false
@@ -233,7 +246,9 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         handler.removeCallbacksAndMessages(null)
         race?.stop()
         race = null
+        dropSwitch()
         Warmup.cancel()
+        Warmup.playingKey = null
     }
 
     // MARK: Remote
@@ -310,7 +325,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     }
 
     // Once per video, as soon as its tracks show up: the profile's saved audio and subtitle language.
-    private fun applyPreferredTracks(web: WebEngine) {
+    private fun applyPreferredTracks(web: Engine) {
         val key = "${server?.id}-${request.season}-${request.episode}"
         if (prefsAppliedFor == key || (audioTracks.isEmpty() && textTracks.isEmpty())) return
         prefsAppliedFor = key
@@ -337,7 +352,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     }
 
     // The chosen server subtitle track has no lines: try the same language's other tracks in turn.
-    private fun fixEmptySubtitles(state: MediaState, web: WebEngine) {
+    private fun fixEmptySubtitles(state: MediaState, web: Engine) {
         val current = state.text.firstOrNull { it.on }
         if (!started || usingExternalSubtitles || (useExternal && externalLoading) || current == null) { emptySubtitleSince = null; return }
         if (current.cues > 0) { emptySubtitleSince = null; return }
@@ -408,13 +423,53 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         startRace(list)
     }
 
-    // A hand-picked server plays alone, from where you were.
+    // A hand-picked server plays alone, from where you were. While something
+    // is playing it keeps playing: the new server loads hidden (a warm race)
+    // and takes over at the current second once it plays; if it can't, you
+    // stay where you were.
+    private var switching: StreamRace? = null
+
     fun choose(next: StreamServer) {
         saveProgress(force = true)
-        if (playback.t > 30 && !request.isLive) request = request.copy(startAt = playback.t)
         notice = null
         handPicked = true
-        startRace(listOf(next))
+        dropSwitch()
+        // Already playing on it: nothing to do.
+        if (started && next == server && race?.winner != null) { notice = null; return }
+        if (!started || race?.winner == null) {
+            if (playback.t > 5 && !request.isLive) request = request.copy(startAt = playback.t)
+            startRace(listOf(next))
+            return
+        }
+        val at = playback.t
+        val pending = StreamRace(context, if (!request.isLive && at > 5) request.copy(startAt = at) else request, listOf(next), StreamRace.Mode.WARM)
+        // Behind the current video, in the player itself: handing over then
+        // never moves a video surface (a MediaTek decoder fails when it does).
+        surface.addView(pending.container, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        switching = pending
+        raced.add(next.id)
+        notice = "Switching to ${next.name}… keep watching"
+        showHUD()
+    }
+
+    private fun dropSwitch() {
+        switching?.let { it.stop(); (it.container.parent as? ViewGroup)?.removeView(it.container) }
+        switching = null
+    }
+
+    private fun checkSwitch() {
+        val pending = switching ?: return
+        val winner = pending.winner
+        if (winner != null) {
+            switching = null
+            if (!request.isLive && playback.t > 1) winner.web.send(MediaCommand.SeekTo(playback.t))
+            adopt(pending)
+        } else if (pending.failed) {
+            val name = pending.candidates.firstOrNull()?.server?.name ?: "That server"
+            dropSwitch()
+            notice = "$name didn't play. Still on ${server?.name ?: "this server"}."
+            showHUD()
+        }
     }
 
     fun play(season: Int, episode: Int, automatic: Boolean = false) {
@@ -422,6 +477,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         autoAdvances = if (automatic) autoAdvances + 1 else 0
         skippedIntro = false; markedWatched = false; showSkipIntro = false; subsNoticeShown = false
         request = request.copy(season = season, episode = episode, startAt = null)
+        dropSwitch()
         upNextCountdown = null
         openedAt = now(); recoveries = 0; handPicked = false; raced.clear()
         markers = EpisodeMarkers(); introSeekFrom = null; ownIntroSkip = false
@@ -429,6 +485,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         external = null
         loadExternalSubtitles()
         val warm = Warmup.take(request)
+        if (warm == null) Warmup.cancel()
         if (warm != null) adopt(warm) else {
             // The last episode must stop now: planning the next race takes a
             // moment, and meanwhile it would keep playing (and be heard) and
@@ -444,6 +501,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     // MARK: Polling
 
     private fun tick() {
+        checkSwitch()
         val w = web ?: return
         val state = w.poll()
         if (state != null) apply(state, w) else checkLost()
@@ -512,7 +570,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
 
     fun trimMemory() { race?.trimMemory() }
 
-    private fun apply(state: MediaState, w: WebEngine) {
+    private fun apply(state: MediaState, w: Engine) {
         playback = state
         watchClock(state)
         val exp = expected
@@ -534,8 +592,9 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         if (!started && state.video && state.paused && !userPaused) { w.send(MediaCommand.Unmute); w.send(MediaCommand.Play) }
         // Servers that pause themselves (an overlay, a second player): only the remote pauses here.
         if (started && state.paused && !state.ended && !userPaused && !state.cushion && now() - lastResume > 2000) { lastResume = now(); w.send(MediaCommand.Play) }
-        if (!started && state.t > 0.4 && !state.paused) {
+        if (!started && state.isPlaying) {
             started = true
+            Perf.mark("picture on screen")
             // Live: build a few seconds of buffer before settling in (a little behind live, far fewer stalls).
             if (request.isLive) w.send(MediaCommand.CushionStart)
         }
@@ -603,7 +662,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         val atCredits = credits != null && state.t >= credits && remaining > 5
         if ((remaining < 90 || (credits != null && state.t >= credits - 60)) && !warmedNext) {
             warmedNext = true
-            Warmup.prepare(PlayRequest(request.title, next.first, next.second, seasons = request.seasons))
+            Warmup.prepare(PlayRequest(request.title, next.first, next.second, seasons = request.seasons), fromPlayer = true)
         }
         if (state.ended || remaining < 25 || atCredits) {
             if (sleep == SleepOption.EPISODE || autoAdvances >= 3) {
@@ -655,8 +714,9 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         fun displayName(track: MediaTrack): String {
             val label = track.label.replace(Regex("^\\d+\\.\\s*"), "")
             if (label.isNotEmpty()) return label
-            if (track.language.isNotEmpty()) return PlaybackPrefs.languageName(track.language.take(2))
-            return "Track ${track.index + 1}"
+            if (track.language.isNotEmpty() && track.language != "und") return PlaybackPrefs.languageName(track.language.take(2))
+            // Unlabeled (most native streams): the first is the film's own audio.
+            return if (track.index == 0) "Original audio" else "Track ${track.index + 1}"
         }
     }
 }

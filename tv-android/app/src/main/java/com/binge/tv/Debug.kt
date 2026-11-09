@@ -4,7 +4,7 @@ import android.content.Intent
 
 // Debug builds only: launch straight into a state for testing, e.g.
 //   adb shell am start -n com.binge.tv/.MainActivity --ez demo true --es tab sports
-//     --es open tv_show:58132 --es play 1:2 --es server vidrift --es multi "dortmund,lens"
+//     --es open tv_show:58132 --es play 1:2 --es server vidrift --es multi "dortmund,lens" --es profile JG
 object DebugLaunch {
     var demo = false
     var tab: String? = null
@@ -14,6 +14,8 @@ object DebugLaunch {
     var multi: String? = null
     var live: String? = null
     var embed: String? = null
+    var profile: String? = null
+    var logAll = false
 
     fun read(intent: Intent?) {
         if (!BuildConfig.DEBUG || intent == null) return
@@ -25,5 +27,7 @@ object DebugLaunch {
         multi = intent.getStringExtra("multi")
         live = intent.getStringExtra("live")
         embed = intent.getStringExtra("embed")
+        profile = intent.getStringExtra("profile")
+        logAll = intent.getBooleanExtra("logall", false)
     }
 }

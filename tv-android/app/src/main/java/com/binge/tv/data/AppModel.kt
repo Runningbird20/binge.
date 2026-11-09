@@ -81,7 +81,10 @@ object AppModel {
                 "select" to AccountProfile.COLUMNS, "account_id" to "eq.${session.userId}", "order" to "is_default.desc,created_at.asc",
             ))
             lockedProfileIds = ProfileLocks.lockedIds()
-            if (profiles.size > 1 || profiles.any { it.id in lockedProfileIds }) phase = Phase.CHOOSING_PROFILE
+            // Debug: --es profile <name> skips the picker (an unlocked profile only).
+            val wanted = com.binge.tv.DebugLaunch.profile?.let { name -> profiles.firstOrNull { it.name.equals(name, ignoreCase = true) && it.id !in lockedProfileIds } }
+            if (wanted != null) choose(wanted)
+            else if (profiles.size > 1 || profiles.any { it.id in lockedProfileIds }) phase = Phase.CHOOSING_PROFILE
             else choose(profiles.firstOrNull())
         } catch (e: Exception) {
             if (handle(e)) return

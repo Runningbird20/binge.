@@ -25,6 +25,19 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
   - **Headers.** The UA drops `; wv`/`Version/x`, and `X-Requested-With` is turned off where the WebView supports it.
 - **Race.** VOD races 3 servers (VidRift, Vidy, CineSrc first; VidLink/Videasy/VidSrc are backups). Live races 3 and gives up after 20s, so recovery tries the next batch. `SportsMemory` (Prefs `sportsFeed.<family>`) ranks the feed families that played on this TV first.
 
+## Native playback and startup (2026-11-06, measured on a Fire TV Stick 4K Max, AFTKRT)
+
+- **Hybrid engine** (`player/HybridEngine.kt`). Each server's page still loads (that's how the stream is found), but as soon as it requests a manifest (`.m3u8`/`.mpd`, CineSrc's `/api/playlist/`), Media3 ExoPlayer (`NativeEngine.kt`) plays it with the page's Referer/Origin/User-Agent/cookies; the page is muted, its segment downloads are blocked, and it's closed once the native player plays. Vidy, CineSrc, VidLink, PPV live streams and (for many titles) VidRift hand over; VidSrc builds its stream in the page and stays there. Native failures fall back to the page, or, once the page is gone, rebuild the native player on the same stream at the same second (twice). Settings › Native player switches it off.
+- **Ads/trackers** are never fetched by server pages (`AdBlock` in `WebEngine.kt`, hosts seen on the servers' pages).
+- **Races** start one server; the next joins after 5s (4s live) unless one is handing over to the native player; at most 2 pages at once. Servers are ranked by how fast they start on this TV (`ServerSpeed`, Prefs `speed.<id>`), native-capable ones first by default. The server plan's lookups are capped at 0.8s. Fastest start is the default on low-memory sticks; a native or HD winner is taken at once.
+- **Preloads** (title page, focused cards) hold the native player paused on its first frame: Play shows the picture in ~0.05–0.1s. Starting a video cancels a preload for something else; nothing else preloads while the player is open (its next episode aside); Home preloads only while it's on screen.
+- **Video layers.** A native player's video is its own surface behind the app and ignores alpha: hidden players are moved off screen at full size (`Engine.setShown`). Shrinking them to a pixel made the MediaTek decoder fail when they grew back for the hand-over; `StickRenderers` also re-creates the decoder on surface changes. Hand-overs never re-parent a surface where it can be avoided (a server switch loads in the player itself).
+- **Server switching** keeps the current video playing until the new server plays, then takes over at the current second.
+- **Measured.** Cold start Fight Club 22s → 9s; live game 4.5s; Play after a preload 0.02–0.09s; two live games in Multiview at 0% dropped frames (the second web-page game used to fall to 2–3 fps). Release builds use R8 (12.8 MB → 3.2 MB APK).
+- **Debugging.** `Perf` marks (logcat tag `binge-perf`, release builds too); debug builds log the media requests each page makes (`binge-media`, `--ez logall true` for every request) and Multiview tile stats (`binge-mv`). `--es profile <name>` skips the profile picker. Fire OS drops `Log.d`, so use `Log.i`.
+
+- **Surprise me** (Home, above Continue Watching; `data/Surprise.kt`, the website's `utils/surprise.js`): a movie or a series from Top Picks and the "Because you watched" rows (15 / 6 per row, weighted toward the top, not one of the last 6 surprises), or a trending title for a profile with no history; opens its title page. A kind with nothing to offer has no button.
+
 ## Measured on a Fire Stick, and stability
 
 - **Fire Stick 4K Max (measured 2026-10-10).**
@@ -49,7 +62,7 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Scrolling.** `PivotScroll` (`Theme.kt`) is the `BringIntoViewSpec`. Rows keep focus at the left margin. Pages don't move for items already on screen, and otherwise land them 22% down.
 - **Text fields** are read-only until OK; otherwise the keyboard opens on focus and takes the OK press. While typing, Back closes the keyboard, not the page.
 - **The Amazon keyboard.** On a real Fire Stick it's a separate window, not reported through IME insets, and it eats the first Back to close itself; Compose's text field then clears focus. So `TvTextField` ends typing on focus loss / Back / any IME action (Fire's keyboard has Next, no Enter) and calls `onDone`. Search uses that to move focus to the first result, retrying while Fire hands focus back.
-- **Back.** Back on a non-Home tab bar goes to Home; only Home's bar exits. The generic BackHandler is registered before pages, so a page's own handler wins. Screens that are one focusable `Box` (Wrapped, Multiview, Ambient) must handle Back in `onKeyEvent`, because it never reaches `BackHandler`.
+- **Back.** Back on a non-Home tab bar goes to Home; only Home's bar exits. The generic BackHandler is registered before pages, so a page's own handler wins. Screens that are one focusable `Box` (Wrapped, Multiview, Ambient, and the player's key layer) must handle Back in `onKeyEvent`/`onPreviewKeyEvent`, because it never reaches `BackHandler` (Back did nothing in the player until 2026-11-06).
 - **Page focus.** A tab page must never request focus while `TabChrome.tabsFocused`, or ▼ would skip its first item. A layout the shell's restore can't enter correctly (Me's two columns enter at Sign out) sets `TabChrome.pageEntry`.
 - **Focus traps.** Pages trap focus (`focusGroup` + `exit = Cancel`) so it can't fall onto the hidden tab bar. `FocusMemory`/`rememberFocus()` puts focus back on the card that opened a page.
 - **Player options** are a right-hand sidebar (`PlayerPanel`, `Pane`).

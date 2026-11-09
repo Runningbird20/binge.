@@ -105,8 +105,11 @@ fun FocusCard(
         shape = CardDefaults.shape(shape),
         colors = CardDefaults.colors(containerColor = Palette.surface),
         scale = CardDefaults.scale(focusedScale = Performance.focusScale(1.08f)),
-        border = CardDefaults.border(focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = shape)),
-        glow = CardDefaults.glow(),
+        // Focus must be obvious from the couch: a thick white border and,
+        // where the hardware can afford it, a soft white glow.
+        border = CardDefaults.border(focusedBorder = Border(androidx.compose.foundation.BorderStroke(3.dp, Color.White), shape = shape)),
+        glow = if (Performance.light) CardDefaults.glow()
+            else CardDefaults.glow(focusedGlow = androidx.tv.material3.Glow(elevationColor = Color.White.copy(alpha = 0.45f), elevation = 14.dp)),
     ) { Box(Modifier.fillMaxSize(), content = content) }
 }
 

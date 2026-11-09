@@ -76,6 +76,12 @@ jobs:
           TMDB_API_KEY:              ${{ secrets.TMDB_API_KEY }}
           MAX_ROWS:                  '3000'      # per table; ~3000 lookups at ~15/s ≈ 3-4 min
 
+      # Every movie/series TMDB flags as adult goes, by TMDB's daily list of
+      # adult ids (older imports let 57 in; one reached a TV on 2026-11-06).
+      - name: Remove adult titles
+        if: always()
+        run: node scripts/remove-adult-titles.js
+
       # Genre lists and row counts the app reads instead of scanning every row,
       # and clears the stored filter counts the sync made stale.
       - name: Refresh genre lists and counts
