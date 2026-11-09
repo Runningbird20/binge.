@@ -16,6 +16,8 @@ import java.util.concurrent.TimeUnit
 object ServerSwitches {
     private var disabled: Set<String> = emptySet()
     private var fetchedAt = 0L
+    // Whatever was fetched last (empty before the first fetch).
+    val lastKnown get() = disabled
 
     @Serializable private data class Row(val provider: String, val enabled: Boolean)
 

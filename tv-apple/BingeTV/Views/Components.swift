@@ -86,9 +86,42 @@ struct PosterCard: View {
                     if let badge = title.badge ?? (title.comingSoon ? "Coming soon" : nil) { Badge(text: badge).padding(10) }
                 }
         }
-        .buttonStyle(.card)
+        .buttonStyle(.focusCard)
         .accessibilityLabel(title.name)
     }
+}
+
+// Cards (posters, episodes, games, people): the focused one must be obvious
+// from the couch. The system .card style only lifts it with a dark shadow,
+// which disappears on this dark background (viewers couldn't tell where they
+// were), so the focused card grows, gets a white border and a soft white glow.
+struct FocusCardStyle: ButtonStyle {
+    var cornerRadius: CGFloat = 12
+
+    func makeBody(configuration: Configuration) -> some View {
+        Card(configuration: configuration, radius: cornerRadius)
+    }
+
+    private struct Card: View {
+        let configuration: Configuration
+        let radius: CGFloat
+        @Environment(\.isFocused) private var focused
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+            configuration.label
+                .clipShape(shape)
+                .overlay(shape.strokeBorder(Color.white, lineWidth: focused ? 4 : 0))
+                .shadow(color: .white.opacity(focused ? 0.35 : 0), radius: focused ? 18 : 0)
+                .scaleEffect(configuration.isPressed ? 1.03 : (focused ? 1.08 : 1))
+                .animation(.easeOut(duration: 0.15), value: focused)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        }
+    }
+}
+
+extension ButtonStyle where Self == FocusCardStyle {
+    static var focusCard: FocusCardStyle { FocusCardStyle() }
 }
 
 struct SectionTitle: View {

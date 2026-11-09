@@ -68,5 +68,7 @@ object PlaybackPrefs {
 // keeps the sharpest; "Fastest start" takes the first one.
 enum class QualityPreference(val raw: String, val label: String) {
     BEST("best", "Best quality"), FASTEST("fastest", "Fastest start");
-    companion object { val current get() = entries.firstOrNull { it.raw == Prefs.string("quality") } ?: BEST }
+    // A stick (low memory) starts fastest by default: waiting for a sharper
+    // stream costs seconds there, and the native player adapts quality anyway.
+    companion object { val current get() = entries.firstOrNull { it.raw == Prefs.string("quality") } ?: if (Performance.lowMemory) FASTEST else BEST }
 }

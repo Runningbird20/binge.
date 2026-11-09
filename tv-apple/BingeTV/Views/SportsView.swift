@@ -266,9 +266,12 @@ struct SportsView: View {
 
     // Games involving teams you follow: live/upcoming first.
     private var yourTeams: some View {
-        let ids = Set(teams.teams.map(\.teamId))
-        let events = boards.flatMap(\.1).filter { $0.competitors.contains { ids.contains($0.team.id ?? "") } }
-            .sorted { $0.sortRank < $1.sortRank }
+        // ESPN team ids are per league (NFL 5 is the Browns, NBA 5 the
+        // Cavaliers): matching ids across every league showed other teams' games.
+        let events = boards.flatMap { league, events in
+            events.filter { event in event.competitors.contains { TeamCenter.followed(teams.teams, teamId: $0.team.id, leaguePath: league.path) != nil } }
+        }
+        .sorted { $0.sortRank < $1.sortRank }
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 18) {
                 SectionTitle(text: "Your teams")
@@ -581,7 +584,7 @@ struct SportThumbCard: View {
             }
             .background(FocusProbe(onFocus: onFocus))
         }
-        .buttonStyle(.card)
+        .buttonStyle(.focusCard)
     }
 }
 
@@ -722,6 +725,6 @@ struct GameCard: View {
             .frame(width: 460, height: 260, alignment: .topLeading)
             .background(Theme.surface)
         }
-        .buttonStyle(.card)
+        .buttonStyle(.focusCard)
     }
 }

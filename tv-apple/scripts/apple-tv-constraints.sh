@@ -23,7 +23,7 @@ case "$1" in
     : > $STATE.log
     (
       while true; do
-        pids=$(pgrep -f "BingeTV.app/BingeTV$" ; pgrep -f "CoreSimulator.*com.apple.WebKit.WebContent")
+        pids=$(pgrep -f "BingeTV.app/BingeTV( |$)" ; pgrep -f "CoreSimulator.*com.apple.WebKit.WebContent")
         total=0
         for pid in ${=pids}; do
           taskpolicy -b -p $pid 2>/dev/null || true
@@ -39,7 +39,7 @@ case "$1" in
     ;;
   stop)
     [[ -f $STATE.pid ]] && kill $(cat $STATE.pid) 2>/dev/null; rm -f $STATE.pid
-    for pid in $(pgrep -f "BingeTV.app/BingeTV$"; pgrep -f "CoreSimulator.*com.apple.WebKit.WebContent"); do taskpolicy -B -p $pid 2>/dev/null || true; done
+    for pid in $(pgrep -f "BingeTV.app/BingeTV( |$)"; pgrep -f "CoreSimulator.*com.apple.WebKit.WebContent"); do taskpolicy -B -p $pid 2>/dev/null || true; done
     BUDGET=$(cat $STATE.budget 2>/dev/null || echo 1800)
     awk -v b=$BUDGET 'BEGIN{m=0;p=0} {if ($2>m){m=$2;p=$3}} END{printf "Peak memory %d MB across %d processes (budget %d MB): %s\n", m, p, b, (m>b ? "OVER" : "ok")}' $STATE.log
     ;;

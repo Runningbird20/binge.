@@ -1,6 +1,7 @@
 package com.binge.tv
 
 import android.app.Application
+import kotlinx.coroutines.launch
 import android.content.ComponentCallbacks2
 import android.os.Bundle
 import android.view.KeyEvent
@@ -74,6 +75,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         DebugLaunch.read(intent)
         if (BuildConfig.DEBUG) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+        // Once the first screen is up: start the web engine (the first WebView
+        // in a process costs ~1s on a stick) and fetch the server switches, so
+        // the first video doesn't wait for either.
+        android.os.Looper.myQueue().addIdleHandler {
+            runCatching { android.webkit.WebView(this).destroy() }
+            runCatching { androidx.media3.exoplayer.ExoPlayer.Builder(this).build().release() }
+            com.binge.tv.data.AppModel.scope.launch { com.binge.tv.data.ServerSwitches.disabledServers() }
+            false
+        }
         val root = FrameLayout(this)
         // Preloads (Warmup) live here: in the window, behind the app, invisible.
         val warmHost = FrameLayout(this).apply { alpha = 0.01f; inert() }

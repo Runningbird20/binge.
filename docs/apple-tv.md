@@ -65,6 +65,7 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
   - **Waiting tiles.** Extra tiles wait as "Paused to keep the others smooth". Picking one closes the least recently watched tile's page: `throttle()` unloads, never just pauses, because a paused page kept its whole WebContent process. A memory warning also closes the least recently watched game.
   - **One server page per tile** (`perTile = 1`). Failed servers retry the next ones (3 batches).
   - **Warmup** skips when `WebEngines.liveCount >= 5`.
+  - **Fixes from the 2026-11-01 live check.** A live-cushion hold no longer counts as a frozen picture (it made Multiview pause a game for good and save a lower limit). A lowered limit expires after 24h. The shared `MultiviewPage` is made once in `.task`; building it in `init` made a throwaway WKWebView on every Sports redraw (10 in 5 min).
   - **HDMI.** While Multiview is open, `avDisplayManager.preferredDisplayCriteria` is held at nil, so Match Content can't re-sync the TV's HDMI per tile.
   - **Simulator.** With separate pages, the tvOS simulator draws only one web video at a time (unfocused tiles look black). That's not a bug; verify on hardware. WebKit reports dropped == total for muted unfocused tiles, so that pattern is ignored.
 
@@ -110,3 +111,4 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
   - `UserJourneyUITests` is a whole evening (browse → watch → skip/pause → subtitles → next episode → search → live game → settings), each step timed (`[journey]` in `build/test.log`).
   - Run it between `scripts/apple-tv-constraints.sh start [budget-MB]` / `stop` to approximate Apple TV hardware. The app and its WebKit processes go to background priority (efficiency cores), and their combined memory is sampled against a budget (1800 MB ≈ Apple TV 4K; ~900 for the Apple TV HD).
   - It's an approximation: the simulator still uses the Mac's video decoder and doesn't enforce tvOS memory limits.
+- **`scripts/multiview-check.sh "team1,team2" [seconds] [budget-MB] [-BingeMultiSwap N] [-BingeMultiExpand N]`**: live Multiview under the same limits. The Debug build logs every tile every 2s (`[mvstat]`: clock, buffer ahead, cushion, muted, resolution, dropped/frozen, held/paused by Multiview), and the script reports each game's share of real time, stalls, holds and wrong-sound samples. Measured 2026-11-01 (2 NFL games, 10 min): 100% / 99% of real time, sound always on the focused game only; the one hold was the Fox feed running dry.

@@ -93,11 +93,11 @@ object Nav {
     // What had focus when each page was opened; Back puts focus back there.
     private val opener = ArrayList<FocusRequester?>()
     var restore by mutableStateOf<FocusRequester?>(null)
-    fun push(screen: Screen) { opener.add(FocusMemory.last); stack.add(screen); if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "nav push $screen -> ${stack.size}") }
+    fun push(screen: Screen) { opener.add(FocusMemory.last); stack.add(screen); if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "nav push $screen -> ${stack.size}") }
     fun pop() {
         if (stack.isEmpty()) return
         stack.removeAt(stack.lastIndex)
-        if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "nav pop -> ${stack.size}")
+        if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge", "nav pop -> ${stack.size}")
         restore = opener.removeLastOrNull()
         returns++
     }
