@@ -7,12 +7,13 @@ import TitleRow from '../components/TitleRow';
 import FantasyBoard from '../components/FantasyBoard';
 import useDeviceType from '../hooks/useDeviceType';
 import { loadSportsStreams, sameGame, splitTeamsFromTitle } from '../utils/sportsProviders';
-import { fetchScoreboards } from '../utils/liveScores';
+import { fetchScoreboards, fetchTeamLooks } from '../utils/liveScores';
 import { followedTeamPlays, listFollowedTeams, TEAMS_EVENT } from '../utils/teams';
 import {
   MULTIVIEW_MAX,
   teamsInNameOrder,
   withScore,
+  withTeamLooks,
   fmtTime,
   fmtDay,
   getStatus,
@@ -107,7 +108,19 @@ export default function Sports() {
     const timer = setInterval(run, SCORES_POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [schedule]);
-  const streams = useMemo(() => schedule.map((stream) => withScore(stream, scores.get(stream.id))), [schedule, scores]);
+  // Logos and colors for games past the scoreboards' day and a half, so their
+  // cards are drawn like the rest instead of showing a feed's own picture.
+  const [looks, setLooks] = useState(() => new Map());
+  useEffect(() => {
+    if (!schedule.length) return undefined;
+    let cancelled = false;
+    fetchTeamLooks(schedule).then((next) => { if (!cancelled) setLooks(next); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [schedule]);
+  const streams = useMemo(
+    () => schedule.map((stream) => withTeamLooks(withScore(stream, scores.get(stream.id)), looks.get(stream.id))),
+    [schedule, scores, looks],
+  );
 
   const toggleHideScores = () => {
     setHideScores((on) => {

@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import InstallApp from './InstallApp';
 import useDeviceType from '../hooks/useDeviceType';
+import { toast } from 'sonner';
 import { APP_DOWNLOADS, captureInstallPrompt } from '../utils/installApp';
 
 jest.mock('../hooks/useDeviceType', () => jest.fn());
+jest.mock('sonner', () => ({ toast: jest.fn() }));
 
 const ANDROID = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
@@ -13,11 +15,21 @@ beforeAll(() => captureInstallPrompt());
 beforeEach(() => useDeviceType.mockReturnValue({ isMobile: true }));
 afterEach(() => jest.restoreAllMocks());
 
-test('Android: Add to Home Screen through the browser’s own dialog, or download the app', async () => {
+test('Android: Install downloads the app straight away, with a note on what to do next', () => {
   as(ANDROID);
   render(<InstallApp />);
+  const install = screen.getByRole('link', { name: 'Install' });
+  expect(install).toHaveAttribute('href', APP_DOWNLOADS.android);
+  fireEvent.click(install);
+  expect(toast).toHaveBeenCalledWith('Downloading binge.apk', expect.objectContaining({ description: expect.stringMatching(/Open it/) }));
+  expect(screen.queryByRole('dialog')).toBeNull(); // no sheet on Android
+});
+
+test('a phone that’s neither: Add to Home Screen through the browser’s own dialog, or download the app', async () => {
+  as('Mozilla/5.0 (Mobile; rv:48.0) Gecko/48.0 Firefox/48.0 KAIOS/2.5');
+  render(<InstallApp />);
   fireEvent.click(screen.getByRole('button', { name: 'Install' }));
-  // Before Chrome has offered to install: where to find it in the menu.
+  // Before the browser has offered to install: where to find it in the menu.
   expect(screen.getByText(/In your browser’s menu/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Download binge.apk' })).toHaveAttribute('href', APP_DOWNLOADS.android);
 
@@ -46,10 +58,10 @@ test('iPhone: the Share steps, and the app’s download link to take to a comput
 test('not inside the phone apps, and not on computers', () => {
   as(`${ANDROID} BingeApp/1.0`);
   const { unmount } = render(<InstallApp />);
-  expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Install' })).toBeNull();
   unmount();
   as(ANDROID);
   useDeviceType.mockReturnValue({ isMobile: false });
   render(<InstallApp />);
-  expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Install' })).toBeNull();
 });

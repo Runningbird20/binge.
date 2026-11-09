@@ -7,8 +7,6 @@ jest.mock('./BottomSheet', () => ({ open, title, children }) => (open ? <div rol
 
 const SERVERS = [{ id: 'cinesrc' }, { id: 'vidrift' }, { id: 'vidy' }, { id: 'vidlink' }, { id: '2embed' }];
 const props = {
-  prefs: { audio: 'original', subtitles: 'off' },
-  onPrefsChange: () => {},
   servers: SERVERS,
   currentServer: 'cinesrc',
   serverLabels: SERVER_LABELS,
@@ -46,4 +44,14 @@ test('phones: the server sheet marks them too', () => {
   expect(within(sheet).getAllByText('No pop-ups')).toHaveLength(2);
   expect(marked('VidRift')).toBe(true);
   expect(marked('Vidy')).toBe(false);
+});
+
+test('audio and subtitle languages are left to Settings, on computers and phones', () => {
+  const { unmount } = render(<PlaybackOptionsPanel {...props} />);
+  expect(screen.getByRole('radiogroup', { name: 'Server' })).toBeInTheDocument();
+  expect(screen.queryByRole('radiogroup', { name: /Audio language|Subtitle language/ })).toBeNull();
+  unmount();
+  render(<MobilePlaybackPickers {...props} />);
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  expect(screen.queryByText('Subtitles')).toBeNull();
 });

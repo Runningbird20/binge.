@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { reachabilityMap } from '../../utils/hostReachability';
 import { fetchTmdbLanguageInfo } from '../../utils/tmdb';
-import { fetchReportSummary, fetchProviderHealth, fetchDisabledServers, getPlaybackPrefs, getServerMemory, rankServers, savePlaybackPrefs, submitStreamReport, wantedAudio } from '../../utils/streamPreferences';
+import { fetchReportSummary, fetchProviderHealth, fetchDisabledServers, getPlaybackPrefs, getServerMemory, rankServers, submitStreamReport, wantedAudio } from '../../utils/streamPreferences';
 import { EVENT_PROVIDERS, PROVIDER_HOSTS, SERVER_CONFIRM_SECONDS, bestServerFor, providerIdsFor } from '../../utils/embedProviders';
 
 // Which embed server plays (see utils/streamPreferences.js): ranked from the
@@ -9,7 +9,7 @@ import { EVENT_PROVIDERS, PROVIDER_HOSTS, SERVER_CONFIRM_SECONDS, bestServerFor,
 // reports, server health and what worked here before. The player follows the
 // ranking until the viewer picks a server or one is confirmed working.
 export default function useServerChoice({ item, mediaType, externalId, resetKey }) {
-  const [prefs, setPrefs] = useState(() => getPlaybackPrefs());
+  const [prefs] = useState(() => getPlaybackPrefs());
   const [provider, setProvider] = useState(() => bestServerFor(item, mediaType, getPlaybackPrefs()));
   const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
   const [originalLanguage, setOriginalLanguage] = useState(item?.original_language || null);
@@ -126,22 +126,6 @@ export default function useServerChoice({ item, mediaType, externalId, resetKey 
     return (candidates.find((server) => !avoidAudio || server.audio !== avoidAudio) || candidates[0])?.id || currentId;
   }
 
-  function changePrefs(patch) {
-    const next = savePlaybackPrefs(patch);
-    setPrefs(next);
-    if (patch.audio) {
-      // New audio language: let the ranking pick again, unless the current
-      // server is already known to have it.
-      const ranking = rankServers(availableIds, { prefs: next, originalLanguage, summary: reportSummary, memory: serverMemory });
-      const current = ranking.find((server) => server.id === provider);
-      const want = wantedAudio(next, originalLanguage);
-      if (!(current?.audio && current.audio === want)) {
-        serverLockedRef.current = false;
-        if (ranking[0]?.id) setProvider(ranking[0].id);
-      }
-    }
-  }
-
   async function reportBroken() {
     if (item?.id) await submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: false }).catch(() => {});
     const memory = getServerMemory(memoryType, item?.id);
@@ -154,6 +138,6 @@ export default function useServerChoice({ item, mediaType, externalId, resetKey 
   return {
     prefs, provider, setProvider, memoryType, originalLanguage, reportSummary, providerHealth,
     serverMemory, setServerMemory, serverLockedRef, manualPickRef, blockedIds, availableIds, rankedServers,
-    confirmServer, reportServerAudio, changePrefs, reportBroken,
+    confirmServer, reportServerAudio, reportBroken,
   };
 }

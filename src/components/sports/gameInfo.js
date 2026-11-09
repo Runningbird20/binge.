@@ -12,15 +12,29 @@ export function teamsInNameOrder(stream, score) {
   return [first, second];
 }
 
-// Adds the ESPN score to a schedule entry, and its logos when the feeds
-// had none (most NFL/NBA/MLB/Premier League listings).
+// Adds the ESPN score to a schedule entry, and its logos and team colors when
+// the feeds had none (most NFL/NBA/MLB/Premier League listings have no logos;
+// only PPV sends colors).
 export function withScore(stream, score) {
   if (!score) return stream;
   const next = { ...stream, score };
-  if (!(stream.logos?.home && stream.logos?.away)) {
-    const [first, second] = teamsInNameOrder(stream, score);
-    if (first?.logo && second?.logo) next.logos = { home: first.logo, away: second.logo };
+  const [first, second] = teamsInNameOrder(stream, score);
+  if (!(stream.logos?.home && stream.logos?.away) && first?.logo && second?.logo) {
+    next.logos = { home: first.logo, away: second.logo };
   }
+  if (!(stream.colors?.length >= 2) && first?.color && second?.color) next.colors = [first.color, second.color];
+  if (!stream.conference && score.conference) next.conference = score.conference;
+  return next;
+}
+
+// Logos and colors from the league's team list (fetchTeamLooks) for games
+// still missing them after their score, so every card is drawn the same way.
+export function withTeamLooks(stream, looks) {
+  if (!looks) return stream;
+  const next = { ...stream };
+  if (!(stream.logos?.home && stream.logos?.away) && looks.logos) next.logos = looks.logos;
+  if (!(stream.colors?.length >= 2) && looks.colors) next.colors = looks.colors;
+  if (!stream.conference && looks.conference) next.conference = looks.conference;
   return next;
 }
 

@@ -1,5 +1,6 @@
-// Multi-provider sports stream aggregation. Combines 3 independent, free
-// live-sports APIs (PPV.st, Streamed.pk, StreamFree) into one feed with
+// Multi-provider sports stream aggregation. Combines independent, free
+// live-sports feeds (PPV.st, StreamFree, TimStreams, and college games on TV
+// channels; see sportsFeeds.js) into one feed with
 // exactly ONE entry per real-world game; every provider feed for that game
 // becomes a selectable "server" on it.
 //
@@ -18,13 +19,23 @@
 // route (/api/sports/streams), which returns the unmerged list; merging only happens here.
 
 import { fetchDisabledServers } from './streamPreferences';
-import { fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized } from './sportsFeeds';
+import { fetchPpvNormalized, fetchStreamfreeNormalized, fetchTimstreamsNormalized, fetchTvChannelGamesNormalized } from './sportsFeeds';
 
 const PROVIDER_NAMES = {
   ppv: 'PPV',
-  streamed: 'Streamed',
   streamfree: 'StreamFree',
+  timstreams: 'TimStreams',
 };
+
+// The feeds, in the fixed order they're merged in (a game takes its name and
+// id from its first listing, so the order must never depend on arrival), with
+// the admin switch that turns each off. Both TimStreams feeds share one switch.
+const FEEDS = [
+  { fetch: fetchPpvNormalized, key: 'sports:ppv' },
+  { fetch: fetchStreamfreeNormalized, key: 'sports:streamfree' },
+  { fetch: fetchTimstreamsNormalized, key: 'sports:timstreams' },
+  { fetch: fetchTvChannelGamesNormalized, key: 'sports:timstreams' },
+];
 
 const MERGE_WINDOW_SEC = 3 * 3600;
 
@@ -122,8 +133,16 @@ function titleSlug(title) {
   return String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+// Women's events: a women's game never merges with the men's game between
+// the same two schools (college doubleheaders are often hours apart on one
+// day), and gets its own id.
+function isWomens(item) {
+  return /\bwomen|\bncaaw\b|\(w\)/i.test(`${item.tag || ''} ${item.name || ''}`);
+}
+
 function sameEvent(a, b) {
   if (a.category !== b.category) return false;
+  if (isWomens(a) !== isWomens(b)) return false;
 
   const timesKnown = a.startsAt && b.startsAt && !a.alwaysLive && !b.alwaysLive;
   if (timesKnown && Math.abs(a.startsAt - b.startsAt) > MERGE_WINDOW_SEC) return false;
@@ -154,6 +173,7 @@ function nickname(name) {
 const LEAGUE_ALIASES = {
   ncaaf: 'College Football', 'ncaa football': 'College Football', 'college football': 'College Football',
   ncaab: 'College Basketball', 'ncaa basketball': 'College Basketball', 'college basketball': 'College Basketball',
+  ncaaw: "Women's College Basketball", 'ncaa women\'s basketball': "Women's College Basketball", 'women\'s college basketball': "Women's College Basketball",
   epl: 'Premier League', 'english premier league': 'Premier League', 'premier league': 'Premier League',
   'la liga': 'LaLiga', laliga: 'LaLiga',
   ucl: 'Champions League', 'uefa champions league': 'Champions League', 'champions league': 'Champions League',
@@ -213,7 +233,14 @@ function eventId(entry) {
     ? [entry.teams.home, entry.teams.away].map((name) => teamTokens(name).join('-')).sort().join('_')
     : titleSlug(entry.name).replace(/\s+/g, '-');
   const day = entry.startsAt && !entry.alwaysLive ? new Date(entry.startsAt * 1000).toISOString().slice(0, 10) : 'live';
-  return `${entry.category}|${base}|${day}`.toLowerCase();
+  return `${entry.category}${isWomens(entry) ? '-w' : ''}|${base}|${day}`.toLowerCase();
+}
+
+// Server order within a game; any other feed id goes last.
+const SERVER_ORDER = ['ppv', 'streamfree', 'timstreams'];
+function feedRank(id) {
+  const index = SERVER_ORDER.indexOf(id);
+  return index === -1 ? SERVER_ORDER.length : index;
 }
 
 export function mergeNormalized(rawItems) {
@@ -253,6 +280,7 @@ export function mergeNormalized(rawItems) {
     const timing = members.find((member) => member.provider.id === 'ppv') || members[0];
     const withTeams = members.find((member) => member.teams) || members[0];
     const withLogos = members.find((member) => member.logos?.home && member.logos?.away);
+    const withColors = members.find((member) => member.colors?.length >= 2);
     const tagged = members.find((member) => member.tag && !/24\/7/i.test(member.tag));
     const entry = {
       category: timing.category,
@@ -260,15 +288,16 @@ export function mergeNormalized(rawItems) {
       name: '',
       poster: (members.find((member) => member.provider.id === 'ppv' && member.poster) || members.find((member) => member.poster))?.poster || null,
       logos: withLogos?.logos || null,
-      colors: members.find((member) => member.colors)?.colors || null,
+      colors: withColors?.colors || null,
+      // A college conference game's conference (its card shows that mark).
+      conference: members.find((member) => member.conference)?.conference || null,
       tag: tagged?.tag || null,
       startsAt: timing.startsAt,
       endsAt: timing.endsAt,
       alwaysLive: members.every((member) => member.alwaysLive),
       replay: timing.replay,
-      // PPV first (most reliable in practice), then StreamFree, then
-      // Streamed's sub-sources.
-      providers: [...providers].sort((a, b) => ['ppv', 'streamfree', 'streamed'].indexOf(a.id) - ['ppv', 'streamfree', 'streamed'].indexOf(b.id)),
+      // PPV first (most reliable in practice), then StreamFree, then TimStreams.
+      providers: [...providers].sort((a, b) => feedRank(a.id) - feedRank(b.id)),
     };
     entry.name = cleanName(entry, (members.find((member) => member.provider.id === 'ppv') || members[0]).name);
     // Logos follow the name's order ("A vs B" → A's logo first), even when
@@ -277,6 +306,11 @@ export function mergeNormalized(rawItems) {
     if (entry.logos && withLogos?.teams && named
       && teamsMatch(named.home, withLogos.teams.away) && !teamsMatch(named.home, withLogos.teams.home)) {
       entry.logos = { home: entry.logos.away, away: entry.logos.home };
+    }
+    // Colors too: each team's color sits behind its own logo.
+    if (entry.colors && withColors?.teams && named
+      && teamsMatch(named.home, withColors.teams.away) && !teamsMatch(named.home, withColors.teams.home)) {
+      entry.colors = [entry.colors[1], entry.colors[0]];
     }
     entry.league = inferLeague(entry);
     entry.id = eventId(entry);
@@ -303,8 +337,9 @@ export function mergeNormalized(rawItems) {
 
 // ── Admin switches ─────────────────────────────────────────────────────
 // Sports feeds share server_config with the movie servers, under a
-// "sports:" prefix: sports:ppv, sports:streamfree, sports:streamed (all of
-// Streamed) and sports:streamed:<source> (one Streamed source, e.g. alpha).
+// "sports:" prefix: sports:ppv, sports:streamfree and sports:timstreams (its
+// events and the TV-channel college games). sports:streamed and
+// sports:streamed:<source> are from Streamed, closed since November 2026.
 
 export const SPORTS_PROVIDER_IDS = Object.keys(PROVIDER_NAMES);
 
@@ -333,11 +368,7 @@ export function countFeedsBySwitch(rawItems) {
 // ── Public API ─────────────────────────────────────────────────────────
 
 export async function fetchRawSportsStreams() {
-  const results = await Promise.allSettled([
-    fetchPpvNormalized(),
-    fetchStreamedNormalized(),
-    fetchStreamfreeNormalized(),
-  ]);
+  const results = await Promise.allSettled(FEEDS.map((feed) => feed.fetch()));
   const lists = results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value);
   if (lists.length === 0) {
     const firstError = results.find((result) => result.status === 'rejected');
@@ -381,11 +412,11 @@ export async function fetchSportsStreams() {
 // (StreamFree takes ~0.7s, the others ~0.3s). Resolves with the final list.
 export async function loadSportsStreams(onUpdate) {
   const disabledPromise = fetchDisabledServers().catch(() => new Set());
-  // Kept in feed order (PPV, Streamed, StreamFree) whatever order they arrive
-  // in: the merge takes a game's name and id from its first listing, so an
-  // arrival-order merge gave the same game a different id from one refresh to
-  // the next (and the player lost the game it was showing).
-  const byFeed = [null, null, null];
+  // Kept in feed order (FEEDS) whatever order they arrive in: the merge takes
+  // a game's name and id from its first listing, so an arrival-order merge gave
+  // the same game a different id from one refresh to the next (and the player
+  // lost the game it was showing).
+  const byFeed = FEEDS.map(() => null);
   const ordered = () => byFeed.filter(Boolean);
   let settled = 0;
   let lastError = null;
@@ -394,9 +425,7 @@ export async function loadSportsStreams(onUpdate) {
   // 2026, otherwise errors on every page that loads sports). Waits at most
   // 1.5s for the switches.
   const switches = await Promise.race([disabledPromise, new Promise((resolve) => setTimeout(() => resolve(new Set()), 1500))]);
-  const feedKeys = ['sports:ppv', 'sports:streamed', 'sports:streamfree'];
-  const feeds = [fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized]
-    .map((fetchFeed, index) => (switches.has(feedKeys[index]) ? async () => [] : fetchFeed));
+  const feeds = FEEDS.map((feed) => (switches.has(feed.key) ? async () => [] : feed.fetch));
   await Promise.all(feeds.map((fetchFeed, index) => fetchFeed()
     .then(async (items) => {
       byFeed[index] = items;

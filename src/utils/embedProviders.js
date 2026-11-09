@@ -21,16 +21,29 @@ import { getServerMemory, rankServers } from './streamPreferences';
 // multiembed.mov (connection reset), autoembed.co (no stream).
 // Removed 2026-11-05: vidsrc.rip ("VidSrc RIP"). Its domain served an ad-filled
 // news site, then a "Redirecting…" page, instead of a player.
+// Added 2026-11-09: VixSrc, VidSpark, VidCore and EmbedWave, the ones of ~30
+// candidates that played Fight Club, a 2026 film, Game of Thrones 1x1, an
+// episode aired 4 days earlier and a new K-drama episode, in Chrome on a
+// non-provider origin, with and without the sandbox. Didn't make it:
+// embed.su and vidsrc.cc (refuse to be framed), VidFast (stuck "fetching"),
+// 111movies, PrimeSrc, VidJoy (a fake YouTube frame), Vidzy (French audio),
+// moviesapi.to (VidSpark's own backend again). vidking.net, vidsrc.xyz/.icu/
+// .vip and rivestream.org didn't resolve at all; multiembed, vidora.su,
+// autoembed.cc and embed-api.stream were sinkholed on the test network, so
+// they're untested, not rejected.
 //   events:    sends PLAYER_EVENT postMessages (play/timeupdate), so the
 //              player can confirm real playback instead of guessing
 //   subtitles: accepts a default subtitle language parameter
 //   idKinds:   which external ids the URL accepts
 //   types:     media types it actually streams
 //   sandbox:   plays in a sandboxed iframe, which blocks its pop-ups and
-//              redirects (utils/popupSandbox.js). Tested 2026-11-05 in Chrome,
-//              each server sandboxed and not, on a non-provider origin: only
-//              VidRift and CineSrc play sandboxed. The rest show a "sandbox
-//              detected" page (2Embed goes black), so they load unsandboxed.
+//              redirects (utils/popupSandbox.js). Retested 2026-11-09 in
+//              Chrome on a non-provider origin, every server sandboxed on
+//              three titles (Fight Club, a 2026 film, GoT 1x1) plus once
+//              unsandboxed: VidRift, CineSrc, VidSpark, VidCore and EmbedWave
+//              play sandboxed. Vidy, VidLink, VixSrc and both VidSrcs show a
+//              "sandbox detected" page but play unsandboxed. Videasy, 2Embed
+//              and VidSrc Classic played in neither mode that day (see each).
 //              A server without the flag is tried sandboxed only if it
 //              reports playback (so a refusal can be noticed).
 export const PROVIDERS = [
@@ -125,6 +138,26 @@ export const PROVIDERS = [
     },
   },
   {
+    // https://vixsrc.to — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
+    // PLAYER_EVENT play/pause/seeked/ended/timeupdate, with the event under
+    // `event` rather than `data`. Plays the title's original-language track
+    // (an Italian dub is the second track). Autoplays and ignores
+    // autoplay=false, so no silent preload.
+    id: 'vixsrc',
+    label: 'VixSrc',
+    sandbox: false, // "Please Disable Sandbox"
+    events: true,
+    idKinds: ['tmdb', 'imdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vixsrc.to');
+      url.searchParams.set('primaryColor', 'F4F6F8');
+      if (startAt > 0) url.searchParams.set('startAt', String(Math.floor(startAt)));
+      return url.toString();
+    },
+  },
+  {
     // https://vidsrc.ru/docs — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
     // MEDIA_DATA progress messages to the parent window.
     id: 'vidsrc-ru',
@@ -160,6 +193,8 @@ export const PROVIDERS = [
   {
     id: 'videasy',
     label: 'Videasy',
+    // 2026-11-09: player.videasy.net now 301s to player.videasy.to, whose
+    // certificate is self-signed (DDoS-Guard), so browsers refuse it.
     sandbox: false, // "Iframe Sandbox Detected"
     events: true,
     idKinds: ['tmdb'],
@@ -171,8 +206,50 @@ export const PROVIDERS = [
     },
   },
   {
+    // https://vidspark.to — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
+    // { source: 'vidspark-player', event, currentTime, duration } and takes
+    // { action } commands. It never starts by itself (there's no autoplay
+    // parameter), so the player sends { action: 'play' } once it loads
+    // (EmbedPlayer's handleFrameLoad); a preload stays silent. That started
+    // movies and some episodes in testing; on others its player only loads
+    // the video after a real click, so it ranks below the servers that
+    // autoplay (an automatically chosen server gets FAILOVER_SECONDS).
+    id: 'vidspark',
+    label: 'VidSpark',
+    sandbox: true, // plays sandboxed (unsandboxed, its first clicks opened pop-ups)
+    events: true,
+    idKinds: ['tmdb', 'imdb'],
+    types: ['movie', 'tv_show'],
+    silentPreload: true,
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt } = {}) {
+      const isTV = mediaType === 'tv_show';
+      const url = new URL(isTV ? `/tv/${id.value}/${season}/${episode}` : `/movie/${id.value}`, 'https://vidspark.to');
+      url.searchParams.set('theme', 'F4F6F8');
+      if (startAt > 0) url.searchParams.set('t', String(Math.floor(startAt)));
+      return url.toString();
+    },
+  },
+  {
+    // https://vidcore.org — TMDB ids only (IMDb ids 404). Sends no playback
+    // messages and ignores its documented startAt. Now and then it shows a
+    // full-page ad instead of the player; sandboxed, that can't open anything.
+    id: 'vidcore',
+    label: 'VidCore',
+    sandbox: true, // plays sandboxed (unsandboxed, clicks opened pop-ups)
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const path = mediaType === 'tv_show' ? `/embed/tv/${id.value}/${season}/${episode}` : `/embed/movie/${id.value}`;
+      const url = new URL(path, 'https://vidcore.org');
+      url.searchParams.set('autoplay', 'true');
+      return url.toString();
+    },
+  },
+  {
     id: '2embed',
     label: '2Embed',
+    // 2026-11-09: unsandboxed, it navigated the whole tab to 2embed.stream
+    // within seconds of loading, with no click, on every title tried.
     sandbox: false, // black when sandboxed (and redirects the whole tab when not)
     idKinds: ['tmdb', 'imdb'],
     types: ['tv_show', 'movie'],
@@ -185,6 +262,7 @@ export const PROVIDERS = [
   {
     id: 'vidsrc-embed-ru',
     label: 'VidSrc Classic',
+    // 2026-11-09: unsandboxed, an ad page and a pop-up, no video, on 3 titles.
     sandbox: false, // "This content can’t be embedded in a sandboxed frame"
     subtitles: true,
     idKinds: ['tmdb', 'imdb'],
@@ -198,6 +276,22 @@ export const PROVIDERS = [
       url.searchParams.set('autoplay', noAutoplay ? '0' : '1');
       // Documented: default subtitle language, ISO 639-1.
       if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
+      return url.toString();
+    },
+  },
+  {
+    // https://embedwave.cc/docs — a front for several backends: its own
+    // ("nxsha") by default, also CineSrc and Videasy, which are here
+    // directly. Sends no playback messages.
+    id: 'embedwave',
+    label: 'EmbedWave',
+    sandbox: true, // plays sandboxed
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const path = mediaType === 'tv_show' ? `/embed/tv/${id.value}/${season}/${episode}` : `/embed/movie/${id.value}`;
+      const url = new URL(path, 'https://embedwave.cc');
+      url.searchParams.set('autoplay', '1');
       return url.toString();
     },
   },
@@ -254,11 +348,11 @@ export const FAILOVER_SECONDS = 25;
 // Servers that report pause/play as well as time, so "time stopped moving"
 // can be told apart from "viewer paused" — buffering detection only runs
 // for these.
-export const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'videasy']);
+export const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'videasy', 'vixsrc', 'vidspark']);
 
 // Servers that can start at a given second (URL param or message), so a
 // mid-play switch keeps the viewer's place.
-export const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink']);
+export const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'vixsrc', 'vidspark']);
 
 export const UP_NEXT_SECONDS = 30;   // show the Up Next card in the last 30s
 export const UP_NEXT_COUNTDOWN = 10; // seconds before the next episode starts

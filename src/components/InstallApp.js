@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { toast } from 'sonner';
 import { Check, Copy, DeviceMobile, DownloadSimple, Export, PlusSquare } from '@phosphor-icons/react';
 import BottomSheet from './BottomSheet';
 import useDeviceType from '../hooks/useDeviceType';
 import { APP_DOWNLOADS, promptInstall, useInstallApp } from '../utils/installApp';
 
-// "Install binge.": a button at the top right of the phone header, opening a
+// "Install binge.": a button at the top right of the phone header. On Android
+// it downloads the app (binge.apk) straight away. On an iPhone it opens a
 // sheet with the two ways to have binge. as an app, and what each gets you.
 // Only on phones in a browser: not on computers, in a Home Screen install or
 // inside the phone apps (utils/installApp.js).
@@ -15,6 +17,20 @@ export default function InstallApp() {
   const [open, setOpen] = useState(false);
   if (!isMobile || installed) return null;
   const close = () => setOpen(false);
+
+  // Android: one tap downloads the app. GitHub sends the release file as a
+  // download, so the page stays where it is; a note says what to do with it.
+  if (platform === 'android') {
+    return (
+      <a
+        className="navbar-install"
+        href={APP_DOWNLOADS.android}
+        onClick={() => toast('Downloading binge.apk', { description: 'Open it when it’s done, and allow installs from your browser if Android asks.' })}
+      >
+        <DownloadSimple size={16} weight="bold" aria-hidden="true" /> Install
+      </a>
+    );
+  }
 
   async function addToHomeScreen() {
     if (await promptInstall() === 'accepted') close();

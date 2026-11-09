@@ -9,6 +9,7 @@ import { fetchTmdbLanguageInfo } from '../utils/tmdb';
 import { useSeasonEpisodes } from '../hooks/useTitleDetails';
 import * as episodeMarkers from '../utils/episodeMarkers';
 import { expectedRuntimeSeconds } from '../utils/runtimeCheck';
+import { getResumePosition, positionKey } from '../utils/playbackPositions';
 
 const { markEpisodeWatched, fetchEpisodeProgress } = supabaseData;
 const { submitStreamReport } = streamPreferences;
@@ -269,4 +270,61 @@ test('the X closes the player entirely; Escape (a TV remote’s Back) only steps
   fireEvent.click(screen.getByRole('button', { name: 'Close player' }));
   expect(onClose).toHaveBeenCalledTimes(1);
   expect(onBack).toHaveBeenCalledTimes(1);
+});
+
+test('the sleep timer stops playback at its time, saving the position, and Resume picks up there', async () => {
+  await setup();
+  fireEvent.click(screen.getByRole('button', { name: 'Sleep timer' }));
+  fireEvent.click(screen.getByRole('button', { name: '15 min' }));
+  expect(screen.getByRole('button', { name: /Stops in 15 min/ })).toBeInTheDocument();
+  post(vidrift(600));
+  post({ type: 'vidrift:paused', currentTime: 600 });
+  await flush(15 * 60 * 1000);
+  expect(screen.queryByTitle(/^Watch /)).toBeNull();
+  expect(screen.getByText('The sleep timer stopped playback at 10:00.')).toBeInTheDocument();
+  expect(getResumePosition(positionKey('tv_show', 42, 1, 1))).toBe(600);
+  expect(screen.getByRole('button', { name: 'Sleep timer' })).toBeInTheDocument(); // off again
+  fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+  await flush();
+  expect(frame().getAttribute('src')).toMatch(/[?&]t=600\b/);
+});
+
+test('“End of episode” stops when the episode ends, without Up Next, ready to play the next one', async () => {
+  await setup({ watched: [] });
+  fireEvent.click(screen.getByRole('button', { name: 'Sleep timer' }));
+  fireEvent.click(screen.getByRole('button', { name: 'End of episode' }));
+  expect(screen.getByRole('button', { name: /Stops after this episode/ })).toBeInTheDocument();
+  post(vidrift(2590)); // the last 30s: Up Next would show now
+  await flush(1000);
+  expect(screen.queryByRole('dialog', { name: 'Up next' })).toBeNull();
+  post(vidrift(2597));
+  await flush(1000);
+  expect(screen.getByText('The sleep timer stopped playback after the episode.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /S1 · E2/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Play the next episode' }));
+  await flush();
+  expect(frame().getAttribute('src')).toMatch(/[?&]e=2\b/);
+});
+
+test('phone: the sleep timer is a row of chips under the video', async () => {
+  await setup({ mobile: true });
+  fireEvent.click(screen.getByRole('button', { name: '30 min' }));
+  expect(screen.getByText('Sleep timer · stops in 30 min')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '30 min' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('VidSpark is told to play once loaded, until it reports playing', async () => {
+  await setup({ item: MOVIE, mediaType: 'movie' });
+  fireEvent.click(screen.getByRole('button', { name: 'Servers' }));
+  fireEvent.click(screen.getByRole('radio', { name: /VidSpark/ }));
+  await flush();
+  expect(frame().getAttribute('src')).toMatch(/^https:\/\/vidspark\.to\/movie\/27205\b/);
+  const send = jest.spyOn(frame().contentWindow, 'postMessage').mockImplementation(() => {});
+  fireEvent.load(frame());
+  await flush(1500);
+  expect(send).toHaveBeenCalledWith({ action: 'play' }, 'https://vidspark.to');
+  expect(send).toHaveBeenCalledTimes(1);
+  post({ source: 'vidspark-player', event: 'play', currentTime: 0, duration: 8888 });
+  await flush(8000);
+  expect(send).toHaveBeenCalledTimes(1);
 });
