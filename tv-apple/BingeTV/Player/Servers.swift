@@ -51,6 +51,8 @@ struct StreamServer: Identifiable, Hashable {
         return list
     }
 
+    static func lastWorking(for title: Title) -> String? { UserDefaults.standard.string(forKey: lastKey(title)) }
+
     static func rememberWorking(_ server: StreamServer, for title: Title) {
         UserDefaults.standard.set(server.id, forKey: lastKey(title))
     }

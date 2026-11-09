@@ -28,7 +28,7 @@ final class TrailerPlayer: ObservableObject {
               let video = videos.results.first(where: { $0.site == "YouTube" && $0.type == "Trailer" && $0.official == true })
                 ?? videos.results.first(where: { $0.site == "YouTube" && $0.type == "Trailer" }) else { return }
         try? await Task.sleep(for: .seconds(2.5))
-        guard !Task.isCancelled, let engine = WebEngines.make(allowedHost: "www.youtube-nocookie.com"), engine is ModernWebView else { return }
+        guard !Task.isCancelled, let engine = WebEngines.make(allowedHost: "www.youtube-nocookie.com", native: false), engine is ModernWebView else { return }
         web = engine
         engine.view.frame = surface.bounds
         engine.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]

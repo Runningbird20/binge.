@@ -163,7 +163,10 @@ struct SportsView: View {
                 #if DEBUG
                 // -BingeMulti "celtics,flyers": open Multiview with those live games.
                 if let wanted = UserDefaults.standard.string(forKey: "BingeMulti")?.lowercased(), !multiOpen {
-                    let picks = wanted.split(separator: ",").compactMap { word in liveGames.first { $0.title.lowercased().contains(word) } }
+                    // 24/7 channels count here, so Multiview can be checked when nothing's live.
+                    let picks = wanted.split(separator: ",").compactMap { word in
+                        playable.filter(\.isLive).first { $0.title.lowercased().contains(word) }
+                    }
                     if picks.count >= 2 {
                         UserDefaults.standard.removeObject(forKey: "BingeMulti")
                         multi = picks

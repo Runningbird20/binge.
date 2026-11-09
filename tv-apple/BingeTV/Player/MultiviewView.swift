@@ -78,7 +78,10 @@ final class MultiviewTile: ObservableObject, Identifiable {
         didSet { surface.backgroundColor = page == nil ? .black : .clear }
     }
     // This game's slot in the shared page (for its position on screen).
-    var slotId: String? { ((race?.winner?.web ?? race?.candidates.first?.web) as? PageSlotEngine)?.id }
+    var slotId: String? {
+        let web = race?.winner?.web ?? race?.candidates.first?.web
+        return ((web as? PageSlotEngine) ?? ((web as? HybridEngine)?.pageEngine as? PageSlotEngine))?.id
+    }
 
     init(game: SportGame) {
         self.game = game
@@ -100,7 +103,11 @@ final class MultiviewTile: ObservableObject, Identifiable {
         let page = self.page
         let race = StreamRace(request: PlayRequest(title: title, liveStreams: servers), servers: servers,
                               mode: .live, keepMuted: true,
-                              makeEngine: page.map { page in { _ in page.makeSlot() } })
+                              makeEngine: page.map { page in { _ in
+                                  // The slot finds the stream; AVPlayer plays it (the iframe then goes).
+                                  let slot = page.makeSlot()
+                                  return NativePlayback.enabled ? HybridEngine(page: slot, clear: true) : slot
+                              } })
         if page != nil { race.container.backgroundColor = .clear }
         race.container.frame = surface.bounds
         race.container.autoresizingMask = [.flexibleWidth, .flexibleHeight]
