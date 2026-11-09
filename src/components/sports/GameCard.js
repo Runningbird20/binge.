@@ -5,6 +5,7 @@ import { hostOf, reachabilityMap } from '../../utils/hostReachability';
 import { MULTIVIEW_MAX, teamsInNameOrder, timeUntil, getStatus, statusLabel, scoreWords } from './gameInfo';
 import { HideScores } from './HideScores';
 import { CatIcon } from './CatIcon';
+import { conferenceLogo, leagueLogo } from './leagueLogos';
 
 // Warms a game while the pointer rests on its card: expands its servers
 // (cached) and probes their hosts, so opening it starts the stream at once.
@@ -27,11 +28,79 @@ function warmGame(stream) {
     .catch(() => warmed.delete(stream.id));
 }
 
-// Team-logo art for games without a provider thumbnail, tinted with the
-// teams' colors when PPV provides them.
+// The colors a game's art falls back to when no feed or ESPN has the teams'.
+const NO_COLORS = ['#2b3446', '#2b3446'];
+const HEX = /^#[0-9a-f]{6}$/i;
+
+const ART_BASE = [0x10, 0x14, 0x1d];
+
+// A team color toned down toward the art's dark base, as PPV's thumbnails
+// do, so a bright one (Ohio State red, Oregon green) doesn't swallow a logo
+// in the same color.
+function deepen(hex, keep = 0.68) {
+  const rgb = [1, 3, 5].map((index, channel) => Math.round(parseInt(hex.slice(index, index + 2), 16) * keep + ART_BASE[channel] * (1 - keep)));
+  return `#${rgb.map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+// PPV's thumbnail look: each team's color glows in from its own side and fades
+// into a dark middle, under a soft shade at the top and bottom.
+export function artBackground(colors) {
+  const [left, right] = (colors?.length >= 2 && HEX.test(colors[0]) && HEX.test(colors[1]) ? colors : NO_COLORS).map((color) => deepen(color));
+  return [
+    'linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0%, transparent 30%, transparent 70%, rgba(0, 0, 0, 0.32) 100%)',
+    `radial-gradient(ellipse 70% 140% at 0% 50%, ${left} 0%, transparent 100%)`,
+    `radial-gradient(ellipse 70% 140% at 100% 50%, ${right} 0%, transparent 100%)`,
+    '#10141d',
+  ].join(', ');
+}
+
+// The mark between the teams: a college conference game's conference (SEC,
+// ACC...), else the league's (the NBA's silhouette, the NFL shield), else a
+// bold VS.
+function MatchupMark({ league, conference }) {
+  // Logos that failed to load; the next one in line shows instead.
+  const [failed, setFailed] = useState(() => new Set());
+  const conferenceSrc = conferenceLogo(conference);
+  const src = [conferenceSrc, leagueLogo(league)].find((candidate) => candidate && !failed.has(candidate));
+  if (!src) return <span className="st-game-art-vs">VS</span>;
+  return (
+    <img
+      className={`st-game-art-league${src === conferenceSrc ? ' st-game-art-conference' : ''}`}
+      src={src}
+      alt=""
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed((before) => new Set(before).add(src))}
+    />
+  );
+}
+
+// ESPN's version of a team logo made for dark backgrounds (the Giants' "ny" in
+// white, as PPV's thumbnails show it): the same address under 500-dark.
+export function darkLogo(url) {
+  return typeof url === 'string' ? url.replace(/(espncdn\.com\/i\/teamlogos\/[^/]+\/)500\//, '$1500-dark/') : url;
+}
+
+// A team's logo on the art, falling back to the regular version when a team
+// has no dark one.
+function TeamLogo({ src }) {
+  const [darkFailed, setDarkFailed] = useState(false);
+  const dark = darkLogo(src);
+  return (
+    <img
+      className="st-game-art-team"
+      src={darkFailed ? src : dark}
+      alt=""
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => { if (dark !== src) setDarkFailed(true); }}
+    />
+  );
+}
+
+// Team-logo art for games without a provider thumbnail, in the teams' colors.
 export function GameArt({ stream }) {
   const [posterFailed, setPosterFailed] = useState(false);
-  const colors = stream.colors?.length >= 2 ? stream.colors : ['#26304a', '#121620'];
 
   // Crisp team logos beat the providers' low-res thumbnails whenever we
   // have both teams' logos.
@@ -50,12 +119,12 @@ export function GameArt({ stream }) {
   }
 
   return (
-    <div className="st-game-art" style={{ background: `linear-gradient(120deg, ${colors[0]} 0%, ${colors[0]} 48%, ${colors[1]} 52%, ${colors[1]} 100%)` }}>
-      {stream.logos?.home && stream.logos?.away ? (
+    <div className="st-game-art" style={{ background: artBackground(stream.colors) }}>
+      {hasLogos ? (
         <>
-          <img src={stream.logos.home} alt="" loading="lazy" referrerPolicy="no-referrer" />
-          <span>vs</span>
-          <img src={stream.logos.away} alt="" loading="lazy" referrerPolicy="no-referrer" />
+          <TeamLogo key={stream.logos.home} src={stream.logos.home} />
+          <MatchupMark key={`${stream.league || ''}|${stream.conference || ''}`} league={stream.league} conference={stream.conference} />
+          <TeamLogo key={stream.logos.away} src={stream.logos.away} />
         </>
       ) : (
         <span className="st-game-art-icon"><CatIcon category={stream.category} size={44} /></span>

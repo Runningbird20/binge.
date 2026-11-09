@@ -13,7 +13,7 @@ const loadFeeds = () => {
   return feeds;
 };
 
-// Server-side proxy + cache for the three sports providers. Returns the
+// Server-side proxy + cache for the sports feeds. Returns the
 // normalized but UNMERGED list ({ raw }); src/utils/sportsProviders.js's
 // mergeNormalized() turns it into one entry per game.
 
@@ -35,20 +35,21 @@ const PPV_OPTIONS = { ...FEED_OPTIONS, headers: { 'User-Agent': 'Mozilla/5.0 (co
 async function fetchRawStreams() {
   if (cache && Date.now() - cacheTime < CACHE_TTL) return cache;
 
-  const { fetchPpvNormalized, fetchStreamedNormalized, fetchStreamfreeNormalized } = loadFeeds();
-  const [ppv, streamed, streamfree] = await Promise.allSettled([
-    fetchPpvNormalized(PPV_OPTIONS),
-    fetchStreamedNormalized(FEED_OPTIONS),
-    fetchStreamfreeNormalized(FEED_OPTIONS),
-  ]);
+  const { fetchPpvNormalized, fetchStreamfreeNormalized, fetchTimstreamsNormalized, fetchTvChannelGamesNormalized } = loadFeeds();
+  // The same fixed order as the browser (sportsProviders.js FEEDS).
+  const sources = [
+    ['ppv.st', fetchPpvNormalized(PPV_OPTIONS)],
+    ['streamfree', fetchStreamfreeNormalized(FEED_OPTIONS)],
+    ['tim-streams', fetchTimstreamsNormalized(FEED_OPTIONS)],
+    ['tv channels', fetchTvChannelGamesNormalized(FEED_OPTIONS)],
+  ];
+  const results = await Promise.allSettled(sources.map(([, promise]) => promise));
 
   const lists = [];
-  if (ppv.status === 'fulfilled') lists.push(...ppv.value);
-  else console.error('[sports] ppv.st', ppv.reason && ppv.reason.message);
-  if (streamed.status === 'fulfilled') lists.push(...streamed.value);
-  else console.error('[sports] streamed.pk', streamed.reason && streamed.reason.message);
-  if (streamfree.status === 'fulfilled') lists.push(...streamfree.value);
-  else console.error('[sports] streamfree', streamfree.reason && streamfree.reason.message);
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') lists.push(...result.value);
+    else console.error(`[sports] ${sources[index][0]}`, result.reason && result.reason.message);
+  });
 
   if (lists.length === 0) {
     if (cache) return cache;
