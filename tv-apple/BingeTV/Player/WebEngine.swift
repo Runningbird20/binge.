@@ -102,9 +102,12 @@ enum WebEngines {
     // is preferred. The legacy one crashes inside WebKit whenever a video
     // seeks, so it is only a fallback.
     @MainActor
-    static func make(allowedHost: String?) -> WebEngine? {
+    static func make(allowedHost: String?, native: Bool = true) -> WebEngine? {
         // The page finds the stream; AVPlayer plays it (HybridEngine).
-        if let modern = ModernWebView(allowedHost: allowedHost) { return NativePlayback.enabled ? HybridEngine(page: modern) : modern }
+        // Trailers stay in the page (YouTube's stream isn't plain HLS).
+        if let modern = ModernWebView(allowedHost: allowedHost) {
+            return native && NativePlayback.enabled ? HybridEngine(page: modern) : modern
+        }
         return LegacyWebView(allowedHost: allowedHost)
     }
 

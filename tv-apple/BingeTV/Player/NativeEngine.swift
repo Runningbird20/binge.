@@ -27,6 +27,10 @@ final class NativeEngine: NSObject, WebEngine {
     private(set) var failed = false
     var onFailed: (() -> Void)?
     static var liveCount = 0
+    static let bufferAhead: TimeInterval = 60
+    static let liveOffset: TimeInterval = 20
+    // A first picture is ready (it's what's on screen once the layer shows).
+    var showing: Bool { surface.playerLayer.isReadyForDisplay && item.status == .readyToPlay }
 
     init(stream: URL, page: String, agent: String) {
         var headers = ["Referer": page]
@@ -37,6 +41,17 @@ final class NativeEngine: NSObject, WebEngine {
         // AVURLAssetHTTPHeaderFieldsKey isn't public API (this app is sideload-only).
         let asset = AVURLAsset(url: stream, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
         item = AVPlayerItem(asset: asset)
+        // Start on the first variant the playlist lists instead of measuring
+        // the network first (faster first picture; it climbs from there).
+        item.startsOnFirstEligibleVariant = true
+        // Movies and episodes buffer a full minute ahead (a slow stretch of
+        // the server's network then never reaches the screen). Live games
+        // sit 20s behind the live edge: the cushion that keeps them smooth,
+        // kept through any stall.
+        item.preferredForwardBufferDuration = Self.bufferAhead
+        item.configuredTimeOffsetFromLive = CMTime(seconds: Self.liveOffset, preferredTimescale: 600)
+        item.automaticallyPreservesTimeOffsetFromLive = true
+        item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
         player = AVPlayer(playerItem: item)
         player.isMuted = true
         player.automaticallyWaitsToMinimizeStalling = true
@@ -97,6 +112,11 @@ final class NativeEngine: NSObject, WebEngine {
         state.ready = player.timeControlStatus == .playing ? 4 : (ready ? 3 : 1)
         state.video = true
         state.height = Int(item.presentationSize.height)
+        state.muted = player.isMuted
+        // Seconds buffered past the playhead.
+        if let range = item.loadedTimeRanges.map(\.timeRangeValue).first(where: { $0.containsTime(player.currentTime()) }) {
+            state.ahead = max(0, (range.end - player.currentTime()).seconds)
+        }
         if let log = item.accessLog()?.events.last {
             state.dropped = log.numberOfDroppedVideoFrames
         }
@@ -119,7 +139,7 @@ final class NativeEngine: NSObject, WebEngine {
         case .seekTo(let seconds): seek(to: seconds)
         case .edge:
             if isLive, let range = item.seekableTimeRanges.last?.timeRangeValue {
-                player.seek(to: range.end - CMTime(seconds: 8, preferredTimescale: 600))
+                player.seek(to: range.end - CMTime(seconds: Self.liveOffset, preferredTimescale: 600))
             }
             player.play()
         case .audioTrack(let index):
@@ -136,7 +156,10 @@ final class NativeEngine: NSObject, WebEngine {
 
     private func seek(to seconds: Double) {
         guard seconds.isFinite else { return }
-        player.seek(to: CMTime(seconds: max(0, seconds), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        // Half a second either way lands on a nearby keyframe: a seek that
+        // shows at once instead of decoding up to the exact frame.
+        let slack = CMTime(seconds: 0.5, preferredTimescale: 600)
+        player.seek(to: CMTime(seconds: max(0, seconds), preferredTimescale: 600), toleranceBefore: slack, toleranceAfter: slack)
     }
 
     #if DEBUG

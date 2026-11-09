@@ -105,27 +105,84 @@ enum ServerPlan {
     // Movie/TV servers for a title: admin switches applied, then the audio
     // preference. If viewers reported a server playing the wanted audio, race
     // only those; servers reported in a different language drop out.
+    // The three lookups run at once, each given 1.5s (a slow network call
+    // used to hold every page back before the race even started).
     static func servers(for title: Title, originalLanguage: String?) async -> [StreamServer] {
-        let disabled = await ServerSwitches.shared.disabledServers()
+        async let off = within(1.5, Set<String>()) { await ServerSwitches.shared.disabledServers() }
+        async let language = within(1.5, originalLanguage) {
+            if let originalLanguage { return originalLanguage }
+            return await OriginalLanguage.of(title)
+        }
+        async let reported = within(1.5, [Report]()) {
+            (try? await Supabase.shared.rpc("stream_report_summary", [
+                "p_media_type": title.kind.rawValue, "p_media_id": title.dbId,
+            ])) ?? []
+        }
+        let disabled = await off
         var list = StreamServer.ranked(for: title).filter { !disabled.contains($0.id) }
         #if DEBUG
         // -BingeServer vidrift: race only that server (testing).
         if let only = UserDefaults.standard.string(forKey: "BingeServer") { list = list.filter { $0.id == only } }
         #endif
-        let original: String?
-        if let originalLanguage { original = originalLanguage } else { original = await OriginalLanguage.of(title) }
-        let wanted = PlaybackPrefs.audio == "original" ? original : PlaybackPrefs.audio
+        // An Apple TV HD races only the first one or two: the quickest
+        // starters here go first (the title's last working server stays first).
+        if Device.isLowMemory { list = ServerSpeed.sorted(list, keepingFirst: StreamServer.lastWorking(for: title)) }
         // Best quality: the servers that have looked sharpest here go first.
-        if QualityPreference.current == .best { list = QualityMemory.sorted(list) }
+        if QualityPreference.current == .best, !Device.isLowMemory { list = QualityMemory.sorted(list) }
+        let original = await language
+        let wanted = PlaybackPrefs.audio == "original" ? original : PlaybackPrefs.audio
         guard let wanted, !wanted.isEmpty else { return list }
-        let reports: [Report] = (try? await Supabase.shared.rpc("stream_report_summary", [
-            "p_media_type": title.kind.rawValue, "p_media_id": title.dbId,
-        ])) ?? []
+        let reports = await reported
         let audio = Dictionary(reports.compactMap { r in r.audioLang.map { (r.provider, $0) } }, uniquingKeysWith: { a, _ in a })
         let matching = list.filter { audio[$0.id] == wanted }
         if !matching.isEmpty { return matching + list.filter { audio[$0.id] == nil } }
         list.removeAll { audio[$0.id] != nil && audio[$0.id] != wanted }
         return list.isEmpty ? StreamServer.ranked(for: title).filter { !disabled.contains($0.id) } : list
+    }
+
+    // The value, or the fallback if it takes longer than the given seconds.
+    static func within<T: Sendable>(_ seconds: Double, _ fallback: T, _ work: @escaping @Sendable () async -> T) async -> T {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await work() }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? fallback
+        }
+    }
+}
+
+// How long each server takes to show a picture on this Apple TV (seconds,
+// averaged, a give-up counting as 40s), like the Fire TV app's ServerSpeed.
+enum ServerSpeed {
+    private static func key(_ id: String) -> String { "binge.speed.\(id)" }
+
+    static func of(_ server: StreamServer) -> Double? {
+        let value = UserDefaults.standard.double(forKey: key(server.id))
+        return value > 0 ? value : nil
+    }
+
+    static func record(_ server: StreamServer, seconds: Double) {
+        guard !server.id.contains("://") else { return } // live streams change every game
+        let old = of(server)
+        UserDefaults.standard.set(old.map { ($0 * 2 + seconds) / 3 } ?? seconds, forKey: key(server.id))
+    }
+
+    static func failed(_ server: StreamServer) { record(server, seconds: 40) }
+
+    // Quickest first (unknown servers count as average), the given one kept first.
+    static func sorted(_ servers: [StreamServer], keepingFirst first: String? = nil) -> [StreamServer] {
+        let known = servers.compactMap(of)
+        let average = known.isEmpty ? 10 : known.reduce(0, +) / Double(known.count)
+        return servers.enumerated().sorted { a, b in
+            if a.element.id == first { return b.element.id != first }
+            if b.element.id == first { return false }
+            let (x, y) = (of(a.element) ?? average, of(b.element) ?? average)
+            return x == y ? a.offset < b.offset : x < y
+        }.map(\.element)
     }
 }
 

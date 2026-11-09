@@ -9,6 +9,8 @@ struct BingeTVApp: App {
         URLCache.shared = URLCache(memoryCapacity: 96 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
         _ = Connectivity.shared // knows whether we're online before anything fails
         #if DEBUG
+        // Logs line by line, in order (the timing checks read them).
+        setvbuf(stdout, nil, _IOLBF, 0)
         if UserDefaults.standard.bool(forKey: "BingeCheckEngines") { EngineCheck.run() }
         #endif
     }

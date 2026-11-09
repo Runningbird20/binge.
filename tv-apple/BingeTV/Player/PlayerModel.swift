@@ -70,7 +70,14 @@ final class PlayerModel: ObservableObject {
     // Episodes that started on their own with nobody touching the remote.
     private var autoAdvances = 0
 
-    var servers: [StreamServer] { request.isLive ? request.liveStreams : StreamServer.all }
+    // The servers to recover with and pick from: an admin's off switch holds
+    // here too (recovery used to race a switched-off server).
+    var servers: [StreamServer] {
+        if request.isLive { return request.liveStreams }
+        let enabled = StreamServer.all.filter { !switchedOff.contains($0.id) }
+        return enabled.isEmpty ? StreamServer.all : enabled
+    }
+    private var switchedOff: Set<String> = []
     let surface = UIView()
     private var race: StreamRace?
     private weak var app: AppModel?
@@ -112,6 +119,7 @@ final class PlayerModel: ObservableObject {
         DispatchQueue.main.async { PiPController.shared.playerOpened() }
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
+            Task { self.switchedOff = await ServerSwitches.shared.disabledServers() }
         } else {
             if request.isLive { startRace(request.liveStreams) } else { startPlannedRace() }
         }
@@ -163,7 +171,9 @@ final class PlayerModel: ObservableObject {
         let planned = request
         racingNames = ""
         Task {
+            async let off = ServerSwitches.shared.disabledServers()
             let servers = await ServerPlan.servers(for: planned.title, originalLanguage: planned.title.originalLanguage)
+            self.switchedOff = await off
             guard StreamRace.key(for: planned) == StreamRace.key(for: self.request) else { return }
             self.startRace(servers.isEmpty ? StreamServer.all : servers)
         }
