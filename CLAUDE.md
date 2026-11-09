@@ -206,7 +206,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 - **Phones:**
   - The bottom nav is Home · Sports · Browse · Search · Me. Browse and Me open `BottomSheet`s, and `html.has-bottom-nav` hides the top search/profile.
   - Title/book sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
-  - The player's server/audio/subtitle pickers are bottom sheets (`MobilePlaybackPickers`).
+  - The player's server picker is a bottom sheet (`MobilePlaybackPickers`).
   - Fullscreen + landscape lock only works on Android; iPhones get a "turn your phone" hint.
 - **Keyboard** (`components/KeyboardShortcuts.js`, mounted in `AppShell`): spatial arrow-key focus over `.st-card, .st-game, …` (scoped to the open dialog), `/` for search, `?` for help. It stands down while an element with `data-embed-player` is mounted (the player owns the arrows).
 - **Mouse-only rule:** every horizontal scroller must have real ‹ › buttons, not just swipe/trackpad scrolling. That means `TitleRow`, `BrowseHero`, `GenreScrollBar`, `CastRow`, and `HScroll` for anything new.
@@ -408,31 +408,32 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 
   Server health (see Admin) and the admin's on/off switches also apply.
 - **Code layout.** `EmbedPlayer.js` is wiring only. The logic is hooks in `src/components/player/` (`useServerChoice`, `useFailover`, `usePlaybackMessages`, `useUpNext`, `useIntroMarkers`, `usePositionSync`…) and the layouts `MobilePlayer`/`DesktopPlayer`. Behaviour is pinned by `EmbedPlayer.test.js` snapshots.
-- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
+- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) switches server without leaving the video; audio and subtitle languages are set in Settings (the ranking follows them). It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
 - **Failover.**
-  - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy `PLAYER_EVENT`) are confirmed working by real playback rather than a timer.
+  - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy/VixSrc `PLAYER_EVENT`, VidSpark's `source: 'vidspark-player'`) are confirmed working by real playback rather than a timer.
   - Server catalogs differ per title: a server can load fine but not have that episode, identical on the provider's own site. So if an automatically chosen `events` server reports no playback time within `FAILOVER_SECONDS`, it's marked dead for that title and the next ranked server loads, with a notice and a "try it anyway" undo.
   - **Wrong video.** `utils/runtimeCheck.js` compares the stream's length with TMDB's runtime. Off by more than max(4 min, 20%) counts as the wrong title, and the player fails over (event servers only).
   - **Manually picked servers are never skipped.**
+  - **VidSpark never starts by itself.** `handleFrameLoad` sends it `{ action: 'play' }` until that load reports play or pause. Some of its episodes still wait for a real click, so it ranks below the servers that autoplay: an automatically chosen one only gets `FAILOVER_SECONDS`.
 - **Buffering** can't be controlled inside a cross-origin player, so it's handled around it.
   - `readPlayback()` normalizes every server's time/pause messages.
   - When a `PAUSE_AWARE` server's time stops while it's playing, a "Buffering… switch at 23:14" bar appears. It auto-switches after 30s, never for a hand-picked server.
 - **Positions.**
-  - **Start second.** `RESUMABLE` servers can start at a given second: CineSrc `t`, Vidy `progress`, VidLink `startAt`, VidRift's `vidrift:resume` message.
+  - **Start second.** `RESUMABLE` servers can start at a given second: CineSrc `t`, Vidy `progress`, VidLink `startAt`, VixSrc `startAt`, VidSpark `t`, VidRift's `vidrift:resume` message.
   - **Saving.** Positions are saved per profile/title/episode in `src/utils/playbackPositions.js` and synced across devices through `continue_watching.position_seconds/duration_seconds`, every ~30s and on close. The newer of local vs synced wins.
   - **The iframe URL never changes for a save.** The start second is frozen per load.
 - **iframe permissions.** Embed iframes use `allow="autoplay *; fullscreen *; …"`. Without the `*`, a player that redirects to another domain loses autoplay/fullscreen.
 - **Before adding or removing a server, test it embedded in an iframe on a non-provider origin and watch for real HLS/MP4 requests.** A 200 page proves nothing: vsembed.ru serves its page but shows "This media is unavailable", and vidsrc.ru is a different, working service. Test it sandboxed too, and set its `sandbox` flag (below).
 - **Pop-ups are blocked by sandboxing the player** (`utils/popupSandbox.js`, `player/usePopupSandbox.js`).
   - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
-  - **Which servers.** Tested 2026-11-05 in Chrome: only VidRift and CineSrc play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
+  - **Which servers.** Retested 2026-11-09 in Chrome, every server on three titles: VidRift, CineSrc, VidSpark, VidCore and EmbedWave play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
   - **The safety net.** A sandboxed server that reports playback but shows none after 12s reloads unsandboxed. If it then plays, the refusal is remembered on that device for 14 days. A server without the flag is only tried sandboxed if it reports playback.
   - **Also sandboxed:** the next-episode preload uses the same decision.
   - **The server lists mark them "No pop-ups"** (`NoPopupsTag` in `PlaybackOptions.js`, a shield on the phone's landscape server chips). It's the same `popupsBlocked()` the player uses, so a refusal this device learned drops the mark. For the server playing now it shows what happened on this load (`popupsBlockedNow`).
   - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
   - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.
 
-**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it.
+**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it (nor do VixSrc, VidSpark, VidCore and EmbedWave document one).
 - **Episode changes inside VidRift** (its Next button, Episodes menu or own Up Next) are followed: it posts `vidrift:episode` just before switching, and every VidRift message carries `tmdbId`, `season` and `episode`, which also catches a missed switch (`useServerEpisode`, `readServerEpisode`).
 - The site moves to that episode without reloading the player: the frame keeps the URL it loaded until a reload of ours (another episode, server or resume), and the start position isn't re-sent to it.
 - For 10s after a switch, the old episode's late progress messages are ignored.

@@ -312,3 +312,19 @@ test('phone: the sleep timer is a row of chips under the video', async () => {
   expect(screen.getByText('Sleep timer · stops in 30 min')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '30 min' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('VidSpark is told to play once loaded, until it reports playing', async () => {
+  await setup({ item: MOVIE, mediaType: 'movie' });
+  fireEvent.click(screen.getByRole('button', { name: 'Servers' }));
+  fireEvent.click(screen.getByRole('radio', { name: /VidSpark/ }));
+  await flush();
+  expect(frame().getAttribute('src')).toMatch(/^https:\/\/vidspark\.to\/movie\/27205\b/);
+  const send = jest.spyOn(frame().contentWindow, 'postMessage').mockImplementation(() => {});
+  fireEvent.load(frame());
+  await flush(1500);
+  expect(send).toHaveBeenCalledWith({ action: 'play' }, 'https://vidspark.to');
+  expect(send).toHaveBeenCalledTimes(1);
+  post({ source: 'vidspark-player', event: 'play', currentTime: 0, duration: 8888 });
+  await flush(8000);
+  expect(send).toHaveBeenCalledTimes(1);
+});

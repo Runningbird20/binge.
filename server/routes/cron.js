@@ -225,6 +225,10 @@ const PROBES = [
   ['videasy', 'Videasy', `https://player.videasy.net/movie/${PROBE_TMDB}`],
   ['2embed', '2Embed', `https://www.2embed.stream/embed/movie/${PROBE_TMDB}`],
   ['vidsrc-embed-ru', 'VidSrc Classic', `https://vsembed.ru/embed/movie?tmdb=${PROBE_TMDB}`],
+  ['vixsrc', 'VixSrc', `https://vixsrc.to/movie/${PROBE_TMDB}`],
+  ['vidspark', 'VidSpark', `https://vidspark.to/movie/${PROBE_TMDB}`],
+  ['vidcore', 'VidCore', `https://vidcore.org/embed/movie/${PROBE_TMDB}`],
+  ['embedwave', 'EmbedWave', `https://embedwave.cc/embed/movie/${PROBE_TMDB}`],
 ];
 const HEALTH_EVERY_MS = 15 * 60 * 1000;
 const UNAVAILABLE = /media is unavailable|video not found|not available in your|404 not found|bad gateway|service unavailable/i;
