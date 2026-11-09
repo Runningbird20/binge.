@@ -340,6 +340,7 @@ final class StreamRace {
         winner = candidate
         #if DEBUG
         print("[race] \(mode == .warm ? "warm" : "live") winner \(candidate.server.name) after \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s")
+        candidate.web.poll { state in print("[race] src=\(state?.src.prefix(160) ?? "-") page=\(state?.page.prefix(100) ?? "-")") }
         #endif
         if request.isLive, mode == .live, !keepMuted, candidates.count > 1 {
             upgradeUntil = Date().addingTimeInterval(6)

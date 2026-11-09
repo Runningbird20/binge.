@@ -31,6 +31,11 @@ struct MediaState: Decodable, Equatable {
     // The element's own mute/volume says no sound, and seconds buffered ahead.
     var muted = false
     var ahead: Double = 0
+    // The stream the video plays (an http(s) .m3u8/.mp4 on tvOS, where pages
+    // use native HLS) and the address of the frame playing it (its Referer).
+    var src = ""
+    var page = ""
+    var agent = ""
     var audio: [MediaTrack] = []
     var text: [MediaTrack] = []
     // The subtitle line on screen right now (drawn by the app, not WebKit).
@@ -98,7 +103,8 @@ enum WebEngines {
     // seeks, so it is only a fallback.
     @MainActor
     static func make(allowedHost: String?) -> WebEngine? {
-        if let modern = ModernWebView(allowedHost: allowedHost) { return modern }
+        // The page finds the stream; AVPlayer plays it (HybridEngine).
+        if let modern = ModernWebView(allowedHost: allowedHost) { return NativePlayback.enabled ? HybridEngine(page: modern) : modern }
         return LegacyWebView(allowedHost: allowedHost)
     }
 
@@ -145,7 +151,7 @@ enum WebEngines {
         var parts=[]; for (var c=0;c<cues.length;c++){ var t=cues[c].text||''; parts.push(t.replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')); }
         return parts.join('\\n').trim(); }
       // The line first: it may adopt a track the server switched on, which the track list should then show.
-      function state(v){ var line=cueText(v); var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, cb:cush.hold?1:0, mu:(v.muted||v.volume===0)?1:0, ba:Math.round(ahead(v)*10)/10, at:tr.a, tt:tr.x, cue:line}; }
+      function state(v){ var line=cueText(v); var tr=tracks(v); var q=v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null; return {t:v.currentTime||0, d:isFinite(v.duration)?v.duration:0, paused:v.paused, ended:v.ended, ready:v.readyState, video:true, h:v.videoHeight||0, fr:q?q.totalVideoFrames:-1, dr:q?q.droppedVideoFrames:-1, cb:cush.hold?1:0, mu:(v.muted||v.volume===0)?1:0, src:(/^https?:/.test(v.currentSrc||'')?v.currentSrc:''), pg:location.href, ua:navigator.userAgent, ba:Math.round(ahead(v)*10)/10, at:tr.a, tt:tr.x, cue:line}; }
       // Fill: pin this frame's video to the viewport, then ask each parent
       // frame to pin the iframe it lives in, all the way up, so the video
       // covers the whole screen instead of the server's page layout.
@@ -256,6 +262,9 @@ final class BridgeProxy: NSObject {
             cushion: (body["cb"] as? NSNumber)?.intValue == 1,
             muted: (body["mu"] as? NSNumber)?.intValue == 1,
             ahead: (body["ba"] as? NSNumber)?.doubleValue ?? 0,
+            src: body["src"] as? String ?? "",
+            page: body["pg"] as? String ?? "",
+            agent: body["ua"] as? String ?? "",
             audio: Self.tracks(body["at"]),
             text: Self.tracks(body["tt"]),
             cue: body["cue"] as? String ?? ""
