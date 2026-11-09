@@ -213,9 +213,9 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 - **PWA:**
   - Manifest `shortcuts`: Continue Watching (`/home?jump=continue`), Sports, Search.
   - `share_target` → `/share` (`pages/ShareTarget.js`): binge./TMDB/IMDb links open the title; anything else searches.
-  - **Install button** (`InstallApp`, the phone header's top right; logic in `utils/installApp.js`). Its sheet offers two ways to have binge. as an app, each saying what it gets you:
-    - **Add to Home Screen:** Chrome's own dialog (the `beforeinstallprompt` offer is held from startup, `captureInstallPrompt` in `App.js`), else where to find it in the browser menu; on iPhone, the Share steps.
-    - **The phone apps:** `binge.apk` / `binge.ipa` from the `mobile-latest` release (`APP_DOWNLOADS`).
+  - **Install button** (`InstallApp`, the phone header's top right; logic in `utils/installApp.js`).
+    - **On Android it downloads `binge.apk` straight away** (a link to the `mobile-latest` release, `APP_DOWNLOADS`), with a toast saying to open it and allow installs. That release only exists once a `mobile-v*` tag has been pushed (the first was `mobile-v1.0`, 2026-11-09); before that the link was a 404.
+    - **On an iPhone** (and any other phone) it opens a sheet with two ways to have binge. as an app, each saying what it gets you: **Add to Home Screen** (Chrome's own dialog where offered, the `beforeinstallprompt` offer being held from startup by `captureInstallPrompt` in `App.js`, else where to find it in the browser menu; on iPhone, the Share steps) and **the phone app** (`binge.ipa`, to sideload from a computer).
     - **Hidden** on computers, in a Home Screen install (`display-mode: standalone`) and inside the phone apps (`BingeApp/` in the user agent).
     - **The sheet is portaled to `document.body`.** The phone header's `backdrop-filter` makes it the containing block for `position: fixed`, so an overlay rendered inside the header covers only the header.
 - **Website TV mode** (for smart-TV browsers; the TV apps don't use it):
