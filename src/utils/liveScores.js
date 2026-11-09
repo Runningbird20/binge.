@@ -9,6 +9,8 @@ const BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 const LEAGUE_PATHS = {
   NFL: ['football/nfl'],
   'College Football': ['football/college-football'],
+  'College Basketball': ['basketball/mens-college-basketball'],
+  "Women's College Basketball": ['basketball/womens-college-basketball'],
   NBA: ['basketball/nba'],
   WNBA: ['basketball/wnba'],
   NHL: ['hockey/nhl'],
@@ -61,6 +63,12 @@ function getJson(url, ttl) {
   return promise;
 }
 
+// Every Division I game, not just ESPN's featured ones: group 50 is D-I
+// basketball (men's and women's), 80 is FBS football.
+function collegeGroups(path) {
+  return `groups=${path.includes('basketball') ? 50 : 80}&limit=500`;
+}
+
 // ESPN's scoreboard "dates" are US Eastern calendar days.
 function easternDay(unixSeconds) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -83,7 +91,7 @@ export async function findEspnEvent(stream) {
   if (!teams || stream.alwaysLive) return null;
   const day = stream.startsAt ? easternDay(stream.startsAt) : null;
   for (const path of espnPathsFor(stream)) {
-    const url = `${BASE}/${path}/scoreboard${day ? `?dates=${day}` : ''}${path.includes('college') ? `${day ? '&' : '?'}groups=80&limit=300` : ''}`;
+    const url = `${BASE}/${path}/scoreboard${day ? `?dates=${day}` : ''}${path.includes('college') ? `${day ? '&' : '?'}${collegeGroups(path)}` : ''}`;
     const board = await getJson(url, 60_000);
     const event = (board?.events || []).find((candidate) => eventMatches(candidate, teams));
     if (event) return { path, eventId: event.id };
@@ -200,7 +208,6 @@ export async function fetchLeagueTeams(path) {
 
 const SCOREBOARD_PATHS = {
   ...Object.fromEntries(Object.entries(LEAGUE_PATHS).map(([league, paths]) => [league, paths[0]])),
-  'College Basketball': 'basketball/mens-college-basketball',
   Eredivisie: 'soccer/ned.1',
   'EFL Championship': 'soccer/eng.2',
   Allsvenskan: 'soccer/swe.1',
@@ -211,8 +218,7 @@ const LIVE_TTL = 30_000;
 const IDLE_TTL = 5 * 60_000;
 
 function scoreboardUrl(path, day) {
-  const college = path.includes('college') ? `&groups=${path.includes('basketball') ? 50 : 80}&limit=300` : '';
-  return `${BASE}/${path}/scoreboard?dates=${day}${college}`;
+  return `${BASE}/${path}/scoreboard?dates=${day}${path.includes('college') ? `&${collegeGroups(path)}` : ''}`;
 }
 
 // Late in the game and within one score: worth switching to.
@@ -253,12 +259,18 @@ function eventScore(event, path) {
       name: c.team?.displayName || c.team?.name || '',
       short: c.team?.abbreviation || c.team?.shortDisplayName || '',
       logo: c.team?.logo || c.team?.logos?.[0]?.href || null,
+      color: /^[0-9a-f]{6}$/i.test(c.team?.color || '') ? `#${c.team.color}` : null,
       score: c.score ?? '',
       homeAway: c.homeAway,
       winner: Boolean(c.winner),
       record: c.records?.[0]?.summary || '',
     })),
   };
+  // A college conference game (both teams in it, conference tournaments too):
+  // its card shows the conference's mark.
+  if (path.includes('college') && competition.conferenceCompetition && competition.groups?.isConference && competition.groups.name) {
+    score.conference = competition.groups.name;
+  }
   score.close = isClose(path, score);
   return score;
 }
@@ -292,5 +304,82 @@ export async function fetchScoreboards(streams) {
       if (event) result.set(stream.id, eventScore(event, path));
     }
   }));
+  return result;
+}
+
+// ── Team looks for games past the scoreboards' window ─────────────────
+// The scoreboards above give a card its logos and colors for the next day and
+// a half. Later games (PPV lists a week ahead) get them from the league's team
+// list (a pro league's is ~140 KB, fetched once a day), or for college
+// football from the current week's scoreboard (Tuesday to Saturday, one
+// request). College basketball's team lists are ~1.4 MB, so its later games
+// keep the feed's own thumbnail, as does a team that can't be told apart.
+
+const TEAM_LIST_LEAGUES = new Set(['NFL', 'NBA', 'WNBA', 'NHL', 'MLB', 'MLS', 'Premier League', 'LaLiga', 'Champions League', 'Serie A', 'Bundesliga', 'Ligue 1', 'Liga MX']);
+const LOOKS_TTL = 6 * 3600_000;
+
+function teamLook(team, conferences = null) {
+  if (!team) return null;
+  const logo = team.logo || (team.logos || []).find((entry) => (entry.rel || []).includes('default'))?.href || team.logos?.[0]?.href || null;
+  return {
+    names: [team.displayName, team.shortDisplayName, team.location, team.location && team.name ? `${team.location} ${team.name}` : null].filter(Boolean),
+    logo,
+    color: /^[0-9a-f]{6}$/i.test(team.color || '') ? `#${team.color}` : null,
+    conference: conferences?.get(String(team.conferenceId)) || null,
+  };
+}
+
+async function leagueLooks(league) {
+  if (league === 'College Football') {
+    const board = await getJson(`${BASE}/football/college-football/scoreboard?${collegeGroups('football/college-football')}`, LOOKS_TTL);
+    const competitions = (board?.events || []).map((event) => event.competitions?.[0]).filter(Boolean);
+    // Conference names by id, from this week's conference games.
+    const conferences = new Map(competitions
+      .filter((competition) => competition.conferenceCompetition && competition.groups?.isConference)
+      .map((competition) => [String(competition.groups.id), competition.groups.name]));
+    const teams = competitions.flatMap((competition) => (competition.competitors || []).map((competitor) => competitor.team));
+    return [...new Map(teams.filter(Boolean).map((team) => [team.id, teamLook(team, conferences)])).values()];
+  }
+  if (!TEAM_LIST_LEAGUES.has(league)) return [];
+  const data = await getJson(`${BASE}/${SCOREBOARD_PATHS[league]}/teams?limit=100`, LOOKS_TTL);
+  return (data?.sports?.[0]?.leagues?.[0]?.teams || []).map(({ team }) => teamLook(team));
+}
+
+const plain = (name) => String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+// The one team a feed's name means: an exact name first ("Washington
+// Commanders", "Clemson"), else the only fuzzy match. Two fuzzy matches
+// ("Texas" ~ Texas and Texas Tech) is none, so no wrong logo.
+function findTeam(looks, name) {
+  const wanted = plain(name);
+  const exact = looks.filter((look) => look.names.some((candidate) => plain(candidate) === wanted));
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return null;
+  const fuzzy = looks.filter((look) => teamsMatch(name, look.names[0]));
+  return fuzzy.length === 1 ? fuzzy[0] : null;
+}
+
+// Map of stream id → { logos, colors, conference } (any may be null) for
+// games that still lack them, in the order of the game's name.
+export async function fetchTeamLooks(streams) {
+  const wanted = streams.filter((stream) => !stream.alwaysLive
+    && (TEAM_LIST_LEAGUES.has(stream.league) || stream.league === 'College Football')
+    && (!(stream.logos?.home && stream.logos?.away && stream.colors?.length >= 2) || (stream.league === 'College Football' && !stream.conference)));
+  const leagues = [...new Set(wanted.map((stream) => stream.league))];
+  const byLeague = new Map(await Promise.all(leagues.map(async (league) => [league, await leagueLooks(league).catch(() => [])])));
+  const result = new Map();
+  for (const stream of wanted) {
+    const teams = stream.teams || splitTeamsFromTitle(stream.name);
+    if (!teams) continue;
+    const looks = byLeague.get(stream.league) || [];
+    const first = findTeam(looks, teams.home);
+    const second = findTeam(looks, teams.away);
+    if (!first || !second || first === second) continue;
+    result.set(stream.id, {
+      logos: first.logo && second.logo ? { home: first.logo, away: second.logo } : null,
+      colors: first.color && second.color ? [first.color, second.color] : null,
+      conference: first.conference && first.conference === second.conference ? first.conference : null,
+    });
+  }
   return result;
 }

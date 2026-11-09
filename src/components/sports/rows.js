@@ -4,7 +4,7 @@ import { getStatus } from './gameInfo';
 // League rows, in the order a US-centric sports home would show them; any
 // league not listed follows, biggest first.
 const LEAGUE_ORDER = [
-  'NFL', 'College Football', 'NBA', 'WNBA', 'NHL', 'MLB', 'MLS', 'Premier League', 'LaLiga', 'Champions League',
+  'NFL', 'College Football', 'NBA', 'College Basketball', 'WNBA', "Women's College Basketball", 'NHL', 'MLB', 'MLS', 'Premier League', 'LaLiga', 'Champions League',
   'Serie A', 'Bundesliga', 'Ligue 1', 'Liga MX', 'Formula 1', 'UFC', 'Wrestling', 'Combat Sports',
 ];
 
