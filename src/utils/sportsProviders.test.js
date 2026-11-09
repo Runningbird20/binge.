@@ -131,6 +131,17 @@ describe('merged logos', () => {
     expect(merged[0].name).toMatch(/^North Carolina/);
     expect(merged[0].logos).toEqual({ home: 'unc.png', away: 'pitt.png' });
   });
+
+  it('team colors follow it too, so each glows behind its own logo', () => {
+    const now = Math.floor(Date.now() / 1000);
+    const base = { category: 'American Football', startsAt: now - 600, endsAt: now + 3600 };
+    const merged = mergeNormalized([
+      { ...base, name: 'North Carolina Tar Heels vs Pittsburgh Panthers', provider: { id: 'ppv', embedUrl: 'https://a.example/1' } },
+      { ...base, name: 'Pittsburgh at North Carolina', teams: { home: 'Pittsburgh', away: 'North Carolina' }, colors: ['#003594', '#7bafd4'], provider: { id: 'timstreams', embedUrl: 'https://c.example/1' } },
+    ]);
+    expect(merged[0].name).toMatch(/^North Carolina/);
+    expect(merged[0].colors).toEqual(['#7bafd4', '#003594']);
+  });
 });
 
 describe('sameGame', () => {

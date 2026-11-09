@@ -1049,31 +1049,29 @@ const BROWSE_SOURCES = {
 
 // Catalog rows for a batch of TMDB ids (via the unique source_key index).
 // Used to turn TMDB trending/discover/recommendation lists into titles the
-// app can actually open. Returns a Map of tmdbId -> catalog item.
+// app can actually open. Returns a Map of tmdbId -> catalog item. Rejects when
+// the catalog didn't answer, so callers can tell that from "not on binge."
+// (catalogLookup must not remember a failure as "not in the catalog").
 export async function fetchCatalogByTmdbIds(mediaType, tmdbIds = []) {
   const source = BROWSE_SOURCES[mediaType];
   const ids = [...new Set(tmdbIds.filter((id) => Number.isFinite(Number(id))))];
   if (!source || ids.length === 0) return new Map();
 
   if (!isSupabaseConfigured || !supabase) {
-    try {
-      const out = new Map();
-      const chunks = [];
-      for (let index = 0; index < ids.length; index += 80) chunks.push(ids.slice(index, index + 80));
+    const out = new Map();
+    const chunks = [];
+    for (let index = 0; index < ids.length; index += 80) chunks.push(ids.slice(index, index + 80));
 
-      await Promise.all(chunks.map(async (chunk) => {
-        const data = await api.get(`/media/by-tmdb-ids?type=${mediaType}&ids=${chunk.join(',')}`);
-        const items = data?.items || [];
-        items.forEach((row) => {
-          const tmdbId = Number(String(row.source_key).split(':')[2]);
-          if (tmdbId) out.set(tmdbId, source.normalize(row));
-        });
-      }));
+    await Promise.all(chunks.map(async (chunk) => {
+      const data = await api.get(`/media/by-tmdb-ids?type=${mediaType}&ids=${chunk.join(',')}`);
+      const items = data?.items || [];
+      items.forEach((row) => {
+        const tmdbId = Number(String(row.source_key).split(':')[2]);
+        if (tmdbId) out.set(tmdbId, source.normalize(row));
+      });
+    }));
 
-      return out;
-    } catch {
-      return new Map();
-    }
+    return out;
   }
 
   const kind = mediaType === 'tv_show' ? 'tv' : 'movie';
@@ -1089,7 +1087,7 @@ export async function fetchCatalogByTmdbIds(mediaType, tmdbIds = []) {
       .from(source.table)
       .select(source.columns)
       .in('source_key', chunk.map((id) => `tmdb:${kind}:${id}`));
-    if (error) return;
+    if (error) throw error;
     (data || []).forEach((row) => {
       const tmdbId = Number(String(row.source_key).split(':')[2]);
       if (tmdbId) out.set(tmdbId, source.normalize(row));

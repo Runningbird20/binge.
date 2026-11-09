@@ -6,8 +6,9 @@ import { EVENT_PROVIDERS, FAILOVER_SECONDS, PAUSE_AWARE, RESUMABLE, STALL_SECOND
 // Moving off a server that isn't working: buffering (offered, then made
 // automatically), a different video under this title's id, or no playback
 // at all. A server the viewer picked by hand is never switched automatically.
+// paused: the sleep timer has the player stopped, so no playback is expected.
 export default function useFailover({
-  item, mediaType, tmdbId, season, episode, externalId, playbackRef, pendingStartRef, servers,
+  item, mediaType, tmdbId, season, episode, externalId, playbackRef, pendingStartRef, servers, paused = false,
 }) {
   const {
     provider, setProvider, memoryType, availableIds, prefs, originalLanguage, reportSummary,
@@ -23,7 +24,7 @@ export default function useFailover({
   // make it automatically after STALL_SWITCH_SECONDS (never for a server
   // the viewer picked by hand).
   useEffect(() => {
-    if (!PAUSE_AWARE.has(provider)) return undefined;
+    if (paused || !PAUSE_AWARE.has(provider)) return undefined;
     const timer = setInterval(() => {
       const state = playbackRef.current;
       if (!state.playing || !(state.time > 0)) return;
@@ -44,7 +45,7 @@ export default function useFailover({
     // switchServer only uses refs, setters and provider; item?.id is listed so a slow
     // server is never remembered against the previous title.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, availableIds, prefs, originalLanguage, reportSummary, item?.id, memoryType]);
+  }, [paused, provider, availableIds, prefs, originalLanguage, reportSummary, item?.id, memoryType]);
 
   // Automatic failover. Servers can load fine and still not have a given
   // episode (their catalogs differ), which looks identical from outside —
@@ -87,7 +88,7 @@ export default function useFailover({
 
   useEffect(() => {
     playbackSeenRef.current = false;
-    if (!item?.id || !externalId || manualPickRef.current || !EVENT_PROVIDERS.has(provider)) return undefined;
+    if (paused || !item?.id || !externalId || manualPickRef.current || !EVENT_PROVIDERS.has(provider)) return undefined;
     const timer = setTimeout(() => {
       if (playbackSeenRef.current) return;
       triedRef.current.add(provider);
@@ -103,7 +104,7 @@ export default function useFailover({
     return () => clearTimeout(timer);
     // A countdown per server/episode: restarting it whenever ranking inputs refresh would keep postponing failover.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, season, episode, externalId, item?.id]);
+  }, [paused, provider, season, episode, externalId, item?.id]);
 
   // Change server, carrying the current position across when possible.
   function switchServer(id, { at = null, reason = null, manual = false } = {}) {

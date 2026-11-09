@@ -78,18 +78,20 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Subtitle size & background | — | — | ✓ | ✓ | |
 | Skip intro | ◐ | ◐ | ✓ | ✓ | The website can only jump on some servers (VidRift, or ones that can start at a given second). |
 | Best quality / Fastest start, resolution badge | — | — | ✓ | ✓ | Apple TV also learns each server's real resolution (`QualityMemory`). |
-| Sleep timer, "Still watching?" | — | — | ✓ | ✓ | On the website's TODO. |
+| "Still watching?" (after 3 episodes in a row) | — | — | ✓ | ✓ | The website has the sleep timer, not this. |
 | Audio description first, Larger text | — | — | ✓ | ✓ | |
 | Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Fire TV has an on/off switch; on Apple TV it's always on. |
 | Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
-| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
+| Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift, CineSrc, VidSpark, VidCore and EmbedWave, not Sports (`utils/popupSandbox.js`). |
+| Servers VixSrc, VidSpark, VidCore, EmbedWave | ✓ | ✓ | — | — | Added to the website 2026-11-09 (`embedProviders.js`). Not tried in the TV apps yet; Apple TV can only use servers that play without MSE. |
 
 ## Sports
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
+| TimStreams feed, and college games on TV channels | ✓ | ✓ | — | — | Added 2026-11-09 (`sportsFeeds.js`): every college game on a TV network TimStreams carries gets that channel as a server. The TV apps still request Streamed, which closed in November 2026. |
 | Multiview | ✓ | — | ✓ | ✓ | *By decision* not on phones (too small). Apple TV: up to 4 games (2 on an Apple TV HD). Fire TV: up to 4, and it learns the device's limit. |
 | Multiview layout (one big + others) | — | — | ✓ | ✓ | The website uses an equal grid. |
 | Followed teams & game alerts | ✓ | ✓ | ◐ | — | Website: push alerts. Apple TV: in-app banners only, with a "Your teams" row. |
@@ -118,7 +120,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 **Phone**:
 - Bottom nav (Home · Sports · Browse · Search · Me) with Browse and Me as bottom sheets.
 - Swipe down to close title and book pages, plus a sticky Play bar.
-- Server, audio and subtitle pickers as bottom sheets.
+- The player's server picker as a bottom sheet.
 - Pull to refresh and haptics.
 - An Install button at the top right of the header: Add to Home Screen, or download the Android / iPhone app.
 

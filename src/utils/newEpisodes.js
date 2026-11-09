@@ -29,6 +29,8 @@ export async function findNewEpisodes({ watchlist = [], continueWatching = [] })
     const data = await tmdbGet(`/tv/${tmdbId}`);
     const last = data?.last_episode_to_air;
     if (!last?.air_date || new Date(`${last.air_date}T12:00:00`).getTime() < cutoff) return null;
+    // Specials (season 0) aren't new episodes (as in continueWatching's lastAiredEpisode).
+    if (!(last.season_number > 0 && last.episode_number > 0)) return null;
     const latest = { season: last.season_number, episode: last.episode_number };
     if (!isAfter(latest, row.at)) return null;
     return {

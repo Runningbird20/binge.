@@ -163,7 +163,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
 - **Admin panel** (`/admin`, `src/pages/AdminHome.js` + `src/pages/admin/*`). Its tabs:
   - **Overview** — the `admin_stats()` RPC (aggregates only; refuses non-admins).
   - **Servers** — status, Check now (`POST /api/ops/health-check`), and a per-server on/off switch in `server_config` that the player honors via `fetchDisabledServers`.
-  - **Sports feeds** (`AdminSportsServers.js`, under Servers) — keys `sports:ppv` / `sports:streamfree` / `sports:streamed` / `sports:streamed:<source>`. Disabled feeds are dropped before merging by `withoutDisabledFeeds` in `fetchSportsStreams`, and by `switchKeys` on the TVs.
+  - **Sports feeds** (`AdminSportsServers.js`, under Servers) — keys `sports:ppv` / `sports:streamfree` / `sports:timstreams` (its events and the TV-channel college games). `sports:streamed` / `sports:streamed:<source>` belong to Streamed, which closed. Disabled feeds are dropped before merging by `withoutDisabledFeeds` in `fetchSportsStreams`, and by `switchKeys` on the TVs.
   - **Errors.**
   - **Announcements** — `site_announcements` → `AnnouncementBanner` on every page.
   - **Notifications** — `POST /api/ops/broadcast`, a push to every device.
@@ -171,6 +171,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
 
   Admin-only server actions use `adminOnly()` from `server/middleware/supabaseAdmin.js`. Admin-only tables use the `public.is_admin()` RLS helper.
 - **Error tracking** (our own, no third party). `src/utils/monitoring.js` posts ErrorBoundary crashes and uncaught errors/rejections (production only, noise-filtered, 1/min per error) to `POST /api/ops/errors` (`server/routes/ops.js`, rate-limited), which writes `error_events`. The Express error handler logs 5xx errors there too. Admins read and resolve them in the panel.
+- **Catalog monitoring** (`server/data-access/monitor.js`, around every `/api/catalog` route). In production, database failures (Turso unreachable, an expired token, a missing column) and queries over 2s go to `error_events`, so a broken catalog shows under /admin → Errors instead of as silently empty rows. Each problem is logged at most once per 10 minutes per server instance. Mistakes in the request itself (a table that isn't media, a write, a bad filter) aren't logged, and neither is `PGRST116`. Previews and local servers only print (`VERCEL_ENV`).
 - **Server uptime** (`checkServers` in `server/routes/cron.js`, table `server_status`):
   - Probes each embed server with TMDB id 550 every 15 min, from the reminders job (or `/api/cron/health`), and merges the last 24h of viewer reports.
   - A 401/403/429 counts as "unknown" (bot protection), not down.
@@ -205,16 +206,16 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 - **Phones:**
   - The bottom nav is Home · Sports · Browse · Search · Me. Browse and Me open `BottomSheet`s, and `html.has-bottom-nav` hides the top search/profile.
   - Title/book sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
-  - The player's server/audio/subtitle pickers are bottom sheets (`MobilePlaybackPickers`).
+  - The player's server picker is a bottom sheet (`MobilePlaybackPickers`).
   - Fullscreen + landscape lock only works on Android; iPhones get a "turn your phone" hint.
 - **Keyboard** (`components/KeyboardShortcuts.js`, mounted in `AppShell`): spatial arrow-key focus over `.st-card, .st-game, …` (scoped to the open dialog), `/` for search, `?` for help. It stands down while an element with `data-embed-player` is mounted (the player owns the arrows).
 - **Mouse-only rule:** every horizontal scroller must have real ‹ › buttons, not just swipe/trackpad scrolling. That means `TitleRow`, `BrowseHero`, `GenreScrollBar`, `CastRow`, and `HScroll` for anything new.
 - **PWA:**
   - Manifest `shortcuts`: Continue Watching (`/home?jump=continue`), Sports, Search.
   - `share_target` → `/share` (`pages/ShareTarget.js`): binge./TMDB/IMDb links open the title; anything else searches.
-  - **Install button** (`InstallApp`, the phone header's top right; logic in `utils/installApp.js`). Its sheet offers two ways to have binge. as an app, each saying what it gets you:
-    - **Add to Home Screen:** Chrome's own dialog (the `beforeinstallprompt` offer is held from startup, `captureInstallPrompt` in `App.js`), else where to find it in the browser menu; on iPhone, the Share steps.
-    - **The phone apps:** `binge.apk` / `binge.ipa` from the `mobile-latest` release (`APP_DOWNLOADS`).
+  - **Install button** (`InstallApp`, the phone header's top right; logic in `utils/installApp.js`).
+    - **On Android it downloads `binge.apk` straight away** (a link to the `mobile-latest` release, `APP_DOWNLOADS`), with a toast saying to open it and allow installs. That release only exists once a `mobile-v*` tag has been pushed (the first was `mobile-v1.0`, 2026-11-09); before that the link was a 404.
+    - **On an iPhone** (and any other phone) it opens a sheet with two ways to have binge. as an app, each saying what it gets you: **Add to Home Screen** (Chrome's own dialog where offered, the `beforeinstallprompt` offer being held from startup by `captureInstallPrompt` in `App.js`, else where to find it in the browser menu; on iPhone, the Share steps) and **the phone app** (`binge.ipa`, to sideload from a computer).
     - **Hidden** on computers, in a Home Screen install (`display-mode: standalone`) and inside the phone apps (`BingeApp/` in the user agent).
     - **The sheet is portaled to `document.body`.** The phone header's `backdrop-filter` makes it the containing block for `position: fixed`, so an overlay rendered inside the header covers only the header.
 - **Website TV mode** (for smart-TV browsers; the TV apps don't use it):
@@ -245,6 +246,9 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Sorting.** The row is re-sorted by the profile's taste (`sortForTaste` / `Seasonal.sorted`): top genres + language share, popularity breaks ties. The scoring is the same on all three.
   - Keyword ids are TMDB's; re-check coverage if you change one.
 - **Release window** (`src/utils/releaseWindow.js`): released → shown; releasing within 30 days → shown with a "Coming Soon" badge; later → hidden. Apply it to any new browse surface.
+  - **Dates for TMDB queries and the calendar are the viewer's local calendar date** (`todayIso`, `daysAgoIso`, `daysAheadIso`, `localIsoDate`). Never `toISOString().slice(0, 10)`: that's the UTC date, which made tonight's episodes vanish from the calendar from about 7pm Eastern and put tomorrow's movies in no row.
+  - **Dates that move with the calendar are worked out when a row loads,** not when the module loads (a row's `fallback` and a kids row's params may be functions). A tab can stay open for days.
+  - **A catalog lookup that fails is never remembered** (`catalogLookup`; `fetchCatalogByTmdbIds` rejects instead of answering "nothing found"). It once hid those titles from every TMDB row until a reload.
 - **Watched titles are never recommended** (`src/utils/watchedTitles.js`). Watched means rated, marked Watched/Watching, in Continue Watching, or any episode watched.
   - **Where they're left out:** every row and the spotlight on Movies/TV (`BrowseView`); Home's spotlight, Top Picks, Because you watched, Top 10, taste rows and New Movies; More Like This; search's "More like {title}"; Surprise me.
   - **Where they still show:** search results (title matches, synopsis matches, Ask binge. picks), the `?view=all` grid, person pages, franchises, the calendar, and the profile's own rows (Continue Watching, My List, New Episodes, Sent to you).
@@ -404,36 +408,42 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 
   Server health (see Admin) and the admin's on/off switches also apply.
 - **Code layout.** `EmbedPlayer.js` is wiring only. The logic is hooks in `src/components/player/` (`useServerChoice`, `useFailover`, `usePlaybackMessages`, `useUpNext`, `useIntroMarkers`, `usePositionSync`…) and the layouts `MobilePlayer`/`DesktopPlayer`. Behaviour is pinned by `EmbedPlayer.test.js` snapshots.
-- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) changes prefs and server without leaving the video. It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
+- **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) switches server without leaving the video; audio and subtitle languages are set in Settings (the ranking follows them). It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
 - **Failover.**
-  - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy `PLAYER_EVENT`) are confirmed working by real playback rather than a timer.
+  - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy/VixSrc `PLAYER_EVENT`, VidSpark's `source: 'vidspark-player'`) are confirmed working by real playback rather than a timer.
   - Server catalogs differ per title: a server can load fine but not have that episode, identical on the provider's own site. So if an automatically chosen `events` server reports no playback time within `FAILOVER_SECONDS`, it's marked dead for that title and the next ranked server loads, with a notice and a "try it anyway" undo.
   - **Wrong video.** `utils/runtimeCheck.js` compares the stream's length with TMDB's runtime. Off by more than max(4 min, 20%) counts as the wrong title, and the player fails over (event servers only).
   - **Manually picked servers are never skipped.**
+  - **VidSpark never starts by itself.** `handleFrameLoad` sends it `{ action: 'play' }` until that load reports play or pause. Some of its episodes still wait for a real click, so it ranks below the servers that autoplay: an automatically chosen one only gets `FAILOVER_SECONDS`.
 - **Buffering** can't be controlled inside a cross-origin player, so it's handled around it.
   - `readPlayback()` normalizes every server's time/pause messages.
   - When a `PAUSE_AWARE` server's time stops while it's playing, a "Buffering… switch at 23:14" bar appears. It auto-switches after 30s, never for a hand-picked server.
 - **Positions.**
-  - **Start second.** `RESUMABLE` servers can start at a given second: CineSrc `t`, Vidy `progress`, VidLink `startAt`, VidRift's `vidrift:resume` message.
+  - **Start second.** `RESUMABLE` servers can start at a given second: CineSrc `t`, Vidy `progress`, VidLink `startAt`, VixSrc `startAt`, VidSpark `t`, VidRift's `vidrift:resume` message.
   - **Saving.** Positions are saved per profile/title/episode in `src/utils/playbackPositions.js` and synced across devices through `continue_watching.position_seconds/duration_seconds`, every ~30s and on close. The newer of local vs synced wins.
   - **The iframe URL never changes for a save.** The start second is frozen per load.
 - **iframe permissions.** Embed iframes use `allow="autoplay *; fullscreen *; …"`. Without the `*`, a player that redirects to another domain loses autoplay/fullscreen.
 - **Before adding or removing a server, test it embedded in an iframe on a non-provider origin and watch for real HLS/MP4 requests.** A 200 page proves nothing: vsembed.ru serves its page but shows "This media is unavailable", and vidsrc.ru is a different, working service. Test it sandboxed too, and set its `sandbox` flag (below).
 - **Pop-ups are blocked by sandboxing the player** (`utils/popupSandbox.js`, `player/usePopupSandbox.js`).
   - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
-  - **Which servers.** Tested 2026-11-05 in Chrome: only VidRift and CineSrc play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
+  - **Which servers.** Retested 2026-11-09 in Chrome, every server on three titles: VidRift, CineSrc, VidSpark, VidCore and EmbedWave play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
   - **The safety net.** A sandboxed server that reports playback but shows none after 12s reloads unsandboxed. If it then plays, the refusal is remembered on that device for 14 days. A server without the flag is only tried sandboxed if it reports playback.
   - **Also sandboxed:** the next-episode preload uses the same decision.
   - **The server lists mark them "No pop-ups"** (`NoPopupsTag` in `PlaybackOptions.js`, a shield on the phone's landscape server chips). It's the same `popupsBlocked()` the player uses, so a refusal this device learned drops the mark. For the server playing now it shows what happened on this load (`popupsBlockedNow`).
   - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
   - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.
 
-**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it.
+**Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it (nor do VixSrc, VidSpark, VidCore and EmbedWave document one).
 - **Episode changes inside VidRift** (its Next button, Episodes menu or own Up Next) are followed: it posts `vidrift:episode` just before switching, and every VidRift message carries `tmdbId`, `season` and `episode`, which also catches a missed switch (`useServerEpisode`, `readServerEpisode`).
 - The site moves to that episode without reloading the player: the frame keeps the URL it loaded until a reload of ours (another episode, server or resume), and the start position isn't re-sent to it.
 - For 10s after a switch, the old episode's late progress messages are ignored.
 
 The rest of Up Next: the player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
+
+**Sleep timer** (`player/useSleepTimer.js`, `SleepTimer.js`; the TV apps' choices: 15 / 30 min, 1 hour, End of episode). A pill in the computer's bar, a row of chips on phones.
+- **Stopping.** Most servers can't be paused from outside, so when it runs out the player saves the position the way closing does (`saveNow` from `usePlaybackMessages`) and takes the player away. The video's place says so, with Resume, which reloads at the saved second.
+- **End of episode** (series, on servers that report playback) turns our Up Next off and stops within 5s of the end. If VidRift moves on by itself near the end, that counts as the end. The site then moves to the next episode, so the button plays it.
+- **While stopped,** `paused` keeps failover, the buffering switch, the sandbox check and Up Next from acting on the missing playback.
 
 **Intro/credits markers** (`utils/episodeMarkers.js`, TV `Data/EpisodeMarkers.swift`; table `episode_markers` + the `episode_marker_summary` RPC; migration `20261014120000_markers_shares.sql`, APPLIED). We don't own the video files, so markers come from two places:
 - **AniSkip, for anime.** The MAL id comes via AniList, which must confirm a Japanese title of that exact name; the catalog's `original_language` is often null.
@@ -463,16 +473,21 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
 - **Feeds load straight from the browser** (`loadSportsStreams`, progressive: games show once two feeds are in). The server proxy `/api/sports/streams` is only a fallback, because the feed hosts refuse Vercel's IPs (502s since 2026-10-08).
 - **Instant paint.** The last schedule is kept in localStorage (`binge.sports.schedule.v1`, 20 min).
 - **Scores.** `fetchScoreboards` (`liveScores.js`) adds the ESPN score, clock, network, logos and a `close` flag to every covered game. It fetches one scoreboard per league per Eastern day, every 30s while live. ESPN `post` = FINAL (drops out of Live Now); `in` = live.
-- **Cards and rows.** Cards show a score bug, "Close game" and the network. The rows are Your teams · Live Now · Starting soon (3h) · leagues · 24/7. The spotlight sticks to its game while it's live.
+- **Cards and rows.** Cards show a score bug, "Close game" and the network. Their art (`GameArt`) copies PPV's thumbnails: each team's color glows in from its side, toned toward the dark base (PPV's colors, else ESPN's via `withScore`, kept in the name's order like logos), with the league's mark between the logos (`leagueLogos.js`, ESPN's dark-background versions) or VS where there's none. A college conference game (ESPN's `conferenceCompetition` + `groups`, carried as `conference` by the TV-channel feed, the scores and `fetchTeamLooks`) shows its conference's logo instead (`CONFERENCE_LOGOS`, all 32 D-I conferences, checked by hand). Pro leagues keep the league's mark, by decision. Team logos use ESPN's dark-background version (`500-dark`, the regular one if it fails). Games past the scoreboards' day and a half get their logos and colors from `fetchTeamLooks` (a pro league's team list, or the college football week's scoreboard; exact name match, else the only fuzzy one), so they're drawn too instead of showing PPV's picture; college basketball's team lists are too big (~1.4 MB) to load for that. The rows are Your teams · Live Now · Starting soon (3h) · leagues · 24/7. The spotlight sticks to its game while it's live.
 - **Hide scores** (`binge.sports.hideScores`) masks the scores on cards, the hero and `LiveScorePanel`.
 - **League names** are unified by `canonicalLeague` (NCAAF → College Football).
-- **Stable game ids.** A game's id comes from the first listing's team names, so `loadSportsStreams` merges feeds in a fixed order (PPV, Streamed, StreamFree), never in arrival order. Otherwise a game's id changed between refreshes and the player showed "not in the schedule" mid-game. The page also keeps the game being watched (and Multiview tiles) across refreshes, re-finding it with `sameGame` under its old id.
+- **Stable game ids.** A game's id comes from the first listing's team names, so `loadSportsStreams` merges feeds in a fixed order (`FEEDS`: PPV, StreamFree, TimStreams, TV-channel games), never in arrival order. New feeds go last, so existing games keep their ids. Otherwise a game's id changed between refreshes and the player showed "not in the schedule" mid-game. The page also keeps the game being watched (and Multiview tiles) across refreshes, re-finding it with `sameGame` under its old id.
 - **Player and chips.** Servers in the player are a row of buttons. Hovering a live card warms it (`expandStreamProviders` is cached 90s). The chip bar fades an edge only when there's more to scroll that way.
 
 **Merging and servers.** `src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge: fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, a ±3h window and league inference. The feed fetchers + normalizers are one ES module, `src/utils/sportsFeeds.js`. The browser imports it, and `server/routes/sports.js` `require`s it with its own timeout and PPV User-Agent, returning `{ raw }` for the client to merge. It must stay a `.js` (Vercel's build compiles that to CommonJS) and be required inside the route, not at startup: on 2026-11-06, loaded at startup as an `.mjs`, it took every `/api` route down (`sports.test.js` checks this). Each game's provider feeds are its selectable servers:
 - **PPV:** `substreams` mirrors are extra servers.
 - **StreamFree:** `sources` (filled near game time) gives one server per quality. Since 2026-11 its entries are `{ quality, url, live }` objects (plain URLs before that; the old `embed_url` is gone), and the normalizer takes both. Entries with embeds and a timestamp more than 2 days old are 24/7 channels (RedZone, Sky Sports F1, Willow).
-- **Streamed:** when a game opens, `expandStreamProviders` (via `/api/sports/resolve/streamed/:source/:id?all=1`) turns each source into all its streams, HD first, at most 4 per source.
+- **TimStreams** (`tim-streams.com/api`, CORS `*`): `/live-upcoming` lists events (NBA, NFL, NHL incl. its ESPN+ games, soccer), with times in US Eastern and no offset (`easternToUnix`). VIP streams need a login and are skipped.
+- **College games on TV channels** (`fetchTvChannelGamesNormalized`). Most college games are on no feed's schedule. ESPN's scoreboards (every D-I game, men's and women's basketball and FBS football) are joined with TimStreams' `/channels`: a game on a carried national network (ESPN/2/U, SEC Network, ACC Network, BTN, CBSSN, FS1/2, truTV, TNT, TBS, USA, CW, ABC, CBS, Fox, NBC) gets that channel's live stream as a server, and joins the game's listing when another feed has it. Football is listed a week ahead, like PPV (ESPN's scoreboard without a date is the current week, one request; a date range with the division filter returns nothing). Basketball is today and tomorrow.
+  - **Over-the-air networks** split the country on busy Saturdays and TimStreams carries one feed of each, so their games are only listed when nothing else of ours is on that network within 3 hours.
+  - **Streaming-only services** (ESPN+, SECN+, ACCNX, B1G+, Peacock, FloSports) have no channel. On 2026-11-09 they were most of the gap: 25% of the next day's men's games were covered, 1% of women's.
+  - **Women's games** (`isWomens`) never merge with the men's game between the same schools, and get their own id.
+- **Streamed** closed in November 2026 (its site says so). Its feed is gone; the per-source switches, `expandStreamProviders` and `/api/sports/resolve/streamed` are left over and unused.
 - **Ranking:** the player orders servers with `rankFeeds` (`utils/sportsServerMemory.js`). The server that last worked for this game goes first, then the feed families that worked lately. "Worked" means 60s on a server; leaving within the minute or a load failure counts against it.
 - PPV shows "Remove sandbox attributes" to headless/automated browsers even top-level. That isn't our iframe; verify PPV in a real browser.
 
@@ -654,7 +669,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 - **`react-router-dom` v7 can't be resolved by this Jest setup.** Test pure logic in `src/utils/*` modules, or mock the router as the page tests do.
 
 **E2E** (`npm run test:e2e`, Playwright, `e2e/`), run locally only:
-- **Coverage.** Sign-up (the Supabase call is intercepted, so no account is created), play/resume, rate (cleans up after itself), the TV remote flow, import, and axe.
+- **Coverage.** Sign-up (the Supabase call is intercepted, so no account is created), play/resume, rate (cleans up after itself), the TV remote flow, import, and axe. Also the database split (`catalog.spec.js`: Home and Movies rows have catalog titles, and `/api/catalog` never failed) and profile PINs (`profile-pin.spec.js`: wrong PIN refused, right PIN opens; removes the PIN after).
 - **Accounts.** Signed-in specs need `E2E_EMAIL`/`E2E_PASSWORD` for a dedicated test account; otherwise they skip.
 - **Against a preview.** `E2E_BASE_URL` points it at a deployed preview. A protected preview needs `VERCEL_AUTOMATION_BYPASS_SECRET`, set once as a cookie in `e2e/auth.setup.js`.
 - The per-preview E2E workflow and the Neon preview-branch workflow were removed (2026-11-04): they failed on nearly every run, and nothing used the branches.

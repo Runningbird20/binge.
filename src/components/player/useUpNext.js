@@ -13,7 +13,7 @@ import { UP_NEXT_COUNTDOWN, UP_NEXT_SECONDS, prefersLowBandwidth } from '../../u
 // it): when VidRift moves on by itself the site follows (useServerEpisode).
 export default function useUpNext({
   isTV, item, tmdbId, season, episode, setSeason, setEpisode, totalSeasons,
-  seasonEpisodeCounts, markers, playbackRef, watched, setWatched,
+  seasonEpisodeCounts, markers, playbackRef, watched, setWatched, paused = false,
 }) {
   const currentSeasonEpisodes = isTV ? seasonEpisodeCounts[season] : null;
   const nextEpisode = useMemo(() => {
@@ -36,18 +36,23 @@ export default function useUpNext({
     setUpNext(null);
     setPreloadNext(false);
   }, [season, episode, item?.id]);
+  // Paused by the sleep timer (stopped, or stopping at the end of this episode):
+  // no Up Next card, no preload.
   useEffect(() => {
-    if (!isTV || !nextEpisode || preloadNext || prefersLowBandwidth()) return undefined;
+    if (paused) { setUpNext(null); setPreloadNext(false); }
+  }, [paused]);
+  useEffect(() => {
+    if (paused || !isTV || !nextEpisode || preloadNext || prefersLowBandwidth()) return undefined;
     const timer = setInterval(() => {
       const { time, duration } = playbackRef.current;
       const creditsSoon = markers.credits && time >= markers.credits.start - 60;
       if (duration > 0 && time > 0 && (duration - time <= 90 || creditsSoon)) setPreloadNext(true);
     }, 2000);
     return () => clearInterval(timer);
-  }, [isTV, nextEpisode, preloadNext, markers.credits, playbackRef]);
+  }, [paused, isTV, nextEpisode, preloadNext, markers.credits, playbackRef]);
 
   useEffect(() => {
-    if (!isTV || !nextEpisode) return undefined;
+    if (paused || !isTV || !nextEpisode) return undefined;
     const timer = setInterval(() => {
       const state = playbackRef.current;
       const key = `${season}:${episode}`;
@@ -59,7 +64,7 @@ export default function useUpNext({
       if ((nearEnd || state.ended) && !upNext) setUpNext({ secondsLeft: getSettings().autoNext ? UP_NEXT_COUNTDOWN : null });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isTV, nextEpisode, season, episode, upNext, markers.credits, playbackRef]);
+  }, [paused, isTV, nextEpisode, season, episode, upNext, markers.credits, playbackRef]);
 
   useEffect(() => {
     if (!upNext || upNext.secondsLeft == null) return undefined;

@@ -16,6 +16,7 @@ test('starting the API doesn’t load the sports feed module', () => {
 test('the sports feed module loads in the server', () => {
   const feeds = require('../../src/utils/sportsFeeds');
   assert.equal(typeof feeds.fetchPpvNormalized, 'function');
-  assert.equal(typeof feeds.fetchStreamedNormalized, 'function');
   assert.equal(typeof feeds.fetchStreamfreeNormalized, 'function');
+  assert.equal(typeof feeds.fetchTimstreamsNormalized, 'function');
+  assert.equal(typeof feeds.fetchTvChannelGamesNormalized, 'function');
 });

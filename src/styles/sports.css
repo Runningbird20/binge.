@@ -79,27 +79,49 @@
 
 .st-game-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* Our own art, in the look of PPV's thumbnails (GameArt): team colors glowing
+   in from the sides, the two logos, the league's mark between them. */
 .st-game-art {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.9rem;
+  gap: 6%;
   color: #fff;
-  font-weight: 800;
-  text-transform: uppercase;
-  font-size: 0.8rem;
 }
 
 .st-game-art img {
-  width: 34%;
-  max-width: 96px;
+  width: 30%;
+  max-width: 104px;
   aspect-ratio: 1;
   object-fit: contain;
   /* A thin light edge keeps a logo readable on its own team color (Texas
-     A&M's maroon on the maroon half). */
+     A&M's maroon on the maroon side). */
   filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.75)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}
+
+.st-game-art .st-game-art-league {
+  width: 14%;
+  max-width: 46px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+/* Conference marks are wordmarks more often than not (BIG EAST, SoCon), so a
+   little wider, and the ones without a dark-background version get the team
+   logos' thin light edge. */
+.st-game-art .st-game-art-conference {
+  width: 17%;
+  max-width: 56px;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.75)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+.st-game-art-vs {
+  flex: none;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .st-game-art-icon { font-size: 2.6rem; }
@@ -729,6 +751,12 @@
   .st-sp-feature { padding-top: 124px; }
   .st-sp-feature-art .st-game-art { align-items: flex-start; padding-top: 24px; }
   .st-sp-feature-art .st-game-art img { width: 22%; max-width: 84px; }
+  /* The row hangs from the top here, so the smaller middle mark is pushed down
+     to the team logos' middle (vertical margins resolve against the width,
+     as the logos' sizes do). */
+  .st-sp-feature-art .st-game-art .st-game-art-league { width: 10%; max-width: 40px; margin-top: calc((min(22%, 84px) - min(10%, 40px)) / 2); }
+  .st-sp-feature-art .st-game-art .st-game-art-conference { width: 12%; max-width: 48px; margin-top: calc((min(22%, 84px) - min(12%, 48px)) / 2); }
+  .st-sp-feature-art .st-game-art-vs { margin-top: calc(min(22%, 84px) / 2 - 0.65rem); }
 }
 
 /* Wider screens: logos on the right half, clear of the title and score. */
@@ -736,6 +764,8 @@
 @media (min-width: 701px) {
   .st-sp-feature-art .st-game-art { justify-content: flex-end; padding-right: 7%; gap: 1.4rem; }
   .st-sp-feature-art .st-game-art img { width: 15%; max-width: 150px; }
+  .st-sp-feature-art .st-game-art .st-game-art-league { width: 6.5%; max-width: 64px; }
+  .st-sp-feature-art .st-game-art .st-game-art-conference { width: 8%; max-width: 76px; }
 }
 
 /* ── Your fantasy teams (FantasyBoard.js, Sports page) ───────────────────
