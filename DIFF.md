@@ -44,6 +44,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Finished shows leave Continue Watching | ✓ | ✓ | — | — | Newest episode marked watched and nothing saved partway (`Home.js`). The TV apps keep them. |
 | Home opens instantly from the last visit | ◐ | ◐ | — | ✓ | Fire TV saves Home to disk for 7 days (`HomeSnapshot`). The website keeps it only for the open tab (`sessionCache`). |
 | Pull to refresh | — | ✓ | — | — | Touch only. |
+| Rows loop back to the start (Netflix-style) | — | — | ✓ | — | Apple TV: rows of 8+ titles carry on past the last one (`RowLoop` in `Components.swift`). |
 | Keyboard shortcuts (`/`, `?`, arrow keys) | ✓ | — | n/a | n/a | `KeyboardShortcuts.js`; also drives the website's TV mode. |
 
 ## Search

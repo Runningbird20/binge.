@@ -133,15 +133,28 @@ struct SectionTitle: View {
     }
 }
 
+// Rows loop like Netflix's: past the last title the row carries on with the
+// first again. The titles are repeated in a lazy stack (cards are only built
+// as they scroll in), so a row that loops costs nothing until it's reached.
+enum RowLoop {
+    // Shorter rows fit on screen or nearly, where a repeat just looks wrong.
+    static let minimum = 8
+    static let cycles = 25
+    static func count(_ items: Int) -> Int { items >= minimum ? items * cycles : items }
+}
+
 struct TitleRowView: View {
     let row: LoadedRow
 
     var body: some View {
+        let items = row.items
         VStack(alignment: .leading, spacing: 4) {
             SectionTitle(text: row.title)
             ScrollView(.horizontal) {
                 LazyHStack(spacing: 40) {
-                    ForEach(row.items) { PosterCard(title: $0) }
+                    ForEach(0..<RowLoop.count(items.count), id: \.self) { index in
+                        PosterCard(title: items[index % items.count])
+                    }
                 }
                 .padding(.vertical, 34) // room for the focus lift
             }
