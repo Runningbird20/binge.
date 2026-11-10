@@ -74,7 +74,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
 | Switch a video's own audio / subtitle tracks | ◐ | ◐ | ✓ | ✓ | The website can't reach inside the players (cross-origin). It picks a server and passes a subtitle language where the server supports it. |
-| Subtitles from OpenSubtitles (timing nudge, other versions) | — | — | ✓ | ✓ | `/api/extras/subtitles`. |
+| Subtitles from OpenSubtitles (timing nudge, other versions) | — | — | ✓ | ✓ | `/api/extras/subtitles`. A timing fix is remembered per file and server and shared with other viewers (`SubtitleSync`, `subtitle_sync`). The website can't shift captions: the server's player draws them. |
 | Subtitle size & background | — | — | ✓ | ✓ | |
 | Skip intro | ◐ | ◐ | ✓ | ✓ | The website can only jump on some servers (VidRift, or ones that can start at a given second). |
 | Best quality / Fastest start, resolution badge | — | — | ✓ | ✓ | Apple TV also learns each server's real resolution (`QualityMemory`). |
