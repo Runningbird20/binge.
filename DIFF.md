@@ -157,7 +157,6 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 - **Apple TV Settings** says playback settings are "saved to your profile, so the website uses them too". Only audio and subtitle language are; everything else stays on that Apple TV.
 - **Apple TV ambient mode** has no on/off switch (`binge.ambient` is read but never written).
-- **Website search** doesn't apply maturity levels, so a Kids profile can find R-rated titles by searching. The browse rows and title matches elsewhere do apply them.
 
 ## Biggest gaps, by app
 

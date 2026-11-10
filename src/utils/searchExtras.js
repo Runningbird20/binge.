@@ -77,7 +77,8 @@ export function matchesPersonName(query, name) {
 }
 
 // { person: { id, name, photo, department }, items } or null.
-export async function searchPerson(query) {
+// kidsSafe: the profile's maturity restriction (their titles are filtered).
+export async function searchPerson(query, { kidsSafe = false } = {}) {
   const data = await tmdbGet('/search/person', { query, include_adult: 'false' });
   const person = (data?.results || [])
     .filter((entry) => !entry.adult && (entry.known_for_department === 'Acting' || entry.known_for_department === 'Directing'))
@@ -93,10 +94,12 @@ export async function searchPerson(query) {
     .slice(0, 30)
     .map((credit) => normalizeTmdbResult(credit));
   const [movies, shows] = await Promise.all([
-    resolveTmdbItems(results.filter((r) => r.mediaType === 'movie'), 'movie'),
-    resolveTmdbItems(results.filter((r) => r.mediaType === 'tv_show'), 'tv_show'),
+    resolveTmdbItems(results.filter((r) => r.mediaType === 'movie'), 'movie', { kidsSafe }),
+    resolveTmdbItems(results.filter((r) => r.mediaType === 'tv_show'), 'tv_show', { kidsSafe }),
   ]);
   const items = [...movies, ...shows].sort((a, b) => (b._tmdb?.voteCount || 0) - (a._tmdb?.voteCount || 0));
+  // Someone whose work is all over this profile's level isn't a result.
+  if (kidsSafe && !items.length) return null;
   return {
     person: {
       id: person.id,
