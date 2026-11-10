@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import { requireSupabaseClient } from '../utils/supabase';
+import { signInWithSupabase } from '../utils/supabaseData';
+import { useAuth } from '../contexts/AuthContext';
 
 const PIN_LENGTH = 4;
 
@@ -88,7 +90,60 @@ function ProfileLockScreen({ profile, onCancel, onUnlock }) {
         ))}
       </div>
       <p className="profile-lock-error" role="alert">{error}</p>
+      <ForgotPin profile={profile} onUnlock={onUnlock} />
     </div>
+  );
+}
+
+// "Forgot PIN?": the account password removes the lock (set_profile_lock with
+// no PIN) and opens the profile; a new PIN can be set on Edit Profile.
+function ForgotPin({ profile, onUnlock }) {
+  const { user } = useAuth() || {};
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await signInWithSupabase({ email: user?.email, password });
+      const { error: lockError } = await requireSupabaseClient()
+        .rpc('set_profile_lock', { target_profile: profile.id, new_pin: null });
+      if (lockError) throw lockError;
+      onUnlock();
+    } catch (err) {
+      setError(err.message || 'That password didn’t work.');
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="profile-lock-forgot" onClick={() => setOpen(true)}>Forgot PIN?</button>
+    );
+  }
+  return (
+    <form className="profile-lock-reset" onSubmit={submit}>
+      <p>Enter the account password to remove {profile.name}’s PIN. You can set a new one on Edit Profile.</p>
+      <input
+        type="password"
+        className="profile-picker-add-input"
+        aria-label="Account password"
+        placeholder="Account password"
+        autoComplete="current-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        autoFocus
+      />
+      {error && <p className="profile-lock-error" role="alert">{error}</p>}
+      <div className="profile-picker-add-actions">
+        <button type="submit" className="btn-primary" disabled={busy || !password}>{busy ? 'Checking…' : 'Remove PIN and open'}</button>
+        <button type="button" className="btn-ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
+      </div>
+    </form>
   );
 }
 

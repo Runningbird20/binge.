@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +53,8 @@ private object SearchCache { var trending: List<Title> = emptyList() }
 @Composable
 fun SearchScreen() {
     var query by remember { mutableStateOf("") }
+    // This profile's last searches on this TV: pick one to search again.
+    var recent by remember { mutableStateOf(com.binge.tv.data.RecentSearches.list(AppModel.profile?.id)) }
     var results by remember { mutableStateOf<List<Title>>(emptyList()) }
     var trending by remember { mutableStateOf(SearchCache.trending) }
     var searching by remember { mutableStateOf(false) }
@@ -111,6 +114,12 @@ fun SearchScreen() {
         results = runCatching { Catalog.search(text, AppModel.maturity) }.getOrDefault(emptyList())
         searching = false
         if (text.length >= 2) { delay(250); ask(text) }
+        // Kept as a recent search once it's settled and found something.
+        delay(2500)
+        if (results.isNotEmpty() || ai.isNotEmpty()) {
+            com.binge.tv.data.RecentSearches.add(text, AppModel.profile?.id)
+            recent = com.binge.tv.data.RecentSearches.list(AppModel.profile?.id)
+        }
     }
     LaunchedEffect(Unit) {
         if (trending.isNotEmpty()) return@LaunchedEffect
@@ -201,6 +210,15 @@ fun SearchScreen() {
             if (ai.isNotEmpty() && showing.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("More titles", style = Type.section, modifier = Modifier.padding(top = 8.dp)) }
             if (text.isNotEmpty() && !searching && results.isEmpty() && ai.isEmpty() && games.isEmpty() && !aiLoading && aiError == null) item(span = { GridItemSpan(maxLineSpan) }) {
                 Text("Nothing on binge. matches “$text”.", style = Type.headline, color = Palette.muted, modifier = Modifier.padding(top = 30.dp))
+            }
+            if (text.isEmpty() && recent.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }, key = "recent") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Recent searches", style = Type.section)
+                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(recent.size, key = { recent[it] }) { i -> Pill(recent[i]) { query = recent[i] } }
+                        item(key = "clear") { Pill("Clear", icon = Icons.Rounded.Close) { com.binge.tv.data.RecentSearches.clear(AppModel.profile?.id); recent = emptyList() } }
+                    }
+                }
             }
             if (text.isEmpty() && trending.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Trending searches", style = Type.section) }
             items(showing, key = { it.id }) { PosterCard(it, Nav::open, if (it.id == firstId) Modifier.focusRequester(firstResult) else Modifier) }

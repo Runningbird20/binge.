@@ -8,6 +8,7 @@ export default function UpNextCard({ upNext, nextEpisode, nextInfo, onPlay, onCa
     <div className="st-upnext" role="dialog" aria-label="Up next">
       {nextInfo?.still && <img src={nextInfo.still} alt="" className="st-upnext-still" />}
       <div className="st-upnext-body">
+        {upNext.stillWatching && <strong className="st-upnext-ask">Still watching?</strong>}
         <strong>{nextInfo?.title || `Episode ${nextEpisode.episode}`}</strong>
         <span className="st-upnext-meta">Next: season {nextEpisode.season}, episode {nextEpisode.episode}</span>
         <div className="st-upnext-actions">

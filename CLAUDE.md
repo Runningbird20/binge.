@@ -104,11 +104,12 @@ This is the one thing every route/feature decision hinges on. There are two ways
 2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`), a client-side router that reimplements a handful of REST-shaped endpoints (search, media details, profile, admin) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
 
 **The Express backend** (`server/app.js` + `server/routes/*.js`) is deployed unconditionally as a Vercel serverless function (`api/index.js` re-exports `server/app`; `vercel.json` routes `/api/(.*)` to `api/[...slug].js`). Its route files:
-- `catalog` — the catalog proxy;
+- `catalog` — the catalog proxy (watched by `data-access/monitor.js`, see Catalog monitoring);
 - `extras` — OMDb ratings, episode ratings, Ask binge., subtitles;
 - `sports` — feeds, ESPN, fantasy;
 - `books`, `manga` — reading proxies;
 - `cron`, `ops` — error reports, health checks, broadcasts;
+- `og` — link previews: `vercel.json` sends link-preview bots (by user agent) asking for `/movie/:id`, `/tv-show/:id` or `/book/:id` here, a small page whose og:/twitter: tags carry the title, description and TMDB backdrop (people get the normal site);
 - `admin`, `account` — service role;
 - `media` — the few catalog reads `supabaseApi.js` deliberately passes on (popular titles, curated lists, relevance sort).
 
@@ -143,6 +144,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - PINs are bcrypt-hashed. Five wrong tries start a 5-minute cooldown.
   - Saving a lock asks for the account password.
   - It's a selection lock inside one account, not a security boundary.
+  - **Forgot PIN?** on the lock screen: the account password removes the lock (`set_profile_lock` with no PIN) and opens the profile.
   - **Never select `pin` into the client profile list.**
 - **Profile scoping.** Reads go through `scopeToProfile` in `src/utils/data/shared.js`. The default profile (or an account's only profile) also owns rows with `profile_id` null, the same rule as the TV apps. Before this, those titles showed on the TV but never on the website.
 - **Maturity levels** (`src/utils/kidsMode.js`):
@@ -152,7 +154,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - Only Toddler/Kids get the kids-only rows (`isChildLevel`).
   - The website lets unrated Family/Animation/Kids titles through. The TV apps leave out every unrated title on a restricted level (see TV apps).
   - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, a book's screen adaptations, the calendar's Coming Soon row and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
-  - **Website search results don't apply maturity levels yet:** title matches, Ask binge. picks and person search.
+  - **Website search applies them too** (2026-11-10): title and related matches through `filterSearchPayload` (`utils/searchMaturity.js`: ratings looked up by id, unrated left out, child levels keep children's book genres only, a failed lookup shows nothing); Ask binge. picks and person search pass `kidsSafe` to `resolveTmdbItems`.
 - **Profile settings** (`/settings`, `src/utils/profileSettings.js`):
   - Autoplay next, previews, data saver, haptics and captions-first live in `account_profiles.settings` (jsonb) + localStorage.
   - Audio/subtitle prefs live in `audio_pref`/`subtitle_pref`.
@@ -267,6 +269,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. Apple TV applies the same rule (`finishedShows`); Fire TV doesn't yet.
   - **Links carry `&t=`.** Continue Watching links include the saved second (see the web player).
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
+- **Opens instantly on a return visit.** Home's stats and personal rows, its Top 10s and the Movies/Series rows are kept on the device for a week (`utils/keptCache.js`, `TitleRow keepKey`), painted at once and refreshed; signing out clears them.
 - **Surprise me** (above Continue Watching, `SurpriseButtons` in `Home.js`, logic in `utils/surprise.js`):
   - "Surprise me with a movie" and "… with a series" each open one title of that type.
   - The title comes from the profile's Top Picks / "Because you watched" rows, which `buildPersonalizedRows` has already filtered for maturity and the release window. Picks lean toward the top and skip Coming Soon titles, watched titles (`exclude`) and the last 6 surprises.
@@ -445,6 +448,8 @@ The rest of Up Next: the player shows a 10s "Up Next" card in the last 30s, at t
 - **End of episode** (series, on servers that report playback) turns our Up Next off and stops within 5s of the end. If VidRift moves on by itself near the end, that counts as the end. The site then moves to the next episode, so the button plays it.
 - **While stopped,** `paused` keeps failover, the buffering switch, the sandbox check and Up Next from acting on the missing playback.
 
+**Still watching?, binge mode, intros** (`useUpNext`, `utils/introSkips.js`): three automatic episodes in a row ask "Still watching?" (the card waits), Settings › Binge mode starts the next episode at the credits, and known intros are skipped automatically in binge mode or for a show you turned it on for (offered after two episodes skipped by hand).
+
 **Intro/credits markers** (`utils/episodeMarkers.js`, TV `Data/EpisodeMarkers.swift`; table `episode_markers` + the `episode_marker_summary` RPC; migration `20261014120000_markers_shares.sql`, APPLIED). We don't own the video files, so markers come from two places:
 - **AniSkip, for anime.** The MAL id comes via AniList, which must confirm a Japanese title of that exact name; the catalog's `original_language` is often null.
 - **Viewers.** An early 15s–3.5min forward jump reports the intro, and moving on in the last 15% reports the credits. The median shows once 2+ viewers agree, and a show's usual intro covers untimed episodes.
@@ -600,6 +605,7 @@ Both apps are the website's phone layout in a full-screen web view (no native sc
   - **binge. links open in the Android app** (a verified App Link): `autoVerify` in its manifest + `public/.well-known/assetlinks.json`, which must list the SHA-256 of the key the APK is signed with (the Android debug key; `mobile-apps.yml` warns when a build's isn't listed). Not on iOS yet: Associated Domains need a paid Apple account.
   - **Files saved through `<a download>` blob links reach the phone.** Android saves them to Downloads; iOS opens the share sheet via `WKDownload`.
   - **The web views present as plain Chrome / Safari** (Android drops `; wv` and `X-Requested-With`, as Fire TV does). The UA ends in `BingeApp/1.0`, which must never contain `BingeTV`, the website's TV-mode trigger.
+  - **The frame bridge** (`frame-bridge.js`: Android `assets/`, iOS `BingeMobile/`, identical, checked by `src/utils/frameBridge.test.js`) is injected into every frame, the servers' players included. The site (`utils/frameBridge.js`, `player/useAppBridge.js`) says hello to the player frame with a nonce, relayed down to nested frames; the frame playing the video answers every 0.5s with its time, and takes `seek` / `play` / `pause` / `captions` / `shift`. In the apps that makes every server report its time (resume, intro learning, Up Next, Skip intro jumps by seek), jumps to the saved second on servers that can't start there, and offers binge.'s captions (OpenSubtitles, drawn inside the server's frame) with the same timing fix as the TVs (`subtitle_sync`). The browser never allows any of it across sites.
 - **What they don't have:** web push (web views don't get it), and a sign-in shared with the browser.
 - **Android** (`MainActivity.kt`, plain `Activity`, the only dependency `androidx.webkit`; same AGP/Kotlin versions as `tv-android/`):
   - **`PageScript.kt`** runs only in the site's origin. It's injected with `addDocumentStartJavaScript` and talks over the `bingeApp` `addWebMessageListener` channel, accepting the top-level frame only. It sends outside links and `window.open` to the browser and reads blob downloads (Android WebViews can't download `blob:` themselves).
