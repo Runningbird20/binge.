@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 @main
@@ -9,6 +10,12 @@ struct BingeTVApp: App {
         URLCache.shared = URLCache(memoryCapacity: 96 * 1024 * 1024, diskCapacity: 512 * 1024 * 1024)
         _ = Connectivity.shared // knows whether we're online before anything fails
         CrashReporter.install()
+        // Long-form video: multichannel (5.1 / Atmos) goes to the receiver as
+        // is, and long-form routing keeps it on the TV's chosen speakers.
+        let audio = AVAudioSession.sharedInstance()
+        try? audio.setCategory(.playback, mode: .moviePlayback, policy: .longFormAudio)
+        try? audio.setSupportsMultichannelContent(true)
+        try? audio.setActive(true)
         #if DEBUG
         // Logs line by line, in order (the timing checks read them).
         setvbuf(stdout, nil, _IOLBF, 0)

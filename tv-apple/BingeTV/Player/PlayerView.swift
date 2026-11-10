@@ -21,6 +21,8 @@ struct PlayerView: View {
                 .focused($surfaceFocused)
                 .disabled(panelOpen)
                 .onMoveCommand { direction in
+                    // A swipe being scrubbed isn't also a 10s skip.
+                    if model.scrubbedRecently, direction == .left || direction == .right { return }
                     switch direction {
                     case .left where model.request.isLive: model.flipGame(by: -1)
                     case .right where model.request.isLive: model.flipGame(by: 1)
@@ -34,7 +36,9 @@ struct PlayerView: View {
                 }
                 .onPlayPauseCommand { model.togglePlay() }
                 .onExitCommand {
-                    if model.upNextCountdown ?? -1 > 0 {
+                    if model.scrubbing {
+                        model.cancelScrub()
+                    } else if model.upNextCountdown ?? -1 > 0 {
                         model.cancelUpNext()
                     } else {
                         model.close()
@@ -73,9 +77,17 @@ struct PlayerView: View {
                     .accessibilityLabel("Buffering")
             }
 
-            if model.hudVisible || !model.started {
+            if (model.hudVisible || !model.started) && !model.scrubbing {
                 HUD(model: model).transition(.opacity)
             }
+
+            ScrubOverlay(model: model)
+            RemoteSwipeCatcher(
+                began: { !panelOpen && !model.pausedAmbient && model.scrubBegan() },
+                changed: { model.scrubChanged($0) },
+                ended: { model.scrubEnded() })
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
 
             // Bottom-right corner, out of the picture's way; lifts above the
             // HUD's progress bar only while that shows. ▲ skips, ▼ hides it.
@@ -133,6 +145,7 @@ struct PlayerView: View {
         .animation(.easeInOut(duration: 0.25), value: model.hudVisible)
         .animation(.easeInOut(duration: 0.25), value: model.showSkipIntro)
         .animation(.easeInOut(duration: 0.25), value: panelOpen)
+        .animation(.easeInOut(duration: 0.2), value: model.scrubbing)
         .onAppear {
             surfaceFocused = true
             #if DEBUG
@@ -149,6 +162,14 @@ private extension PlayerPanel {
     @ViewBuilder
     var extrasRow: some View {
         let alert = teams.recent.flatMap { Date().timeIntervalSince($0.at) < 20 * 60 ? $0 : nil }
+        if !model.request.isLive, model.started {
+            Button {
+                model.moveToCorner()
+                dismissPlayer()
+            } label: { Label("Keep watching in the corner", systemImage: "pip") }
+            .buttonStyle(PillButtonStyle())
+            .focusSection()
+        }
         if model.request.isLive || pip.tile != nil || alert != nil {
             VStack(alignment: .leading, spacing: 12) {
                 if let alert {
@@ -362,7 +383,7 @@ private struct UpNextCard: View {
 // same sidebar. Back goes up a level, then closes.
 private enum Pane: String {
     case menu = "Options", audio = "Audio", subtitles = "Subtitles", timing = "Subtitle timing", server = "Server"
-    case picture = "Picture", quality = "Quality", sleep = "Sleep timer", episodes = "Episodes"
+    case picture = "Picture", quality = "Quality", sleep = "Sleep timer", episodes = "Episodes", info = "Playback info"
 }
 
 private struct PlayerPanel: View {
@@ -375,6 +396,7 @@ private struct PlayerPanel: View {
     @State private var episodes: [TMDBSeason.Episode] = []
     @State private var pane: Pane = .menu
     @State private var from: Pane = .menu
+    @State private var autoSkip = false
     @FocusState private var focus: String?
 
     var body: some View {
@@ -405,7 +427,7 @@ private struct PlayerPanel: View {
         .ignoresSafeArea()
         .disabled(alertBusy)
         .onExitCommand { if pane == .menu { close() } else { open(.menu) } }
-        .onAppear { focusFirst() }
+        .onAppear { focusFirst(); autoSkip = IntroSkips.isOn(model.request.title) }
         .onChange(of: pane) { _, _ in focusFirst() }
         .task {
             guard model.isEpisode, let tmdbId = model.request.title.tmdbId else { return }
@@ -434,6 +456,7 @@ private struct PlayerPanel: View {
         case .quality: return "q\(QualityPreference.current.rawValue)"
         case .sleep: return "z\(model.sleep.rawValue)"
         case .episodes: return "e\(model.request.episode ?? 1)"
+        case .info: return "info-done"
         case .timing: return "earlier"
         }
     }
@@ -459,6 +482,7 @@ private struct PlayerPanel: View {
         rows.append((.quality, "Quality", QualityPreference.current.label))
         rows.append((.sleep, "Sleep timer", model.sleep.rawValue))
         if model.isEpisode, !episodes.isEmpty { rows.append((.episodes, "Episodes", "Season \(model.request.season ?? 1)")) }
+        rows.append((.info, "Playback info", model.resolutionLabel ?? ""))
         return rows
     }
 
@@ -477,6 +501,14 @@ private struct PlayerPanel: View {
             ForEach(menuRows, id: \.pane) { row in
                 SideRow(label: row.label, value: row.value, chevron: true) { open(row.pane) }
                     .focused($focus, equals: row.pane.rawValue)
+            }
+            if model.isEpisode {
+                SideRow(label: "Skip intros automatically", value: autoSkip ? "On" : "Off") {
+                    autoSkip.toggle()
+                    IntroSkips.set(model.request.title, on: autoSkip)
+                }
+                .focused($focus, equals: "autoskip")
+                note(autoSkip ? "Every episode of \(model.request.title.name) skips its intro when its timing is known." : "For \(model.request.title.name) only. Binge mode (Settings) skips every show's intros.")
             }
         case .audio:
             if model.audioTracks.count > 1 {
@@ -543,6 +575,8 @@ private struct PlayerPanel: View {
                         .focused($focus, equals: "z\(option.rawValue)")
                 }
             }
+        case .info:
+            playbackInfo
         case .episodes:
             ForEach(episodes) { episode in
                 SideRow(label: "\(episode.episodeNumber). \(episode.name ?? "Episode \(episode.episodeNumber)")",
@@ -553,6 +587,42 @@ private struct PlayerPanel: View {
                 .focused($focus, equals: "e\(episode.episodeNumber)")
             }
         }
+    }
+
+    // What's playing and how well: when something buffers, this says
+    // whether it's the server, the connection or the stream itself.
+    @ViewBuilder private var playbackInfo: some View {
+        let p = model.playback
+        stat("Server", model.server?.name ?? "Choosing…")
+        stat("Player", p.native ? "Apple's player" : "The server's page")
+        stat("Picture", [model.resolutionLabel, p.height > 0 ? "\(p.height) lines" : nil].compactMap { $0 }.joined(separator: " · ").nilIfEmpty ?? "Not known yet")
+        if p.native {
+            // Single-quality streams don't state one.
+            if p.bitrate > 0 { stat("Stream bitrate", Self.rate(p.bitrate)) }
+            stat("Download speed", p.bandwidth > 0 ? Self.rate(p.bandwidth) + (p.bitrate > 0 ? String(format: " (%.1f× what it needs)", p.bandwidth / p.bitrate) : "") : "Measuring…")
+        }
+        stat("Buffered ahead", p.ahead > 0 ? String(format: "%.0f seconds", p.ahead) : (model.request.isLive ? "Live" : "—"))
+        if p.dropped >= 0 { stat("Dropped frames", "\(p.dropped)") }
+        if p.native { stat("Stalls", "\(p.stalls)") }
+        if !p.audioFormat.isEmpty { stat("Audio", p.audioFormat) }
+        if p.held > 0 { note("Holding quality under \(Self.rate(p.held)) until the connection settles, so the picture doesn't stop to buffer.") }
+        if let backup = model.backupStatus { note(backup) }
+        note(model.playbackDiagnosis)
+        SideRow(label: "Done") { open(.menu) }.focused($focus, equals: "info-done")
+    }
+
+    private func stat(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.callout).foregroundStyle(Theme.muted)
+            Spacer(minLength: 20)
+            Text(value).font(.callout.weight(.semibold)).monospacedDigit().lineLimit(1)
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+    }
+
+    static func rate(_ bits: Double) -> String {
+        bits >= 1_000_000 ? String(format: "%.1f Mbps", bits / 1_000_000) : bits > 0 ? String(format: "%.0f kbps", bits / 1000) : "—"
     }
 
     private func note(_ text: String) -> some View {

@@ -174,6 +174,7 @@ final class PlayerModel: ObservableObject {
     }
     private var web: WebEngine? { race?.winner?.web }
     #if DEBUG
+    private var debugScrubbed = false
     private var debugFroze = false
     #endif
 
@@ -201,6 +202,7 @@ final class PlayerModel: ObservableObject {
     private var expected: Double?
 
     private func adopt(_ next: StreamRace) {
+        if let backup, backup !== next { dropBackup() }
         raced.formUnion(next.candidates.map(\.server.id))
         let request = self.request
         Task {
@@ -264,6 +266,21 @@ final class PlayerModel: ObservableObject {
 
     private var closed = false
 
+    // Picture in picture: this video carries on in the corner (Overlay.swift)
+    // while you browse; the player closes without stopping it.
+    func moveToCorner() {
+        guard let race, race.winner != nil, started, !request.isLive, let app else { return }
+        saveProgress(force: true)
+        movedToCorner = true
+        race.container.removeFromSuperview()
+        race.onChange = nil
+        self.race = nil
+        PiPController.shared.showEpisode(CornerEpisode(race: race, request: request, app: app, at: playback.t, duration: playback.d))
+        close()
+    }
+    // Handed to the corner (picture in picture): not parked or stopped here.
+    private var movedToCorner = false
+
     func close() {
         guard !closed else { return }
         closed = true
@@ -276,7 +293,15 @@ final class PlayerModel: ObservableObject {
         lifecycle = []
         saveProgress(force: true)
         if syncPending, let syncKey { SubtitleSync.report(syncKey, offset: subtitleOffset) }
-        race?.stop()
+        dropBackup()
+        preview?.stop()
+        preview = nil
+        // Kept paused for a few minutes: going back in resumes at once.
+        if let race, race.winner != nil, started, !playback.ended, !movedToCorner {
+            Warmup.shared.park(race)
+        } else {
+            race?.stop()
+        }
         race = nil
         Warmup.shared.cancel()
     }
@@ -310,7 +335,79 @@ final class PlayerModel: ObservableObject {
         showHUD()
     }
 
+    // MARK: Swipe to scrub (Scrub.swift)
+
+    @Published private(set) var scrubTarget: Double?
+    private var scrubBase = 0.0
+    private var preview: ScrubPreview?
+    private var scrubCommit: Task<Void, Never>?
+    private(set) var lastScrubAt = Date.distantPast
+    var scrubPreviewView: UIView? { preview?.view }
+    var scrubbing: Bool { scrubTarget != nil }
+    // ◀ ▶ arriving with a swipe are that same swipe, not a 10s skip.
+    var scrubbedRecently: Bool { scrubbing || Date().timeIntervalSince(lastScrubAt) < 0.6 }
+
+    // Returns false when this video can't be scrubbed (live, or a server
+    // page that can't seek).
+    func scrubBegan() -> Bool {
+        guard started, !request.isLive, playback.d > 0, let web, web.canSeek else { return false }
+        scrubCommit?.cancel()
+        scrubBase = scrubTarget ?? playback.t
+        if preview == nil, let source = (web as? HybridEngine)?.previewSource {
+            preview = ScrubPreview(stream: source.stream, page: source.page, agent: source.agent)
+        }
+        lastScrubAt = Date()
+        return true
+    }
+
+    func scrubChanged(_ translation: CGFloat) {
+        let target = ScrubMath.target(base: scrubBase, translation: Double(translation), duration: playback.d)
+        scrubTarget = target
+        preview?.show(target)
+        lastScrubAt = Date()
+        hudVisible = false
+    }
+
+    // Letting go: jump there unless another swipe follows within a moment.
+    func scrubEnded() {
+        lastScrubAt = Date()
+        scrubCommit?.cancel()
+        scrubCommit = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.6))
+            guard !Task.isCancelled else { return }
+            self?.commitScrub()
+        }
+    }
+
+    func commitScrub() {
+        scrubCommit?.cancel()
+        guard let target = scrubTarget else { return }
+        scrubTarget = nil
+        lastScrubAt = Date()
+        seek(to: target)
+        endPreviewSoon()
+    }
+
+    func cancelScrub() {
+        scrubCommit?.cancel()
+        scrubTarget = nil
+        lastScrubAt = Date()
+        endPreviewSoon()
+    }
+
+    // The preview player stays a few seconds for another swipe, then goes.
+    private func endPreviewSoon() {
+        let current = preview
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard let self, !self.scrubbing, self.preview === current else { return }
+            self.preview?.stop()
+            self.preview = nil
+        }
+    }
+
     func togglePlay() {
+        if scrubbing { commitScrub(); return }
         lastToggleAt = Date()
         nowPlayingAt = .distantPast
         autoAdvances = 0
@@ -581,7 +678,13 @@ final class PlayerModel: ObservableObject {
 
     // ▲ during the intro: straight to its end when we know it (viewers'
     // timings or AniSkip), else a typical 85s.
-    func skipIntro() {
+    func skipIntro(automatic: Bool = false) {
+        if !automatic, isEpisode, let season = request.season, let episode = request.episode {
+            let skips = IntroSkips.recordManual(request.title, season: season, episode: episode)
+            if IntroSkips.shouldOffer(request.title, skips: skips) {
+                notice = "Skip intros on \(request.title.name) automatically? Turn it on in Options (swipe down)."
+            }
+        }
         skippedIntro = true
         showSkipIntro = false
         if let intro = markers.intro, let web, web.canSeek {
@@ -772,6 +875,8 @@ final class PlayerModel: ObservableObject {
         }
         let stuck = started ? now.timeIntervalSince(clockMovedAt) : 0
         buffering = stuck > 1.5 || state.cushion
+        // A backup stream is ready: switch to it now rather than wait.
+        if !request.isLive, stuck > 2, backup?.winner != nil { switchToBackup(); return }
         if stuck > (request.isLive ? 12 : 20) { recover(reason: "stopped playing") }
     }
 
@@ -849,6 +954,7 @@ final class PlayerModel: ObservableObject {
             QualityMemory.record(server, height: state.height)
         }
         watchClock(state)
+        watchBuffer(state)
         // Playing, but the video's length says it's a different title.
         // The race may have dropped TMDB's length (servers agreed on another cut).
         if started, let expected, race?.expectedDuration != nil, ExpectedRuntime.isWrong(state.d, expected: expected) {
@@ -961,6 +1067,15 @@ final class PlayerModel: ObservableObject {
             web.send(.captionStyle(size: PlaybackPrefs.captionSize, background: PlaybackPrefs.captionBackground))
         }
 
+        // Skipping intros automatically (this show, or binge mode): only when
+        // the intro's timing is known, never a guessed 85s.
+        if let intro = markers.intro, isEpisode, started, !skippedIntro, !state.paused, web.canSeek,
+           state.t >= intro.start - 0.5, state.t < intro.end - 2,
+           IntroSkips.isOn(request.title) || PlaybackPrefs.bingeMode {
+            skipIntro(automatic: true)
+            notice = "Skipped the intro."
+            showHUD()
+        }
         if let intro = markers.intro {
             showSkipIntro = PlaybackPrefs.skipIntroButton && isEpisode && started && !skippedIntro && state.t >= intro.start - 0.5 && state.t < intro.end - 2
         } else {
@@ -997,6 +1112,19 @@ final class PlayerModel: ObservableObject {
         updateNowPlaying(state)
         handleUpNext(state)
         saveProgress(force: false)
+        #if DEBUG
+        // -BingeCornerAfter N: N seconds in, move to the corner (testing).
+        let cornerAfter = UserDefaults.standard.double(forKey: "BingeCornerAfter")
+        if cornerAfter > 0, started, state.t > cornerAfter, !movedToCorner { moveToCorner() }
+        // -BingeScrubAt N: N seconds in, the same calls a swipe makes (800
+        // points right), left open on screen (the simulator can't swipe).
+        let scrubAt = UserDefaults.standard.double(forKey: "BingeScrubAt")
+        if scrubAt > 0, started, state.t > scrubAt, !debugScrubbed {
+            debugScrubbed = true
+            if scrubBegan() { scrubChanged(800) }
+            print("[scrub] target \(scrubTarget.map { ScrubMath.clock($0) } ?? "none") preview=\(preview != nil)")
+        }
+        #endif
     }
 
     // MARK: Up Next
@@ -1034,6 +1162,12 @@ final class PlayerModel: ObservableObject {
                 }
                 return
             }
+            // Binge mode: straight on to the next episode at the credits
+            // (unless Up Next was dismissed with Back).
+            if PlaybackPrefs.bingeMode, upNextCountdown != -1 {
+                playNext(automatic: true)
+                return
+            }
             // Real seconds: this runs on every poll (4 times a second).
             upNextCountdown = upNextClock.tick(now: Date())
             if upNextCountdown == 0 { playNext(automatic: true) }
@@ -1057,6 +1191,98 @@ final class PlayerModel: ObservableObject {
             EpisodeMarkerStore.reportCredits(request.title, season: season, episode: episode, start: playback.t, duration: playback.d)
         }
         play(season: next.season, episode: next.episode, automatic: automatic)
+    }
+
+    // MARK: Backup stream (movies and episodes)
+
+    // Live games always keep a second stream behind the one on screen. A
+    // movie or episode gets one only when it's needed: the buffer has been
+    // draining (or the picture froze), so the next-best server loads, held
+    // silent at this second, and takes over the moment the picture stops.
+    // Nothing extra runs while playback is smooth; a backup that isn't
+    // needed after a minute of full buffer is closed again.
+    private var backup: StreamRace?
+    private var aheadSamples: [(at: Date, ahead: Double)] = []
+    private var backupStartedAt = Date.distantPast
+    private var smoothSince: Date?
+
+    var backupStatus: String? {
+        guard let backup else { return nil }
+        if let ready = backup.winner { return "A backup stream (\(ready.server.name)) is ready in case this one stalls." }
+        return "Loading a backup stream in case this one stalls…"
+    }
+
+    var playbackDiagnosis: String {
+        let p = playback
+        if !started { return "Starting…" }
+        if p.native, p.bandwidth > 0, p.bitrate > 0, p.bandwidth < p.bitrate * 1.2 {
+            return "Downloads are only just keeping up with this stream. If it buffers, try another server; if every server does, it's the connection."
+        }
+        if p.stalls > 0 || buffering { return "This stream has stalled. A backup stream takes over if it keeps happening." }
+        if !p.native { return "This server plays in its own page, which shares fewer details." }
+        return "Playing smoothly."
+    }
+
+    private func watchBuffer(_ state: Playback) {
+        guard started, !request.isLive, !handPicked, !userPaused, !state.paused else { aheadSamples = []; return }
+        let now = Date()
+        aheadSamples.append((now, state.ahead))
+        aheadSamples.removeAll { now.timeIntervalSince($0.at) > 20 }
+        if backup == nil {
+            // Down to under 10s and fallen by 3s+ over the last 12s or more.
+            let draining = state.ahead > 0 && state.ahead < 10
+                && (aheadSamples.first.map { $0.ahead - state.ahead > 3 && now.timeIntervalSince($0.at) > 12 } ?? false)
+            if draining || buffering, now.timeIntervalSince(backupStartedAt) > 60 { startBackup() }
+        } else {
+            if state.ahead > 30 { smoothSince = smoothSince ?? now } else { smoothSince = nil }
+            if let since = smoothSince, now.timeIntervalSince(since) > 60 {
+                #if DEBUG
+                print("[backup] not needed after all; closing it")
+                #endif
+                dropBackup()
+            }
+        }
+    }
+
+    private func startBackup() {
+        let current = server
+        let others = servers.filter { $0 != current && !(race?.rejected.contains($0.id) ?? false) }
+        guard !others.isEmpty, WebEngines.liveCount < (Device.isLowMemory ? 2 : 6) else { return }
+        var held = request
+        held.startAt = playback.t + 2
+        let next = StreamRace(request: held, servers: Array(others.prefix(Device.isLowMemory ? 1 : 2)), mode: .warm)
+        next.expectedDuration = expected
+        next.container.frame = surface.bounds
+        next.container.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        surface.insertSubview(next.container, at: 0) // behind the stream on screen
+        backup = next
+        backupStartedAt = Date()
+        smoothSince = nil
+        #if DEBUG
+        print("[backup] buffer \(String(format: "%.1f", playback.ahead))s and falling on \(current?.name ?? "?"): loading \(next.candidates.map(\.server.name))")
+        #endif
+    }
+
+    private func switchToBackup() {
+        guard let next = backup, let winner = next.winner else { return }
+        let at = playback.t
+        let from = server?.name ?? "The server"
+        backup = nil
+        saveProgress(force: true)
+        if at > 1 { request.startAt = at }
+        adopt(next)
+        if at > 1, winner.web.canSeek { winner.web.send(.seekTo(at)) }
+        notice = "\(from) slowed down. Switched to \(winner.server.name) to keep playing."
+        #if DEBUG
+        print("[backup] switched to \(winner.server.name) at \(String(format: "%.1f", at))s")
+        #endif
+    }
+
+    private func dropBackup() {
+        backup?.stop()
+        backup?.container.removeFromSuperview()
+        backup = nil
+        smoothSince = nil
     }
 
     // MARK: Now Playing and the TV's display mode
