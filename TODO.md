@@ -14,10 +14,10 @@ Ideas for binge., roughly in priority order. Each item names the files to start 
 
 ## Tests and reliability
 
-- [ ] **Unit tests for the untested utils.** 42 of 64 `src/utils` modules have no test file. Start with logic that silently changes what users see: `catalogLookup`, `browseRows`, `continueWatching`, `kidsMode`, `releaseCalendar`, `playbackPositions`, `newEpisodes`.
+- [ ] **Unit tests for the rest of the untested utils.** `catalogLookup`, `browseRows`, `playbackPositions`, `releaseCalendar` (`.ics`), `searchMaturity` and `keptCache` have tests now; `newEpisodes` and most of the other utils still don't.
+
 - [ ] **An E2E check for the database split.** Signed in, open Home and assert rows have titles: this would have caught the empty preview (`e2e/`, needs `E2E_EMAIL`/`E2E_PASSWORD`).
 - [ ] **E2E for profile PINs** (set PIN → switch away → wrong PIN → right PIN) once a test account exists.
-- [ ] **Watch `/api/catalog` in production.** Log slow queries and errors to `error_events` so a broken catalog shows on `/admin` instead of as silently empty rows.
 
 ## Mobile
 
