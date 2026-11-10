@@ -644,3 +644,5 @@
   font-size: 0.95rem;
 }
 .st-upnext-ask { display: block; margin-bottom: 4px; }
+
+.st-pb-timing { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }

@@ -7,7 +7,7 @@ import { isAutoSkipOn, recordManualSkip, setAutoSkip, shouldOfferAutoSkip } from
 
 // Intro / credits markers (see utils/episodeMarkers): the Skip intro button,
 // and learning an episode's intro from viewers who skip ahead early.
-export default function useIntroMarkers({ isTV, item, season, episode, provider, playbackRef, iframeRef, pendingStartRef, setResumeNonce }) {
+export default function useIntroMarkers({ isTV, item, season, episode, provider, playbackRef, iframeRef, pendingStartRef, setResumeNonce, bridge }) {
   const [markers, setMarkers] = useState({});
   const [showSkipIntro, setShowSkipIntro] = useState(false);
   // "Hide" on the Skip intro button: gone for the rest of this episode.
@@ -37,15 +37,17 @@ export default function useIntroMarkers({ isTV, item, season, episode, provider,
 
   // Skipping needs a server we can move: VidRift by message, the other
   // resumable servers by reloading at the new second.
-  const canJump = provider === 'vidrift' || RESUMABLE.has(provider);
+  // In the phone apps the frame bridge reports and seeks on any server.
+  const bridged = Boolean(bridge?.active);
+  const canJump = provider === 'vidrift' || RESUMABLE.has(provider) || bridged;
   useEffect(() => {
-    if (!markers.intro || !canJump || !PAUSE_AWARE.has(provider)) { setShowSkipIntro(false); return undefined; }
+    if (!markers.intro || !canJump || !(PAUSE_AWARE.has(provider) || bridged)) { setShowSkipIntro(false); return undefined; }
     const timer = setInterval(() => {
       const { time } = playbackRef.current;
       setShowSkipIntro(time > 0 && time >= markers.intro.start - 0.5 && time < markers.intro.end - 2);
     }, 500);
     return () => clearInterval(timer);
-  }, [markers.intro, canJump, provider, playbackRef]);
+  }, [markers.intro, canJump, provider, playbackRef, bridged]);
 
   // Binge mode, or this show set to skip intros: done for you, once.
   useEffect(() => {
@@ -68,7 +70,9 @@ export default function useIntroMarkers({ isTV, item, season, episode, provider,
     haptic();
     ownSkipRef.current = target;
     setShowSkipIntro(false);
-    if (provider === 'vidrift' && iframeRef.current?.contentWindow) {
+    if (bridged) {
+      bridge.seek(target);
+    } else if (provider === 'vidrift' && iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage({ type: 'vidrift:resume', currentTime: target }, 'https://embed.vidrift.net');
     } else if (RESUMABLE.has(provider)) {
       pendingStartRef.current = Math.floor(target);
