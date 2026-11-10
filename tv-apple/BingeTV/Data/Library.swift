@@ -79,6 +79,24 @@ final class WatchedTitles {
     }
 }
 
+// MARK: - Preloading what you rest on
+
+extension AppModel {
+    // The episode Play would start (where Continue Watching points), loaded
+    // in the background so Play is instant.
+    func preload(_ title: Title) {
+        guard title.tmdbId != nil, !title.comingSoon else { return }
+        Task {
+            let resume = title.kind == .tvShow || isSignedIn ? await resumePoint(for: title) : nil
+            Warmup.shared.prepare(PlayRequest(
+                title: title,
+                season: title.kind == .tvShow ? (resume?.currentSeason ?? 1) : nil,
+                episode: title.kind == .tvShow ? (resume?.currentEpisode ?? 1) : nil,
+                startAt: ResumeRule.start(position: resume?.positionSeconds, duration: resume?.durationSeconds)))
+        }
+    }
+}
+
 // MARK: - Episodes watched by hand
 
 struct EpisodeKey: Hashable, Codable {
@@ -395,6 +413,35 @@ enum RecentSearches {
     }
 
     static func clear(_ profile: String?) { UserDefaults.standard.removeObject(forKey: key(profile)) }
+}
+
+// MARK: - Skipping intros automatically, per show
+
+enum IntroSkips {
+    private static func onKey(_ show: Title) -> String { "binge.autoSkip.\(show.id)" }
+    private static func countKey(_ show: Title) -> String { "binge.introSkipped.\(show.id)" }
+    private static func offeredKey(_ show: Title) -> String { "binge.autoSkipOffered.\(show.id)" }
+
+    static func isOn(_ show: Title) -> Bool { UserDefaults.standard.bool(forKey: onKey(show)) }
+    static func set(_ show: Title, on: Bool) { UserDefaults.standard.set(on, forKey: onKey(show)) }
+
+    // A Skip intro press on this episode; returns how many different episodes
+    // of the show you've skipped the intro on.
+    @discardableResult
+    static func recordManual(_ show: Title, season: Int, episode: Int) -> Int {
+        let tag = "\(season):\(episode)"
+        var seen = Set(UserDefaults.standard.stringArray(forKey: countKey(show)) ?? [])
+        seen.insert(tag)
+        UserDefaults.standard.set(Array(seen.prefix(50)), forKey: countKey(show))
+        return seen.count
+    }
+
+    // Offered once per show, after the second episode skipped by hand.
+    static func shouldOffer(_ show: Title, skips: Int) -> Bool {
+        guard skips >= 2, !isOn(show), !UserDefaults.standard.bool(forKey: offeredKey(show)) else { return false }
+        UserDefaults.standard.set(true, forKey: offeredKey(show))
+        return true
+    }
 }
 
 // MARK: - Hide scores (Sports)

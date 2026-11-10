@@ -28,6 +28,19 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
   - **Subtitles when skipping back** (`binge.captionsOnRewind`, on by default). With subtitles off, ◀ turns on the server's track in the profile's subtitle language (else the Apple TV's language) until the video is 1s past where ◀ was pressed.
 - **The bridge** is `WebEngines.bridgeScript`. It reports the main `<video>` via `webkit.messageHandlers.binge` and relays commands to child frames with `postMessage`. Progress is saved to `continue_watching`.
 
+## Viewing (2026-11-10)
+
+- **Backup stream (movies and episodes).** `PlayerModel.watchBuffer`: with the buffer under 10s and down 3s+ over 12s (or the picture frozen), the next one or two ranked servers race in warm mode at the current second, behind the stream on screen. The moment the picture stalls 2s, `switchToBackup` adopts it at the same second. A backup unused after a minute of 30s+ buffer is closed. Never for hand-picked servers or live (live has its standby).
+- **Steady quality** (`NativeEngine.guardQuality`, every 2s): a stall, or buffer under 15s (8 live) with downloads under 1.25× the bitrate, sets `preferredPeakBitRate` to 70% of the current variant. It lifts after 60s of a full buffer with 2.5× headroom (and 90s held). Shown in Playback info; `QualityMemory` still learns the real height.
+- **Playback info** (Options): server, which player, resolution, bitrate (when the stream states one), download speed vs need, buffer, dropped frames, stalls, audio format, the hold and the backup, and a one-line diagnosis.
+- **Instant resume** (`Warmup.park`): closing the player parks the race (winner only, muted, paused; live keeps running) for 5 minutes, 2 for live, in a slot apart from preloads. `Warmup.take` returns it first. Measured: Parasite back on screen within 2.5s, at the second it was left.
+- **Preload on rest:** your own rows (`TitleRowView(preload:)`) and the spotlight's More info, after 1s, through `AppModel.preload` (the resume episode for series).
+- **Shared server numbers** (`SharedServerStats`, `server_stats` + `server_stats_summary`, migration `20261110130000`): every 12h the medians from other Apple TVs seed `ServerSpeed`/`QualityMemory` for servers this one hasn't measured; its own numbers are reported back (each server at most every 10 min).
+- **Swipe to scrub** (`Scrub.swift`): a pan recognizer on the window (indirect touches) moves a target (1.5s a point at most, carrying on across swipes); click jumps, Back cancels, 1.6s idle jumps. ◀ ▶ within 0.6s of a swipe are ignored. Previews: a second AVPlayer on the stream at 300 kbps, seeked with 3s tolerance (Apple's player only). Not checkable in the simulator: `-BingeScrubAt N` runs the same calls.
+- **Intros and binge mode:** two episodes skipped by hand offer "Skip intros automatically" (Options, per show, `IntroSkips`); Settings › Binge mode skips known intros and starts the next episode at the credits (still asks "Still watching?" after 3).
+- **Picture in picture** (`CornerEpisode` in `Overlay.swift`): Options › Keep watching in the corner moves the race into the overlay window; it saves progress, pauses when another player opens or the app leaves, and Home's bar parks it for the player to pick up (full screen, no reload). The simulator draws one video at a time, so check it with trailers off (`-binge.trailers NO`). `-BingeCornerAfter N` moves to the corner N seconds in.
+- **Sound:** the audio session is `.playback`/`.moviePlayback` with multichannel on; AVPlayer items allow Spatial Audio for stereo and multichannel.
+
 ## Details found on a real Apple TV
 
 - **Safe area:** `ModernWebView` uses a runtime `BingeWKWebView` subclass that reports zero `safeAreaInsets`. Otherwise the overscan safe area offsets fixed-position video toward the bottom-right.
@@ -113,7 +126,7 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
 ## Debug launch arguments
 
 - **Navigation:** `-BingeDemo`, `-BingeTab`, `-BingeOpen kind:id`, `-BingeOpen person:id`, `-BingeOpen page:library` (`-BingeLibraryTab 1` = Ratings), `-BingePanel YES` (opens the player sidebar).
-- **Playback:** `-BingePlay s:e`, `-BingePlayAfter N`, `-BingeLive <team>`, `-BingeProbe <url>`, `-BingeHandoff YES`.
+- **Playback:** `-BingePlay s:e`, `-BingePlayAfter N`, `-BingeScrubAt N`, `-BingeCornerAfter N`, `-BingeLive <team>`, `-BingeProbe <url>`, `-BingeHandoff YES`.
 - **Failure simulation:** `-BingeStallAfter N`, `-BingeKillAfter N`, `-BingeAmbientAfter N`, `-BingeLowMemory YES`.
 - **Subtitles and audio:** `-BingeSubtitlesURL <url>` (a fixed test file), `-BingeAudioTest fr` (switches audio 20s in; verified on VidRift: Korean→French, kept playing).
 - **Sign-in:** `-BingeEmail <e> -BingePassword <p>` signs in without the remote keyboard.

@@ -32,6 +32,35 @@ struct SurpriseButtons: View {
     }
 }
 
+// What's playing in the corner: back to full screen (the same stream, no
+// reload), pause or play, or close it.
+struct CornerBar: View {
+    @ObservedObject var episode: CornerEpisode
+    let fullScreen: (PlayRequest) -> Void
+
+    var body: some View {
+        HStack(spacing: 24) {
+            Image(systemName: "pip").font(.title3)
+            Text("In the corner: \(episode.label)").font(.headline).lineLimit(1)
+            Spacer(minLength: 20)
+            Button {
+                if let request = PiPController.shared.fullScreenEpisode() { fullScreen(request) }
+            } label: { Label("Full screen", systemImage: "arrow.up.left.and.arrow.down.right") }
+            .buttonStyle(ActionButtonStyle(primary: true))
+            Button { episode.setPaused(!episode.paused) } label: {
+                Label(episode.paused ? "Play" : "Pause", systemImage: episode.paused ? "play.fill" : "pause.fill")
+            }
+            .buttonStyle(ActionButtonStyle())
+            Button("Close") { PiPController.shared.closeEpisode() }.buttonStyle(ActionButtonStyle())
+        }
+        .padding(.horizontal, 34)
+        .padding(.vertical, 20)
+        .background(Theme.raised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.top, 20)
+        .focusSection()
+    }
+}
+
 // Reminders that are due (set here or on the website): open the title, or
 // dismiss. The website pushes them to phones; the TV shows them here.
 struct ReminderBanner: View {

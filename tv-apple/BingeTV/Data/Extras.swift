@@ -31,6 +31,11 @@ enum PlaybackPrefs {
     // Settings › Playback › Skip intro button (on by default).
     static let skipIntroKey = "binge.skipIntroButton"
     static var skipIntroButton: Bool { UserDefaults.standard.object(forKey: skipIntroKey) as? Bool ?? true }
+    // Settings › Playback › Binge mode (off by default): at the credits the
+    // next episode starts straight away, and known intros are skipped.
+    static let bingeModeKey = "binge.bingeMode"
+    static var bingeMode: Bool { UserDefaults.standard.bool(forKey: bingeModeKey) }
+
     // Settings › Playback › Subtitles when skipping back (on by default).
     static let captionsOnRewindKey = "binge.captionsOnRewind"
     static var captionsOnRewind: Bool { UserDefaults.standard.object(forKey: captionsOnRewindKey) as? Bool ?? true }
@@ -178,6 +183,13 @@ enum ServerSpeed {
         guard !server.id.contains("://") else { return } // live streams change every game
         let old = of(server)
         UserDefaults.standard.set(old.map { ($0 * 2 + seconds) / 3 } ?? seconds, forKey: key(server.id))
+        SharedServerStats.report(server)
+    }
+
+    // A starting point from other devices, for a server this one hasn't timed.
+    static func seed(_ id: String, seconds: Double) {
+        guard seconds > 0, UserDefaults.standard.double(forKey: key(id)) <= 0 else { return }
+        UserDefaults.standard.set(seconds, forKey: key(id))
     }
 
     static func failed(_ server: StreamServer) { record(server, seconds: 40) }
@@ -192,6 +204,50 @@ enum ServerSpeed {
             let (x, y) = (of(a.element) ?? average, of(b.element) ?? average)
             return x == y ? a.offset < b.offset : x < y
         }.map(\.element)
+    }
+}
+
+// What every Apple TV measured about the movie/TV servers (server_stats):
+// start time and real picture height, medians from the last 30 days. A
+// device that hasn't timed a server yet starts from these, so a new or
+// reinstalled Apple TV already ranks the servers well on its first play.
+// Its own measurements take over from there and are shared back.
+enum SharedServerStats {
+    static let device = "apple-tv"
+    private static let fetchedKey = "binge.serverStats.fetched"
+
+    // At most twice a day.
+    static func refresh(now: Date = Date()) async {
+        let last = UserDefaults.standard.double(forKey: fetchedKey)
+        guard now.timeIntervalSince1970 - last > 12 * 3600 else { return }
+        struct Row: Decodable { let server: String; let startS: Double?; let quality: Int? }
+        guard let rows: [Row] = try? await Supabase.shared.rpc("server_stats_summary", ["p_device": device]) else { return }
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: fetchedKey)
+        apply(rows.map { ($0.server, $0.startS, $0.quality) })
+    }
+
+    static func apply(_ rows: [(server: String, start: Double?, quality: Int?)]) {
+        for row in rows where StreamServer.all.contains(where: { $0.id == row.server }) {
+            if let start = row.start { ServerSpeed.seed(row.server, seconds: start) }
+            if let quality = row.quality { QualityMemory.seed(row.server, height: quality) }
+        }
+    }
+
+    // This device's numbers for a server, at most every 10 minutes each.
+    private static var lastReport: [String: Date] = [:]
+    static func report(_ server: StreamServer) {
+        guard !server.id.contains("://"), Date().timeIntervalSince(lastReport[server.id] ?? .distantPast) > 600 else { return }
+        lastReport[server.id] = Date()
+        let start = ServerSpeed.of(server), quality = QualityMemory.learned(server)
+        Task {
+            guard let userId = await Supabase.shared.session?.userId else { return }
+            try? await Supabase.shared.upsert("server_stats", onConflict: "user_id,device,server", [
+                "user_id": userId, "device": device, "server": server.id,
+                "start_s": start.map { min(120, ($0 * 10).rounded() / 10) } ?? NSNull(),
+                "quality": quality > 0 ? min(4320, quality) : NSNull(),
+                "updated_at": ISO8601DateFormatter().string(from: Date()),
+            ])
+        }
     }
 }
 

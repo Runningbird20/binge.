@@ -119,6 +119,21 @@ final class StreamRace {
         }
     }
 
+    // Left the player: keep only what's on screen, silent and held where it
+    // is (a live game keeps running at the edge), ready to be taken back.
+    func park() {
+        mode = .warm
+        seekedToStart = true
+        upgradeUntil = nil
+        dropStandby()
+        if let winner {
+            for other in candidates where other.server != winner.server { Self.tearDown(other.web) }
+            candidates = [winner]
+            winner.web.send(.mute)
+            if !request.isLive { winner.web.send(.pause) }
+        }
+    }
+
     func goLive() {
         mode = .live
         if let winner {
@@ -402,6 +417,14 @@ enum QualityMemory {
 
     static func learned(_ server: StreamServer) -> Int { UserDefaults.standard.integer(forKey: key(server)) }
 
+    // A starting point from other Apple TVs (SharedServerStats), only for a
+    // server this one hasn't measured.
+    static func seed(_ id: String, height: Int) {
+        let key = "binge.q." + id
+        guard height > 0, UserDefaults.standard.integer(forKey: key) == 0 else { return }
+        UserDefaults.standard.set(height, forKey: key)
+    }
+
     static func quality(_ server: StreamServer) -> Int { max(learned(server), nominal(server.name)) }
 
     // Highest wins at once; a lower reading eases it down slowly.
@@ -409,6 +432,7 @@ enum QualityMemory {
         guard height > 0 else { return }
         let old = learned(server)
         UserDefaults.standard.set(height >= old ? height : (old * 3 + height) / 4, forKey: key(server))
+        SharedServerStats.report(server)
     }
 
     // Best quality first, otherwise the given order.
@@ -444,12 +468,35 @@ final class Warmup {
         // the app leaves the screen.
         for name in [UIApplication.didReceiveMemoryWarningNotification, UIApplication.didEnterBackgroundNotification] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { Warmup.shared.cancel() }
+                MainActor.assumeIsolated { Warmup.shared.cancel(); Warmup.shared.dropParked() }
             }
         }
     }
 
     private var pendingKey: String?
+    // Instant resume: the video you just left, held paused for a few minutes
+    // (a live game for two) so going back in plays at once, no reload. Kept
+    // apart from the preload above, which browsing replaces all the time.
+    private(set) var parked: StreamRace?
+
+    func park(_ race: StreamRace) {
+        dropParked()
+        race.park()
+        race.container.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        host.addSubview(race.container)
+        parked = race
+        let minutes: Double = race.request.isLive ? 2 : 5
+        DispatchQueue.main.asyncAfter(deadline: .now() + minutes * 60) { [weak race] in
+            guard let race, Warmup.shared.parked === race else { return }
+            Warmup.shared.dropParked()
+        }
+    }
+
+    func dropParked() {
+        parked?.stop()
+        parked?.container.removeFromSuperview()
+        parked = nil
+    }
     // Multiview is open: no background preloads at all. The Sports page
     // underneath kept preloading its spotlight game (4 servers at once)
     // while Multiview ran, which is memory the Apple TV didn't have.
@@ -463,7 +510,7 @@ final class Warmup {
         // open (Multiview, a corner game), rather than risk running out of memory.
         if race == nil, WebEngines.liveCount >= (Device.isLowMemory ? 2 : 5) { return }
         let key = StreamRace.key(for: request)
-        if race?.key == key || pendingKey == key { return }
+        if race?.key == key || pendingKey == key || parked?.key == key { return }
         race?.stop()
         race?.container.removeFromSuperview()
         race = nil
@@ -493,6 +540,14 @@ final class Warmup {
 
     // Hands over the warm race if it matches (and hasn't given up).
     func take(_ request: PlayRequest) -> StreamRace? {
+        if let parked, parked.key == StreamRace.key(for: request), !parked.failed, parked.winner != nil {
+            self.parked = nil
+            parked.container.removeFromSuperview()
+            #if DEBUG
+            print("[resume] picked up the parked stream")
+            #endif
+            return parked
+        }
         guard let race, race.key == StreamRace.key(for: request), !race.failed else { return nil }
         self.race = nil
         race.container.removeFromSuperview()
