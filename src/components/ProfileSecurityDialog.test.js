@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProfileSecurityDialog from './ProfileSecurityDialog';
 import * as supabaseModule from '../utils/supabase';
+import * as supabaseData from '../utils/supabaseData';
 
 const profile = { id: 'p1', name: 'Kids' };
 const boxes = () => screen.getAllByLabelText(/digit \d of 4/i);
@@ -53,4 +54,26 @@ test('the close button and Escape go back to the profiles', () => {
   fireEvent.click(screen.getByRole('button', { name: /back to profiles/i }));
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(onCancel).toHaveBeenCalledTimes(2);
+});
+
+test('Forgot PIN: the account password removes the lock and opens the profile', async () => {
+  const { rpc, onUnlock } = setup(true);
+  const signIn = jest.spyOn(supabaseData, 'signInWithSupabase').mockResolvedValue({});
+  fireEvent.click(screen.getByRole('button', { name: /forgot pin/i }));
+  fireEvent.change(screen.getByLabelText(/account password/i), { target: { value: 'secret' } });
+  fireEvent.click(screen.getByRole('button', { name: /remove pin and open/i }));
+  await waitFor(() => expect(onUnlock).toHaveBeenCalled());
+  expect(signIn).toHaveBeenCalledWith({ email: undefined, password: 'secret' });
+  expect(rpc).toHaveBeenCalledWith('set_profile_lock', { target_profile: 'p1', new_pin: null });
+});
+
+test('Forgot PIN: a wrong password keeps the lock', async () => {
+  const { rpc, onUnlock } = setup(true);
+  jest.spyOn(supabaseData, 'signInWithSupabase').mockRejectedValue(new Error('Invalid login credentials'));
+  fireEvent.click(screen.getByRole('button', { name: /forgot pin/i }));
+  fireEvent.change(screen.getByLabelText(/account password/i), { target: { value: 'nope' } });
+  fireEvent.click(screen.getByRole('button', { name: /remove pin and open/i }));
+  expect(await screen.findByText(/invalid login credentials/i)).toBeInTheDocument();
+  expect(onUnlock).not.toHaveBeenCalled();
+  expect(rpc).not.toHaveBeenCalledWith('set_profile_lock', expect.anything());
 });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { readKept, writeKept } from '../utils/keptCache';
 import { Link } from 'react-router-dom';
 import { SquaresFour } from '@phosphor-icons/react';
 import BrowseHero from './BrowseHero';
@@ -29,12 +30,18 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
   useEffect(() => {
     if (profilesLoading) return undefined;
     let cancelled = false;
-    setPersonal(null);
+    // The last visit's rows paint at once (keptCache.js), then fresh ones.
+    const keepKey = `personal:${mediaType}:${activeProfile?.id || ''}:${kidsSafe || 'all'}`;
+    setPersonal(readKept(keepKey) || null);
     buildPersonalizedRows({ mediaTypes: [mediaType], kidsSafe, becauseLimit: 3 })
-      .then((result) => { if (!cancelled) setPersonal(result); })
+      .then((result) => {
+        if (cancelled) return;
+        setPersonal(result);
+        writeKept(keepKey, result);
+      })
       .catch(() => { if (!cancelled) setPersonal({ hasHistory: false, topPicks: [], becauseYouWatched: [], taste: {} }); });
     return () => { cancelled = true; };
-  }, [mediaType, kidsSafe, profilesLoading, refreshKey]);
+  }, [mediaType, kidsSafe, profilesLoading, refreshKey, activeProfile?.id]);
 
   const definitions = useMemo(
     () => orderRowsForTaste(rowsFor(mediaType, { kidsSafe }), personal?.taste),
@@ -46,9 +53,14 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
   const headline = definitions[0];
   useEffect(() => {
     let cancelled = false;
-    setTrending(null);
+    const keepKey = `row:${mediaType}:${headline.id}:${kidsSafe || 'all'}`;
+    setTrending(readKept(keepKey) || null);
     loadRowItems(headline, mediaType, { kidsSafe })
-      .then((items) => { if (!cancelled) setTrending(items); })
+      .then((items) => {
+        if (cancelled) return;
+        setTrending(items);
+        if (items?.length) writeKept(keepKey, items);
+      })
       .catch(() => { if (!cancelled) setTrending([]); });
     return () => { cancelled = true; };
   }, [headline, mediaType, kidsSafe, refreshKey]);
@@ -117,6 +129,7 @@ export default function BrowseView({ mediaType, refreshKey = 0 }) {
             title={definition.title}
             subtitle={definition.subtitle}
             load={loaders.get(definition.id)}
+            keepKey={definition.seasonal ? undefined : `row:${mediaType}:${definition.id}:${kidsSafe || 'all'}`}
             minItems={definition.comingSoon ? 1 : 5}
             hideWatched
           />

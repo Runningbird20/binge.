@@ -25,6 +25,7 @@ import { isChildLevel, maturityRestriction } from '../utils/kidsMode';
 import { resumeUrl, detailsUrl, computeProgressBadge, computeResumeProgress, formatTimeLeft, hasSavedPosition, lastAiredEpisode } from '../utils/continueWatching';
 import { excludeRated, computeWatchMinutes, countCompleted } from '../utils/libraryStats';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
+import { readKept, writeKept } from '../utils/keptCache';
 import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { findNewEpisodes } from '../utils/newEpisodes';
 import { seasonStatus } from '../utils/seasonStatus';
@@ -359,11 +360,13 @@ export default function Home() {
       setWatchlistItems(nextWatchlist);
       setRatingsItems(nextRatings);
       setContinueWatchingItems(nextContinueWatching);
-      setCached(cacheKey, {
+      const snapshot = {
         watchlistItems: nextWatchlist,
         ratingsItems: nextRatings,
         continueWatchingItems: nextContinueWatching,
-      });
+      };
+      setCached(cacheKey, snapshot);
+      writeKept(cacheKey, snapshot); // the next visit paints from it
     } catch {
       if (!mountedRef.current) return;
       setWatchlistItems([]);
@@ -377,7 +380,9 @@ export default function Home() {
   useEffect(() => {
     if (authLoading || !userId) return;
 
-    const cached = getCached(buildUserDataCacheKey('home-stats', userId, profileId));
+    const key = buildUserDataCacheKey('home-stats', userId, profileId);
+    // This tab's copy, else the last visit's (kept on this device a week).
+    const cached = getCached(key) || readKept(key);
     if (cached) {
       setWatchlistItems(cached.watchlistItems);
       setRatingsItems(cached.ratingsItems);
@@ -391,11 +396,17 @@ export default function Home() {
   useEffect(() => {
     if (authLoading || !userId || profilesLoading) return undefined;
     let cancelled = false;
+    const keepKey = `personal:home:${userId}:${profileId || ''}:${kidsSafe || 'all'}`;
+    setPersonal((current) => current || readKept(keepKey) || null);
     buildPersonalizedRows({ mediaTypes: ['movie', 'tv_show'], kidsSafe, becauseLimit: 4 })
-      .then((result) => { if (!cancelled) setPersonal(result); })
+      .then((result) => {
+        if (cancelled) return;
+        setPersonal(result);
+        writeKept(keepKey, result);
+      })
       .catch(() => { if (!cancelled) setPersonal({ hasHistory: false, topPicks: [], becauseYouWatched: [], taste: {} }); });
     return () => { cancelled = true; };
-  }, [authLoading, userId, profilesLoading, kidsSafe, refreshKey]);
+  }, [authLoading, userId, profileId, profilesLoading, kidsSafe, refreshKey]);
 
   // Hero: resume what you were watching first, then your top picks — or
   // trending for a brand-new profile.
@@ -606,6 +617,7 @@ export default function Home() {
             title={isChildLevel(kidsSafe) ? 'Popular Kids Series' : 'Top 10 Series This Week'}
             ranked={!isChildLevel(kidsSafe)}
             load={() => loadRowItems(headlineRows.tv_show, 'tv_show', { kidsSafe })}
+            keepKey={`row:home-top10-tv:${kidsSafe || 'all'}`}
             limit={isChildLevel(kidsSafe) ? 30 : 10}
             hideWatched
           />
@@ -621,6 +633,7 @@ export default function Home() {
             title={isChildLevel(kidsSafe) ? 'Popular Kids Movies' : 'Top 10 Movies This Week'}
             ranked={!isChildLevel(kidsSafe)}
             load={() => loadRowItems(headlineRows.movie, 'movie', { kidsSafe })}
+            keepKey={`row:home-top10-movie:${kidsSafe || 'all'}`}
             limit={isChildLevel(kidsSafe) ? 30 : 10}
             hideWatched
           />

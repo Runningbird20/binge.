@@ -19,7 +19,8 @@ import useFullscreen from './player/useFullscreen';
 import usePlayerKeyboard from './player/usePlayerKeyboard';
 import useControlsAutoHide from './player/useControlsAutoHide';
 import UpNextCard from './player/UpNextCard';
-import { FailoverBar, PreloadFrame, SkipIntroButton } from './player/PlayerOverlays';
+import { AutoSkipOffer, FailoverBar, PreloadFrame, SkipIntroButton } from './player/PlayerOverlays';
+import useSleepTimer from './player/useSleepTimer';
 import MobilePlayer from './player/MobilePlayer';
 import DesktopPlayer from './player/DesktopPlayer';
 
@@ -111,9 +112,11 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   const { seasonEpisodeCounts, totalSeasons, metadataWarning } = useEpisodeGuide({ item, isTV, tmdbId, season, resetKey });
   const { watched, setWatched, markingWatched, markWatched } = useWatchedEpisodes({ item, isTV, season, episode, resetKey });
   const intro = useIntroMarkers({ isTV, item, season, episode, provider, playbackRef, iframeRef, pendingStartRef, setResumeNonce });
+  const sleep = useSleepTimer({ onClose, isTV });
   const upNext = useUpNext({
     isTV, item, tmdbId, season, episode, setSeason, setEpisode, totalSeasons,
     seasonEpisodeCounts, markers: intro.markers, playbackRef, watched, setWatched,
+    stopAtEnd: sleep.stopAtEnd, onSleep: onClose,
   });
   const { syncPosition } = usePositionSync({
     item, mediaType, isTV, season, episode, provider, externalId, subtitleLang,
@@ -185,6 +188,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
     blockedCount: serverChoice.blockedIds.size,
     health: serverChoice.providerHealth,
     popupsBlockedNow: popups.sandboxed,
+    sleep,
   };
   // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
   const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
@@ -194,6 +198,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   const overlays = (
     <>
       {intro.showSkipIntro && <SkipIntroButton onSkip={intro.skipIntro} onHide={intro.hideSkipIntro} />}
+      {intro.offerAutoSkip && <AutoSkipOffer onAccept={intro.acceptAutoSkip} onDecline={intro.declineAutoSkip} />}
       {upNext.upNext && upNext.nextEpisode && (
         <UpNextCard upNext={upNext.upNext} nextEpisode={upNext.nextEpisode} nextInfo={upNext.nextInfo} onPlay={upNext.playNextEpisode} onCancel={upNext.dismissUpNext} />
       )}

@@ -45,6 +45,17 @@ export function SkipIntroButton({ onSkip, onHide }) {
   );
 }
 
+// After two episodes' intros skipped by hand: offer to do it for this show.
+export function AutoSkipOffer({ onAccept, onDecline }) {
+  return (
+    <div className="st-autoskip" role="dialog" aria-label="Skip intros automatically">
+      <span>Skip intros on this show automatically?</span>
+      <button type="button" className="st-btn st-btn--primary" onClick={onAccept}>Turn on</button>
+      <button type="button" className="st-btn st-btn--ghost" onClick={onDecline}>No thanks</button>
+    </div>
+  );
+}
+
 // Hidden frame that warms the next episode's player (see useUpNext).
 // The next episode, warming up hidden. It must never be heard (embed players
 // are cross-origin, so the page can't mute them): a server whose autoplay

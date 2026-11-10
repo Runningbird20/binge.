@@ -143,6 +143,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - PINs are bcrypt-hashed. Five wrong tries start a 5-minute cooldown.
   - Saving a lock asks for the account password.
   - It's a selection lock inside one account, not a security boundary.
+  - **Forgot PIN?** on the lock screen: the account password removes the lock (`set_profile_lock` with no PIN) and opens the profile.
   - **Never select `pin` into the client profile list.**
 - **Profile scoping.** Reads go through `scopeToProfile` in `src/utils/data/shared.js`. The default profile (or an account's only profile) also owns rows with `profile_id` null, the same rule as the TV apps. Before this, those titles showed on the TV but never on the website.
 - **Maturity levels** (`src/utils/kidsMode.js`):
@@ -263,6 +264,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. Apple TV applies the same rule (`finishedShows`); Fire TV doesn't yet.
   - **Links carry `&t=`.** Continue Watching links include the saved second (see the web player).
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
+- **Opens instantly on a return visit.** Home's stats and personal rows, its Top 10s and the Movies/Series rows are kept on the device for a week (`utils/keptCache.js`, `TitleRow keepKey`), painted at once and refreshed; signing out clears them.
 - **Surprise me** (above Continue Watching, `SurpriseButtons` in `Home.js`, logic in `utils/surprise.js`):
   - "Surprise me with a movie" and "… with a series" each open one title of that type.
   - The title comes from the profile's Top Picks / "Because you watched" rows, which `buildPersonalizedRows` has already filtered for maturity and the release window. Picks lean toward the top and skip Coming Soon titles, watched titles (`exclude`) and the last 6 surprises.
@@ -434,6 +436,8 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 - For 10s after a switch, the old episode's late progress messages are ignored.
 
 The rest of Up Next: the player shows a 10s "Up Next" card in the last 30s, at the credits marker, or on `ended` / `vidrift:nextup`, and switches episode itself so the chosen server carries over. In the last 90s the next episode preloads in a hidden 1px iframe with no autoplay permission (skipped with data saver).
+
+**Sleep timer, Still watching?, binge mode** (`player/useSleepTimer.js`, `useUpNext`): the sleep timer closes the player when it's time (another site's player can't be paused), "end of episode" stops instead of moving on, three automatic episodes in a row ask "Still watching?", and Settings › Binge mode starts the next episode at the credits. Known intros are skipped automatically in binge mode or for a show you turned it on for (offered after two episodes skipped by hand, `utils/introSkips.js`).
 
 **Intro/credits markers** (`utils/episodeMarkers.js`, TV `Data/EpisodeMarkers.swift`; table `episode_markers` + the `episode_marker_summary` RPC; migration `20261014120000_markers_shares.sql`, APPLIED). We don't own the video files, so markers come from two places:
 - **AniSkip, for anime.** The MAL id comes via AniList, which must confirm a Japanese title of that exact name; the catalog's `original_language` is often null.

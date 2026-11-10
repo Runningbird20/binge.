@@ -41,7 +41,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Trailer previews when hovering a card | ✓ | — | — | — | `HoverPreview.js`, needs a mouse or trackpad. |
 | Watched titles left out of every recommendation | ✓ | ✓ | ✓ | ◐ | `utils/watchedTitles.js`; Apple TV `WatchedTitles`. Fire TV leaves them out of Top Picks and Because you watched only; its Trending, genre and seasonal rows still show them. |
 | Finished shows leave Continue Watching | ✓ | ✓ | ✓ | — | Newest episode marked watched and nothing saved partway (`Home.js`; Apple TV `finishedShows`). Fire TV keeps them. |
-| Home opens instantly from the last visit | ◐ | ◐ | ✓ | ✓ | The TV apps save Home to disk for 7 days (`HomeSnapshot`). The website keeps it only for the open tab (`sessionCache`). |
+| Home opens instantly from the last visit | ✓ | ✓ | ✓ | ✓ | The TV apps save Home to disk for 7 days (`HomeSnapshot`); the website keeps Home's and the browse rows the same way (`utils/keptCache.js`, cleared on sign-out). |
 | Pull to refresh | — | ✓ | — | — | Touch only. |
 | Rows loop back to the start (Netflix-style) | — | — | ✓ | — | Apple TV: rows of 8+ titles carry on past the last one (`RowLoop` in `Components.swift`). |
 | Keyboard shortcuts (`/`, `?`, arrow keys) | ✓ | — | n/a | n/a | `KeyboardShortcuts.js`; also drives the website's TV mode. |
@@ -78,7 +78,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Subtitle size & background | — | — | ✓ | ✓ | |
 | Skip intro | ◐ | ◐ | ✓ | ✓ | The website can only jump on some servers (VidRift, or ones that can start at a given second). |
 | Best quality / Fastest start, resolution badge | — | — | ✓ | ✓ | Apple TV also learns each server's real resolution (`QualityMemory`). |
-| Sleep timer, "Still watching?" | — | — | ✓ | ✓ | On the website's TODO. |
+| Sleep timer, "Still watching?" | ✓ | ✓ | ✓ | ✓ | The website's sleep timer closes the player when it's time (it can't pause another site's player), keeping your place. |
 | Audio description first, Larger text | — | — | ✓ | ✓ | |
 | Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Both have an on/off switch in Settings. |
 | Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |
@@ -96,7 +96,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Preload what you rest on (your rows, spotlight) | — | — | ✓ | ◐ | Apple TV: Top Picks, My List, Sent to you, New Episodes, Because you… and the spotlight, after 1s (`AppModel.preload`). Both TVs preload Continue Watching cards. |
 | Server speed and quality shared between devices | — | — | ✓ | — | `server_stats` (migration `20261110130000`): a new Apple TV starts from other Apple TVs' measurements. |
 | Swipe to scrub with picture previews | — | — | ✓ | — | Apple TV: swipe on the Siri Remote's touch surface; previews from a second low-bitrate player when Apple's player is on (`Scrub.swift`). |
-| Skip intros automatically (per show), binge mode | — | — | ✓ | — | Apple TV: Options › Skip intros automatically (offered after you skip two episodes' intros); Settings › Binge mode starts the next episode at the credits. Only intros with a known timing are skipped. |
+| Skip intros automatically (per show), binge mode | ◐ | ◐ | ✓ | — | Apple TV: Options › Skip intros automatically (offered after you skip two episodes' intros); Settings › Binge mode starts the next episode at the credits. The website does the same, but can only skip on servers that can jump (VidRift and the resumable ones). Only intros with a known timing are skipped. |
 | Movies and episodes in a corner while you browse | — | — | ✓ | — | Apple TV: Options › Keep watching in the corner; Home's bar goes back to full screen without a reload. Live games could already. |
 | Surround sound and Spatial Audio | — | — | ✓ | — | Apple TV: multichannel passes to the receiver, Spatial Audio for AirPods (`allowedAudioSpatializationFormats`). |
 

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { haptic } from '../../utils/haptics';
 import { fetchEpisodeMarkers, looksLikeIntroSkip, reportIntro } from '../../utils/episodeMarkers';
 import { PAUSE_AWARE, RESUMABLE } from '../../utils/embedProviders';
+import { getSettings } from '../../utils/profileSettings';
+import { isAutoSkipOn, recordManualSkip, setAutoSkip, shouldOfferAutoSkip } from '../../utils/introSkips';
 
 // Intro / credits markers (see utils/episodeMarkers): the Skip intro button,
 // and learning an episode's intro from viewers who skip ahead early.
@@ -15,11 +17,16 @@ export default function useIntroMarkers({ isTV, item, season, episode, provider,
   const ownSkipRef = useRef(0);
   const introFromRef = useRef(null);
   const introReportTimerRef = useRef(null);
+  // Skipped automatically this episode (binge mode or this show's setting),
+  // and the one-time offer to turn that on.
+  const autoSkippedRef = useRef(false);
+  const [offerAutoSkip, setOfferAutoSkip] = useState(false);
 
   useEffect(() => {
     setMarkers({});
     setShowSkipIntro(false);
     setIntroHidden(false);
+    autoSkippedRef.current = false;
     if (!isTV || !item?.id) return undefined;
     let cancelled = false;
     fetchEpisodeMarkers(item, season, episode).then((found) => { if (!cancelled) setMarkers(found || {}); });
@@ -40,9 +47,24 @@ export default function useIntroMarkers({ isTV, item, season, episode, provider,
     return () => clearInterval(timer);
   }, [markers.intro, canJump, provider, playbackRef]);
 
-  function skipIntro() {
+  // Binge mode, or this show set to skip intros: done for you, once.
+  useEffect(() => {
+    if (!showSkipIntro || introHidden || autoSkippedRef.current || !item?.id) return;
+    if (getSettings().bingeMode || isAutoSkipOn(item.id)) {
+      autoSkippedRef.current = true;
+      skipIntro({ automatic: true });
+    }
+    // skipIntro reads this render's markers; the effect runs when the button would show.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSkipIntro, introHidden, item?.id]);
+
+  function skipIntro({ automatic = false } = {}) {
     const target = markers.intro?.end;
     if (!target) return;
+    if (!automatic && item?.id) {
+      const skips = recordManualSkip(item.id, season, episode);
+      if (shouldOfferAutoSkip(item.id, skips)) setOfferAutoSkip(true);
+    }
     haptic();
     ownSkipRef.current = target;
     setShowSkipIntro(false);
@@ -73,5 +95,14 @@ export default function useIntroMarkers({ isTV, item, season, episode, provider,
     if (ownSkipRef.current && reading.time > (ownSkipRef.current - 3)) ownSkipRef.current = 0;
   }
 
-  return { markers, showSkipIntro: showSkipIntro && !introHidden, hideSkipIntro: () => setIntroHidden(true), skipIntro, noteTime };
+  return {
+    markers,
+    showSkipIntro: showSkipIntro && !introHidden,
+    hideSkipIntro: () => setIntroHidden(true),
+    skipIntro: () => skipIntro(),
+    noteTime,
+    offerAutoSkip,
+    acceptAutoSkip: () => { if (item?.id) setAutoSkip(item.id, true); setOfferAutoSkip(false); },
+    declineAutoSkip: () => setOfferAutoSkip(false),
+  };
 }

@@ -41,6 +41,7 @@ export function PlaybackOptionsPanel({
   blockedCount = 0,
   health = {},
   popupsBlockedNow,
+  sleep,
   onClose,
 }) {
   const originalName = languageName(originalLanguage);
@@ -140,6 +141,25 @@ export function PlaybackOptionsPanel({
           <WarningCircle size={16} weight="bold" /> Not playing? Try the next server
         </button>
       </div>
+
+      {sleep && (
+        <div className="st-pb-col">
+          <h3>Sleep timer</h3>
+          <ul role="radiogroup" aria-label="Sleep timer">
+            {sleep.choices.map((choice) => {
+              const active = sleep.choice === choice.value;
+              return (
+                <li key={choice.value || 'off'}>
+                  <button type="button" role="radio" aria-checked={active} className={active ? 'active' : ''} onClick={() => sleep.setChoice(choice.value)}>
+                    <span className="st-pb-check">{active && <Check size={14} weight="bold" />}</span>{choice.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="st-pb-hint">When it's time, the player closes and keeps your place.</p>
+        </div>
+      )}
 
       {onClose && (
         <button type="button" className="st-btn st-btn--secondary st-pb-done" onClick={onClose}>Done</button>
