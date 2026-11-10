@@ -90,6 +90,16 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | TV switches to the video's frame rate (Match Content) | — | — | ✓ | — | Apple TV, with Match Content on in the Apple TV's settings (`NativeEngine.displayCriteria`). |
 | Now Playing in Control Center / the phone's TV remote | — | — | ✓ | — | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. |
 | Subtitles while skipping back | — | — | ✓ | — | Apple TV: with subtitles off, ◀ turns the server's track on until the video passes where you were. |
+| Backup stream for movies and episodes, started only when needed | — | — | ✓ | — | Apple TV: when the buffer drains (or the picture froze) the next-best server loads silently at that second and takes over if the picture stops (`PlayerModel` backup). Live games on both TVs keep a standby all the time. |
+| Steady quality on a shaky connection | — | — | ✓ | — | Apple TV, Apple's player only: a stall, or a low buffer that downloads don't refill, caps the bitrate a step down until the connection recovers (`NativeEngine.guardQuality`). |
+| Playback info (server, resolution, bitrate, download speed, buffer, dropped frames, stalls, audio) | — | — | ✓ | — | Apple TV: Options › Playback info, with a one-line diagnosis. |
+| Instant resume after leaving the player | — | — | ✓ | — | Apple TV: the stream stays loaded and paused for 5 minutes (2 for live), so going back in plays at once (`Warmup.park`). |
+| Preload what you rest on (your rows, spotlight) | — | — | ✓ | ◐ | Apple TV: Top Picks, My List, Sent to you, New Episodes, Because you… and the spotlight, after 1s (`AppModel.preload`). Both TVs preload Continue Watching cards. |
+| Server speed and quality shared between devices | — | — | ✓ | — | `server_stats` (migration `20261110130000`): a new Apple TV starts from other Apple TVs' measurements. |
+| Swipe to scrub with picture previews | — | — | ✓ | — | Apple TV: swipe on the Siri Remote's touch surface; previews from a second low-bitrate player when Apple's player is on (`Scrub.swift`). |
+| Skip intros automatically (per show), binge mode | — | — | ✓ | — | Apple TV: Options › Skip intros automatically (offered after you skip two episodes' intros); Settings › Binge mode starts the next episode at the credits. Only intros with a known timing are skipped. |
+| Movies and episodes in a corner while you browse | — | — | ✓ | — | Apple TV: Options › Keep watching in the corner; Home's bar goes back to full screen without a reload. Live games could already. |
+| Surround sound and Spatial Audio | — | — | ✓ | — | Apple TV: multichannel passes to the receiver, Spatial Audio for AirPods (`allowedAudioSpatializationFormats`). |
 
 ## Sports
 

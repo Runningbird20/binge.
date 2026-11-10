@@ -40,6 +40,15 @@ struct MediaState: Decodable, Equatable {
     var text: [MediaTrack] = []
     // The subtitle line on screen right now (drawn by the app, not WebKit).
     var cue: String = ""
+    // Apple's player only (the quality panel): the variant's bitrate, the
+    // measured download speed (bits/s), stalls so far, a quality hold the
+    // app put on (bits/s, 0 = none) and the audio format.
+    var native = false
+    var bitrate: Double = 0
+    var bandwidth: Double = 0
+    var stalls = 0
+    var held: Double = 0
+    var audioFormat = ""
 
     enum CodingKeys: String, CodingKey { case t, d, paused, ended, ready, video }
 }

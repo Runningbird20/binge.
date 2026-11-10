@@ -39,14 +39,19 @@ final class NativeEngine: NSObject, WebEngine {
     private var trackCriteria: AVDisplayCriteria?
     private var lookingAtTrack = false
 
-    init(stream: URL, page: String, agent: String) {
+    // The stream with the headers its page sends (Referer, Origin, UA).
+    static func asset(stream: URL, page: String, agent: String) -> AVURLAsset {
         var headers = ["Referer": page]
         if let origin = URL(string: page).flatMap({ url in url.scheme.flatMap { scheme in url.host.map { "\(scheme)://\($0)" } } }) {
             headers["Origin"] = origin
         }
         if !agent.isEmpty { headers["User-Agent"] = agent }
         // AVURLAssetHTTPHeaderFieldsKey isn't public API (this app is sideload-only).
-        let asset = AVURLAsset(url: stream, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        return AVURLAsset(url: stream, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+    }
+
+    init(stream: URL, page: String, agent: String) {
+        let asset = Self.asset(stream: stream, page: page, agent: agent)
         item = AVPlayerItem(asset: asset)
         // Start on the first variant the playlist lists instead of measuring
         // the network first (faster first picture; it climbs from there).
@@ -59,6 +64,9 @@ final class NativeEngine: NSObject, WebEngine {
         item.configuredTimeOffsetFromLive = CMTime(seconds: Self.liveOffset, preferredTimescale: 600)
         item.automaticallyPreservesTimeOffsetFromLive = true
         item.canUseNetworkResourcesForLiveStreamingWhilePaused = true
+        // Surround and Atmos reach a receiver as they are; AirPods get
+        // Spatial Audio from stereo and multichannel alike.
+        item.allowedAudioSpatializationFormats = .monoStereoAndMultichannel
         player = AVPlayer(playerItem: item)
         player.isMuted = true
         player.automaticallyWaitsToMinimizeStalling = true
@@ -87,6 +95,80 @@ final class NativeEngine: NSObject, WebEngine {
         Task { [weak self] in
             let criteria = try? await asset.load(.preferredDisplayCriteria)
             self?.assetCriteria = criteria
+        }
+    }
+
+    // MARK: Steady quality
+
+    // When the buffer runs low and downloads don't keep up (or the video
+    // stalled), cap the bitrate a step under what's playing, so the picture
+    // stays steady instead of stopping to buffer. The cap lifts once the
+    // buffer is full again and the connection has room for more.
+    private var hold: Double = 0
+    private var holdSince = Date.distantPast
+    private var lastStalls = 0
+    private var roomySince: Date?
+    private var lastGuard = Date.distantPast
+
+    private func guardQuality(ahead: Double) {
+        guard Date().timeIntervalSince(lastGuard) > 2, let event = item.accessLog()?.events.last else { return }
+        lastGuard = Date()
+        let stalls = item.accessLog()?.events.reduce(0) { $0 + max(0, $1.numberOfStalls) } ?? 0
+        let stalled = stalls > lastStalls
+        lastStalls = stalls
+        let indicated = event.indicatedBitrate, observed = event.observedBitrate
+        guard indicated > 0 else { return }
+        let low = isLive ? 8.0 : 15.0
+        let starving = ahead < low && observed > 0 && observed < indicated * 1.25
+        if stalled || starving {
+            let next = max(400_000, indicated * 0.7)
+            if hold == 0 || next < hold {
+                hold = next
+                holdSince = Date()
+                item.preferredPeakBitRate = next
+                #if DEBUG
+                print("[native] holding quality under \(Int(next / 1000)) kbps (\(stalled ? "stalled" : "buffer \(Int(ahead))s, \(Int(observed / 1000)) kbps down"))")
+                #endif
+            }
+            roomySince = nil
+            return
+        }
+        guard hold > 0 else { return }
+        // Full again with room to spare for a minute: lift the hold.
+        let full = ahead > (isLive ? 15 : 40) && observed > indicated * 2.5
+        if full { roomySince = roomySince ?? Date() } else { roomySince = nil }
+        if let since = roomySince, Date().timeIntervalSince(since) > 60, Date().timeIntervalSince(holdSince) > 90 {
+            hold = 0
+            roomySince = nil
+            item.preferredPeakBitRate = 0
+            #if DEBUG
+            print("[native] quality hold lifted")
+            #endif
+        }
+    }
+
+    // "Dolby Digital Plus 5.1", "AAC stereo": what the audio track carries.
+    private var audioFormat = ""
+    private var readingAudio = false
+    private func readAudioFormat() {
+        guard audioFormat.isEmpty, !readingAudio,
+              let track = item.tracks.first(where: { $0.assetTrack?.mediaType == .audio })?.assetTrack else { return }
+        readingAudio = true
+        Task { [weak self] in
+            let format = try? await track.load(.formatDescriptions).first
+            guard let self else { return }
+            self.readingAudio = false
+            guard let format, let basic = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee else { return }
+            let codec: String
+            switch CMFormatDescriptionGetMediaSubType(format) {
+            case kAudioFormatEnhancedAC3: codec = "Dolby Digital Plus"
+            case kAudioFormatAC3: codec = "Dolby Digital"
+            case kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE, kAudioFormatMPEG4AAC_HE_V2: codec = "AAC"
+            case kAudioFormatFLAC: codec = "FLAC"
+            default: codec = "Audio"
+            }
+            let channels = Int(basic.mChannelsPerFrame)
+            self.audioFormat = codec + " " + (channels >= 8 ? "7.1" : channels >= 6 ? "5.1" : channels == 2 ? "stereo" : channels == 1 ? "mono" : "\(channels) channels")
         }
     }
 
@@ -159,7 +241,17 @@ final class NativeEngine: NSObject, WebEngine {
         }
         if let log = item.accessLog()?.events.last {
             state.dropped = log.numberOfDroppedVideoFrames
+            state.bitrate = max(0, log.indicatedBitrate)
+            state.bandwidth = max(0, log.observedBitrate)
         }
+        state.native = true
+        state.stalls = lastStalls
+        if showing, ready {
+            guardQuality(ahead: state.ahead)
+            readAudioFormat()
+        }
+        state.held = hold
+        state.audioFormat = audioFormat
         let groups = selectionGroups
         state.audio = tracks(groups.audio)
         state.text = tracks(groups.text)

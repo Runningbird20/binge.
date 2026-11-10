@@ -223,6 +223,13 @@ struct MeView: View {
                         }
                     }
                 }
+                if let episode = pip.episode {
+                    Section {
+                        Button { PiPController.shared.closeEpisode() } label: {
+                            Label("Close the corner (\(episode.label))", systemImage: "pip.remove")
+                        }
+                    }
+                }
                 Section {
                 } footer: {
                     Text("Books, manga and account settings are on \(Config.siteHost).")

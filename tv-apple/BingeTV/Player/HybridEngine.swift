@@ -46,6 +46,8 @@ final class HybridEngine: WebEngine {
 
     // The page this server plays in until AVPlayer takes over (nil after).
     var pageEngine: WebEngine? { page }
+    // The stream on screen, for the scrub preview (Apple's player only).
+    var previewSource: (stream: URL, page: String, agent: String)? { isNative ? source : nil }
 
     // clear: the page draws its video elsewhere (a Multiview slot is an
     // iframe in the shared page behind the tile), so this view must not

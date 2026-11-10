@@ -69,4 +69,46 @@ final class FeaturesUITests: XCTestCase {
         shot("features-sports-hidden")
         app.terminate()
     }
+
+    // Continue Watching → play → Playback info → leave → back in (instant
+    // resume) → the corner.
+    func testResumeInfoAndCorner() throws {
+        // Trailers off: the simulator draws one video at a time, and the
+        // spotlight's trailer would take the corner's picture.
+        let app = try launch(["-BingeTab", "home", "-binge.trailers", "NO"])
+        Thread.sleep(forTimeInterval: 14)
+        press(.down, 3)
+        Thread.sleep(forTimeInterval: 1)
+        shot("viewing-0-cw-focus")
+        press(.select)
+        Thread.sleep(forTimeInterval: 25)
+        shot("viewing-1-playing")
+        press(.down)
+        Thread.sleep(forTimeInterval: 1.5)
+        shot("viewing-2-panel")
+        press(.down, 7)
+        Thread.sleep(forTimeInterval: 1)
+        press(.select)
+        Thread.sleep(forTimeInterval: 3)
+        shot("viewing-3-info")
+        press(.menu)
+        press(.menu)
+        Thread.sleep(forTimeInterval: 1)
+        press(.menu)
+        Thread.sleep(forTimeInterval: 3)
+        shot("viewing-4-left")
+        press(.select)
+        Thread.sleep(forTimeInterval: 2.5)
+        shot("viewing-5-resumed-2s")
+        Thread.sleep(forTimeInterval: 6)
+        press(.down)
+        Thread.sleep(forTimeInterval: 1.5)
+        press(.up)
+        Thread.sleep(forTimeInterval: 0.8)
+        shot("viewing-6-corner-button")
+        press(.select)
+        Thread.sleep(forTimeInterval: 5)
+        shot("viewing-7-corner")
+        app.terminate()
+    }
 }
