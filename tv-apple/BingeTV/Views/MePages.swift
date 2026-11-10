@@ -178,6 +178,7 @@ struct CalendarView: View {
 struct PlaybackSettingsView: View {
     @EnvironmentObject private var app: AppModel
     @AppStorage("binge.trailers") private var trailers = true
+    @AppStorage("binge.ambient") private var ambient = true
     @AppStorage("binge.quality") private var quality = QualityPreference.best.rawValue
     @AppStorage("binge.captionSize") private var captionSize = 100
     @AppStorage("binge.captionBackground") private var captionBackground = "rgba(0,0,0,0.6)"
@@ -270,7 +271,11 @@ struct PlaybackSettingsView: View {
                 Button("On") { trailers = true }.buttonStyle(PillButtonStyle(selected: trailers))
                 Button("Off") { trailers = false }.buttonStyle(PillButtonStyle(selected: !trailers))
             }
-            Text("Saved to your profile, so the website uses them too.").font(.caption).foregroundStyle(Theme.muted)
+            group("Ambient mode", "A slideshow of your titles after a few idle minutes, and on a long pause.") {
+                Button("On") { ambient = true }.buttonStyle(PillButtonStyle(selected: ambient))
+                Button("Off") { ambient = false }.buttonStyle(PillButtonStyle(selected: !ambient))
+            }
+            Text("Audio and subtitle language are saved to your profile, so the website uses them too. The rest are for this Apple TV.").font(.caption).foregroundStyle(Theme.muted)
         }
         .padding(.vertical, 30)
         .frame(maxWidth: .infinity, alignment: .leading)

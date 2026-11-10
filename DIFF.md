@@ -80,7 +80,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Best quality / Fastest start, resolution badge | — | — | ✓ | ✓ | Apple TV also learns each server's real resolution (`QualityMemory`). |
 | Sleep timer, "Still watching?" | — | — | ✓ | ✓ | On the website's TODO. |
 | Audio description first, Larger text | — | — | ✓ | ✓ | |
-| Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Fire TV has an on/off switch; on Apple TV it's always on. |
+| Ambient mode (slideshow when idle) | — | — | ✓ | ✓ | Both have an on/off switch in Settings. |
 | Follows an episode change made inside the server's player | ✓ | ✓ | — | — | VidRift's own Next button, Episodes menu or Up Next: the site moves to that episode without reloading (`useServerEpisode`). The TV apps don't read VidRift's episode messages. |
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
@@ -155,8 +155,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 ## Known mismatches
 
-- **Apple TV Settings** says playback settings are "saved to your profile, so the website uses them too". Only audio and subtitle language are; everything else stays on that Apple TV.
-- **Apple TV ambient mode** has no on/off switch (`binge.ambient` is read but never written).
+None right now.
 
 ## Biggest gaps, by app
 
