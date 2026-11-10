@@ -219,10 +219,16 @@ fun SportsScreen() {
                     Pill("Clear") { multi = emptyList() }
                 }
             }
-            if (categories.size > 2) item(key = "chips") {
+            item(key = "announcement") { AnnouncementBanner() }
+            item(key = "chips") {
                 PivotScroll(offset = Dimens.edge) {
                     LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(categories, key = { it }) { name -> Pill(name, selected = category == name, icon = if (name == "All") null else sportIcon(name)) { category = name } }
+                        // For games you're watching later: no scores anywhere (alerts too).
+                        item(key = "hide-scores") {
+                            val hidden = com.binge.tv.data.Prefs.version >= 0 && com.binge.tv.data.ScoreVisibility.hidden
+                            Pill(if (hidden) "Scores hidden" else "Hide scores", selected = hidden) { com.binge.tv.data.Prefs.set(com.binge.tv.data.ScoreVisibility.KEY, !hidden) }
+                        }
+                        if (categories.size > 2) items(categories, key = { it }) { name -> Pill(name, selected = category == name, icon = if (name == "All") null else sportIcon(name)) { category = name } }
                     }
                 }
             }
@@ -318,7 +324,10 @@ fun StatusPill(game: SportGame) {
 
 @Composable
 private fun ScoreChip(event: Scoreboard.Event) {
-    Text(listOfNotNull("${event.away?.team?.abbreviation ?: ""} ${event.away?.score ?: ""}", "–", "${event.home?.score ?: ""} ${event.home?.team?.abbreviation ?: ""}", event.status.type.shortDetail).joinToString(" "),
+    // Hide scores (for games watched later): the teams and the clock only.
+    val hidden = com.binge.tv.data.Prefs.version >= 0 && com.binge.tv.data.ScoreVisibility.hidden
+    Text((if (hidden) listOfNotNull("${event.away?.team?.abbreviation ?: ""} vs ${event.home?.team?.abbreviation ?: ""}", event.status.type.shortDetail)
+        else listOfNotNull("${event.away?.team?.abbreviation ?: ""} ${event.away?.score ?: ""}", "–", "${event.home?.score ?: ""} ${event.home?.team?.abbreviation ?: ""}", event.status.type.shortDetail)).joinToString(" "),
         style = Type.caption.copy(fontWeight = FontWeight.Bold), maxLines = 1,
         modifier = Modifier.background(Color.Black.copy(alpha = 0.75f), CircleShape).padding(horizontal = 7.dp, vertical = 3.dp))
 }
@@ -375,13 +384,13 @@ private fun ScoreCard(event: Scoreboard.Event, watchable: Boolean, onClick: () -
                 Text(event.status.type.shortDetail ?: "", style = Type.caption.copy(fontWeight = FontWeight.SemiBold), color = if (event.isLive) Palette.live else Palette.muted, maxLines = 1, modifier = Modifier.weight(1f))
                 if (watchable) Icon(Icons.Rounded.PlayArrow, "Watch", tint = Palette.gold, modifier = Modifier.size(16.dp))
             }
-            val showScore = event.status.type.state != "pre"
+            val showScore = event.status.type.state != "pre" && !(com.binge.tv.data.Prefs.version >= 0 && com.binge.tv.data.ScoreVisibility.hidden)
             listOfNotNull(event.away, event.home).forEach { team ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.then(if (event.isFinal && team.winner == false) Modifier.background(Color.Transparent) else Modifier)) {
                     team.team.logo?.let { AsyncImage(it, null, Modifier.size(22.dp)) }
                     Text(team.name, style = Type.headline.copy(fontSize = androidx.compose.ui.unit.TextUnit(14f, androidx.compose.ui.unit.TextUnitType.Sp)),
-                        color = if (event.isFinal && team.winner == false) Color.White.copy(alpha = 0.55f) else Color.White, maxLines = 1, modifier = Modifier.weight(1f))
+                        color = if (showScore && event.isFinal && team.winner == false) Color.White.copy(alpha = 0.55f) else Color.White, maxLines = 1, modifier = Modifier.weight(1f))
                     if (showScore) Text(team.score ?: "", style = Type.section.copy(fontWeight = FontWeight.ExtraBold))
                 }
             }

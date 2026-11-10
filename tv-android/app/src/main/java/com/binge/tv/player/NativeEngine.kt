@@ -53,6 +53,8 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
     private var destroyed = false
     private var audioList: List<Pair<Tracks.Group, Int>> = emptyList()
     private var textList: List<Pair<Tracks.Group, Int>> = emptyList()
+    private var stalls = 0
+    private val meter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(context)
 
     init {
         live++
@@ -90,6 +92,9 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
         })
         player.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() { firstFrame = true }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_BUFFERING && firstFrame && player.playWhenReady) stalls++
+            }
             override fun onCues(cueGroup: CueGroup) {
                 cue = cueGroup.cues.mapNotNull { it.text?.toString() }.joinToString("\n").trim()
             }
@@ -152,6 +157,17 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             },
             cue = cue,
             rendering = firstFrame && state == Player.STATE_READY && player.playWhenReady,
+            native = true,
+            ahead = player.totalBufferedDuration / 1000.0,
+            bitrate = player.videoFormat?.bitrate?.takeIf { it > 0 } ?: 0,
+            bandwidth = meter.bitrateEstimate,
+            stalls = stalls,
+            audioFormat = player.audioFormat?.let { f ->
+                val codec = when (f.sampleMimeType) { MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Digital Plus"; MimeTypes.AUDIO_AC3 -> "Dolby Digital"; MimeTypes.AUDIO_AAC -> "AAC"; else -> "Audio" }
+                val ch = f.channelCount
+                "$codec " + when { ch >= 8 -> "7.1"; ch >= 6 -> "5.1"; ch == 2 -> "stereo"; ch == 1 -> "mono"; ch > 0 -> "$ch channels"; else -> "" }
+            }?.trim().orEmpty(),
+            fps = player.videoFormat?.frameRate?.takeIf { it > 0 } ?: 0f,
         )
     }
 

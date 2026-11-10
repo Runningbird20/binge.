@@ -155,6 +155,14 @@ class MainActivity : Activity() {
             }
             WebViewCompat.addDocumentStartJavaScript(this, PageScript.SOURCE, setOf(siteOrigin))
         }
+        // The frame bridge (assets/frame-bridge.js), in every frame: the site
+        // follows and steers the video inside any server's player (time,
+        // seeking, binge.'s captions). It does nothing in the top page.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            runCatching { context.assets.open("frame-bridge.js").bufferedReader().use { it.readText() } }.getOrNull()?.let { bridge ->
+                WebViewCompat.addDocumentStartJavaScript(this, bridge, setOf("*"))
+            }
+        }
         webViewClient = Client()
         webChromeClient = Chrome()
         setDownloadListener { url, _, _, _, _ ->

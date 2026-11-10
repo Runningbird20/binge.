@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ClockCounterClockwise, MagnifyingGlass, Sparkle, Trophy, User, X } from '@phosphor-icons/react';
 import { api } from '../api';
+import { useAuth } from '../contexts/AuthContext';
+import { maturityRestriction } from '../utils/kidsMode';
+import { filterSearchPayload } from '../utils/searchMaturity';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
@@ -30,6 +33,8 @@ function itemSub(item) {
 // Navbar search: recent searches when empty; grouped results while typing
 // (Top result → Movies → Series → Books → Live games, plus a person match).
 export default function GlobalSearch() {
+  // A restricted profile only sees what its level allows (searchMaturity.js).
+  const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
   const [query, setQuery]       = useState('');
   const [expanded, setExpanded] = useState(false);
   const [results, setResults]   = useState(null);
@@ -72,13 +77,14 @@ export default function GlobalSearch() {
     let cancelled = false;
     setLoading(true);
     api.get(`/search?q=${encodeURIComponent(term)}&types=movies,tv,books`)
+      .then((data) => filterSearchPayload(data, kidsSafe))
       .then((data) => { if (!cancelled) setResults(data); })
       .catch(() => { if (!cancelled) setResults(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     searchGames(term).then((list) => { if (!cancelled) setGames(list); }).catch(() => {});
-    searchPerson(term).then((match) => { if (!cancelled) setPerson(match); }).catch(() => {});
+    searchPerson(term, { kidsSafe }).then((match) => { if (!cancelled) setPerson(match); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [debounced, expanded]);
+  }, [debounced, expanded, kidsSafe]);
 
   useEffect(() => {
     if (!expanded) return undefined;

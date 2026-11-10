@@ -15,6 +15,9 @@ export default function useUpNext({
   isTV, item, tmdbId, season, episode, setSeason, setEpisode, totalSeasons,
   seasonEpisodeCounts, markers, playbackRef, watched, setWatched, paused = false,
 }) {
+  // Episodes started by themselves in a row; after three the card asks
+  // "Still watching?" and waits (as on the TVs).
+  const autoAdvancesRef = useRef(0);
   const currentSeasonEpisodes = isTV ? seasonEpisodeCounts[season] : null;
   const nextEpisode = useMemo(() => {
     if (!isTV) return null;
@@ -60,23 +63,30 @@ export default function useUpNext({
       // At the credits when we know where they start, else the last 30s.
       const atCredits = markers.credits && state.time >= markers.credits.start && state.duration - state.time > 5;
       const nearEnd = atCredits || (state.duration > 0 && state.time > 0 && state.duration - state.time <= UP_NEXT_SECONDS);
+      if (!(nearEnd || state.ended) || upNext) return;
+      if (autoAdvancesRef.current >= 3) { setUpNext({ secondsLeft: null, stillWatching: true }); return; }
+      // Binge mode: straight on, no countdown.
+      if (getSettings().bingeMode) { playNextEpisode({ automatic: true }); return; }
       // With autoplay off in Settings the card waits for a tap (no countdown).
-      if ((nearEnd || state.ended) && !upNext) setUpNext({ secondsLeft: getSettings().autoNext ? UP_NEXT_COUNTDOWN : null });
+      setUpNext({ secondsLeft: getSettings().autoNext ? UP_NEXT_COUNTDOWN : null });
     }, 1000);
     return () => clearInterval(timer);
+    // playNextEpisode is this render's; the interval restarts with the episode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paused, isTV, nextEpisode, season, episode, upNext, markers.credits, playbackRef]);
 
   useEffect(() => {
     if (!upNext || upNext.secondsLeft == null) return undefined;
-    if (upNext.secondsLeft <= 0) { playNextEpisode(); return undefined; }
+    if (upNext.secondsLeft <= 0) { playNextEpisode({ automatic: true }); return undefined; }
     const timer = setTimeout(() => setUpNext((current) => (current ? { secondsLeft: current.secondsLeft - 1 } : current)), 1000);
     return () => clearTimeout(timer);
     // Every tick re-renders, so playNextEpisode is always this render's (the current episode).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upNext]);
 
-  function playNextEpisode() {
+  function playNextEpisode({ automatic = false } = {}) {
     if (!nextEpisode) return;
+    autoAdvancesRef.current = automatic ? autoAdvancesRef.current + 1 : 0;
     haptic();
     // Moving on before the Up Next card showed up: the credits had started.
     const state = playbackRef.current;
@@ -97,5 +107,5 @@ export default function useUpNext({
     setUpNext(null);
   }
 
-  return { nextEpisode, nextInfo, upNext, preloadNext, playNextEpisode, dismissUpNext };
+  return { nextEpisode, nextInfo, upNext, preloadNext, playNextEpisode: () => playNextEpisode(), dismissUpNext };
 }

@@ -511,3 +511,21 @@
 @media (prefers-reduced-motion: reduce) {
   .profile-lock-boxes--error { animation: none; }
 }
+
+/* "Forgot PIN?" under the lock screen's digits */
+.profile-lock-forgot {
+  margin-top: 18px;
+  background: none;
+  border: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.profile-lock-reset {
+  margin-top: 18px;
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}

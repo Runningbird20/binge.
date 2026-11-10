@@ -102,6 +102,7 @@ app.use('/api/books',       require('./routes/books'));
 app.use('/api/account', require('./routes/account'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));
+app.use('/api/og', require('./routes/og'));
 app.use('/api/ops', require('./routes/ops'));
 
 app.use('/api', (_req, res) => {

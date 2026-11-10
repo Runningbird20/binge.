@@ -38,6 +38,7 @@ class BingeApplication : Application(), ImageLoaderFactory {
         Performance.init(this)
         HomeSnapshot.init(this)
         Supabase.init(this)
+        com.binge.tv.data.CrashReporter.install(this)
     }
 
     // A Fire TV stick has 1–2 GB for everything, and the WebView's video
@@ -73,6 +74,7 @@ class BingeApplication : Application(), ImageLoaderFactory {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.binge.tv.data.DisplayMatch.activity = java.lang.ref.WeakReference(this)
         DebugLaunch.read(intent)
         if (BuildConfig.DEBUG) android.webkit.WebView.setWebContentsDebuggingEnabled(true)
         // Once the first screen is up: start the web engine (the first WebView

@@ -13,6 +13,7 @@ import { fetchTmdbRecommendations, tmdbIdFromItem } from '../utils/tmdb';
 import { resolveTmdbItems } from '../utils/catalogLookup';
 import { maturityRestriction } from '../utils/kidsMode';
 import { useAuth } from '../contexts/AuthContext';
+import { filterSearchPayload } from '../utils/searchMaturity';
 import {
   addRecentSearch, clearRecentSearches, getRecentSearches, groupResults, isGameLive, removeRecentSearch, searchGames, searchPerson,
 } from '../utils/searchExtras';
@@ -20,7 +21,7 @@ import {
 // "Ask binge." picks for a natural-language request, with reasons.
 // filters: the page's chips (applied to the picks too); onItems hears every
 // pick (before filtering) so the chips can offer their languages and decades.
-function AiPicks({ query, auto, filters, onItems }) {
+function AiPicks({ query, auto, filters, onItems, kidsSafe }) {
   const [state, setState] = useState(auto ? 'loading' : 'idle');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -38,11 +39,11 @@ function AiPicks({ query, auto, filters, onItems }) {
   useEffect(() => {
     if (state !== 'loading') return undefined;
     let cancelled = false;
-    askBinge(query)
+    askBinge(query, { kidsSafe })
       .then((next) => { if (!cancelled) { setResult(next); setState('done'); onItemsRef.current?.(next.items || []); } })
       .catch((err) => { if (!cancelled) { setError(err.message || 'The AI search didn’t respond.'); setState('error'); onItemsRef.current?.([]); } });
     return () => { cancelled = true; };
-  }, [state, query]);
+  }, [state, query, kidsSafe]);
 
   if (state === 'idle') {
     return (
@@ -266,7 +267,9 @@ export default function SearchResults() {
     let cancelled = false;
 
     setPrimaryState('loading');
+    // A restricted profile only sees what its level allows (searchMaturity.js).
     api.get(`/search?q=${encodeURIComponent(query)}&types=movies,tv,books`)
+      .then((data) => filterSearchPayload(data, kidsSafe))
       .then((data) => {
         if (cancelled) return;
         setPrimary(data);
@@ -277,11 +280,12 @@ export default function SearchResults() {
     setGames([]);
     setPerson(null);
     searchGames(query).then((list) => { if (!cancelled) setGames(list); }).catch(() => {});
-    searchPerson(query).then((match) => { if (!cancelled) setPerson(match); }).catch(() => {});
+    searchPerson(query, { kidsSafe }).then((match) => { if (!cancelled) setPerson(match); }).catch(() => {});
     addRecentSearch(query);
 
     setRelatedState('loading');
     api.get(`/search-related?q=${encodeURIComponent(query)}&types=movies,tv,books`)
+      .then((data) => filterSearchPayload(data, kidsSafe))
       .then((data) => {
         if (cancelled) return;
         setRelated(data);
@@ -290,7 +294,7 @@ export default function SearchResults() {
       .catch(() => { if (!cancelled) setRelatedState('error'); });
 
     return () => { cancelled = true; };
-  }, [query]);
+  }, [query, kidsSafe]);
 
   const primaryMovies = tagType(primary?.movies, 'movie');
   const primaryTv = tagType(primary?.tv, 'tv');
@@ -365,7 +369,7 @@ export default function SearchResults() {
         {/* Every search goes through Ask binge. (it puts exact title matches first,
             and understands requests like "new Malayalam movies"); the plain
             title results below show instantly while it thinks. */}
-        {query.trim().length >= 2 && <AiPicks key={query} query={query} auto filters={filters} onItems={setAiItems} />}
+        {query.trim().length >= 2 && <AiPicks kidsSafe={kidsSafe} key={query} query={query} auto filters={filters} onItems={setAiItems} />}
 
         {filteredAway && (
           <div className="empty-state">

@@ -55,6 +55,7 @@ object AppModel {
         if (com.binge.tv.DebugLaunch.demo) { isDemo = true; phase = Phase.READY; return }
         session = Supabase.session
         if (session == null) phase = Phase.SIGNED_OUT else loadProfiles()
+        scope.launch { SharedServerStats.refresh() }
     }
 
     suspend fun signIn(email: String, password: String) {
@@ -230,13 +231,16 @@ object AppModel {
             if (!maturity.allows(title.ageRating) || !seen.add(title.id)) return@mapNotNull null
             ContinueItem(title, row.currentSeason, row.currentEpisode, row.positionSeconds, row.durationSeconds)
         }
-        return withBackdrops(items)
+        val lastAired = java.util.concurrent.ConcurrentHashMap<String, EpisodeKey>()
+        val decorated = withBackdrops(items, lastAired)
+        val finished = EpisodeStore.finished(decorated, lastAired)
+        return decorated.map { if (it.id in finished) it.copy(finished = true) else it }
     }
 
     // Catalog rows only carry posters; Continue Watching cards are wide, so
     // fetch each title's backdrop from TMDB (cached). The same call says
     // whether a newer episode aired in the last two weeks.
-    private suspend fun withBackdrops(items: List<ContinueItem>): List<ContinueItem> = coroutineScope {
+    private suspend fun withBackdrops(items: List<ContinueItem>, lastAired: MutableMap<String, EpisodeKey>): List<ContinueItem> = coroutineScope {
         items.map { item ->
             async {
                 val tmdbId = item.title.tmdbId ?: return@async item
@@ -246,6 +250,7 @@ object AppModel {
                 if (details.originalLanguage != null && next.title.originalLanguage == null)
                     next = next.copy(title = next.title.copy(originalLanguage = details.originalLanguage))
                 val aired = details.lastEpisodeToAir
+                if (aired != null && item.title.kind == MediaKind.TV) lastAired[item.id] = EpisodeKey(aired.seasonNumber, aired.episodeNumber)
                 if (aired != null && ReleaseWindow.isRecent(aired.airDate, 14.0) &&
                     (aired.seasonNumber to aired.episodeNumber).let { (s, e) -> s > (item.season ?: 0) || (s == (item.season ?: 0) && e > (item.episode ?: 0)) }) {
                     next = next.copy(newEpisode = "S${aired.seasonNumber}:E${aired.episodeNumber}")
@@ -306,6 +311,7 @@ object AppModel {
     // Same continue_watching row the website writes, so every device resumes from the same spot.
     suspend fun saveProgress(title: Title, season: Int?, episode: Int?, position: Double, duration: Double) {
         val session = session ?: return
+        WatchedTitles.invalidate()
         val row = mutableMapOf<String, Any?>("updated_at" to IsoDate.now(), "position_seconds" to position.toInt(), "duration_seconds" to duration.toInt())
         if (title.kind == MediaKind.TV) { row["current_season"] = season ?: 1; row["current_episode"] = episode ?: 1 }
         val match = listOf("user_id" to "eq.${session.userId}", "media_type" to "eq.${title.kind.raw}",
@@ -397,6 +403,7 @@ object AppModel {
         val id = existing.firstOrNull()?.id
         if (id != null) Supabase.update(table, listOf("id" to "eq.$id"), row)
         else Supabase.insert(table, row + mapOf("user_id" to session.userId, "profile_id" to profile?.id, "media_id" to title.dbId))
+        WatchedTitles.invalidate()
         listIds[title.id]?.let { listId ->
             runCatching { Supabase.delete("watchlist", listOf("id" to "eq.$listId")) }
             refreshList()
@@ -427,6 +434,7 @@ object AppModel {
             "episode" to "eq.$episode", "profile_id" to exactProfile)
         val existing = runCatching { Supabase.selectAs<List<SeasonRow>>("episode_progress", listOf("select" to "season") + match) }.getOrNull()
         if (existing?.isEmpty() != true) return
+        WatchedTitles.invalidate()
         runCatching {
             Supabase.insert("episode_progress", mapOf("user_id" to session.userId, "profile_id" to profile?.id, "media_id" to title.dbId,
                 "season" to season, "episode" to episode, "watched_at" to IsoDate.now()))

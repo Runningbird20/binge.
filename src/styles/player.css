@@ -647,3 +647,23 @@
    opens its lineup below the cards. */
 
 .st-pb-report > .themed-select { width: 180px; max-width: 100%; }
+
+/* "Skip intros on this show automatically?" (after two skipped by hand) */
+.st-autoskip {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(12, 14, 20, 0.92);
+  color: #fff;
+  z-index: 6;
+  font-size: 0.95rem;
+}
+.st-upnext-ask { display: block; margin-bottom: 4px; }
+
+.st-pb-timing { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
