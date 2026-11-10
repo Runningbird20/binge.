@@ -50,6 +50,16 @@ data class MediaState(
     // The native player has drawn its first picture and is playing: counts as
     // started even before the clock passes the 0.4s a page needs to prove it.
     val rendering: Boolean = false,
+    // The native player only (Playback info, backup stream, frame rate):
+    // seconds buffered ahead, the variant's bitrate, the measured download
+    // speed (bits/s), stalls so far, the audio format and the frame rate.
+    val native: Boolean = false,
+    val ahead: Double = 0.0,
+    val bitrate: Int = 0,
+    val bandwidth: Long = 0,
+    val stalls: Int = 0,
+    val audioFormat: String = "",
+    val fps: Float = 0f,
 ) {
     // Really playing: the clock moved, or the native player is showing pictures.
     val isPlaying get() = !paused && (t > 0.4 || rendering)

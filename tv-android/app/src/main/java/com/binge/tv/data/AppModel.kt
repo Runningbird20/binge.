@@ -55,6 +55,7 @@ object AppModel {
         if (com.binge.tv.DebugLaunch.demo) { isDemo = true; phase = Phase.READY; return }
         session = Supabase.session
         if (session == null) phase = Phase.SIGNED_OUT else loadProfiles()
+        scope.launch { SharedServerStats.refresh() }
     }
 
     suspend fun signIn(email: String, password: String) {
