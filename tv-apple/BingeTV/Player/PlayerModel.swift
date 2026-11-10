@@ -239,6 +239,7 @@ final class PlayerModel: ObservableObject {
         if let winner = race.winner {
             server = winner.server
             notice = nil
+            resolveSubtitleSync()
         } else if race.failed {
             // Nothing in this race played, but there are backups (live
             // batches, or the servers a low-memory Apple TV didn't race).
@@ -274,6 +275,7 @@ final class PlayerModel: ObservableObject {
         lifecycle.forEach(NotificationCenter.default.removeObserver)
         lifecycle = []
         saveProgress(force: true)
+        if syncPending, let syncKey { SubtitleSync.report(syncKey, offset: subtitleOffset) }
         race?.stop()
         race = nil
         Warmup.shared.cancel()
@@ -303,6 +305,7 @@ final class PlayerModel: ObservableObject {
         autoAdvances = 0
         web.send(.seekTo(seconds))
         playback.t = seconds
+        clockAt = Date()
         nowPlayingAt = .distantPast
         showHUD()
     }
@@ -344,15 +347,33 @@ final class PlayerModel: ObservableObject {
     @Published private(set) var externalLoading = false
     @Published private(set) var useExternal = true
     @Published private(set) var subtitleLanguage = PlaybackPrefs.subtitle
+    // The viewer's shift, in seconds: + shows each line later, - earlier
+    // (the same sign as the Fire TV app). It used to be the other way round
+    // here, so "Earlier" made the lines later.
     @Published private(set) var subtitleOffset: Double = 0
     private var externalKey: String?
+    // Remembered / shared timing (SubtitleSync) for the file and server on now.
+    private var syncKey: SubtitleSync.Key?
+    private var syncPending = false
+    private var offsetChangedAt = Date.distantPast
+    // When playback.t was read: lines are timed from the clock between polls
+    // (4 a second), not only at them, so each one appears on its word.
+    private var clockAt = Date()
+
+    // The video's second right now, run on from the last poll while playing.
+    func clock(at date: Date) -> Double {
+        guard started, !playback.paused, !buffering else { return playback.t }
+        return playback.t + min(0.6, max(0, date.timeIntervalSince(clockAt)))
+    }
 
     // The line to draw now: our file (shifted by the viewer's offset), else
     // the server's own track.
-    var subtitleText: String {
-        if useExternal, let external { return external.text(at: playback.t + subtitleOffset) }
+    func subtitleText(at date: Date) -> String {
+        if useExternal, let external { return external.text(at: clock(at: date), shift: subtitleOffset) }
         return useExternal && externalLoading ? "" : playback.cue
     }
+
+    var subtitleText: String { subtitleText(at: Date()) }
 
     var usingExternalSubtitles: Bool { useExternal && external != nil }
 
@@ -366,8 +387,40 @@ final class PlayerModel: ObservableObject {
     }
 
     func nudgeSubtitles(by seconds: Double) {
-        subtitleOffset = (subtitleOffset + seconds).clamped(to: -30...30)
+        subtitleOffset = ((subtitleOffset + seconds).clamped(to: -30...30) * 10).rounded() / 10
+        if let syncKey {
+            SubtitleSync.remember(syncKey, offset: subtitleOffset)
+            syncPending = true
+            offsetChangedAt = Date()
+        }
         showHUD()
+    }
+
+    // The file and server are both known: start from the timing you (or
+    // other viewers) settled on for them.
+    private func resolveSubtitleSync() {
+        guard !request.isLive, let external, let server, useExternal else { return }
+        let key = SubtitleSync.Key(kind: request.title.kind, mediaId: request.title.dbId,
+                                   season: request.season ?? 0, episode: request.episode ?? 0,
+                                   lang: subtitleLanguage, release: external.release ?? "version-\(external.version)",
+                                   server: server.id.contains("://") ? server.name : server.id)
+        guard key != syncKey else { return }
+        if syncPending, let old = syncKey { SubtitleSync.report(old, offset: subtitleOffset) }
+        syncKey = key
+        syncPending = false
+        subtitleOffset = 0
+        Task {
+            guard let found = await SubtitleSync.start(key), self.syncKey == key, self.subtitleOffset == 0 else { return }
+            self.subtitleOffset = found.offset
+            #if DEBUG
+            print("[subs] timing \(String(format: "%+.1f", found.offset))s (\(found.source))")
+            #endif
+            guard found.offset != 0, found.source != .mine else { return }
+            self.notice = String(format: "Subtitles shifted %+.1fs to match", found.offset)
+                + (found.source == .viewers ? ", as other viewers set them." : ", as on your last episode.")
+                + " Change it in Options › Subtitle timing."
+            self.showHUD()
+        }
     }
 
     func nextSubtitleVersion() {
@@ -382,7 +435,10 @@ final class PlayerModel: ObservableObject {
         guard force || externalKey != key else { return }
         externalKey = key
         externalLoading = true
-        if version == 0 { subtitleOffset = 0 }
+        if syncPending, let syncKey { SubtitleSync.report(syncKey, offset: subtitleOffset) }
+        syncPending = false
+        syncKey = nil
+        subtitleOffset = 0
         let language = subtitleLanguage
         Task {
             let file = await ExternalSubtitles.load(request, language: language, version: version)
@@ -394,6 +450,7 @@ final class PlayerModel: ObservableObject {
             #endif
             // Ours are drawn instead of the server's.
             if file != nil, self.useExternal { self.web?.send(.textTrack(-1)) }
+            self.resolveSubtitleSync()
         }
     }
 
@@ -552,6 +609,7 @@ final class PlayerModel: ObservableObject {
         nowPlayingAt = .distantPast
         web.send(.seekBy(seconds))
         playback.t = max(0, playback.t + seconds) // instant HUD feedback
+        clockAt = Date()
         showHUD()
     }
 
@@ -778,6 +836,12 @@ final class PlayerModel: ObservableObject {
 
     private func apply(_ state: Playback, web: WebEngine) {
         playback = state
+        clockAt = Date()
+        // A shift left alone for 20s of playing is the viewer's answer: shared.
+        if syncPending, let syncKey, !state.paused, Date().timeIntervalSince(offsetChangedAt) > 20 {
+            syncPending = false
+            SubtitleSync.report(syncKey, offset: subtitleOffset)
+        }
         // Learn what this server really delivers (Best quality ranks by it).
         if started, let server, !state.paused, state.height > 0,
            Date().timeIntervalSince(serverSince) > 30, Date().timeIntervalSince(qualityRecordedAt) > 20 {

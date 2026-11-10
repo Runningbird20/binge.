@@ -19,6 +19,7 @@ import com.binge.tv.data.PlaybackPrefs
 import com.binge.tv.data.Prefs
 import com.binge.tv.data.SportGame
 import com.binge.tv.data.SportsFeed
+import com.binge.tv.data.SubtitleSync
 import com.binge.tv.data.Title
 import com.binge.tv.data.Tmdb
 import com.binge.tv.data.TmdbDetails
@@ -57,6 +58,10 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     var useExternal by mutableStateOf(true); private set
     var subtitleLanguage by mutableStateOf(PlaybackPrefs.subtitle); private set
     var subtitleOffset by mutableStateOf(0.0); private set
+    // Remembered / shared timing (SubtitleSync) for the file and server on now.
+    private var syncKey: SubtitleSync.Key? = null
+    private var syncPending = false
+    private var offsetChangedAt = 0L
 
     val surface = FrameLayout(context).apply { setBackgroundColor(android.graphics.Color.BLACK) }
     private val handler = Handler(Looper.getMainLooper())
@@ -227,6 +232,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
             server = w.server
             notice = null
             w.web.onProcessGone = { checkLost(force = true) }
+            resolveSubtitleSync()
         } else if (r.failed) {
             // Nothing in this race played, but there are untried servers.
             if (!handPicked && recoveries < 3 && servers.any { it.id !in raced }) {
@@ -242,6 +248,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     fun close() {
         if (closed) return
         saveProgress(force = true)
+        syncKey?.let { if (syncPending) SubtitleSync.report(it, subtitleOffset) }
         closed = true
         handler.removeCallbacksAndMessages(null)
         race?.stop()
@@ -284,10 +291,43 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     }
 
     fun nudgeSubtitles(by: Double) {
-        subtitleOffset = (subtitleOffset + by).coerceIn(-30.0, 30.0)
+        subtitleOffset = Math.round((subtitleOffset + by).coerceIn(-30.0, 30.0) * 10) / 10.0
         web?.send(MediaCommand.CueShift(subtitleOffset))
+        syncKey?.let {
+            SubtitleSync.remember(context, it, subtitleOffset)
+            syncPending = true
+            offsetChangedAt = now()
+        }
         refreshSubtitle()
         showHUD()
+    }
+
+    // The file and server are both known: start from the timing you (or
+    // other viewers) settled on for them.
+    private fun resolveSubtitleSync() {
+        val file = external ?: return
+        val current = server ?: return
+        if (request.isLive || !useExternal) return
+        val key = SubtitleSync.Key(request.title.kind, request.title.dbId, request.season ?: 0, request.episode ?: 0,
+            subtitleLanguage, file.release ?: "version-${file.version}", if ("://" in current.id) current.name else current.id)
+        if (key == syncKey) return
+        syncKey?.let { if (syncPending) SubtitleSync.report(it, subtitleOffset) }
+        syncKey = key
+        syncPending = false
+        subtitleOffset = 0.0
+        web?.send(MediaCommand.CueShift(0.0))
+        AppModel.scope.launch {
+            val found = SubtitleSync.start(context, key) ?: return@launch
+            if (syncKey != key || subtitleOffset != 0.0) return@launch
+            subtitleOffset = found.first
+            web?.send(MediaCommand.CueShift(subtitleOffset))
+            refreshSubtitle()
+            if (found.first == 0.0 || found.second == SubtitleSync.Source.MINE) return@launch
+            notice = "Subtitles shifted %+.1fs to match".format(found.first) +
+                (if (found.second == SubtitleSync.Source.VIEWERS) ", as other viewers set them." else ", as on your last episode.") +
+                " Change it in Options › Subtitle timing."
+            showHUD()
+        }
     }
 
     fun nextSubtitleVersion() {
@@ -302,7 +342,11 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         if (!force && externalKey == key) return
         externalKey = key
         externalLoading = true
-        if (version == 0) subtitleOffset = 0.0
+        syncKey?.let { if (syncPending) SubtitleSync.report(it, subtitleOffset) }
+        syncPending = false
+        syncKey = null
+        subtitleOffset = 0.0
+        web?.send(MediaCommand.CueShift(0.0))
         val language = subtitleLanguage
         AppModel.scope.launch {
             val file = ExternalSubtitles.load(req.title, req.season, req.episode, language, version)
@@ -310,6 +354,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
             externalLoading = false
             external = file
             if (file != null && useExternal) web?.send(MediaCommand.TextTrack(-1))
+            resolveSubtitleSync()
         }
     }
 
@@ -572,6 +617,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
 
     private fun apply(state: MediaState, w: Engine) {
         playback = state
+        // A shift left alone for 20s of playing is the viewer's answer: shared.
+        syncKey?.let { if (syncPending && !state.paused && now() - offsetChangedAt > 20_000) { syncPending = false; SubtitleSync.report(it, subtitleOffset) } }
         watchClock(state)
         val exp = expected
         if (started && exp != null && ExpectedRuntime.isWrong(state.d, exp)) { expected = null; recover("had the wrong video"); return }
