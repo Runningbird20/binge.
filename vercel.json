@@ -24,6 +24,17 @@
       "dest": "/404.html"
     },
     {
+      "src": "/(movie|tv-show|book)/([0-9]+)/?",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*([Bb]ot\\b|[Bb]ot/|[Cc]rawler|[Ss]pider|facebookexternalhit|[Ff]acebot|Slack|Discord|WhatsApp|Telegram|LinkedIn|Embedly|Skype|Pinterest|Iframely|vkShare|Google-PageRenderer).*"
+        }
+      ],
+      "dest": "/api/[...slug]?slug=og/$1/$2"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
