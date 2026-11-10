@@ -152,7 +152,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - Only Toddler/Kids get the kids-only rows (`isChildLevel`).
   - The website lets unrated Family/Animation/Kids titles through. The TV apps leave out every unrated title on a restricted level (see TV apps).
   - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, a book's screen adaptations, the calendar's Coming Soon row and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
-  - **Website search results don't apply maturity levels yet:** title matches, Ask binge. picks and person search.
+  - **Website search applies them too** (2026-11-10): title and related matches through `filterSearchPayload` (`utils/searchMaturity.js`: ratings looked up by id, unrated left out, child levels keep children's book genres only, a failed lookup shows nothing); Ask binge. picks and person search pass `kidsSafe` to `resolveTmdbItems`.
 - **Profile settings** (`/settings`, `src/utils/profileSettings.js`):
   - Autoplay next, previews, data saver, haptics and captions-first live in `account_profiles.settings` (jsonb) + localStorage.
   - Audio/subtitle prefs live in `audio_pref`/`subtitle_pref`.
