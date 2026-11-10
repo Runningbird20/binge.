@@ -38,6 +38,7 @@ class BingeApplication : Application(), ImageLoaderFactory {
         Performance.init(this)
         HomeSnapshot.init(this)
         Supabase.init(this)
+        com.binge.tv.data.CrashReporter.install(this)
     }
 
     // A Fire TV stick has 1–2 GB for everything, and the WebView's video

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.runtime.Composable
@@ -60,6 +61,13 @@ import com.binge.tv.data.Tmdb
 import com.binge.tv.data.TmdbDetails
 import com.binge.tv.data.TmdbSeason
 import com.binge.tv.player.PlayRequest
+import com.binge.tv.data.CreditPerson
+import com.binge.tv.data.EpisodeKey
+import com.binge.tv.data.EpisodeMarking
+import com.binge.tv.data.EpisodeStore
+import com.binge.tv.data.People
+import com.binge.tv.data.Reminders
+import com.binge.tv.data.WatchedTitles
 import com.binge.tv.player.Warmup
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -80,6 +88,12 @@ fun TitleScreen(title: Title, active: Boolean) {
     var sentTo by remember { mutableStateOf<String?>(null) }
     var listBusy by remember { mutableStateOf(false) }
     var listError by remember { mutableStateOf<String?>(null) }
+    var people by remember { mutableStateOf<List<CreditPerson>>(emptyList()) }
+    // Episodes watched or marked; the last marking and its undo.
+    var watchedEpisodes by remember { mutableStateOf<Set<EpisodeKey>>(emptySet()) }
+    var markNote by remember { mutableStateOf<Pair<String, suspend () -> Unit>?>(null) }
+    var episodeMenu by remember { mutableStateOf<TmdbSeason.Episode?>(null) }
+    var reminderSet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val playFocus = remember { FocusRequester() }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -118,10 +132,14 @@ fun TitleScreen(title: Title, active: Boolean) {
         val starsTask = async { AppModel.myRating(title) }
         val franchiseTask = async { Franchises.find(title, AppModel.maturity) }
         val tmdbId = title.tmdbId
+        people = People.forTitle(title)
+        if (title.kind == MediaKind.TV) watchedEpisodes = EpisodeStore.watched(title)
+        reminderSet = Reminders.list(dueOnly = false).any { it.mediaType == title.kind.raw && it.mediaId == title.dbId }
         if (title.kind == MediaKind.TV && tmdbId != null) previously = loadPreviously(tmdbId, resume)
         outside = outsideTask.await(); myStars = starsTask.await(); franchise = franchiseTask.await()
-        if (tmdbId != null) more = Catalog.load(RowSpec("more", "More Like This", title.kind, "${title.kind.tmdbPath}/$tmdbId/recommendations"), AppModel.maturity)
-            ?.items.orEmpty().filter { it.id != title.id }
+        // Watched titles are never recommended.
+        if (tmdbId != null) more = WatchedTitles.without(Catalog.load(RowSpec("more", "More Like This", title.kind, "${title.kind.tmdbPath}/$tmdbId/recommendations"), AppModel.maturity)
+            ?.items.orEmpty().filter { it.id != title.id }, WatchedTitles.load())
     }
     LaunchedEffect(season) {
         val s = season ?: return@LaunchedEffect
@@ -129,6 +147,52 @@ fun TitleScreen(title: Title, active: Boolean) {
         episodes = runCatching { Tmdb.get<TmdbSeason>("tv/$id/season/$s") }.getOrNull()?.episodes.orEmpty()
     }
     LaunchedEffect(active) { if (active) { kotlinx.coroutines.delay(60); runCatching { playFocus.requestFocus() } } }
+    LaunchedEffect(markNote) { if (markNote != null) { kotlinx.coroutines.delay(10_000); markNote = null } }
+
+    val lastAired = details?.lastEpisodeToAir?.let { EpisodeKey(it.seasonNumber, it.episodeNumber) }
+    // Marking by hand (the website's episodeMarking.js): hand-marked rows have
+    // no watch time; catching up past where Continue Watching points moves it on.
+    fun mark(keys: List<EpisodeKey>, note: String) {
+        val added = keys.filter { it !in watchedEpisodes }
+        if (added.isEmpty()) return
+        watchedEpisodes = watchedEpisodes + added
+        scope.launch {
+            try { EpisodeStore.mark(title, added) } catch (e: Exception) {
+                watchedEpisodes = watchedEpisodes - added.toSet()
+                if (!AppModel.handle(e)) listError = "Couldn't save those episodes. Try again."
+                return@launch
+            }
+            val before = resume
+            var moved = false
+            val furthest = keys.maxOrNull()
+            val s = before?.currentSeason; val e = before?.currentEpisode
+            if (before != null && s != null && e != null && furthest != null && EpisodeKey(s, e) <= furthest) {
+                EpisodeMarking.next(keys, seasons, lastAired)?.let { next ->
+                    EpisodeStore.setResume(title, next.season, next.episode); moved = true; resume = AppModel.resumePoint(title)
+                }
+            }
+            markNote = note to {
+                watchedEpisodes = watchedEpisodes - added.toSet()
+                runCatching { EpisodeStore.unmark(title, added) }
+                if (moved && before != null) EpisodeStore.setResume(title, before.currentSeason ?: 1, before.currentEpisode ?: 1, before.positionSeconds ?: 0.0, before.durationSeconds ?: 0.0)
+                resume = AppModel.resumePoint(title)
+            }
+        }
+    }
+    fun unmark(keys: List<EpisodeKey>, note: String) {
+        val removed = keys.filter { it in watchedEpisodes }
+        if (removed.isEmpty()) return
+        scope.launch {
+            val times = EpisodeStore.times(title, removed)
+            watchedEpisodes = watchedEpisodes - removed.toSet()
+            try { EpisodeStore.unmark(title, removed) } catch (e: Exception) {
+                watchedEpisodes = watchedEpisodes + removed
+                if (!AppModel.handle(e)) listError = "Couldn't update those episodes. Try again."
+                return@launch
+            }
+            markNote = note to { watchedEpisodes = watchedEpisodes + removed; runCatching { EpisodeStore.mark(title, removed, times) } }
+        }
+    }
     LaunchedEffect(Nav.returns) { if (active) resume = AppModel.resumePoint(title) }
 
     Box(Modifier.fillMaxSize()) {
@@ -176,6 +240,11 @@ fun TitleScreen(title: Title, active: Boolean) {
                             ActionButton(if (myStars == null) "Rate" else "Rated", if (myStars == null) Icons.Rounded.StarBorder else Icons.Rounded.Star, enabled = AppModel.isSignedIn) { rating = true }
                             if (AppModel.isSignedIn && AppModel.profiles.size > 1)
                                 ActionButton(sentTo?.let { "Sent to $it" } ?: "Send to…", if (sentTo == null) Icons.Rounded.Send else Icons.Rounded.Check) { sending = true }
+                            // Not out yet: remind this profile on the day (Home shows it; phones get a push).
+                            val upcoming = if (AppModel.isSignedIn) Reminders.upcoming(title, details) else null
+                            if (upcoming != null) ActionButton(if (reminderSet) "Reminder set" else upcoming.first, androidx.compose.material.icons.Icons.Rounded.Notifications, enabled = !reminderSet) {
+                                scope.launch { runCatching { Reminders.add(title, upcoming.second) }.onSuccess { reminderSet = true }.onFailure { listError = "Couldn't set that reminder. Try again." } }
+                            }
                             resumeProgress?.let { ProgressBar(it, Modifier.width(110.dp)) }
                         }
                         listError?.let { Text(it, style = Type.caption, color = Palette.error) }
@@ -191,6 +260,14 @@ fun TitleScreen(title: Title, active: Boolean) {
                         val selectedSeason = remember { androidx.compose.ui.focus.FocusRequester() }
                         PivotScroll(offset = Dimens.edge) {
                             LazyRow(Modifier.focusRestorer(selectedSeason), contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                val current = season
+                                if (AppModel.isSignedIn && current != null && episodes.isNotEmpty()) item(key = "mark-season") {
+                                    val aired = EpisodeMarking.season(current, episodes, lastAired)
+                                    val done = aired.isNotEmpty() && aired.all { it in watchedEpisodes }
+                                    Pill(if (done) "Season watched" else "Mark season watched", selected = done, icon = androidx.compose.material.icons.Icons.Rounded.Check, enabled = aired.isNotEmpty()) {
+                                        if (done) unmark(aired, "Season $current marked as not watched") else mark(aired, "Season $current marked as watched")
+                                    }
+                                }
                                 items(seasons, key = { it.seasonNumber }) { s ->
                                     val chosen = season == s.seasonNumber
                                     Pill(s.name ?: "Season ${s.seasonNumber}", if (chosen) Modifier.focusRequester(selectedSeason) else Modifier, selected = chosen) { season = s.seasonNumber }
@@ -198,9 +275,22 @@ fun TitleScreen(title: Title, active: Boolean) {
                             }
                         }
                     }
-                    item(key = "episodes") {
-                        EpisodeStrip(null, null, episodes, title.backdrop, resume?.let { r -> r.currentSeason?.let { s -> r.currentEpisode?.let { s to it } } }) { start(it.seasonNumber, it.episodeNumber) }
+                    markNote?.let { (text, undo) ->
+                        item(key = "mark-note") {
+                            Row(Modifier.padding(horizontal = Dimens.edge, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(text, style = Type.callout.copy(fontWeight = FontWeight.SemiBold))
+                                Pill("Undo") { markNote = null; scope.launch { undo() } }
+                            }
+                        }
                     }
+                    item(key = "episodes") {
+                        EpisodeStrip(null, null, episodes, title.backdrop, resume?.let { r -> r.currentSeason?.let { s -> r.currentEpisode?.let { s to it } } },
+                            watched = watchedEpisodes, onLongClick = if (AppModel.isSignedIn) { ep -> episodeMenu = ep } else null) { start(it.seasonNumber, it.episodeNumber) }
+                        Text("Hold OK on an episode to mark it watched", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = Dimens.edge))
+                    }
+                }
+                if (people.isNotEmpty()) {
+                    item(key = "cast") { CastRow(people) }
                 }
                 franchise?.let { order -> item(key = "franchise") { FranchiseSection(order) } }
                 // Breathing room under the buttons (movies have no season row between).
@@ -217,6 +307,17 @@ fun TitleScreen(title: Title, active: Boolean) {
                     rating = false
                     scope.launch { runCatching { AppModel.rate(title, stars) }.onSuccess { myStars = stars.toDouble() } }
                 }
+            }
+        }
+    }
+    episodeMenu?.let { episode ->
+        val key = EpisodeKey(episode.seasonNumber, episode.episodeNumber)
+        ActionSheet("S${key.season}:E${key.episode} ${episode.name.orEmpty()}", onDismiss = { episodeMenu = null }) {
+            Pill("Play", icon = Icons.Rounded.PlayArrow) { episodeMenu = null; start(key.season, key.episode) }
+            if (key in watchedEpisodes) Pill("Mark as not watched") { episodeMenu = null; unmark(listOf(key), "S${key.season}:E${key.episode} marked as not watched") }
+            else Pill("Watched up to here", icon = Icons.Rounded.Check) {
+                episodeMenu = null
+                mark(EpisodeMarking.upTo(key, seasons, lastAired), "Watched up to S${key.season}:E${key.episode}")
             }
         }
     }
@@ -253,16 +354,20 @@ private suspend fun loadPreviously(tmdbId: Int, resume: ContinueRow?): List<Tmdb
 }
 
 @Composable
-private fun EpisodeStrip(heading: String?, subtitle: String?, episodes: List<TmdbSeason.Episode>, fallback: String?, current: Pair<Int, Int>?, onPlay: (TmdbSeason.Episode) -> Unit) {
+private fun EpisodeStrip(heading: String?, subtitle: String?, episodes: List<TmdbSeason.Episode>, fallback: String?, current: Pair<Int, Int>?,
+                         watched: Set<EpisodeKey> = emptySet(), onLongClick: ((TmdbSeason.Episode) -> Unit)? = null, onPlay: (TmdbSeason.Episode) -> Unit) {
     Column {
         if (heading != null) SectionTitle(heading, subtitle)
         PivotScroll(offset = Dimens.edge) {
             LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap)) {
                 items(episodes, key = { it.id }) { episode ->
                     Column(Modifier.width(200.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FocusCard(onClick = { onPlay(episode) }, modifier = Modifier.width(200.dp).height(112.dp)) {
+                        FocusCard(onClick = { onPlay(episode) }, onLongClick = onLongClick?.let { { it(episode) } }, modifier = Modifier.width(200.dp).height(112.dp)) {
                             Art(Tmdb.image(episode.stillPath, Tmdb.WIDE) ?: fallback, "Episode ${episode.episodeNumber}", Modifier.fillMaxSize())
                             if (current == episode.seasonNumber to episode.episodeNumber) Badge("Up next", Modifier.align(Alignment.BottomStart).padding(6.dp))
+                            if (EpisodeKey(episode.seasonNumber, episode.episodeNumber) in watched)
+                                Icon(Icons.Rounded.Check, "Watched", tint = Color.Black, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(20.dp)
+                                    .background(Color.White, androidx.compose.foundation.shape.CircleShape).padding(2.dp))
                         }
                         Text("${episode.episodeNumber}. ${episode.name ?: "Episode ${episode.episodeNumber}"}", style = Type.callout.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull(episode.runtime?.let { "${it}m" }, episode.airDate).joinToString("  ·  "), style = Type.caption, color = Palette.muted)

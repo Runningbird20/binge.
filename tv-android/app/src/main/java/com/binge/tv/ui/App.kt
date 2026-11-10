@@ -83,6 +83,7 @@ sealed class Screen {
     object Settings : Screen()
     object Wrapped : Screen()
     object Library : Screen()
+    data class Person(val id: Int, val name: String) : Screen()
 }
 
 // A simple stack over the tabs: title pages, the player, Me's pages.
@@ -311,6 +312,7 @@ private fun ScreenFor(screen: Screen, active: Boolean) {
         Screen.Settings -> SettingsScreen()
         Screen.Wrapped -> WrappedScreen()
         Screen.Library -> LibraryScreen()
+        is Screen.Person -> PersonScreen(screen.id, screen.name)
     }
 }
 
