@@ -132,6 +132,11 @@ object Supabase {
         send("POST", table, listOf("on_conflict" to onConflict), row, Auth.REQUIRED, "resolution=merge-duplicates,return=minimal")
     }
 
+    // Many rows at once; rows that already exist are left as they are.
+    suspend fun insertIgnoringDuplicates(table: String, onConflict: String, rows: List<Map<String, Any?>>) {
+        send("POST", table, listOf("on_conflict" to onConflict), rows, Auth.REQUIRED, "resolution=ignore-duplicates,return=minimal")
+    }
+
     suspend fun rpc(name: String, params: Map<String, Any?>, auth: Auth = Auth.OPTIONAL): String =
         send("POST", "rpc/$name", emptyList(), params, auth)
 
