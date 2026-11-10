@@ -46,13 +46,20 @@ struct PlayerView: View {
             // Subtitles, drawn here from the video's own track (WebKit
             // doesn't draw them reliably on tvOS, and servers' own caption
             // overlays are hidden in fill mode). Style from Settings.
-            if model.started, !model.subtitleText.isEmpty {
-                SubtitleLine(text: model.subtitleText)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    // Above the corner Skip intro button while it shows.
-                    .padding(.bottom, model.hudVisible ? 200 : (model.showSkipIntro ? 150 : 70))
-                    .animation(.easeOut(duration: 0.2), value: model.hudVisible)
-                    .allowsHitTesting(false)
+            // Redrawn 20 times a second from the running clock, so a line
+            // changes on its word rather than at the next poll.
+            if model.started {
+                TimelineView(.periodic(from: .now, by: 0.05)) { context in
+                    let text = model.subtitleText(at: context.date)
+                    if !text.isEmpty {
+                        SubtitleLine(text: text)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            // Above the corner Skip intro button while it shows.
+                            .padding(.bottom, model.hudVisible ? 200 : (model.showSkipIntro ? 150 : 70))
+                            .animation(.easeOut(duration: 0.2), value: model.hudVisible)
+                    }
+                }
+                .allowsHitTesting(false)
             }
 
             if !model.started {
@@ -445,7 +452,7 @@ private struct PlayerPanel: View {
         rows.append((.audio, "Audio", model.audioTracks.first(where: \.on).flatMap(PlayerModel.spokenName) ?? "Default"))
         rows.append((.subtitles, "Subtitles", subtitleLabel))
         if model.usingExternalSubtitles {
-            rows.append((.timing, "Subtitle timing", model.subtitleOffset == 0 ? "In sync" : String(format: "%+.1fs", model.subtitleOffset)))
+            rows.append((.timing, "Subtitle timing", model.subtitleOffset == 0 ? "As the file has them" : String(format: "%.1fs %@", abs(model.subtitleOffset), model.subtitleOffset > 0 ? "later" : "earlier")))
         }
         rows.append((.server, model.request.isLive ? "Stream" : "Server", model.server?.name ?? "Choosing…"))
         rows.append((.picture, "Picture", model.fillScreen ? "Fill screen" : "Server's layout"))
@@ -500,9 +507,14 @@ private struct PlayerPanel: View {
                 }
             }
         case .timing:
-            note(model.subtitleOffset == 0 ? "In sync" : String(format: "Shifted %+.1f seconds", model.subtitleOffset))
+            note(model.subtitleOffset == 0 ? "As the file has them"
+                 : String(format: "Lines show %.1f seconds %@", abs(model.subtitleOffset), model.subtitleOffset > 0 ? "later" : "earlier"))
             SideRow(label: "Earlier (0.5s)") { model.nudgeSubtitles(by: -0.5) }.focused($focus, equals: "earlier")
             SideRow(label: "Later (0.5s)") { model.nudgeSubtitles(by: 0.5) }.focused($focus, equals: "later")
+            if model.subtitleOffset != 0 {
+                SideRow(label: "Back to the file's timing") { model.nudgeSubtitles(by: -model.subtitleOffset) }.focused($focus, equals: "reset")
+            }
+            note("Remembered for this episode on this server, and shared so other viewers start in sync.")
             if (model.external?.versions ?? 0) > 1 {
                 SideRow(label: "Another version") { model.nextSubtitleVersion() }.focused($focus, equals: "version")
             }

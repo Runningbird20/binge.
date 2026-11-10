@@ -26,6 +26,9 @@ struct ExternalSubtitleFile: Equatable {
         longest = cues.map { $0.end - $0.start }.max() ?? 0
     }
 
+    // With the viewer's shift: + shows every line that much later.
+    func text(at time: Double, shift: Double) -> String { text(at: time - shift) }
+
     // The line(s) on screen at a given second (cues are sorted by start).
     func text(at time: Double) -> String {
         var low = 0, high = cues.count
@@ -133,5 +136,77 @@ enum ExternalSubtitles {
             total = total * 60 + value
         }
         return total
+    }
+}
+
+// Subtitle timing that sticks. A file made for another cut of the video is
+// off by the same gap all the way through, so once a viewer has shifted it
+// to match, that shift is kept: on this Apple TV for this file and server,
+// for the show's next episodes on that server, and (subtitle_sync) for every
+// viewer after them, who then start in sync.
+enum SubtitleSync {
+    struct Key: Hashable {
+        let kind: MediaKind
+        let mediaId: Int
+        let season: Int
+        let episode: Int
+        let lang: String
+        let release: String
+        let server: String
+
+        var local: String { "\(kind.rawValue):\(mediaId):\(season):\(episode):\(lang):\(server):\(release)" }
+        var show: String { "show:\(kind.rawValue):\(mediaId):\(lang):\(server)" }
+    }
+
+    enum Source { case mine, viewers, lastEpisode }
+
+    private static let storeKey = "binge.subtitleSync"
+    private static var store: [String: Double] {
+        get { UserDefaults.standard.dictionary(forKey: storeKey) as? [String: Double] ?? [:] }
+        set {
+            var next = newValue
+            if next.count > 400 { next = Dictionary(uniqueKeysWithValues: next.shuffled().prefix(300).map { ($0.key, $0.value) }) }
+            UserDefaults.standard.set(next, forKey: storeKey)
+        }
+    }
+
+    // Where to start: your own shift for this file, else what other viewers
+    // settled on, else (a series) your shift on the last episode from this
+    // server. Nil: nothing known, start at 0.
+    static func start(_ key: Key) async -> (offset: Double, source: Source)? {
+        if let mine = store[key.local] { return (mine, .mine) }
+        if let shared = await shared(key) { return (shared, .viewers) }
+        if key.kind == .tvShow, let last = store[key.show], last != 0 { return (last, .lastEpisode) }
+        return nil
+    }
+
+    static func remember(_ key: Key, offset: Double) {
+        var all = store
+        all[key.local] = offset
+        if key.kind == .tvShow { all[key.show] = offset }
+        store = all
+    }
+
+    private static func shared(_ key: Key) async -> Double? {
+        struct Row: Decodable { let offsetS: Double?; let viewers: Int? }
+        let rows: [Row]? = try? await Supabase.shared.rpc("subtitle_sync_summary", [
+            "p_media_type": key.kind.rawValue, "p_media_id": key.mediaId, "p_season": key.season, "p_episode": key.episode,
+            "p_lang": key.lang, "p_release": key.release, "p_server": key.server,
+        ])
+        guard let value = rows?.first?.offsetS, value.isFinite else { return nil }
+        return (value * 10).rounded() / 10
+    }
+
+    // Shared once the viewer has left it alone for a while (see PlayerModel).
+    static func report(_ key: Key, offset: Double) {
+        Task {
+            guard let userId = await Supabase.shared.session?.userId else { return }
+            try? await Supabase.shared.upsert("subtitle_sync", onConflict: "user_id,media_type,media_id,season,episode,lang,release,server", [
+                "user_id": userId, "media_type": key.kind.rawValue, "media_id": key.mediaId,
+                "season": key.season, "episode": key.episode, "lang": key.lang,
+                "release": String(key.release.prefix(300)), "server": String(key.server.prefix(40)),
+                "offset_s": (offset * 10).rounded() / 10, "updated_at": ISO8601DateFormatter().string(from: Date()),
+            ])
+        }
     }
 }

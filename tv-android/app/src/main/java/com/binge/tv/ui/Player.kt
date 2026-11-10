@@ -357,7 +357,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                         val rows = buildList {
                             add(Triple(Pane.AUDIO, "Audio", audioLabel))
                             add(Triple(Pane.SUBTITLES, "Subtitles", subtitleLabel))
-                            if (model.subtitlesShowing) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "In sync" else "%+.1fs".format(model.subtitleOffset)))
+                            if (model.subtitlesShowing) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "As the file has them" else "%.1fs %s".format(kotlin.math.abs(model.subtitleOffset), if (model.subtitleOffset > 0) "later" else "earlier")))
                             add(Triple(Pane.SERVER, if (model.request.isLive) "Stream" else "Server", model.server?.name ?: "Choosing…"))
                             if (!model.isNative) add(Triple(Pane.PICTURE, "Picture", if (model.fillScreen) "Fill screen" else "Server's layout"))
                             if (!model.request.isLive) add(Triple(Pane.QUALITY, "Quality", QualityPreference.current.label))
@@ -402,7 +402,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                         }
                     }
                     Pane.TIMING -> {
-                        item { Note("If the words come early or late, shift them half a second at a time. Now: " + if (model.subtitleOffset == 0.0) "in sync" else "%+.1fs".format(model.subtitleOffset)) }
+                        item { Note("If the words come early or late, shift them half a second at a time. Now: " + (if (model.subtitleOffset == 0.0) "as the file has them" else "%.1fs %s".format(kotlin.math.abs(model.subtitleOffset), if (model.subtitleOffset > 0) "later" else "earlier")) + ". Remembered for this episode on this server, and shared so other viewers start in sync.") }
                         item { SideItem("Earlier", "0.5 seconds", modifier = Modifier.focusRequester(firstFocus)) { model.nudgeSubtitles(-0.5) } }
                         item { SideItem("Later", "0.5 seconds") { model.nudgeSubtitles(0.5) } }
                         item { SideItem("Much earlier", "2 seconds") { model.nudgeSubtitles(-2.0) } }
