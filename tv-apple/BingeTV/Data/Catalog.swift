@@ -8,7 +8,7 @@ struct RowSpec: Identifiable, Sendable {
     var params: [String: String] = [:]
 }
 
-struct LoadedRow: Identifiable {
+struct LoadedRow: Identifiable, Codable {
     let id: String
     let title: String
     let items: [Title]

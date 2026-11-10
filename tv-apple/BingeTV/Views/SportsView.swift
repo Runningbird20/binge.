@@ -5,6 +5,7 @@ import SwiftUI
 // with ESPN scores at the end. Games play right here: a game's feeds are
 // raced like movie servers (first stream to actually play wins).
 struct SportsView: View {
+    @AppStorage(ScoreVisibility.key) private var hideScores = false
     @EnvironmentObject private var app: AppModel
     @State private var boards: [(League, [Scoreboard.Event])] = []
     @State private var games: [SportGame] = []
@@ -58,6 +59,7 @@ struct SportsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 34) {
+                AnnouncementBanner()
                 if let featured {
                     SportsSpotlight(game: featured, event: event(for: featured), busy: starting == featured.id,
                                     inMulti: multi.contains(featured),
@@ -81,10 +83,15 @@ struct SportsView: View {
                 if !multi.isEmpty { multiviewBar }
                 if let corner = pip.game { cornerBar(corner) }
 
-                if categories.count > 2 {
+                if categories.count > 2 || !boards.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing: 20) {
-                            ForEach(categories, id: \.self) { name in
+                            // For games you're watching later: no scores anywhere.
+                            Button { hideScores.toggle() } label: {
+                                Label(hideScores ? "Scores hidden" : "Hide scores", systemImage: hideScores ? "eye.slash.fill" : "eye.slash")
+                            }
+                            .buttonStyle(PillButtonStyle(selected: hideScores))
+                            ForEach(categories.count > 2 ? categories : [], id: \.self) { name in
                                 Button {
                                     category = name
                                 } label: {
@@ -519,12 +526,17 @@ struct StatusPill: View {
 // The live score from ESPN, laid over the thumbnail.
 struct ScoreChip: View {
     let event: Scoreboard.Event
+    @AppStorage(ScoreVisibility.key) private var hideScores = false
     var body: some View {
         let away = event.away, home = event.home
         HStack(spacing: 10) {
-            Text("\(away?.team.abbreviation ?? "") \(away?.score ?? "")")
-            Text("–").foregroundStyle(.white.opacity(0.6))
-            Text("\(home?.score ?? "") \(home?.team.abbreviation ?? "")")
+            if hideScores {
+                Text("\(away?.team.abbreviation ?? "") vs \(home?.team.abbreviation ?? "")")
+            } else {
+                Text("\(away?.team.abbreviation ?? "") \(away?.score ?? "")")
+                Text("–").foregroundStyle(.white.opacity(0.6))
+                Text("\(home?.score ?? "") \(home?.team.abbreviation ?? "")")
+            }
             if let detail = event.status.type.shortDetail {
                 Text(detail).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
             }
@@ -691,6 +703,7 @@ struct GameCard: View {
     let watchable: Bool
     let busy: Bool
     let action: () -> Void
+    @AppStorage(ScoreVisibility.key) private var hideScores = false
 
     var body: some View {
         Button(action: action) {
@@ -715,12 +728,12 @@ struct GameCard: View {
                             .accessibilityLabel("Watch")
                     }
                 }
-                let showScore = event.status.type.state != "pre"
+                let showScore = event.status.type.state != "pre" && !hideScores
                 if let away = event.away {
-                    TeamScore(name: away.name, logo: away.logoURL, score: showScore ? away.score : nil, dim: event.isFinal && away.winner == false)
+                    TeamScore(name: away.name, logo: away.logoURL, score: showScore ? away.score : nil, dim: showScore && event.isFinal && away.winner == false)
                 }
                 if let home = event.home {
-                    TeamScore(name: home.name, logo: home.logoURL, score: showScore ? home.score : nil, dim: event.isFinal && home.winner == false)
+                    TeamScore(name: home.name, logo: home.logoURL, score: showScore ? home.score : nil, dim: showScore && event.isFinal && home.winner == false)
                 }
             }
             .padding(.horizontal, 26)

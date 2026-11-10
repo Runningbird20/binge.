@@ -31,8 +31,10 @@ struct TMDBDetails: Decodable {
         var airDate: String? = nil
         var id: Int { seasonNumber }
     }
-    struct Cast: Decodable, Hashable { let name: String }
-    struct Credits: Decodable { let cast: [Cast] }
+    struct Cast: Decodable, Hashable { var id: Int?; let name: String; var character: String?; var profilePath: String?; var order: Int? }
+    struct Crew: Decodable, Hashable { var id: Int?; let name: String; var job: String?; var profilePath: String? }
+    struct Credits: Decodable { let cast: [Cast]; var crew: [Crew]? }
+    struct Creator: Decodable, Hashable { var id: Int?; let name: String; var profilePath: String? }
     struct Logo: Decodable { let filePath: String; let iso6391: String? }
     struct Images: Decodable { let logos: [Logo] }
 
@@ -55,6 +57,7 @@ struct TMDBDetails: Decodable {
     struct AiredEpisode: Decodable, Hashable { let airDate: String?; let seasonNumber: Int; let episodeNumber: Int; let name: String? }
     let credits: Credits?
     let images: Images?
+    var createdBy: [Creator]? = nil
 
     var logoPath: String? {
         let logos = images?.logos ?? []

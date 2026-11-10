@@ -11,7 +11,7 @@ enum MediaKind: String, Codable, Hashable, Sendable {
 
 // A title from binge.'s catalog (the site's movies / tv_shows tables),
 // optionally decorated with TMDB art.
-struct Title: Identifiable, Hashable, Sendable {
+struct Title: Identifiable, Hashable, Sendable, Codable {
     let kind: MediaKind
     let dbId: Int
     let name: String
@@ -123,7 +123,7 @@ enum ISODate {
     static func parse(_ text: String) -> Date? { withFraction.date(from: text) ?? plain.date(from: text) }
 }
 
-struct ContinueItem: Identifiable, Hashable {
+struct ContinueItem: Identifiable, Hashable, Codable {
     var title: Title
     let season: Int?
     let episode: Int?
@@ -133,6 +133,9 @@ struct ContinueItem: Identifiable, Hashable {
     var newEpisode: String?
     // "2 episodes left in Season 3", "New season Friday" (SeasonStatus).
     var seasonNote: String?
+    // The newest aired episode is watched and nothing's saved partway:
+    // left out of the Continue Watching row (New Episodes still has it).
+    var finished = false
 
     var id: String { title.id }
 

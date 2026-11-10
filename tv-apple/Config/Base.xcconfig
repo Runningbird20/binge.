@@ -16,6 +16,10 @@ BINGE_TEAM =
 // turns these on.
 BINGE_APP_ENTITLEMENTS =
 BINGE_SHELF_ENTITLEMENTS =
+// The same paid signing also lets binge. run as the Apple TV's current user
+// (User Management): each person in Control Center keeps their own
+// binge. profile, while the sign-in is shared.
+BINGE_USER_MANAGEMENT = NO
 
 #include? "Secrets.xcconfig"
 #include? "Signing.xcconfig"

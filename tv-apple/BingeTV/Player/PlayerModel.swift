@@ -249,6 +249,15 @@ final class PlayerModel: ObservableObject {
                 return
             }
             notice = "No server could play this right now. Swipe down to try one again."
+            // The admin panel hears about it (once a day per title and episode).
+            let what = request.isLive ? (request.game?.title ?? request.title.name)
+                : "\(request.title.name)\(episodeLabel.map { " \($0)" } ?? "")"
+            let key = "binge.reported.\(StreamRace.key(for: request))"
+            if Date().timeIntervalSince1970 - UserDefaults.standard.double(forKey: key) > 86_400 {
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
+                CrashReporter.report(message: "Apple TV: no server could play \(what)",
+                                     stack: "Raced: \(raced.sorted().joined(separator: ", "))", place: "apple-tv/player")
+            }
         }
     }
 

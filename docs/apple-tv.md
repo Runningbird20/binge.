@@ -99,12 +99,20 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
   - **Shared with the site:** the server switches (`ServerSwitches`), 1–5★ ratings (uniform criteria), audio/subtitle prefs (`ServerPlan` uses `stream_report_summary`), outside ratings/AI picks, heatmap, franchises, Previously on, and History/Calendar/Wrapped.
   - **Sports:** followed teams + in-app close-game alerts (`TeamCenter`), and a corner PiP + alert banner in a second, non-interactive UIWindow (`Player/Overlay.swift`).
   - **Library and playback extras:** My List & Ratings (`LibraryView`, `ratedTitles()`), spotlight trailers, and skip intro / sleep timer / Still watching.
-  - **System:** a Top Shelf extension (`TopShelf/`, App Group `group.$(BINGE_BUNDLE_ID)`, `binge://` deep links).
+  - **Home and title pages (2026-11-09, the website's rules):**
+    - **Saved Home** (`HomeSnapshot`, Caches, 7 days per profile) shows at once while fresh rows load.
+    - **Watched titles** (`WatchedTitles`: ratings, Watched/Watching, Continue Watching, episode_progress; reused a minute, cleared on any save) leave every Home/Movies/Series row, the spotlights, More Like This and Surprise me.
+    - **Finished shows** leave Continue Watching (`finishedShows`); New Episodes and the calendar keep them.
+    - **Spotlight logo art** (`HeroLogo`, the title page's own cached TMDB request); text after 0.9s without one.
+    - **Surprise me**, **Cast row → person pages** (`People`, `PersonView`), **Mark season watched / Watched up to here** with Undo (`EpisodeMarking`; hand-marked rows have `watched_at` null; undoing an unmark restores the real times), **recent searches** (8 per profile, this Apple TV), **Remind me** for unreleased movies and next episodes (`watch_reminders`; due ones show on Home).
+  - **Sports:** Hide scores (`binge.sports.hideScores`), also in game alerts.
+  - **Admin:** the announcements banner (Home, Movies, Series, Sports) and `CrashReporter` (signal/exception → file → `POST /api/ops/errors` on the next launch; also "no server could play", once a day per episode). Off in Debug builds unless `-BingeCrashReports YES`.
+  - **System:** a Top Shelf extension (`TopShelf/`, App Group `group.$(BINGE_BUNDLE_ID)`, `binge://` deep links). Its Continue Watching (progress bars, Play resumes) needs the App Group, so paid signing; the unsigned Sideloadly IPA shows Trending. Paid signing (`setup-signing.sh --paid`) also adds User Management (`runs-as-current-user-with-user-independent-keychain`): each Apple TV user opens on their own last binge. profile (`AppModel.perUser`).
   - **QR handoff to a phone** remains only as a fallback.
 
 ## Debug launch arguments
 
-- **Navigation:** `-BingeDemo`, `-BingeTab`, `-BingeOpen kind:id`, `-BingeOpen page:library` (`-BingeLibraryTab 1` = Ratings), `-BingePanel YES` (opens the player sidebar).
+- **Navigation:** `-BingeDemo`, `-BingeTab`, `-BingeOpen kind:id`, `-BingeOpen person:id`, `-BingeOpen page:library` (`-BingeLibraryTab 1` = Ratings), `-BingePanel YES` (opens the player sidebar).
 - **Playback:** `-BingePlay s:e`, `-BingePlayAfter N`, `-BingeLive <team>`, `-BingeProbe <url>`, `-BingeHandoff YES`.
 - **Failure simulation:** `-BingeStallAfter N`, `-BingeKillAfter N`, `-BingeAmbientAfter N`, `-BingeLowMemory YES`.
 - **Subtitles and audio:** `-BingeSubtitlesURL <url>` (a fixed test file), `-BingeAudioTest fr` (switches audio 20s in; verified on VidRift: Korean→French, kept playing).
