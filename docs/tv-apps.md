@@ -33,7 +33,9 @@ How the Apple TV app (`tv-apple/`) and the Fire TV / Android TV app (`tv-android
   - **The route.** `GET /api/extras/subtitles?type=&tmdb=&season=&episode=&lang=&version=` (`server/routes/extras.js`) searches OpenSubtitles by TMDB id. It ranks the files: no AI or machine translations, non-hearing-impaired first, trusted, most downloaded.
   - **Caching.** It downloads the WebVTT once and caches it in `subtitle_cache` (migration `20261015120000`, APPLIED; service role only), because the free API allows only a few downloads a day.
   - **Keys.** Needs `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME/PASSWORD`) locally and in Vercel. Without it, the route answers `{unavailable}` and the TV falls back to the server's tracks.
-  - **On the TV** (`Player/ExternalSubtitles.swift` and the Fire TV twin), the app parses the VTT and draws the line for `t + offset`. The panel offers the language, Earlier/Later (0.5s) and "Another version".
+  - **On the TV** (`Player/ExternalSubtitles.swift` and the Fire TV twin), the app parses the VTT and draws the line for `t - shift` (+ = later), from a clock run on between polls (Apple TV redraws 20 times a second). The panel offers the language, Earlier/Later (0.5s), back to the file's timing, and "Another version". Until 2026-11-10 the Apple TV had the sign backwards (Earlier made lines later).
+- **Timing that sticks** (`SubtitleSync`, both apps). A file made for another cut of the video is off by the same gap throughout, and the servers' own captions (the website's) often are too. A shift is remembered on the TV per file (release name) + server, carried to the show's next episodes on that server, and, once left alone for 20s of playing, shared in `subtitle_sync` (migration `20261110120000`, NOT YET APPLIED; until it is, the shared part quietly does nothing). The next viewer starts from the median, with a notice saying so.
+  - **The website can't shift captions:** they're drawn by the server's player inside a cross-origin frame. Only the server's own menu can.
 
 ## Live streams
 
