@@ -109,6 +109,7 @@ This is the one thing every route/feature decision hinges on. There are two ways
 - `sports` — feeds, ESPN, fantasy;
 - `books`, `manga` — reading proxies;
 - `cron`, `ops` — error reports, health checks, broadcasts;
+- `og` — link previews: `vercel.json` sends link-preview bots (by user agent) asking for `/movie/:id`, `/tv-show/:id` or `/book/:id` here, a small page whose og:/twitter: tags carry the title, description and TMDB backdrop (people get the normal site);
 - `admin`, `account` — service role;
 - `media` — the few catalog reads `supabaseApi.js` deliberately passes on (popular titles, curated lists, relevance sort).
 
