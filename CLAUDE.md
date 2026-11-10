@@ -264,7 +264,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 
 - **Continue Watching:**
   - **Season notes.** "2 episodes left in Season 3", "Season 4 starts Friday" (`utils/seasonStatus.js` / TV `Data/SeasonStatus.swift`, same rules).
-  - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. The TV apps don't apply this rule yet.
+  - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. Apple TV applies the same rule (`finishedShows`); Fire TV doesn't yet.
   - **Links carry `&t=`.** Continue Watching links include the saved second (see the web player).
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
 - **Surprise me** (above Continue Watching, `SurpriseButtons` in `Home.js`, logic in `utils/surprise.js`):
@@ -574,7 +574,7 @@ Rules that apply every time:
   - **Profile scoping.** Rows are scoped by `user_id` + `profile_id`, and the default (or only) profile also sees rows with `profile_id` null.
   - **Maturity.** `Maturity` (`Models.swift` / `Models.kt`) is decoded leniently from `settings` and must never fail the profile list. Unrated titles are left out on every restricted level.
   - **Playback.** Each server page loads top-level in a hidden web view, a bridge script injected into every frame drives its `<video>`, and `StreamRace` races servers muted.
-  - **Don't capture stream URLs to play them natively.**
+  - **Native playback is allowed.** Once a server's page has found its stream, the app may play that stream address in its own player (Apple TV's `NativeEngine` via `HybridEngine`, Fire TV's `HybridEngine`), and that path may be changed in any way that improves start time or smoothness.
   - **Hand-picked servers are never auto-switched.**
   - **Subtitles** are drawn by the app (`SubtitleLine`), not by WebKit. OpenSubtitles allows only a few downloads a day, so files are cached in `subtitle_cache`.
   - **Verify Multiview and sports on hardware.** The tvOS simulator draws one web video at a time, and sports embeds flag the Android emulator as a bot.

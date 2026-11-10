@@ -75,7 +75,9 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
         surface.player = player
         val item = MediaItem.Builder().setUri(source.url)
             .setMimeType(if (source.dash) MimeTypes.APPLICATION_MPD else MimeTypes.APPLICATION_M3U8)
-            .apply { if (isLive) setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(12_000).build()) }
+            // Live: no target offset of our own. The playlist's HOLD-BACK (or 3
+            // segments, ~18s) is what hls.js uses on the website; 12s ran these
+            // bursty restreams dry and stalled.
             .build()
         player.setMediaItem(item)
         if (com.binge.tv.BuildConfig.DEBUG) player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {

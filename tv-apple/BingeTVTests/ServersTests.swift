@@ -248,4 +248,41 @@ import Testing
         #expect(!ExpectedRuntime.agree(98 * 60, [47 * 60]), "two different wrong videos don't agree")
         #expect(ExpectedRuntime.agree(5400, [5440]))
     }
+
+    // How fast each server starts here: quickest first, a give-up counts as
+    // 40s, unknown servers as average, and the title's last server stays first.
+    private func byId(_ id: String) -> StreamServer { StreamServer.all.first { $0.id == id }! }
+
+    @Test func speedRanking() {
+        let keys = StreamServer.all.map { "binge.speed.\($0.id)" }
+        let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, saved) { UserDefaults.standard.set(value, forKey: key) } }
+        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+
+        ServerSpeed.record(byId("vidrift"), seconds: 9)
+        ServerSpeed.failed(byId("vidy"))
+        ServerSpeed.record(byId("cinesrc"), seconds: 3)
+        #expect(ServerSpeed.sorted(StreamServer.all).map(\.id) == ["cinesrc", "vidrift", "vidy"])
+        #expect(ServerSpeed.sorted(StreamServer.all, keepingFirst: "vidy").map(\.id) == ["vidy", "cinesrc", "vidrift"])
+        // Averaged: one fast start doesn't erase a history of slow ones.
+        ServerSpeed.record(byId("vidy"), seconds: 1)
+        #expect(ServerSpeed.of(byId("vidy")) == 27)
+        // Live streams (their id is a URL) aren't remembered.
+        let live = StreamServer(id: "https://example.com/embed/1", name: "PPV · ESPN") { _, _, _, _ in URL(string: "https://example.com")! }
+        ServerSpeed.record(live, seconds: 2)
+        #expect(ServerSpeed.of(live) == nil)
+    }
+
+    // A slow lookup gives way to its fallback instead of holding the race back.
+    @Test func plannerLookupsAreTimeBoxed() async {
+        let start = Date()
+        let slow = await ServerPlan.within(0.2, "fallback") {
+            try? await Task.sleep(for: .seconds(5))
+            return "late"
+        }
+        #expect(slow == "fallback")
+        #expect(Date().timeIntervalSince(start) < 2)
+        let fast = await ServerPlan.within(2, "fallback") { "quick" }
+        #expect(fast == "quick")
+    }
 }

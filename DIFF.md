@@ -24,26 +24,26 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
 | Where to watch (legal streaming services row) | ✓ | ✓ | — | — | `WhereToWatch.js`, TMDB `watch/providers`. |
-| Cast & crew photo row | ✓ | ✓ | ◐ | ◐ | The TV apps show a text "Starring …" line only, no photos. |
-| Actor / director pages (`/person/:id`) | ✓ | ✓ | — | — | `pages/Person.js`, `utils/people.js`. |
+| Cast & crew photo row | ✓ | ✓ | ✓ | ◐ | Apple TV: `CastRow` (`PersonView.swift`), each photo opens the person's page. Fire TV shows a text "Starring …" line only. |
+| Actor / director pages (`/person/:id`) | ✓ | ✓ | ✓ | — | `pages/Person.js`, `utils/people.js`; Apple TV `PersonView` + `Data/People.swift`, same rules. |
 | Episode heatmap | ✓ | ✓ | ✓ | — | Fire TV has no `EpisodeHeatmap`. |
 | Franchise "Mark all watched" | ✓ | ✓ | — | — | `FranchiseOrder.js`. Story / release order itself is on every app. |
-| Mark season watched / Watched up to here | ✓ | ✓ | — | — | TV apps only mark an episode watched automatically, at 90% played. |
+| Mark season watched / Watched up to here | ✓ | ✓ | ✓ | — | Apple TV: a pill left of the season picker, and "Watched up to here" / "Mark as not watched" when you hold an episode, with Undo. Fire TV only marks an episode watched automatically, at 90% played. |
 | Detailed rating (per category) | ✓ | ✓ | ◐ | ◐ | TV apps: 1–5 stars, copied into every category. |
-| Remind me (release reminders) | ✓ | ✓ | — | — | `RemindButton`; delivered in the app and by push. |
+| Remind me (release reminders) | ✓ | ✓ | ◐ | — | `RemindButton`; delivered in the app and by push. Apple TV: only for what isn't out yet (a movie's release, a series' next episode, at 9 that morning); due reminders show on Home. |
 
 ## Home & browsing
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| Spotlight with logo art | ✓ | ✓ | — | — | TV spotlights show the title as text. |
+| Spotlight with logo art | ✓ | ✓ | ✓ | — | Apple TV: `HeroLogo`, text after 0.9s without one. Fire TV shows the title as text. |
 | Spotlight trailers | ✓ | — | ✓ | — | The website plays them only with a mouse or trackpad (`canAutoplayPreviews`). |
 | Trailer previews when hovering a card | ✓ | — | — | — | `HoverPreview.js`, needs a mouse or trackpad. |
-| "Surprise me with a movie / a series" | ✓ | ✓ | — | — | Home, above Continue Watching (`utils/surprise.js`). |
-| Watched titles left out of every recommendation | ✓ | ✓ | ◐ | ◐ | `utils/watchedTitles.js`. The TV apps leave them out of Top Picks and Because you watched only; their Trending, genre and seasonal rows still show them. |
-| Finished shows leave Continue Watching | ✓ | ✓ | — | — | Newest episode marked watched and nothing saved partway (`Home.js`). The TV apps keep them. |
-| Home opens instantly from the last visit | ◐ | ◐ | — | ✓ | Fire TV saves Home to disk for 7 days (`HomeSnapshot`). The website keeps it only for the open tab (`sessionCache`). |
+| Watched titles left out of every recommendation | ✓ | ✓ | ✓ | ◐ | `utils/watchedTitles.js`; Apple TV `WatchedTitles`. Fire TV leaves them out of Top Picks and Because you watched only; its Trending, genre and seasonal rows still show them. |
+| Finished shows leave Continue Watching | ✓ | ✓ | ✓ | — | Newest episode marked watched and nothing saved partway (`Home.js`; Apple TV `finishedShows`). Fire TV keeps them. |
+| Home opens instantly from the last visit | ◐ | ◐ | ✓ | ✓ | The TV apps save Home to disk for 7 days (`HomeSnapshot`). The website keeps it only for the open tab (`sessionCache`). |
 | Pull to refresh | — | ✓ | — | — | Touch only. |
+| Rows loop back to the start (Netflix-style) | — | — | ✓ | — | Apple TV: rows of 8+ titles carry on past the last one (`RowLoop` in `Components.swift`). |
 | Keyboard shortcuts (`/`, `?`, arrow keys) | ✓ | — | n/a | n/a | `KeyboardShortcuts.js`; also drives the website's TV mode. |
 
 ## Search
@@ -52,7 +52,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 |---|:-:|:-:|:-:|:-:|---|
 | Type / decade / language filter chips | ✓ | ✓ | — | — | Results page only (`utils/searchFilters.js`). |
 | People in search (with a link to their page) | ✓ | ✓ | ◐ | ◐ | TV apps mix an actor's best-known titles into the results; there's no person result. |
-| Recent searches | ✓ | ✓ | — | — | TV apps show "Trending searches" instead. |
+| Recent searches | ✓ | ✓ | ✓ | — | Apple TV: the last 8 per profile, on this Apple TV. Fire TV shows "Trending searches" instead. |
 | Voice search | — | — | ✓ | ◐ | Apple TV: system dictation. Fire TV: only the Fire TV keyboard's mic. |
 
 ## Library, stats & account
@@ -86,6 +86,10 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
 | Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift, CineSrc, VidSpark, VidCore and EmbedWave, not Sports (`utils/popupSandbox.js`). |
 | Servers VixSrc, VidSpark, VidCore, EmbedWave | ✓ | ✓ | — | — | Added to the website 2026-11-09 (`embedProviders.js`). Not tried in the TV apps yet; Apple TV can only use servers that play without MSE. |
+| Streams play in the TV's own player (native HLS) | — | — | ✓ | ✓ | Once the server's page finds its stream (`HybridEngine`). Apple TV also saves a stream that played for 3 hours, so playing it again skips the page (`StreamCache`). |
+| TV switches to the video's frame rate (Match Content) | — | — | ✓ | — | Apple TV, with Match Content on in the Apple TV's settings (`NativeEngine.displayCriteria`). |
+| Now Playing in Control Center / the phone's TV remote | — | — | ✓ | — | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. |
+| Subtitles while skipping back | — | — | ✓ | — | Apple TV: with subtitles off, ◀ turns the server's track on until the video passes where you were. |
 
 ## Sports
 
@@ -97,7 +101,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Followed teams & game alerts | ✓ | ✓ | ◐ | — | Website: push alerts. Apple TV: in-app banners only, with a "Your teams" row. |
 | Live score panel (second screen, line score) | ✓ | ✓ | ◐ | ◐ | TV apps show score chips and a Scores row. |
 | Fantasy roster | ✓ | ✓ | — | — | `FantasyRoster`, ESPN Fantasy. |
-| Hide scores | ✓ | ✓ | — | — | |
+| Hide scores | ✓ | ✓ | ✓ | — | Apple TV: the pill before the sport chips; game alerts leave the score out too. |
 | Previous / next live game from the player (◀ ▶) | n/a | n/a | ✓ | — | |
 | A live game in a corner window over other video | — | — | ✓ | — | `Player/Overlay.swift`. |
 
@@ -107,8 +111,8 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 |---|:-:|:-:|:-:|:-:|---|
 | Books & manga (reader, Where to read) | ✓ | ✓ | — | — | |
 | Push notifications (new episodes, reminders, admin broadcasts) | ✓ | ✓ | — | — | iPhones need the site installed to the Home Screen. |
-| Announcements banner | ✓ | ✓ | — | — | |
-| Error reporting to the admin panel | ✓ | ✓ | — | — | |
+| Announcements banner | ✓ | ✓ | ◐ | — | Apple TV: Home, Movies, Series and Sports; links are shown as text (a TV can't open them). |
+| Error reporting to the admin panel | ✓ | ✓ | ✓ | — | Apple TV: crashes (sent on the next launch) and "no server could play" (`CrashReporter.swift`). |
 | Offline banner, app shortcuts, share to binge. | ✓ | ✓ | — | — | PWA features. Sharing links to binge. is mostly used on phones. |
 
 ---
@@ -150,10 +154,9 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 ## Biggest gaps, by app
 
 - **TV apps vs website**:
-  - Where to watch, cast & crew photos with person pages, and logo art in the spotlight.
-  - Mark season watched, and hiding finished shows from Continue Watching.
-  - Search filters and recent searches; Surprise me; detailed ratings.
+  - Where to watch, search filters, detailed ratings.
   - Creating and editing profiles, and account tools.
+  - Fire TV also lacks what Apple TV gained on 2026-11-09: cast photos with person pages, logo art in the spotlight, mark season watched, hiding finished shows, recent searches, Remind me, Hide scores, announcements and error reports.
 - **Website vs TV apps**:
   - OpenSubtitles subtitles and subtitle styling; quality choice.
   - Sleep timer and "Still watching?".

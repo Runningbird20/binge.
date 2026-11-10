@@ -18,7 +18,7 @@ How the Apple TV app (`tv-apple/`) and the Fire TV / Android TV app (`tv-android
   - **Loading.** The server's player page loads top-level in a hidden web view (WKWebView / Android WebView).
   - **The bridge.** A bridge script injected into every frame drives its `<video>` and reports the main one; that's what makes nested-iframe live-sports embeds controllable.
   - **The race.** `StreamRace` races several servers, muted, and the first to play wins.
-  - **Don't capture stream URLs to play them natively.**
+  - **Native playback is allowed.** Once the page has found its stream, the app may play that address in its own player (AVPlayer / ExoPlayer through `HybridEngine`), and that path may be changed in any way that improves start time or smoothness.
   - **Recovery** re-races the other servers from the saved second.
   - **Hand-picked servers are never auto-switched.**
 - **Wrong video under the right id.** A server can play a different title: Vidy served a 98-min video for the 156-min Demon Slayer: Infinity Castle. `ExpectedRuntime` compares the stream's length with TMDB's runtime, using the same rule as the web. The race rejects a wrong stream, and the player recovers.

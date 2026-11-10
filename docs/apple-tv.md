@@ -11,7 +11,21 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
 **Playback** is in the app, through tvOS's private **WKWebView** (`Player/WebEngine.swift`, via the Obj-C runtime: sideload-only, never App Store).
 - **Legacy fallback.** `UIWebView` is only a fallback: any `<video>` seek crashes inside WebKit there (`canSeek = false`).
 - **Servers.** tvOS has no MSE, so only servers with a native-HLS fallback work: VidRift, Vidy, CineSrc (`Player/Servers.swift`). VidRift exposes about 25 dubs; CineSrc has subtitle tracks.
-- **Startup.** `StreamRace` runs all servers at once. `Warmup` runs one background race from the title page, a focused Continue Watching card or the next episode, held on its first frame: ~0.8s warm, ~2–3s cold.
+- **Startup.** `StreamRace` runs all servers at once (an Apple TV 4K has the memory for it, which is quicker than the Fire TV's two-at-a-time). `Warmup` runs one background race from the title page, a focused Continue Watching card or the next episode, held on its first frame. Measured 2026-11-09 in the simulator: Parasite 3.8s cold, 0.5s warm.
+  - **Planning** (`ServerPlan.servers`): admin switches, original language and audio reports are fetched at once, each capped at 1.5s (`within`).
+  - **On screen, the first stream to play shows at once.** With Best quality the others keep loading for 8s and a sharper one takes over at the same second (`upgradeTick`). Only a preload waits for the sharpest server, since nobody is watching it yet.
+  - **`ServerSpeed`** remembers how long each server takes to start here (a give-up counts as 40s). An Apple TV HD races only one or two, the quickest first.
+  - **Recovery honours the admin's off switches** (`PlayerModel.servers`). It used to race a switched-off server.
+- **Native playback** (`HybridEngine` + `NativeEngine`, 2026-11-09, `binge.nativePlayer`). tvOS pages play native HLS, so the bridge reports the stream (`video.currentSrc`), the frame playing it (Referer) and the UA. AVPlayer then opens it with those headers (`AVURLAssetHTTPHeaderFieldsKey`, private API; sideload-only app).
+  - **Side by side.** The page keeps playing, muted, while AVPlayer starts hidden, so whichever shows pictures first is on screen. A slow stream server costs no extra time. AVPlayer takes over at the page's second once it has a picture, and the page is closed. If it has none 20s after the page started playing, the page carries on and that stream host stays in the page for a day. The Apple TV HD pauses the page instead (two decoders) and gives AVPlayer 8s.
+  - **Buffering.** AVPlayer starts on the playlist's first variant, keeps 60s buffered for movies and episodes, and keeps live 20s behind the edge (`configuredTimeOffsetFromLive`, kept through stalls).
+  - **Everywhere:** movies, shows, live games (the standby too) and Multiview tiles (a tile's iframe leaves the shared page once AVPlayer has it). Trailers stay in the page (`WebEngines.make(native: false)`).
+  - **Measured** in the simulator: Willow live 5.2s with a standby; 2-tile Multiview at 383 MB, 100% of real time, 0 dropped frames, sound correct across focus swaps.
+  - **Crash Landing on You** went from 18–25s to 11.5s. Its floor is CineSrc's page, which takes ~8s to set its stream; Vidy never loads it, and VidRift was switched off in the admin panel on 2026-11-09.
+  - **Saved streams** (`StreamCache`). A stream that played is kept for 3 hours under its server page's address (max 40). Playing that server and episode again starts AVPlayer on it at once, with the page loading alongside as the backup (the Apple TV HD loads the page only if the saved stream fails). A saved stream that fails (its token ran out) is dropped without marking the host as failing, and the page's fresh stream gets AVPlayer as usual.
+  - **Display mode.** Once AVPlayer is on screen, the player asks the TV for the video's frame rate and range (`NativeEngine.displayCriteria`: the track's measured rate and format, else the playlist's), when Match Content is on. Movies and episodes pause up to 5s while the TV switches; live keeps going. Closing the player clears it. Multiview keeps clearing it every second (its games mix 50 and 60fps).
+  - **Now Playing** (`NowPlaying.swift`). Title, episode, poster and progress go to Control Center and the iPhone's Apple TV Remote, and their play/pause/skip/scrub drive the player. A toggle there within 0.6s of a Siri remote press is the same press echoed, and is ignored.
+  - **Subtitles when skipping back** (`binge.captionsOnRewind`, on by default). With subtitles off, ◀ turns on the server's track in the profile's subtitle language (else the Apple TV's language) until the video is 1s past where ◀ was pressed.
 - **The bridge** is `WebEngines.bridgeScript`. It reports the main `<video>` via `webkit.messageHandlers.binge` and relays commands to child frames with `postMessage`. Progress is saved to `continue_watching`.
 
 ## Details found on a real Apple TV
@@ -85,12 +99,20 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
   - **Shared with the site:** the server switches (`ServerSwitches`), 1–5★ ratings (uniform criteria), audio/subtitle prefs (`ServerPlan` uses `stream_report_summary`), outside ratings/AI picks, heatmap, franchises, Previously on, and History/Calendar/Wrapped.
   - **Sports:** followed teams + in-app close-game alerts (`TeamCenter`), and a corner PiP + alert banner in a second, non-interactive UIWindow (`Player/Overlay.swift`).
   - **Library and playback extras:** My List & Ratings (`LibraryView`, `ratedTitles()`), spotlight trailers, and skip intro / sleep timer / Still watching.
-  - **System:** a Top Shelf extension (`TopShelf/`, App Group `group.$(BINGE_BUNDLE_ID)`, `binge://` deep links).
+  - **Home and title pages (2026-11-09, the website's rules):**
+    - **Saved Home** (`HomeSnapshot`, Caches, 7 days per profile) shows at once while fresh rows load.
+    - **Watched titles** (`WatchedTitles`: ratings, Watched/Watching, Continue Watching, episode_progress; reused a minute, cleared on any save) leave every Home/Movies/Series row, the spotlights, More Like This and Surprise me.
+    - **Finished shows** leave Continue Watching (`finishedShows`); New Episodes and the calendar keep them.
+    - **Spotlight logo art** (`HeroLogo`, the title page's own cached TMDB request); text after 0.9s without one.
+    - **Surprise me**, **Cast row → person pages** (`People`, `PersonView`), **Mark season watched / Watched up to here** with Undo (`EpisodeMarking`; hand-marked rows have `watched_at` null; undoing an unmark restores the real times), **recent searches** (8 per profile, this Apple TV), **Remind me** for unreleased movies and next episodes (`watch_reminders`; due ones show on Home).
+  - **Sports:** Hide scores (`binge.sports.hideScores`), also in game alerts.
+  - **Admin:** the announcements banner (Home, Movies, Series, Sports) and `CrashReporter` (signal/exception → file → `POST /api/ops/errors` on the next launch; also "no server could play", once a day per episode). Off in Debug builds unless `-BingeCrashReports YES`.
+  - **System:** a Top Shelf extension (`TopShelf/`, App Group `group.$(BINGE_BUNDLE_ID)`, `binge://` deep links). Its Continue Watching (progress bars, Play resumes) needs the App Group, so paid signing; the unsigned Sideloadly IPA shows Trending. Paid signing (`setup-signing.sh --paid`) also adds User Management (`runs-as-current-user-with-user-independent-keychain`): each Apple TV user opens on their own last binge. profile (`AppModel.perUser`).
   - **QR handoff to a phone** remains only as a fallback.
 
 ## Debug launch arguments
 
-- **Navigation:** `-BingeDemo`, `-BingeTab`, `-BingeOpen kind:id`, `-BingeOpen page:library` (`-BingeLibraryTab 1` = Ratings), `-BingePanel YES` (opens the player sidebar).
+- **Navigation:** `-BingeDemo`, `-BingeTab`, `-BingeOpen kind:id`, `-BingeOpen person:id`, `-BingeOpen page:library` (`-BingeLibraryTab 1` = Ratings), `-BingePanel YES` (opens the player sidebar).
 - **Playback:** `-BingePlay s:e`, `-BingePlayAfter N`, `-BingeLive <team>`, `-BingeProbe <url>`, `-BingeHandoff YES`.
 - **Failure simulation:** `-BingeStallAfter N`, `-BingeKillAfter N`, `-BingeAmbientAfter N`, `-BingeLowMemory YES`.
 - **Subtitles and audio:** `-BingeSubtitlesURL <url>` (a fixed test file), `-BingeAudioTest fr` (switches audio 20s in; verified on VidRift: Korean→French, kept playing).

@@ -227,7 +227,9 @@ enum SportsFeed {
         for s in streams {
             // Embeds appear in "sources" near game time (older API: embed_url).
             var seen = Set<String>()
-            let embeds = ((s["sources"] as? [String] ?? []) + [s["embed_url"] as? String].compactMap { $0 })
+            // "sources" are objects ({quality, url, live}) since 2026-11; plain strings before.
+            let sources = (s["sources"] as? [Any] ?? []).compactMap { ($0 as? String) ?? (($0 as? [String: Any])?["url"] as? String) }
+            let embeds = (sources + [s["embed_url"] as? String].compactMap { $0 })
                 .filter { $0.hasPrefix("http") && seen.insert($0).inserted }
                 .compactMap(URL.init(string:))
             guard !embeds.isEmpty else { continue }
