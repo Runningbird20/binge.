@@ -8,6 +8,8 @@
 	<string>$(BINGE_SUPABASE_KEY)</string>
 	<key>BingeTMDBKey</key>
 	<string>$(BINGE_TMDB_KEY)</string>
+	<key>BingeUserManagement</key>
+	<string>$(BINGE_USER_MANAGEMENT)</string>
 	<key>BingeAppGroup</key>
 	<string>group.$(BINGE_BUNDLE_ID)</string>
 	<key>CFBundleURLTypes</key>

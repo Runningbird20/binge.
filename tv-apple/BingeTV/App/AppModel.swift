@@ -27,6 +27,10 @@ final class AppModel: ObservableObject {
     var isKids: Bool { maturity.isChild }
     var isSignedIn: Bool { session != nil }
 
+    // Signed with User Management: this app's settings belong to whoever
+    // is the Apple TV's current user, so "last profile" is that person's.
+    static var perUser: Bool { (Bundle.main.object(forInfoDictionaryKey: "BingeUserManagement") as? String) == "YES" }
+
     private var lastProfileKey: String { "binge.lastProfile.\(session?.userId ?? "")" }
     var lastProfileId: String? { UserDefaults.standard.string(forKey: lastProfileKey) }
 
@@ -82,7 +86,12 @@ final class AppModel: ObservableObject {
                 URLQueryItem(name: "order", value: "is_default.desc,created_at.asc"),
             ])
             lockedProfileIds = try await ProfileLocks.lockedIds()
-            if profiles.count > 1 || profiles.contains(where: { lockedProfileIds.contains($0.id) }) {
+            // Running as the Apple TV's current user (paid signing): this
+            // person's own last profile opens straight away, unless it has a PIN.
+            if Self.perUser, let last = lastProfileId, let mine = profiles.first(where: { $0.id == last }),
+               !lockedProfileIds.contains(mine.id) {
+                choose(mine)
+            } else if profiles.count > 1 || profiles.contains(where: { lockedProfileIds.contains($0.id) }) {
                 phase = .choosingProfile
             } else {
                 choose(profiles.first)
@@ -298,13 +307,16 @@ final class AppModel: ObservableObject {
             return ContinueItem(title: title, season: row.currentSeason, episode: row.currentEpisode,
                                 position: row.positionSeconds, duration: row.durationSeconds)
         }
-        return await withBackdrops(items)
+        var result = await withBackdrops(items)
+        let finished = await finishedShows(result.items, lastAired: result.lastAired)
+        for index in result.items.indices where finished.contains(result.items[index].id) { result.items[index].finished = true }
+        return result.items
     }
 
     // Catalog rows only carry posters; Continue Watching cards are wide, so
     // fetch each title's backdrop from TMDB (cached). The same call says
     // whether a newer episode aired in the last two weeks.
-    private func withBackdrops(_ items: [ContinueItem]) async -> [ContinueItem] {
+    private func withBackdrops(_ items: [ContinueItem]) async -> (items: [ContinueItem], lastAired: [String: EpisodeKey]) {
         await withTaskGroup(of: (Int, TMDBDetails?).self) { group in
             for (index, item) in items.enumerated() {
                 guard let tmdbId = item.title.tmdbId else { continue }
@@ -313,8 +325,12 @@ final class AppModel: ObservableObject {
                 }
             }
             var result = items
+            var lastAired: [String: EpisodeKey] = [:]
             for await (index, details) in group {
                 guard let details else { continue }
+                if let aired = details.lastEpisodeToAir, result[index].title.kind == .tvShow {
+                    lastAired[result[index].id] = EpisodeKey(season: aired.seasonNumber, episode: aired.episodeNumber)
+                }
                 if let backdrop = TMDB.image(details.backdropPath, TMDB.wide) { result[index].title.backdrop = backdrop }
                 if result[index].title.originalLanguage?.isEmpty ?? true { result[index].title.originalLanguage = details.originalLanguage }
                 if let aired = details.lastEpisodeToAir, let date = aired.airDate,
@@ -326,7 +342,7 @@ final class AppModel: ObservableObject {
                     result[index].seasonNote = SeasonStatus.note(details, season: result[index].season ?? 1, episode: result[index].episode ?? 1)
                 }
             }
-            return result
+            return (result, lastAired)
         }
     }
 
@@ -373,6 +389,7 @@ final class AppModel: ObservableObject {
     // and TV all resume from the same spot.
     func saveProgress(title: Title, season: Int?, episode: Int?, position: Double, duration: Double) async {
         guard let session, !isDemo else { return }
+        WatchedTitles.shared.invalidate()
         var row: [String: Any] = [
             "updated_at": ISO8601DateFormatter().string(from: Date()),
             "position_seconds": Int(position),

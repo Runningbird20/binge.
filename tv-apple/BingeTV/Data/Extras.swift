@@ -287,6 +287,7 @@ extension AppModel {
             row["media_id"] = title.dbId
             try await Supabase.shared.insert(table, row)
         }
+        WatchedTitles.shared.invalidate()
         if let listId = listIds[title.id] {
             try? await Supabase.shared.delete("watchlist", [URLQueryItem(name: "id", value: "eq.\(listId)")])
             await refreshList()
@@ -325,6 +326,7 @@ extension AppModel {
         struct Row: Decodable { let season: Int }
         let existing: [Row]? = try? await Supabase.shared.select("episode_progress", [URLQueryItem(name: "select", value: "season")] + match)
         guard existing?.isEmpty == true else { return }
+        WatchedTitles.shared.invalidate()
         try? await Supabase.shared.insert("episode_progress", [
             "user_id": session.userId, "profile_id": profile?.id ?? NSNull(), "media_id": title.dbId,
             "season": season, "episode": episode, "watched_at": ISO8601DateFormatter().string(from: Date()),

@@ -234,6 +234,7 @@ struct QRCodeView: View {
 extension View {
     func titleDestinations() -> some View {
         navigationDestination(for: Title.self) { TitleDetailView(title: $0) }
+            .navigationDestination(for: PersonRef.self) { PersonView(person: $0) }
     }
 }
 

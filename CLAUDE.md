@@ -260,7 +260,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 
 - **Continue Watching:**
   - **Season notes.** "2 episodes left in Season 3", "Season 4 starts Friday" (`utils/seasonStatus.js` / TV `Data/SeasonStatus.swift`, same rules).
-  - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. The TV apps don't apply this rule yet.
+  - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. Apple TV applies the same rule (`finishedShows`); Fire TV doesn't yet.
   - **Links carry `&t=`.** Continue Watching links include the saved second (see the web player).
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
 - **Surprise me** (above Continue Watching, `SurpriseButtons` in `Home.js`, logic in `utils/surprise.js`):

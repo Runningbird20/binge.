@@ -149,6 +149,12 @@ actor Supabase {
                            auth: .required, prefer: "resolution=merge-duplicates,return=minimal")
     }
 
+    // Many rows at once; rows that already exist are left as they are.
+    func insertIgnoringDuplicates(_ table: String, onConflict: String, _ rows: [[String: Any]]) async throws {
+        _ = try await send("POST", table: table, query: [URLQueryItem(name: "on_conflict", value: onConflict)], body: rows,
+                           auth: .required, prefer: "resolution=ignore-duplicates,return=minimal")
+    }
+
     func rpc<T: Decodable>(_ name: String, _ params: [String: Any], auth: Auth = .optional) async throws -> T {
         let data = try await send("POST", table: "rpc/\(name)", query: [], body: params, auth: auth)
         return try decoder.decode(T.self, from: data)

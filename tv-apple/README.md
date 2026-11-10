@@ -107,7 +107,7 @@ or an account: `-BingeDemo` (browse without signing in), `-BingeTab sports`,
    - If the TV then asks, turn on Settings → Privacy & Security → **Developer Mode** and restart it.
 4. **Install:** run `tv-apple/scripts/install-on-tv.sh`. It builds, signs and installs.
 
-A free Apple ID signs the app for **7 days**; run `install-on-tv.sh` again to renew. A paid account ($99/yr) lasts a year and also allows **App Groups** (`setup-signing.sh --paid`). App Groups let Top Shelf show your personal Continue Watching. Without them it shows Trending on binge., which needs no setup.
+A free Apple ID signs the app for **7 days**; run `install-on-tv.sh` again to renew. A paid account ($99/yr) lasts a year and also allows **App Groups** (`setup-signing.sh --paid`). App Groups let Top Shelf show your personal Continue Watching (with progress bars; Play resumes at the saved second). Without them it shows Trending on binge., which needs no setup. The same paid signing adds **User Management**: binge. then runs as the Apple TV's current user (Control Center's user switcher), so each person opens on their own binge. profile while sharing the sign-in. The unsigned `binge-tv.ipa` (Sideloadly) has neither.
 
 ### Or: an .ipa for Sideloadly
 

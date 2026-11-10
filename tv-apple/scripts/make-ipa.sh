@@ -10,7 +10,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 rm -rf "$here/build/ipa"
 xcodebuild -project "$here/BingeTV.xcodeproj" -scheme BingeTV -configuration Release \
   -destination 'generic/platform=tvOS' -derivedDataPath "$here/build/ipa" \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" BINGE_USER_MANAGEMENT=NO build | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
 
 app="$here/build/ipa/Build/Products/Release-appletvos/BingeTV.app"
 [ -d "$app" ] || { echo "Build failed (see errors above)."; exit 1; }
