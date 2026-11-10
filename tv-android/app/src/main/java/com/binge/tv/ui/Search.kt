@@ -80,6 +80,29 @@ fun SearchScreen() {
 
     // Every search goes through Ask binge. (exact titles first, and requests
     // like "new Malayalam movies"); plain title matches show while it thinks.
+    // Games too (as on the website): live ones and today's, matched by team, title or league.
+    var games by remember { mutableStateOf<List<com.binge.tv.data.SportGame>>(emptyList()) }
+    var startingGame by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(text) {
+        if (text.length < 3) { games = emptyList(); return@LaunchedEffect }
+        delay(350)
+        val words = text.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val soon = System.currentTimeMillis() + 12 * 3_600_000L
+        games = runCatching { com.binge.tv.data.SportsFeed.recent() }.getOrDefault(emptyList())
+            .filter { !it.alwaysLive && (it.isLive || (it.startsAt ?: Long.MAX_VALUE) < soon) }
+            .filter { game -> val hay = "${game.title} ${game.league} ${game.category}".lowercase(); words.all { it in hay } }
+            .take(12)
+    }
+    fun playGame(game: com.binge.tv.data.SportGame) {
+        if (startingGame != null) return
+        startingGame = game.id
+        scope.launch {
+            val servers = runCatching { com.binge.tv.data.SportsFeed.servers(game) }.getOrDefault(emptyList())
+            startingGame = null
+            if (servers.isNotEmpty()) Nav.play(liveRequest(game, servers))
+        }
+    }
+
     LaunchedEffect(text) {
         if (text.isEmpty()) { results = emptyList(); ai = emptyList(); return@LaunchedEffect }
         searching = true
@@ -108,8 +131,19 @@ fun SearchScreen() {
     val firstResult = remember { androidx.compose.ui.focus.FocusRequester() }
     val fieldFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var fieldFocused by remember { mutableStateOf(false) }
+    val firstGame = remember { androidx.compose.ui.focus.FocusRequester() }
     fun afterTyping() {
         scope.launch {
+            // A game you searched for (a team) comes first, above the titles.
+            if (games.isNotEmpty()) {
+                for (wait in listOf(250L, 400L, 600L, 900L)) {
+                    kotlinx.coroutines.delay(wait)
+                    runCatching { firstGame.requestFocus() }
+                    kotlinx.coroutines.delay(60)
+                    if (!fieldFocused) break
+                }
+                return@launch
+            }
             if (firstId == null) { kotlinx.coroutines.delay(250); runCatching { fieldFocus.requestFocus() }; return@launch }
             // Fire TV hands focus back from its keyboard window a moment after
             // it closes (and puts it on the box): ask again until it moves.
@@ -136,11 +170,23 @@ fun SearchScreen() {
                         style = Type.callout, color = Palette.muted)
                 }
             }
+            if (games.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }, key = "games") {
+                Column {
+                    Text("Games", style = Type.section, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.92f))
+                    androidx.compose.foundation.lazy.LazyRow(contentPadding = PaddingValues(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap)) {
+                        items(games.size, key = { games[it].id }) { i ->
+                            val game = games[i]
+                            GameCard(game, null, startingGame == game.id, false, { playGame(game) }, {}, {},
+                                modifier = if (i == 0) Modifier.focusRequester(firstGame) else Modifier)
+                        }
+                    }
+                }
+            }
             if (text.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
                 when {
                     aiLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Spinner(18.dp); Text("Finding the best matches…", style = Type.callout, color = Palette.muted) }
                     ai.isNotEmpty() -> Text(aiSummary ?: "Best matches", style = Type.section)
-                    aiError != null && results.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    aiError != null && results.isEmpty() && games.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(aiError ?: "", style = Type.callout, color = Palette.muted)
                         Pill("Try again") { scope.launch { ask(text) } }
                     }
@@ -153,7 +199,7 @@ fun SearchScreen() {
                 }
             }
             if (ai.isNotEmpty() && showing.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("More titles", style = Type.section, modifier = Modifier.padding(top = 8.dp)) }
-            if (text.isNotEmpty() && !searching && results.isEmpty() && ai.isEmpty() && !aiLoading && aiError == null) item(span = { GridItemSpan(maxLineSpan) }) {
+            if (text.isNotEmpty() && !searching && results.isEmpty() && ai.isEmpty() && games.isEmpty() && !aiLoading && aiError == null) item(span = { GridItemSpan(maxLineSpan) }) {
                 Text("Nothing on binge. matches “$text”.", style = Type.headline, color = Palette.muted, modifier = Modifier.padding(top = 30.dp))
             }
             if (text.isEmpty() && trending.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Trending searches", style = Type.section) }

@@ -63,6 +63,9 @@ data class SportStream(val label: String, val embed: String? = null, val streame
         else listOf(if (label.startsWith("PPV")) "sports:ppv" else "sports:streamfree")
 }
 
+// Feed abbreviations shown as the site names leagues (its canonicalLeague).
+private val LEAGUE_NAMES = mapOf("NCAAF" to "College Football", "NCAAB" to "College Basketball", "CFB" to "College Football", "CBB" to "College Basketball")
+
 data class SportGame(
     val id: String,
     val title: String,
@@ -97,7 +100,7 @@ data class SportGame(
     // Same rules as the site's inferLeague (sportsProviders.js).
     val league: String
         get() {
-            if (!tag.isNullOrEmpty() && !tag.contains("24/7")) return tag
+            if (!tag.isNullOrEmpty() && !tag.contains("24/7")) return LEAGUE_NAMES[tag.uppercase()] ?: tag
             if (is247) return "24/7 Channels"
             val tokens = teamTokens
             if (tokens != null) {
@@ -132,7 +135,15 @@ object SportsFeed {
 
     // All of it (parsing three feeds, merging) off the main thread: on a Fire TV
     // this took seconds and froze the remote ("app not responding").
-    suspend fun load(): List<SportGame> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+    // The last schedule loaded (Sports page or search), reused for 2 minutes by search.
+    @Volatile private var latest: List<SportGame> = emptyList()
+    @Volatile private var latestAt = 0L
+    suspend fun recent(): List<SportGame> =
+        if (latest.isNotEmpty() && System.currentTimeMillis() - latestAt < 120_000) latest else load()
+
+    suspend fun load(): List<SportGame> = loadFresh().also { latest = it; latestAt = System.currentTimeMillis() }
+
+    private suspend fun loadFresh(): List<SportGame> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         val ppv = async { fetchPPV() }
         val streamed = async { fetchStreamed() }
         val streamfree = async { fetchStreamFree() }
@@ -232,7 +243,9 @@ object SportsFeed {
         for (stream in streams) {
             val s = stream.obj() ?: continue
             val seen = HashSet<String>()
-            val embeds = (s["sources"].arr().mapNotNull { it.str() } + listOfNotNull(s["embed_url"].str()))
+            // "sources" are objects ({quality, url, live}) since 2026-11; plain strings before.
+            val qualities = s["sources"].arr().mapNotNull { src -> src.obj()?.let { o -> o["url"].str()?.let { it to o["quality"].str() } } }.toMap()
+            val embeds = (s["sources"].arr().mapNotNull { it.str() ?: it.obj()?.get("url").str() } + listOfNotNull(s["embed_url"].str()))
                 .filter { it.startsWith("http") && seen.add(it) }
             if (embeds.isEmpty()) continue
             val category = streamfreeCategories[s["category"].str() ?: ""] ?: "Other"
@@ -248,7 +261,7 @@ object SportsFeed {
                 category = category, startsAt = starts, endsAt = ends, alwaysLive = starts == null, teams = names,
                 logos = if (names == null) null else t1?.get("logo").str() to t2?.get("logo").str(),
                 poster = s["thumbnail_url"].str(),
-                streams = embeds.mapIndexed { index, url -> SportStream(streamfreeLabel(url, index, embeds.size), embed = url) },
+                streams = embeds.mapIndexed { index, url -> SportStream(qualities[url]?.let { "StreamFree $it" } ?: streamfreeLabel(url, index, embeds.size), embed = url) },
                 tag = s["league"].str(),
             )
         }

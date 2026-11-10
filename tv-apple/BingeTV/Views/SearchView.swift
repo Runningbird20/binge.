@@ -10,6 +10,7 @@ struct SearchView: View {
     @State private var aiSummary: String?
     @State private var aiLoading = false
     @State private var aiError: String?
+    @State private var recent: [String] = []
 
     private let columns = [GridItem(.adaptive(minimum: 220, maximum: 220), spacing: 48, alignment: .top)]
 
@@ -36,6 +37,7 @@ struct SearchView: View {
                             .font(.callout)
                             .foregroundStyle(Theme.muted)
                     }
+                    if query.isEmpty && !recent.isEmpty { recentSection }
                     if query.isEmpty && !trending.isEmpty { SectionTitle(text: "Trending searches") }
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 56) {
                         ForEach(showing) { PosterCard(title: $0) }
@@ -60,7 +62,13 @@ struct SearchView: View {
             aiSummary = nil
             aiError = nil
             if AskBinge.shouldAutoAsk(text, results: found) { await ask(text) }
+            // Kept as a recent search once it's settled and found something.
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled, !results.isEmpty || !ai.isEmpty else { return }
+            RecentSearches.add(text, profile: app.profile?.id)
+            recent = RecentSearches.list(app.profile?.id)
         }
+        .onAppear { recent = RecentSearches.list(app.profile?.id) }
         .task {
             guard trending.isEmpty else { return }
             async let movies = Catalog.load(RowSpec(id: "s-m", title: "", kind: .movie, path: "trending/movie/week"), maturity: app.maturity)
@@ -70,6 +78,32 @@ struct SearchView: View {
             let a = m?.items ?? [], b = s?.items ?? []
             trending = (0..<max(a.count, b.count)).flatMap { i in [i < b.count ? b[i] : nil, i < a.count ? a[i] : nil].compactMap { $0 } }
         }
+    }
+
+    // This profile's last searches on this Apple TV: select one to search again.
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SectionTitle(text: "Recent searches")
+            ScrollView(.horizontal) {
+                HStack(spacing: 20) {
+                    ForEach(recent, id: \.self) { text in
+                        Button(text) { query = text }
+                            .buttonStyle(PillButtonStyle())
+                    }
+                    Button {
+                        RecentSearches.clear(app.profile?.id)
+                        recent = []
+                    } label: {
+                        Label("Clear", systemImage: "xmark")
+                    }
+                    .buttonStyle(PillButtonStyle())
+                }
+                .padding(.vertical, 16)
+            }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+        }
+        .focusSection()
     }
 
     // MARK: Ask binge.

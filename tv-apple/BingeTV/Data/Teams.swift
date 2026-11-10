@@ -136,7 +136,9 @@ final class TeamCenter: ObservableObject {
         guard state == "in", let period = event.status.period else { return nil }
         let a = Int(away.score ?? "") ?? 0, h = Int(home.score ?? "") ?? 0
         let margin = abs(a - h)
-        let score = "\(away.team.abbreviation ?? away.name) \(a) – \(h) \(home.team.abbreviation ?? home.name)"
+        // Hide scores: the alert still says what's happening, not the score.
+        let score = ScoreVisibility.hidden ? (event.status.type.shortDetail ?? "")
+            : "\(away.team.abbreviation ?? away.name) \(a) – \(h) \(home.team.abbreviation ?? home.name)"
         let regulation: Int, close: Int
         switch sport {
         case "basketball": (regulation, close) = (4, 6)
@@ -159,7 +161,7 @@ final class TeamCenter: ObservableObject {
         }
         if late, margin <= close {
             return GameAlert(id: "\(event.id):close", headline: "Close game: \(matchup)",
-                             detail: "\(score) · \(event.status.type.shortDetail ?? "")", teams: tokens)
+                             detail: ScoreVisibility.hidden ? score : "\(score) · \(event.status.type.shortDetail ?? "")", teams: tokens)
         }
         return nil
     }

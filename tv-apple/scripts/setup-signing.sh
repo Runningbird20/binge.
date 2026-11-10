@@ -3,7 +3,9 @@
 # Config/Signing.xcconfig, so you never have to touch Signing & Capabilities.
 #   scripts/setup-signing.sh          free Apple ID (Top Shelf shows Trending)
 #   scripts/setup-signing.sh --paid   paid developer account (adds App Groups,
-#                                     so Top Shelf shows your Continue Watching)
+#                                     so Top Shelf shows your Continue Watching,
+#                                     and User Management, so each Apple TV user
+#                                     opens on their own binge. profile)
 set -e
 here="$(cd "$(dirname "$0")/.." && pwd)"
 paid=0; [ "$1" = "--paid" ] && paid=1
@@ -47,6 +49,7 @@ case "$account" in *@*) owner="$(echo "$account" | cut -d@ -f1 | tr -cd 'A-Za-z0
   if [ "$paid" = 1 ]; then
     echo "BINGE_APP_ENTITLEMENTS = Config/BingeTV.entitlements"
     echo "BINGE_SHELF_ENTITLEMENTS = Config/TopShelf.entitlements"
+    echo "BINGE_USER_MANAGEMENT = YES"
   fi
 } > "$here/Config/Signing.xcconfig"
 

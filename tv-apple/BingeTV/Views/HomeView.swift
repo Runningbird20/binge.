@@ -10,22 +10,28 @@ struct HomeView: View {
     @State private var loading = true
     @State private var play: PlayRequest?
     @State private var detail: Title?
+    // Titles this profile has watched: never recommended (WatchedTitles).
+    @State private var watched: Set<String> = []
+    @State private var dueReminders: [Reminder] = []
 
     private var name: String { app.profile?.name ?? "you" }
+    // Finished shows leave the row (they stay in New Episodes).
+    private var visibleContinue: [ContinueItem] { continueItems.filter { !$0.finished } }
+    private var generalRows: [LoadedRow] { WatchedTitles.without(rows, watched) }
 
     // A different title most visits: one of your top picks or something
     // trending, chosen when the rows load (not always the first pick).
     @State private var spotlightPick: Title?
     private var spotlight: Title? {
         spotlightPick
-            ?? (personal.topPicks?.items ?? []).first(where: { $0.backdrop != nil })
-            ?? rows.first?.items.first(where: { $0.backdrop != nil })
+            ?? (personal.topPicks?.items ?? []).first(where: { $0.backdrop != nil && !watched.contains($0.id) })
+            ?? generalRows.first?.items.first(where: { $0.backdrop != nil })
     }
 
     private func chooseSpotlight() {
         let picks = (personal.topPicks?.items ?? []).prefix(10).filter { $0.backdrop != nil }
-        let trending = rows.prefix(2).flatMap { $0.items.prefix(6) }.filter { $0.backdrop != nil }
-        let pool = Array(picks) + trending
+        let trending = generalRows.prefix(2).flatMap { $0.items.prefix(6) }.filter { $0.backdrop != nil }
+        let pool = WatchedTitles.without(Array(picks) + trending, watched)
         guard !pool.isEmpty else { return }
         spotlightPick = pool.randomElement()
     }
@@ -36,10 +42,10 @@ struct HomeView: View {
         var out: [LoadedRow] = []
         if let row = personal.newEpisodes { out.append(row) }
         if !shared.isEmpty { out.append(LoadedRow(id: "sent-to-you", title: "Sent to you", items: shared)) }
-        if let row = personal.topPicks { out.append(row) }
+        if let row = personal.topPicks, let kept = WatchedTitles.without([row], watched).first { out.append(kept) }
         if !myList.isEmpty { out.append(LoadedRow(id: "my-list", title: "My List", items: myList)) }
-        var because = personal.because[...]
-        for (index, row) in rows.enumerated() {
+        var because = WatchedTitles.without(personal.because, watched)[...]
+        for (index, row) in generalRows.enumerated() {
             out.append(row)
             if index % 2 == 0, let next = because.popFirst() { out.append(next) }
         }
@@ -50,9 +56,21 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
+                AnnouncementBanner()
+                if !dueReminders.isEmpty {
+                    ReminderBanner(reminders: dueReminders, open: { reminder in
+                        Task { await openReminder(reminder) }
+                    }, dismiss: { reminder in
+                        dueReminders.removeAll { $0.id == reminder.id }
+                        Task { await app.dismissReminder(reminder.id) }
+                    })
+                }
                 if let spotlight { HeroView(title: spotlight) }
-                if !continueItems.isEmpty {
-                    ContinueRowView(title: "Continue Watching for \(name)", items: continueItems,
+                if !loading || !rows.isEmpty {
+                    SurpriseButtons(personal: personal, fallback: generalRows.prefix(2).flatMap(\.items), watched: watched) { detail = $0 }
+                }
+                if !visibleContinue.isEmpty {
+                    ContinueRowView(title: "Continue Watching for \(name)", items: visibleContinue,
                                     play: { item in play = item.playRequest },
                                     details: { detail = $0.title },
                                     remove: { item in
@@ -77,11 +95,32 @@ struct HomeView: View {
             PlayerView(request: request, app: app)
         }
         .task {
+            showSnapshot()
             await openDeepLink()
             await load()
         }
         .onChange(of: app.deepLink) { _, _ in Task { await openDeepLink() } }
         .onChange(of: app.listIds) { _, _ in Task { myList = (try? await app.myList()) ?? myList } }
+    }
+
+    // Home as it was last time, at once; the fresh rows replace it.
+    private func showSnapshot() {
+        guard rows.isEmpty, let id = app.profile?.id, let saved = HomeSnapshot.read(id) else { return }
+        continueItems = saved.continueItems
+        myList = saved.myList
+        personal = saved.personal
+        shared = saved.shared
+        rows = saved.rows
+        watched = WatchedTitles.shared.keys
+        chooseSpotlight()
+    }
+
+    private func openReminder(_ reminder: Reminder) async {
+        guard let kind = MediaKind(rawValue: reminder.mediaType),
+              let title = try? await Catalog.titles(kind, ids: [reminder.mediaId])[reminder.mediaId] else { return }
+        dueReminders.removeAll { $0.id == reminder.id }
+        await app.dismissReminder(reminder.id)
+        detail = title
     }
 
     // A Top Shelf item: play it, or open its title page.
@@ -99,6 +138,7 @@ struct HomeView: View {
 
     private func refreshContinue() async {
         if let items = try? await app.continueWatching() { continueItems = items }
+        watched = await WatchedTitles.shared.load(app)
     }
 
     private func load() async {
@@ -109,32 +149,40 @@ struct HomeView: View {
         async let list: [Title] = (try? await app.myList()) ?? []
         async let loved = app.lovedTitles()
         async let rated = app.ratedIds()
+        async let watchedKeys = WatchedTitles.shared.load(app)
+        async let due = app.reminders(dueOnly: true)
 
         let (items, listTitles) = await (cw, list)
         continueItems = items
         // The first Continue Watching card is the likeliest next play.
-        if let first = items.first { Warmup.shared.prepare(first.playRequest) }
+        if let first = items.first(where: { !$0.finished }) { Warmup.shared.prepare(first.playRequest) }
         myList = listTitles
+        watched = await watchedKeys
         rows = await general
         loading = false
+        dueReminders = await due
 
-        let exclude = (await rated).union(items.map(\.id)).union(listTitles.map(\.id))
+        let exclude = (await rated).union(items.map(\.id)).union(listTitles.map(\.id)).union(watched)
         personal = await Personal.build(watched: items, loved: await loved, exclude: exclude,
                                         maturity: maturity, name: app.profile?.name)
         chooseSpotlight()
+        let showing = items.filter { !$0.finished }
         // Ambient mode's slideshow: what you're watching, then your picks.
-        AmbientStore.shared.titles = Array((items.map(\.title) + (personal.topPicks?.items ?? []) + myList + (rows.first?.items ?? []))
+        AmbientStore.shared.titles = Array((showing.map(\.title) + (personal.topPicks?.items ?? []) + myList + (generalRows.first?.items ?? []))
             .filter { $0.backdrop != nil }.prefix(20))
-        AmbientStore.shared.resume = items.first
+        AmbientStore.shared.resume = showing.first
         shared = await app.sharedWithMe()
-        TopShelfStore.save(continueItems: items, picks: personal.topPicks?.items ?? rows.first?.items ?? [])
+        TopShelfStore.save(continueItems: showing, picks: personal.topPicks?.items ?? generalRows.first?.items ?? [])
+        if let id = app.profile?.id {
+            HomeSnapshot(continueItems: items, myList: myList, personal: personal, shared: shared, rows: rows).save(id)
+        }
     }
 }
 
 // The personalized rows: Top Picks (recommendations shared by several of
 // your titles score highest), "Because you watched/liked X", New Episodes.
 enum Personal {
-    struct Rows {
+    struct Rows: Codable {
         var topPicks: LoadedRow?
         var because: [LoadedRow] = []
         var newEpisodes: LoadedRow?
@@ -242,6 +290,7 @@ struct BrowseView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
+                AnnouncementBanner()
                 if let spotlight = rows.first?.items.first(where: { $0.backdrop != nil }) {
                     HeroView(title: spotlight)
                 }
@@ -264,7 +313,10 @@ struct BrowseView: View {
         loading = true
         async let watched: [ContinueItem] = (try? await app.continueWatching()) ?? []
         async let loved = app.lovedTitles()
-        rows = await Catalog.loadAll(Rows.browse(kind, kids: app.isKids), maturity: app.maturity)
+        async let watchedKeys = WatchedTitles.shared.load(app)
+        let loaded = await Catalog.loadAll(Rows.browse(kind, kids: app.isKids), maturity: app.maturity)
+        // Watched titles are never recommended (spotlight included).
+        rows = WatchedTitles.without(loaded, await watchedKeys)
         loading = false
         // The seasonal row leads with what this profile likes.
         let taste = Seasonal.Taste(history: await watched.map(\.title) + loved)
@@ -279,6 +331,11 @@ struct BrowseView: View {
 struct HeroView: View {
     let title: Title
     @StateObject private var trailer = TrailerPlayer()
+    // The title's logo art as the headline (the title page's own TMDB
+    // request, so opening it is instant too). The text shows when there's
+    // no logo, or it takes longer than 0.9s.
+    @State private var logo: UIImage?
+    @State private var headlineReady = false
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -307,10 +364,23 @@ struct HeroView: View {
             .padding(.horizontal, -Theme.edge)
 
             VStack(alignment: .leading, spacing: 20) {
-                Text(title.name)
-                    .font(.system(size: 68, weight: .heavy))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.6)
+                Group {
+                    if let logo {
+                        Image(uiImage: logo)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 620, maxHeight: 190, alignment: .leading)
+                            .accessibilityLabel(title.name)
+                            .transition(.opacity)
+                    } else {
+                        Text(title.name)
+                            .font(.system(size: 68, weight: .heavy))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.6)
+                            .opacity(headlineReady ? 1 : 0)
+                    }
+                }
+                .animation(.easeOut(duration: 0.3), value: logo != nil)
                 if !title.metaLine.isEmpty {
                     Text(title.metaLine).font(.callout.weight(.semibold)).foregroundStyle(Theme.muted)
                 }
@@ -332,6 +402,15 @@ struct HeroView: View {
         .task(id: title.id) {
             trailer.stop()
             await trailer.start(title)
+        }
+        .task(id: "logo-\(title.id)") {
+            logo = nil
+            headlineReady = false
+            async let image = HeroLogo.load(title)
+            let timeout = Task { try? await Task.sleep(for: .milliseconds(900)); headlineReady = true }
+            if let found = await image, !Task.isCancelled { logo = found }
+            timeout.cancel()
+            headlineReady = true
         }
         .onDisappear { trailer.stop() }
     }
@@ -422,5 +501,17 @@ extension ContinueItem {
         PlayRequest(title: title, season: title.kind == .tvShow ? (season ?? 1) : nil,
                     episode: title.kind == .tvShow ? (episode ?? 1) : nil,
                     startAt: ResumeRule.start(position: position, duration: duration))
+    }
+}
+
+enum HeroLogo {
+    // The same request the title page makes (TMDB caches it), then the
+    // logo's image, sized for the spotlight.
+    static func load(_ title: Title) async -> UIImage? {
+        guard let tmdbId = title.tmdbId,
+              let details: TMDBDetails = try? await TMDB.shared.get("\(title.kind.tmdbPath)/\(tmdbId)",
+                                                                   ["append_to_response": "credits,images", "include_image_language": "en,null"]),
+              let url = TMDB.image(details.logoPath, "w780") else { return nil }
+        return await ImageStore.shared.load(url, pixels: 1240)
     }
 }

@@ -63,6 +63,9 @@ final class StreamRace {
     private var playingHeights: [String: Int] = [:]
     private var firstPlayAt: Date?
     private var memoryObserver: NSObjectProtocol?
+    #if DEBUG
+    private var debugStages: [String: String] = [:]
+    #endif
 
     // Multiview tiles decide their own sound; the winner stays muted.
     let keepMuted: Bool
@@ -165,17 +168,23 @@ final class StreamRace {
         }
 
         // Mute every contender, nudge any that loaded but wait for a click,
-        // and crown the first whose clock moves. "Best quality" (movies and
-        // shows) gives the others 1.5s more and takes the sharpest playing.
-        // Best quality (preloads and live games too): wait a few seconds for
-        // the sharpest server this Apple TV has seen, then take the sharpest
-        // that's playing. Fastest start: the first to play.
-        let shopping = !keepMuted && QualityPreference.current == .best && candidates.count > 1
+        // and crown the first whose clock moves. Best quality, preloads only:
+        // wait a few seconds for the sharpest server this Apple TV has seen
+        // (nobody is watching yet). On screen the first to play is shown at
+        // once, and a sharper one takes over within seconds (upgradeTick).
+        let shopping = !keepMuted && mode == .warm && QualityPreference.current == .best && candidates.count > 1
         for candidate in candidates {
             candidate.web.send(.mute)
             candidate.web.poll { [weak self] state in
                 guard let self, self.winner == nil, let state,
                       self.candidates.contains(where: { $0.server == candidate.server }) else { return }
+                #if DEBUG
+                let stage = "video=\(state.video) ready=\(state.ready) paused=\(state.paused) t>0=\(state.t > 0)"
+                if self.debugStages[candidate.server.id] != stage {
+                    self.debugStages[candidate.server.id] = stage
+                    print("[race] \(String(format: "%.1f", Date().timeIntervalSince(self.startedAt)))s \(candidate.server.name) \(stage) src=\(state.src.prefix(90))")
+                }
+                #endif
                 if state.paused, state.ready >= 2 { candidate.web.send(.play) }
                 if let expected = self.expectedDuration, ExpectedRuntime.isWrong(state.d, expected: expected) {
                     // Two servers with the same "wrong" length: TMDB lists another
@@ -210,6 +219,7 @@ final class StreamRace {
 
         if Date().timeIntervalSince(startedAt) > Self.giveUpSeconds {
             if request.isLive { candidates.forEach { SportsMemory.record($0.server.name, worked: false) } }
+            else { candidates.forEach { ServerSpeed.failed($0.server) } }
             failed = true
             stop()
             onChange?()
@@ -251,7 +261,7 @@ final class StreamRace {
                 if !state.paused, state.t > 0.4 { self.playingAt[other.server.id] = Date() }
                 let current = self.heights[winner.server.id] ?? 0
                 let sharperKnown = QualityMemory.quality(other.server) > QualityMemory.quality(winner.server)
-                guard QualityPreference.current == .best || !self.request.isLive, !state.paused, state.t > 0.4,
+                guard QualityPreference.current == .best || !self.request.isLive, !self.userPaused, !state.paused, state.t > 0.4,
                       sharperKnown || (current > 0 && state.height >= Int(Double(current) * 1.3)) else { return }
                 // Promote the sharper stream.
                 #if DEBUG
@@ -340,9 +350,15 @@ final class StreamRace {
         winner = candidate
         #if DEBUG
         print("[race] \(mode == .warm ? "warm" : "live") winner \(candidate.server.name) after \(String(format: "%.1f", Date().timeIntervalSince(startedAt)))s")
+        candidate.web.poll { state in print("[race] src=\(state?.src.prefix(160) ?? "-") page=\(state?.page.prefix(100) ?? "-")") }
         #endif
-        if request.isLive, mode == .live, !keepMuted, candidates.count > 1 {
-            upgradeUntil = Date().addingTimeInterval(6)
+        let seconds = Date().timeIntervalSince(startedAt)
+        if !request.isLive { ServerSpeed.record(candidate.server, seconds: seconds) }
+        // Others still loading may turn out sharper: live games always look,
+        // movies and shows with Best quality (the first stream plays meanwhile).
+        let shop = request.isLive || QualityPreference.current == .best
+        if shop, mode == .live, !keepMuted, candidates.count > 1 {
+            upgradeUntil = Date().addingTimeInterval(request.isLive ? 6 : 8)
         } else {
             for other in candidates where other.server != candidate.server { Self.tearDown(other.web) }
             candidates = [candidate]

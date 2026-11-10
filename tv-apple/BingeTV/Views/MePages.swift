@@ -186,6 +186,8 @@ struct PlaybackSettingsView: View {
     @AppStorage(MultiviewLayout.key) private var multiviewLayout = MultiviewLayout.grid.rawValue
     @AppStorage(MultiviewEngine.key) private var multiviewEngine = MultiviewEngine.page.rawValue
     @AppStorage(PlaybackPrefs.skipIntroKey) private var skipIntroButton = true
+    @AppStorage(PlaybackPrefs.captionsOnRewindKey) private var captionsOnRewind = true
+    @AppStorage(NativePlayback.key) private var nativePlayer = true
     @State private var audio = PlaybackPrefs.audio
     @State private var subtitle = PlaybackPrefs.subtitle
 
@@ -220,6 +222,14 @@ struct PlaybackSettingsView: View {
             group("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.") {
                 Button("On") { skipIntroButton = true }.buttonStyle(PillButtonStyle(selected: skipIntroButton))
                 Button("Off") { skipIntroButton = false }.buttonStyle(PillButtonStyle(selected: !skipIntroButton))
+            }
+            group("Subtitles when skipping back", "With subtitles off, pressing ◀ shows them until the video is back where you were.") {
+                Button("On") { captionsOnRewind = true }.buttonStyle(PillButtonStyle(selected: captionsOnRewind))
+                Button("Off") { captionsOnRewind = false }.buttonStyle(PillButtonStyle(selected: !captionsOnRewind))
+            }
+            group("Native player", "Plays a server's stream in Apple's own player once its page finds it: smoother, less memory, instant skips. Off keeps every video in the server's page.") {
+                Button("On") { nativePlayer = true }.buttonStyle(PillButtonStyle(selected: nativePlayer))
+                Button("Off") { nativePlayer = false }.buttonStyle(PillButtonStyle(selected: !nativePlayer))
             }
             group("Multiview engine", "One page plays every game in a single web page (up to 4 games, much less memory). Separate pages is the older way, at most 2.") {
                 ForEach(MultiviewEngine.allCases) { option in
