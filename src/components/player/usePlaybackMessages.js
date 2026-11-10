@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { readPlayback } from '../../utils/playbackMessages';
 import { positionKey, savePosition } from '../../utils/playbackPositions';
 import { EVENT_PROVIDERS } from '../../utils/embedProviders';
+import { readFrameMessage } from '../../utils/frameBridge';
 
 // Listens to the playback messages the embed posts (time, duration,
 // play/pause/ended; see utils/playbackMessages) and keeps playbackRef current.
@@ -9,17 +10,24 @@ import { EVENT_PROVIDERS } from '../../utils/embedProviders';
 // and saves the position locally (every 10s) and for other devices (30s).
 export default function usePlaybackMessages({
   provider, item, mediaType, season, episode, iframeRef, playbackRef,
-  confirmServer, failover, intro, syncPosition,
+  confirmServer, failover, intro, syncPosition, bridge,
 }) {
   const lastRemoteSaveRef = useRef(0);
+  // In the phone apps every server reports through the frame bridge
+  // (useAppBridge); the latest one is read here.
+  const bridgeRef = useRef(bridge);
+  bridgeRef.current = bridge;
 
   useEffect(() => {
-    if (!EVENT_PROVIDERS.has(provider)) return undefined;
+    if (!EVENT_PROVIDERS.has(provider) && !bridgeRef.current?.enabled) return undefined;
     playbackRef.current = { time: 0, duration: 0, playing: false, ended: false, lastAdvanceAt: Date.now(), lastSavedAt: 0 };
     function onMessage(event) {
-      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
-      const reading = readPlayback(event.data);
+      const current = bridgeRef.current;
+      const bridged = current?.enabled ? readFrameMessage(event.data, current.nonceRef.current) : null;
+      if (!bridged && (!iframeRef.current || event.source !== iframeRef.current.contentWindow)) return;
+      const reading = bridged || readPlayback(event.data);
       if (!reading) return;
+      if (bridged) current.noteReading(bridged);
       const now = Date.now();
       const state = playbackRef.current;
 

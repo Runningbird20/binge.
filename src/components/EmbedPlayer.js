@@ -21,6 +21,7 @@ import useControlsAutoHide from './player/useControlsAutoHide';
 import UpNextCard from './player/UpNextCard';
 import { AutoSkipOffer, FailoverBar, PreloadFrame, SkipIntroButton } from './player/PlayerOverlays';
 import useSleepTimer from './player/useSleepTimer';
+import useAppBridge from './player/useAppBridge';
 import MobilePlayer from './player/MobilePlayer';
 import DesktopPlayer from './player/DesktopPlayer';
 
@@ -111,7 +112,21 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
 
   const { seasonEpisodeCounts, totalSeasons, metadataWarning } = useEpisodeGuide({ item, isTV, tmdbId, season, resetKey });
   const { watched, setWatched, markingWatched, markWatched } = useWatchedEpisodes({ item, isTV, season, episode, resetKey });
-  const intro = useIntroMarkers({ isTV, item, season, episode, provider, playbackRef, iframeRef, pendingStartRef, setResumeNonce });
+  const loadKey = `${provider}|${item?.id}|${frameSeason}|${frameEpisode}|${resumeNonce}`;
+  if (frozenStartRef.current.key !== loadKey) {
+    const pending = pendingStartRef.current;
+    pendingStartRef.current = null;
+    frozenStartRef.current = {
+      key: loadKey,
+      value: pending ?? (item?.id ? getResumePosition(positionKey(mediaType, item.id, frameSeason, frameEpisode)) : null),
+    };
+  }
+  const startAt = frozenStartRef.current.value;
+  // Phone apps only: the bridge in the server's frame (useAppBridge).
+  const bridge = useAppBridge({
+    iframeRef, provider, loadKey, item, mediaType, season, episode, subtitles: prefs.subtitles, startAt, playbackRef,
+  });
+  const intro = useIntroMarkers({ isTV, item, season, episode, provider, playbackRef, iframeRef, pendingStartRef, setResumeNonce, bridge });
   const sleep = useSleepTimer({ onClose, isTV });
   const upNext = useUpNext({
     isTV, item, tmdbId, season, episode, setSeason, setEpisode, totalSeasons,
@@ -127,7 +142,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   });
   usePlaybackMessages({
     provider, item, mediaType, season, episode, iframeRef, playbackRef,
-    confirmServer: serverChoice.confirmServer, failover, intro, syncPosition,
+    confirmServer: serverChoice.confirmServer, failover, intro, syncPosition, bridge,
   });
   useServerEpisode({ isTV, tmdbId, season, episode, iframeRef, onEpisode: followPlayerEpisode });
   // Pop-ups blocked by sandboxing the player, where the server allows it. One
@@ -141,16 +156,6 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   });
   const controls = useControlsAutoHide(item?.id, season, episode);
 
-  const loadKey = `${provider}|${item?.id}|${frameSeason}|${frameEpisode}|${resumeNonce}`;
-  if (frozenStartRef.current.key !== loadKey) {
-    const pending = pendingStartRef.current;
-    pendingStartRef.current = null;
-    frozenStartRef.current = {
-      key: loadKey,
-      value: pending ?? (item?.id ? getResumePosition(positionKey(mediaType, item.id, frameSeason, frameEpisode)) : null),
-    };
-  }
-  const startAt = frozenStartRef.current.value;
   const embedUrl = buildUrl(provider, externalId, mediaType, frameSeason, frameEpisode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth() });
 
   // TV remote: hand the remote to the video once it loads, so OK plays and
@@ -189,6 +194,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
     health: serverChoice.providerHealth,
     popupsBlockedNow: popups.sandboxed,
     sleep,
+    appCaptions: bridge.captions,
   };
   // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
   const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
