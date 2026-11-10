@@ -55,6 +55,7 @@ final class AppModel: ObservableObject {
         } else {
             await loadProfiles()
         }
+        Task { await SharedServerStats.refresh() }
     }
 
     func signIn(email: String, password: String) async throws {

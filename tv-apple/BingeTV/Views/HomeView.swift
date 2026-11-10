@@ -13,8 +13,11 @@ struct HomeView: View {
     // Titles this profile has watched: never recommended (WatchedTitles).
     @State private var watched: Set<String> = []
     @State private var dueReminders: [Reminder] = []
+    @ObservedObject private var pip = PiPController.shared
 
     private var name: String { app.profile?.name ?? "you" }
+    // Your own rows: resting on a card preloads it.
+    static let preloadRows: Set<String> = ["top-picks", "my-list", "sent-to-you", "new-episodes"]
     // Finished shows leave the row (they stay in New Episodes).
     private var visibleContinue: [ContinueItem] { continueItems.filter { !$0.finished } }
     private var generalRows: [LoadedRow] { WatchedTitles.without(rows, watched) }
@@ -57,6 +60,7 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 30) {
                 AnnouncementBanner()
+                if let corner = pip.episode { CornerBar(episode: corner) { play = $0 } }
                 if !dueReminders.isEmpty {
                     ReminderBanner(reminders: dueReminders, open: { reminder in
                         Task { await openReminder(reminder) }
@@ -78,7 +82,9 @@ struct HomeView: View {
                                         Task { await app.removeFromContinue(item.title) }
                                     })
                 }
-                ForEach(feed) { TitleRowView(row: $0) }
+                ForEach(feed) { row in
+                    TitleRowView(row: row, preload: Self.preloadRows.contains(row.id) || row.id.hasPrefix("because-"))
+                }
                 if loading && rows.isEmpty {
                     ForEach(0..<3, id: \.self) { _ in RowSkeleton() }
                 } else if !loading && rows.isEmpty && continueItems.isEmpty {
@@ -331,6 +337,8 @@ struct BrowseView: View {
 struct HeroView: View {
     let title: Title
     @StateObject private var trailer = TrailerPlayer()
+    @EnvironmentObject private var app: AppModel
+    @FocusState private var infoFocused: Bool
     // The title's logo art as the headline (the title page's own TMDB
     // request, so opening it is instant too). The text shows when there's
     // no logo, or it takes longer than 0.9s.
@@ -393,6 +401,7 @@ struct HeroView: View {
                 NavigationLink(value: title) {
                     Label("More info", systemImage: "info.circle")
                 }
+                .focused($infoFocused)
                 .padding(.top, 8)
             }
             .frame(maxWidth: 860, alignment: .leading)
@@ -413,6 +422,12 @@ struct HeroView: View {
             headlineReady = true
         }
         .onDisappear { trailer.stop() }
+        // Resting on the spotlight preloads it, like a card.
+        .task(id: infoFocused ? title.id : "") {
+            guard infoFocused else { return }
+            try? await Task.sleep(for: .seconds(1))
+            if !Task.isCancelled { app.preload(title) }
+        }
     }
 }
 

@@ -145,6 +145,11 @@ enum RowLoop {
 
 struct TitleRowView: View {
     let row: LoadedRow
+    // Resting on a card for a second preloads what Play would start (rows
+    // of your own picks, where the next play most likely is).
+    var preload = false
+    @EnvironmentObject private var app: AppModel
+    @FocusState private var focused: Int?
 
     var body: some View {
         let items = row.items
@@ -154,6 +159,7 @@ struct TitleRowView: View {
                 LazyHStack(spacing: 40) {
                     ForEach(0..<RowLoop.count(items.count), id: \.self) { index in
                         PosterCard(title: items[index % items.count])
+                            .focused($focused, equals: index)
                     }
                 }
                 .padding(.vertical, 34) // room for the focus lift
@@ -162,6 +168,12 @@ struct TitleRowView: View {
             .scrollClipDisabled()
         }
         .focusSection()
+        .task(id: focused) {
+            guard preload, let index = focused, !items.isEmpty else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            app.preload(items[index % items.count])
+        }
     }
 }
 

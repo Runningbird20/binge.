@@ -187,6 +187,7 @@ struct PlaybackSettingsView: View {
     @AppStorage(MultiviewEngine.key) private var multiviewEngine = MultiviewEngine.page.rawValue
     @AppStorage(PlaybackPrefs.skipIntroKey) private var skipIntroButton = true
     @AppStorage(PlaybackPrefs.captionsOnRewindKey) private var captionsOnRewind = true
+    @AppStorage(PlaybackPrefs.bingeModeKey) private var bingeMode = false
     @AppStorage(NativePlayback.key) private var nativePlayer = true
     @State private var audio = PlaybackPrefs.audio
     @State private var subtitle = PlaybackPrefs.subtitle
@@ -222,6 +223,10 @@ struct PlaybackSettingsView: View {
             group("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.") {
                 Button("On") { skipIntroButton = true }.buttonStyle(PillButtonStyle(selected: skipIntroButton))
                 Button("Off") { skipIntroButton = false }.buttonStyle(PillButtonStyle(selected: !skipIntroButton))
+            }
+            group("Binge mode", "At the credits the next episode starts straight away (no countdown), and intros with a known timing are skipped.") {
+                Button("On") { bingeMode = true }.buttonStyle(PillButtonStyle(selected: bingeMode))
+                Button("Off") { bingeMode = false }.buttonStyle(PillButtonStyle(selected: !bingeMode))
             }
             group("Subtitles when skipping back", "With subtitles off, pressing ◀ shows them until the video is back where you were.") {
                 Button("On") { captionsOnRewind = true }.buttonStyle(PillButtonStyle(selected: captionsOnRewind))
