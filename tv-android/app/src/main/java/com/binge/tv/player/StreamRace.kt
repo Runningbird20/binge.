@@ -110,6 +110,21 @@ class StreamRace(
         handler.postDelayed(::loop, 300)
     }
 
+    // Left the player: keep only what's on screen, silent and held where it
+    // is (live keeps running at the edge), ready to be taken back.
+    fun park() {
+        mode = Mode.WARM
+        seekedToStart = true
+        upgradeUntil = null
+        waiting.clear()
+        winner?.let { w ->
+            candidates.filter { it !== w }.forEach { it.web.destroy() }
+            candidates = listOf(w)
+            w.web.send(MediaCommand.Mute)
+            if (!request.isLive) w.web.send(MediaCommand.Pause)
+        }
+    }
+
     fun goLive() {
         mode = Mode.LIVE
         winner?.let { it.web.setShown(true); if (!keepMuted) it.web.send(MediaCommand.Unmute); it.web.send(MediaCommand.Play) }
@@ -278,6 +293,29 @@ object Warmup {
     // The video the player is on: never preloaded a second time.
     var playingKey: String? = null
 
+    // Instant resume: the video you just left, held paused for a few minutes
+    // (live for two) so going back in plays at once. Kept apart from the
+    // preload above. Only a native stream on a stick (a page is too heavy).
+    var parked: StreamRace? = null
+        private set
+    private var parkedExpiry: Job? = null
+
+    fun park(next: StreamRace) {
+        dropParked()
+        val host = host ?: run { next.stop(); return }
+        next.park()
+        (next.container.parent as? ViewGroup)?.removeView(next.container)
+        host.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        parked = next
+        parkedExpiry = AppModel.scope.launch { delay(if (next.request.isLive) 120_000 else 300_000); if (parked === next) dropParked() }
+    }
+
+    fun dropParked() {
+        parkedExpiry?.cancel()
+        parked?.let { it.stop(); (it.container.parent as? ViewGroup)?.removeView(it.container) }
+        parked = null
+    }
+
     fun prepare(request: PlayRequest, fromPlayer: Boolean = false) {
         val host = host ?: return
         if (request.key == playingKey) return
@@ -287,7 +325,7 @@ object Warmup {
         // Optional work: skip when several video pages are already open.
         if (race == null && WebEngine.live + NativeEngine.live >= 3) return
         val key = request.key
-        if (race?.key == key || pendingKey == key) return
+        if (race?.key == key || pendingKey == key || parked?.key == key) return
         cancel()
         pendingKey = key
         AppModel.scope.launch {
@@ -307,6 +345,14 @@ object Warmup {
 
     // Hands over the warm race if it matches (and hasn't given up).
     fun take(request: PlayRequest): StreamRace? {
+        parked?.let { p ->
+            if (p.key == request.key && !p.failed && p.winner != null) {
+                parked = null
+                parkedExpiry?.cancel()
+                (p.container.parent as? ViewGroup)?.removeView(p.container)
+                return p
+            }
+        }
         // Still being planned for this video: the player starts its own race now
         // (two of the same would compete for the CPU).
         if (race == null && pendingKey == request.key) { pendingKey = null; return null }

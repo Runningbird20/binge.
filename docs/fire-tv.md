@@ -68,6 +68,12 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Player options** are a right-hand sidebar (`PlayerPanel`, `Pane`).
 - **Me tab.** Me → My List & Ratings is `LibraryScreen`. Quit (last, with a confirmation) leaves the app.
 
+## Ported from the Apple TV (2026-11-10)
+
+- **Data** (`data/Library.kt`, `People.kt`, `Ops.kt`, `Viewing.kt`): watched titles out of every row (`WatchedTitles`), finished shows, episode marking (`EpisodeStore`, `EpisodeMarking`), reminders, recent searches, Hide scores, people pages, announcements, crash reports (written on the uncaught exception, sent next launch), binge mode, per-show auto-skip (`IntroSkips`), shared server start times (`SharedServerStats`, device `fire-tv`), frame-rate matching (`DisplayMatch`, `preferredDisplayModeId`).
+- **Player:** Playback info (Options; ExoPlayer's buffer, bitrate, `DefaultBandwidthMeter` speed, stalls, audio format, fps), the backup stream (one page, only with fewer than 3 engines live), instant resume (`Warmup.park`; native streams only on a stick), binge mode at the credits, known intros skipped automatically.
+- **Not checked on hardware or with a network:** the emulator here has no DNS, so only "installs and starts without a crash" was checked.
+
 ## Testing
 
 - **Testing.** There's an Android TV emulator in the scratchpad (`$S/android`, AVD `firetv`).
