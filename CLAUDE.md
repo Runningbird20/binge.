@@ -104,7 +104,7 @@ This is the one thing every route/feature decision hinges on. There are two ways
 2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`), a client-side router that reimplements a handful of REST-shaped endpoints (search, media details, profile, admin) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
 
 **The Express backend** (`server/app.js` + `server/routes/*.js`) is deployed unconditionally as a Vercel serverless function (`api/index.js` re-exports `server/app`; `vercel.json` routes `/api/(.*)` to `api/[...slug].js`). Its route files:
-- `catalog` — the catalog proxy;
+- `catalog` — the catalog proxy (failed or slow requests, over 3s, go to the admin panel's Errors, once a minute per kind);
 - `extras` — OMDb ratings, episode ratings, Ask binge., subtitles;
 - `sports` — feeds, ESPN, fantasy;
 - `books`, `manga` — reading proxies;

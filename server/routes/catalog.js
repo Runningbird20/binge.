@@ -2,6 +2,45 @@ const express = require('express');
 const { executeQuery } = require('../data-access/query');
 const { rpc } = require('../data-access/client');
 const router = express.Router();
+
+// Production watch: a failed or slow catalog request goes to the admin
+// panel's Errors (error_events), so a broken catalog shows up there instead
+// of as silently empty rows. Each kind of problem at most once a minute per
+// server instance; slow means over 3s (Turso bills rows read, and a slow
+// query usually means a missing index: run with CATALOG_DEBUG=plan).
+const SLOW_MS = 3000;
+const lastReport = new Map();
+function describe(req, body) {
+  const what = req.path.startsWith('/rest/') ? `GET ${req.path}` : `${req.method} ${req.path}`;
+  const table = req.body?.table ? ` ${req.body.table}` : '';
+  return `${what}${table}`.slice(0, 200);
+}
+router.use((req, res, next) => {
+  const started = Date.now();
+  let body;
+  const json = res.json.bind(res);
+  res.json = (value) => { body = value; return json(value); };
+  res.on('finish', () => {
+    const ms = Date.now() - started;
+    const failed = res.statusCode >= 400;
+    if (!failed && ms < SLOW_MS) return;
+    const message = failed
+      ? `Catalog ${res.statusCode}: ${String(body?.error?.message || body?.message || 'error').slice(0, 300)} (${describe(req)})`
+      : `Catalog slow: ${ms}ms (${describe(req)})`;
+    const kind = failed ? message.replace(/\d+/g, '#') : `slow ${describe(req).replace(/\d+/g, '#')}`;
+    if (Date.now() - (lastReport.get(kind) || 0) < 60_000) return;
+    lastReport.set(kind, Date.now());
+    if (lastReport.size > 500) lastReport.delete(lastReport.keys().next().value);
+    require('./ops').recordError({
+      source: 'server',
+      message,
+      stack: failed ? JSON.stringify({ query: req.query, body: req.body }).slice(0, 2000) : null,
+      url: `${req.method} ${req.originalUrl}`.slice(0, 500),
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 300),
+    });
+  });
+  next();
+});
 // Public media metadata only. User tables and mutations are never accepted.
 router.post('/query', async (req, res) => {
   const result = await executeQuery(req.body);

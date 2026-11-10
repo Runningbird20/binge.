@@ -81,3 +81,5 @@ router.post('/broadcast', adminOnly(async (req, res, db) => {
 
 module.exports = router;
 module.exports.logServerError = logServerError;
+// Other routes' own reports (the catalog watch in routes/catalog.js).
+module.exports.recordError = (row) => insertError(row).catch(() => {});
