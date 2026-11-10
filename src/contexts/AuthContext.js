@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { clearKept } from '../utils/keptCache';
 import { isSupabaseConfigured, supabase } from '../utils/supabase';
 import { api, clearTokenCache, setTokenCache } from '../api';
 import {
@@ -302,6 +303,7 @@ export function AuthProvider({ children }) {
     // Clear local state up front instead of waiting on network
     clearTokenCache();
     clearActiveProfileId();
+    clearKept(); // the last visit's rows (keptCache.js) belonged to this account
     setUser(null);
     setProfiles([]);
     setActiveProfileIdState(null);

@@ -240,6 +240,12 @@ export default function Settings() {
             onChange={(autoNext) => updateSettings({ autoNext })}
           />
           <Switch
+            label="Binge mode"
+            description="At the credits the next episode starts straight away, and intros with a known timing are skipped (on servers that can jump)."
+            checked={Boolean(settings.bingeMode)}
+            onChange={(bingeMode) => updateSettings({ bingeMode })}
+          />
+          <Switch
             label="Data saver"
             description="Ask servers for lower quality and skip trailer previews."
             checked={settings.dataSaver}
