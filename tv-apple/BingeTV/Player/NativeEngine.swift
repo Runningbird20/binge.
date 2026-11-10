@@ -31,6 +31,13 @@ final class NativeEngine: NSObject, WebEngine {
     static let liveOffset: TimeInterval = 20
     // A first picture is ready (it's what's on screen once the layer shows).
     var showing: Bool { surface.playerLayer.isReadyForDisplay && item.status == .readyToPlay }
+    // What the TV should switch to for this video (with Match Content on):
+    // the playing track's real frame rate and format, else what the
+    // playlist declares. Films at 24fps judder on a TV left at 60Hz.
+    var displayCriteria: AVDisplayCriteria? { trackCriteria ?? assetCriteria }
+    private var assetCriteria: AVDisplayCriteria?
+    private var trackCriteria: AVDisplayCriteria?
+    private var lookingAtTrack = false
 
     init(stream: URL, page: String, agent: String) {
         var headers = ["Referer": page]
@@ -77,6 +84,38 @@ final class NativeEngine: NSObject, WebEngine {
             }
         })
         player.play()
+        Task { [weak self] in
+            let criteria = try? await asset.load(.preferredDisplayCriteria)
+            self?.assetCriteria = criteria
+        }
+    }
+
+    // Once the video has played a few seconds: its measured frame rate
+    // (snapped to a real video rate; the first readings are 1-9fps while it
+    // starts) and format. Until then the playlist's own criteria stand.
+    private var trackCheckedAt = Date.distantPast
+    private func readTrackCriteria() {
+        guard trackCriteria == nil, !lookingAtTrack, player.currentTime().seconds > 5,
+              Date().timeIntervalSince(trackCheckedAt) > 2 else { return }
+        trackCheckedAt = Date()
+        guard let track = item.tracks.first(where: { $0.assetTrack?.mediaType == .video }),
+              let rate = Self.standardRate(track.currentVideoFrameRate), let assetTrack = track.assetTrack else { return }
+        lookingAtTrack = true
+        Task { [weak self] in
+            let format = try? await assetTrack.load(.formatDescriptions).first
+            guard let self else { return }
+            self.lookingAtTrack = false
+            guard let format else { self.trackCheckedAt = .distantFuture; return } // HLS without one: don't ask again
+            self.trackCriteria = AVDisplayCriteria(refreshRate: rate, formatDescription: format)
+            #if DEBUG
+            print("[native] video \(String(format: "%.3f", rate))fps")
+            #endif
+        }
+    }
+
+    static let standardRates: [Float] = [23.976, 24, 25, 29.97, 30, 47.952, 48, 50, 59.94, 60]
+    static func standardRate(_ measured: Float) -> Float? {
+        standardRates.min { abs($0 - measured) < abs($1 - measured) }.flatMap { abs($0 - measured) < 0.3 ? $0 : nil }
     }
 
     func load(_ url: URL) {}
@@ -113,6 +152,7 @@ final class NativeEngine: NSObject, WebEngine {
         state.video = true
         state.height = Int(item.presentationSize.height)
         state.muted = player.isMuted
+        if showing { readTrackCriteria() }
         // Seconds buffered past the playhead.
         if let range = item.loadedTimeRanges.map(\.timeRangeValue).first(where: { $0.containsTime(player.currentTime()) }) {
             state.ahead = max(0, (range.end - player.currentTime()).seconds)

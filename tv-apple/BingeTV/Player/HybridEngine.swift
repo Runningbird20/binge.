@@ -1,3 +1,4 @@
+import AVFoundation
 import UIKit
 
 // One server: its page loads (that's how the stream is found), and as soon as
@@ -8,6 +9,11 @@ import UIKit
 // costs nothing at all. Once AVPlayer shows pictures it takes over at the
 // page's second and the page is closed. Same idea as the Fire TV app's
 // HybridEngine.
+//
+// A stream that played is remembered for a few hours (StreamCache): the next
+// play of the same server and episode starts AVPlayer on it at once, without
+// waiting for the page to find it again. The page still loads alongside (on
+// an Apple TV HD only if the saved address has stopped working).
 @MainActor
 final class HybridEngine: WebEngine {
     private var page: WebEngine?
@@ -25,6 +31,12 @@ final class HybridEngine: WebEngine {
     private var wantPlay = true
     private var wantMuted = true
     private var closed = false
+    // The server page's own address (the cache key), and whether AVPlayer
+    // started on a saved stream rather than one this page found.
+    private var pageURL: URL?
+    private var fromCache = false
+    // Apple TV HD with a saved stream: the page waits until it's needed.
+    private var pendingPage: URL?
 
     // AVPlayer gets this long to show pictures while the page plays.
     static let nativeGrace: TimeInterval = 20
@@ -48,7 +60,19 @@ final class HybridEngine: WebEngine {
 
     func load(_ url: URL) {
         if url.absoluteString == "about:blank" { close(); return }
+        pageURL = url
+        if NativePlayback.enabled, native == nil, let saved = StreamCache.stream(for: url), !NativePlayback.skips(saved.stream.host) {
+            fromCache = true
+            startNative(stream: saved.stream, pageURL: saved.page, agent: saved.agent)
+            if !sideBySide { pendingPage = url; return }
+        }
         page?.load(url)
+    }
+
+    private func loadPendingPage() {
+        guard let pending = pendingPage else { return }
+        pendingPage = nil
+        page?.load(pending)
     }
 
     func setAllowedHost(_ host: String?) { page?.setAllowedHost(host) }
@@ -63,7 +87,7 @@ final class HybridEngine: WebEngine {
         engine.onFailed = { [weak self] in self?.fallBack() }
         install(engine, shown: false)
         nativeStartedAt = Date()
-        if !sideBySide {
+        if !sideBySide, !fromCache {
             page?.send(.mute)
             page?.send(.pause)
         }
@@ -84,6 +108,8 @@ final class HybridEngine: WebEngine {
     // AVPlayer has pictures: it's the one on screen from now on.
     private func promote(_ engine: NativeEngine) {
         isNative = true
+        pendingPage = nil
+        if let pageURL, let source { StreamCache.save(source, for: pageURL) }
         // Pick up where the page is (a movie or episode; live stays at the edge).
         if let pageState, pageState.d > 0, pageState.t > 1 { engine.send(.seekTo(pageState.t + 0.3)) }
         engine.view.alpha = 1
@@ -100,6 +126,18 @@ final class HybridEngine: WebEngine {
     private func fallBack() {
         native?.destroy()
         native = nil
+        // A saved stream that no longer plays (its token ran out): forget it
+        // and let the page find today's; that one gets AVPlayer as usual.
+        if fromCache, !isNative, page != nil {
+            fromCache = false
+            source = nil
+            if let pageURL { StreamCache.forget(pageURL) }
+            #if DEBUG
+            print("[native] saved stream didn't play; loading the page")
+            #endif
+            loadPendingPage()
+            return
+        }
         if let page {
             NativePlayback.failed(source?.stream.host)
             #if DEBUG
@@ -190,8 +228,13 @@ final class HybridEngine: WebEngine {
         }
     }
 
+    // The video's frame rate and range, once AVPlayer is what's on screen
+    // (in the page, WebKit asks for the TV's mode itself).
+    var displayCriteria: AVDisplayCriteria? { isNative ? native?.displayCriteria : nil }
+
     func close() {
         closed = true
+        pendingPage = nil
         native?.destroy()
         native = nil
         closePage()
@@ -200,7 +243,8 @@ final class HybridEngine: WebEngine {
 
 // Settings › Playback › "Native player" (on by default).
 enum NativePlayback {
-    static var enabled: Bool { UserDefaults.standard.object(forKey: "binge.nativePlayer") as? Bool ?? true }
+    static let key = "binge.nativePlayer"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
     // A stream host AVPlayer couldn't start stays in the page for a day.
     private static func key(_ host: String) -> String { "binge.nativeFailed.\(host)" }
@@ -213,4 +257,40 @@ enum NativePlayback {
         let at = UserDefaults.standard.double(forKey: key(host))
         return at > 0 && Date().timeIntervalSince1970 - at < 86_400
     }
+}
+
+// Streams that played, by the server page that found them, kept a few hours
+// (the addresses carry tokens that run out). A saved one that fails costs a
+// moment: the page is loading alongside anyway, and the entry is dropped.
+enum StreamCache {
+    static let lifetime: TimeInterval = 3 * 3600
+    static let limit = 40
+    private static let key = "binge.streams"
+
+    struct Saved { let stream: URL; let page: String; let agent: String }
+
+    private static var all: [String: [String: Any]] {
+        get { UserDefaults.standard.dictionary(forKey: key) as? [String: [String: Any]] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    static func stream(for page: URL, now: Date = Date()) -> Saved? {
+        guard let entry = all[page.absoluteString],
+              let at = entry["at"] as? Double, now.timeIntervalSince1970 - at < lifetime,
+              let stream = (entry["stream"] as? String).flatMap(URL.init(string:)) else { return nil }
+        return Saved(stream: stream, page: entry["page"] as? String ?? "", agent: entry["agent"] as? String ?? "")
+    }
+
+    static func save(_ source: (stream: URL, page: String, agent: String), for page: URL, now: Date = Date()) {
+        var entries = all.filter { now.timeIntervalSince1970 - (($0.value["at"] as? Double) ?? 0) < lifetime }
+        entries[page.absoluteString] = ["stream": source.stream.absoluteString, "page": source.page, "agent": source.agent,
+                                        "at": now.timeIntervalSince1970]
+        if entries.count > limit {
+            let newest = entries.sorted { (($0.value["at"] as? Double) ?? 0) > (($1.value["at"] as? Double) ?? 0) }.prefix(limit)
+            entries = Dictionary(uniqueKeysWithValues: newest.map { ($0.key, $0.value) })
+        }
+        all = entries
+    }
+
+    static func forget(_ page: URL) { all[page.absoluteString] = nil }
 }

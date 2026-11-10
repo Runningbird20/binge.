@@ -86,6 +86,10 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
 | Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift and CineSrc, not Sports (`utils/popupSandbox.js`). |
+| Streams play in the TV's own player (native HLS) | — | — | ✓ | ✓ | Once the server's page finds its stream (`HybridEngine`). Apple TV also saves a stream that played for 3 hours, so playing it again skips the page (`StreamCache`). |
+| TV switches to the video's frame rate (Match Content) | — | — | ✓ | — | Apple TV, with Match Content on in the Apple TV's settings (`NativeEngine.displayCriteria`). |
+| Now Playing in Control Center / the phone's TV remote | — | — | ✓ | — | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. |
+| Subtitles while skipping back | — | — | ✓ | — | Apple TV: with subtitles off, ◀ turns the server's track on until the video passes where you were. |
 
 ## Sports
 

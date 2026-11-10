@@ -1,3 +1,4 @@
+import AVKit
 import Foundation
 import SwiftUI
 
@@ -108,6 +109,17 @@ final class PlayerModel: ObservableObject {
     private var introSeekFrom: Double?
     private var introSeekAt = Date.distantPast
     private var ownIntroSkip = false
+    // Subtitles off and ◀ pressed: the server's track in your language is on
+    // until the video passes where you were (like Apple's "What did they say?").
+    private var rewindCaptionsUntil: Double?
+    // Play/pause from the remote, for telling a Control Center echo apart.
+    private var lastToggleAt = Date.distantPast
+    // The TV's frame rate is set once per video; playback waits while the TV
+    // switches (the picture goes black for a moment).
+    private var criteriaApplied = false
+    private var switchHoldUntil: Date?
+    private var nowPlayingAt = Date.distantPast
+    private var nowPlayingPaused: Bool?
 
     init(request: PlayRequest, app: AppModel) {
         self.request = request
@@ -131,6 +143,7 @@ final class PlayerModel: ObservableObject {
             self.originalLanguage = language
         }
         observeLifecycle()
+        NowPlaying.attach(self)
         loadMarkers()
         loadExternalSubtitles()
         if isEpisode, request.seasons.isEmpty, let tmdbId = request.title.tmdbId {
@@ -212,6 +225,9 @@ final class PlayerModel: ObservableObject {
         emptySubtitleSince = nil
         playback = Playback()
         buffering = false
+        criteriaApplied = false
+        switchHoldUntil = nil
+        rewindCaptionsUntil = nil
         resetStallClock()
         next.goLive()
         raceChanged()
@@ -242,6 +258,8 @@ final class PlayerModel: ObservableObject {
         guard !closed else { return }
         closed = true
         DispatchQueue.main.async { PiPController.shared.playerClosed() }
+        NowPlaying.detach(self)
+        DisplayMode.clear()
         timer?.invalidate()
         timer = nil
         lifecycle.forEach(NotificationCenter.default.removeObserver)
@@ -260,7 +278,29 @@ final class PlayerModel: ObservableObject {
         showHUD()
     }
 
+    // Control Center / the iPhone remote.
+    func setPlaying(_ on: Bool) {
+        guard started, playback.paused == on else { return }
+        togglePlay()
+    }
+
+    func remoteToggle() {
+        guard Date().timeIntervalSince(lastToggleAt) > 0.6 else { return }
+        togglePlay()
+    }
+
+    func seek(to seconds: Double) {
+        guard let web, web.canSeek, !request.isLive else { return }
+        autoAdvances = 0
+        web.send(.seekTo(seconds))
+        playback.t = seconds
+        nowPlayingAt = .distantPast
+        showHUD()
+    }
+
     func togglePlay() {
+        lastToggleAt = Date()
+        nowPlayingAt = .distantPast
         autoAdvances = 0
         pausedAmbient = false
         if stillWatching {
@@ -308,6 +348,7 @@ final class PlayerModel: ObservableObject {
     var usingExternalSubtitles: Bool { useExternal && external != nil }
 
     func chooseSubtitleLanguage(_ code: String) {
+        rewindCaptionsUntil = nil
         subtitleLanguage = code
         useExternal = code != "off"
         if code == "off" { web?.send(.textTrack(-1)) }
@@ -498,9 +539,20 @@ final class PlayerModel: ObservableObject {
         // intro's timing can be shared once the seeking settles.
         if seconds > 0, isEpisode, !ownIntroSkip, introSeekFrom == nil, playback.t < 600 { introSeekFrom = playback.t }
         introSeekAt = Date()
+        if seconds < 0 { captionsForRewind(from: playback.t, web: web) }
+        nowPlayingAt = .distantPast
         web.send(.seekBy(seconds))
         playback.t = max(0, playback.t + seconds) // instant HUD feedback
         showHUD()
+    }
+
+    private func captionsForRewind(from position: Double, web: WebEngine) {
+        guard PlaybackPrefs.captionsOnRewind, subtitleLanguage == "off", started, position > 1 else { return }
+        if rewindCaptionsUntil == nil {
+            guard let track = bestSubtitleTrack(PlaybackPrefs.rewindLanguage) else { return }
+            web.send(.textTrack(track.index))
+        }
+        rewindCaptionsUntil = max(rewindCaptionsUntil ?? 0, position)
     }
 
     func showHUD() {
@@ -570,6 +622,7 @@ final class PlayerModel: ObservableObject {
         markers = EpisodeMarkers()
         introSeekFrom = nil
         ownIntroSkip = false
+        rewindCaptionsUntil = nil
         loadMarkers()
         external = nil
         loadExternalSubtitles()
@@ -798,7 +851,7 @@ final class PlayerModel: ObservableObject {
         // Some servers pause themselves a few seconds in (an overlay, a
         // second player on the page). Only the remote pauses here, so any
         // other pause is undone, at most every 2s.
-        if started, state.paused, !state.ended, !userPaused, !state.cushion, Date().timeIntervalSince(lastResume) > 2 {
+        if started, state.paused, !state.ended, !userPaused, !state.cushion, switchHoldUntil == nil, Date().timeIntervalSince(lastResume) > 2 {
             lastResume = Date()
             web.send(.play)
             #if DEBUG
@@ -863,6 +916,12 @@ final class PlayerModel: ObservableObject {
             hudVisible = true
         }
 
+        if let until = rewindCaptionsUntil, state.t > until + 1 {
+            rewindCaptionsUntil = nil
+            if subtitleLanguage == "off" { web.send(.textTrack(-1)) }
+        }
+        applyDisplayCriteria(web)
+        updateNowPlaying(state)
         handleUpNext(state)
         saveProgress(force: false)
     }
@@ -925,6 +984,41 @@ final class PlayerModel: ObservableObject {
             EpisodeMarkerStore.reportCredits(request.title, season: season, episode: episode, start: playback.t, duration: playback.d)
         }
         play(season: next.season, episode: next.episode, automatic: automatic)
+    }
+
+    // MARK: Now Playing and the TV's display mode
+
+    private func updateNowPlaying(_ state: Playback) {
+        guard started, state.paused != nowPlayingPaused || Date().timeIntervalSince(nowPlayingAt) > 5 else { return }
+        nowPlayingAt = Date()
+        nowPlayingPaused = state.paused
+        NowPlaying.update(title: request.game?.title ?? request.title.name, detail: episodeLabel,
+                          art: request.title.poster ?? request.title.backdrop,
+                          t: state.t, d: state.d, paused: state.paused, live: request.isLive)
+    }
+
+    private func applyDisplayCriteria(_ web: WebEngine) {
+        if let until = switchHoldUntil {
+            let switching = surface.window?.avDisplayManager.isDisplayModeSwitchInProgress ?? false
+            if Date() > until || (!switching && Date() > until.addingTimeInterval(-4.5)) {
+                switchHoldUntil = nil
+                if !userPaused { web.send(.play) }
+            }
+            return
+        }
+        guard !criteriaApplied, started, let window = surface.window,
+              let criteria = (web as? HybridEngine)?.displayCriteria else { return }
+        criteriaApplied = true
+        guard window.avDisplayManager.isDisplayCriteriaMatchingEnabled else { return }
+        window.avDisplayManager.preferredDisplayCriteria = criteria
+        #if DEBUG
+        print("[display] asked the TV to match the video")
+        #endif
+        // A movie or episode waits out the TV's switch; live keeps going.
+        if !request.isLive, !userPaused {
+            web.send(.pause)
+            switchHoldUntil = Date().addingTimeInterval(5)
+        }
     }
 
     // MARK: Progress (synced to continue_watching, like the site)

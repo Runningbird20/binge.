@@ -31,6 +31,15 @@ enum PlaybackPrefs {
     // Settings › Playback › Skip intro button (on by default).
     static let skipIntroKey = "binge.skipIntroButton"
     static var skipIntroButton: Bool { UserDefaults.standard.object(forKey: skipIntroKey) as? Bool ?? true }
+    // Settings › Playback › Subtitles when skipping back (on by default).
+    static let captionsOnRewindKey = "binge.captionsOnRewind"
+    static var captionsOnRewind: Bool { UserDefaults.standard.object(forKey: captionsOnRewindKey) as? Bool ?? true }
+    // The language for those: the profile's subtitle language, else this
+    // Apple TV's own language.
+    static var rewindLanguage: String {
+        if subtitle != "off" { return subtitle }
+        return baseLanguage(Locale.preferredLanguages.first ?? "en")
+    }
 
     static let audioChoices: [(String, String)] = [
         ("original", "Original language"), ("en", "English"), ("es", "Spanish"), ("fr", "French"),
