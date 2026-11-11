@@ -81,7 +81,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 ### Two databases: Turso = media catalog, Supabase = accounts + user data
 
 Nothing lives in both (see `docs/database-split.md`). The `supabase` client exported by `src/utils/supabase.js` is split:
-- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')`. The route is read-only and media tables only. Its Neon-era name, `/api/neon-data`, is gone: a TV build from before 2026-11 calls it and gets no catalog, so reinstall it.
+- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')` and `rpc('search_related')`. The route is read-only and media tables only. Its Neon-era name, `/api/neon-data`, is gone: a TV build from before 2026-11 calls it and gets no catalog, so reinstall it.
 - Everything else is real Supabase.
 
 Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/catalog/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
@@ -354,6 +354,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - **Typo pass.** It uses trigram + word similarity, a faithful JS port of pg_trgm, checked against Postgres.
   - **On SQLite.** SQLite has neither, so the normalized text is stored in `search_*` columns at write time. Exact/prefix matches use B-tree indexes; substrings and typo candidates use the trigram FTS5 tables (`*_fts`, kept in step by triggers). Scoring runs in JS with the old formula.
   - **Caching.** Results are cached 10 min per server instance (`server/data-access/client.js`).
+  - **Description matches** (search's related row) are `search_related` (`server/catalogRelated.js`): words in the overview/synopsis, looked for only among the 5,000 most popular movies and series and the 5,000 newest books, walked by index. Asking the whole table read every row (~15s per search, the "Slow catalog query" errors of 2026-11-10). Never add an open-ended `LIKE '%…%'` over a media table.
   - **Checks.** Run `node scripts/search-benchmark.js` (34/34 found, the same ranks as Neon at the switch). After changing `searchNorm`, run `node scripts/turso-catalog.js rebuild-search`.
 - **Search UI** (`src/utils/searchExtras.js`):
   - **Header dropdown.** Top result → Movies → Series → Books → Live games, plus TMDB person search (actors/directors, real roles only, via `workCredits`) and recent searches per profile. A person result links to their page.
