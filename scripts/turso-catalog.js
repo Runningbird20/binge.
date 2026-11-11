@@ -4,6 +4,8 @@
 //   node scripts/turso-catalog.js schema            create tables, indexes, FTS, triggers (idempotent)
 //   node scripts/turso-catalog.js refresh           rebuild genre lists + row counts (run after syncs)
 //   node scripts/turso-catalog.js rebuild-search    recompute search_* columns (after changing searchNorm)
+//   node scripts/turso-catalog.js build-text-search fill the description word index (*_text_fts) from
+//                                                   scratch (once after creating it; triggers keep it current)
 //   node scripts/turso-catalog.js pull --db file:data/turso/catalog.db
 //                                                   copy the Turso catalog into a local file for
 //                                                   development (~310k rows read; resumes by id)
@@ -112,6 +114,25 @@ async function refresh(db) {
   await db.batch(statements, 'write');
 }
 
+// The description word index (schema.sql *_text_fts) from scratch, in id
+// ranges so no single request runs long. Reads every row once.
+const TEXT_FTS = { movies: 'overview, synopsis', tv_shows: 'overview, synopsis', books: 'synopsis' };
+async function buildTextSearch(db) {
+  for (const [table, columns] of Object.entries(TEXT_FTS)) {
+    const fts = `${table}_text_fts`;
+    await db.execute(`INSERT INTO ${fts} (${fts}) VALUES ('delete-all')`);
+    let after = -1; let done = 0;
+    for (;;) {
+      const last = (await db.execute({ sql: `SELECT max(id) AS id, count(*) AS n FROM (SELECT id FROM ${table} WHERE id > ? ORDER BY id LIMIT 20000)`, args: [after] })).rows[0];
+      if (!Number(last.n)) break;
+      await db.execute({ sql: `INSERT INTO ${fts} (rowid, ${columns}) SELECT id, ${columns} FROM ${table} WHERE id > ? AND id <= ?`, args: [after, last.id] });
+      after = Number(last.id); done += Number(last.n);
+      process.stdout.write(`\r${table}: ${done.toLocaleString()} rows`);
+    }
+    process.stdout.write('\n');
+  }
+}
+
 async function rebuildSearch(db) {
   for (const table of ['movies', 'tv_shows', 'books']) {
     const extra = table === 'books' ? ', author' : '';
@@ -141,8 +162,9 @@ async function main() {
   if (command === 'schema') await applySchema(db);
   else if (command === 'refresh') await refresh(db);
   else if (command === 'rebuild-search') await rebuildSearch(db);
+  else if (command === 'build-text-search') await buildTextSearch(db);
   else if (command === 'pull') await pull(db);
-  else { console.error('Usage: node scripts/turso-catalog.js schema|refresh|rebuild-search|pull [--db file:...]'); process.exitCode = 2; }
+  else { console.error('Usage: node scripts/turso-catalog.js schema|refresh|rebuild-search|build-text-search|pull [--db file:...]'); process.exitCode = 2; }
   db.close();
 }
 

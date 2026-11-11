@@ -1,54 +1,61 @@
 // Search's "related" row: titles whose description mentions the words typed
 // (search_related, called by supabaseApi.js handleSearchRelated).
 //
-// No index can answer `overview LIKE '%words%'`, so asking the whole table
-// read every row: ~15s for one search on the movies table (2026-11-10, the
-// "Slow catalog query" errors in /admin), and Turso bills each row read. So
-// each table is searched within a bounded window that an index hands over in
-// order: the most popular movies and series (the partial popularity indexes)
-// and the newest books (books_year; the row was sorted newest-first anyway).
-// One read round trip for all three.
+// Asking the tables for `overview LIKE '%words%'` read every row's text
+// (~15s a search, up to 112s with a cold cache, and Turso bills each row: the
+// "Slow catalog query" errors of 2026-11-10). Now:
+//   - the words are looked up in the description word index (schema.sql
+//     *_text_fts), which reads only the index;
+//   - within a window an index hands over in order (the 10,000 most popular
+//     movies/series, the 10,000 newest books), so common words stay bounded
+//     and the row keeps to titles people know;
+//   - only the matching rows are read. One round trip for all three.
+// Measured on Turso (2026-11-11): 10–26k rows read, ~0.5–1.7s cold, ~30ms warm.
 const catalogDb = require('./catalogDb');
 const { searchNorm } = require('./catalogSearch');
 
-const WINDOW = 5000;
+const WINDOW = 10000;
 const LIMIT = 8;
+
+const related = ({ table, columns, window, order }) => `SELECT ${columns.map((c) => `m.${c}`).join(', ')}
+  FROM (SELECT id FROM ${table} WHERE ${window} LIMIT ?2) w
+  CROSS JOIN ${table} m ON m.id = w.id
+  WHERE w.id IN (SELECT rowid FROM ${table}_text_fts WHERE ${table}_text_fts MATCH ?1)
+    AND m.source_key IS NOT NULL
+  ORDER BY ${order} LIMIT ?3`;
 
 const TABLES = {
   movies: {
-    sql: `SELECT id, title, year, genre, poster_url, source_key, external_id FROM (
-      SELECT id, title, year, genre, poster_url, source_key, external_id, vote_average, overview, synopsis
-      FROM movies WHERE poster_url IS NOT NULL ORDER BY popularity DESC LIMIT ?2
-    ) WHERE source_key IS NOT NULL AND (overview LIKE ?1 OR synopsis LIKE ?1)
-    ORDER BY vote_average DESC NULLS LAST LIMIT ?3`,
+    sql: related({ table: 'movies', columns: ['id', 'title', 'year', 'genre', 'poster_url', 'source_key', 'external_id'],
+      window: 'poster_url IS NOT NULL ORDER BY popularity DESC', order: 'm.vote_average DESC NULLS LAST' }),
   },
   tv: {
-    sql: `SELECT id, title, year, genre, poster_url, source_key, external_id FROM (
-      SELECT id, title, year, genre, poster_url, source_key, external_id, overview, synopsis
-      FROM tv_shows WHERE poster_url IS NOT NULL ORDER BY popularity DESC LIMIT ?2
-    ) WHERE source_key IS NOT NULL AND (overview LIKE ?1 OR synopsis LIKE ?1)
-    ORDER BY year DESC NULLS LAST LIMIT ?3`,
+    sql: related({ table: 'tv_shows', columns: ['id', 'title', 'year', 'genre', 'poster_url', 'source_key', 'external_id'],
+      window: 'poster_url IS NOT NULL ORDER BY popularity DESC', order: 'm.year DESC NULLS LAST' }),
   },
   books: {
-    sql: `SELECT id, title, author, year, genre, cover_url, source_key, external_id FROM (
-      SELECT id, title, author, year, genre, cover_url, source_key, external_id, synopsis
-      FROM books WHERE year IS NOT NULL ORDER BY year DESC LIMIT ?2
-    ) WHERE source_key IS NOT NULL AND synopsis LIKE ?1
-    ORDER BY year DESC LIMIT ?3`,
+    sql: related({ table: 'books', columns: ['id', 'title', 'author', 'year', 'genre', 'cover_url', 'source_key', 'external_id'],
+      window: 'year IS NOT NULL ORDER BY year DESC', order: 'm.year DESC' }),
   },
 };
 
-// "Breaking Bad's" -> "%breaking%bad%": the words in order, anything between.
-// searchNorm leaves only letters, digits and spaces, so nothing typed can act
-// as a LIKE wildcard.
-function relatedPattern(q) {
-  const words = (searchNorm(String(q || '').slice(0, 200)) || '').split(' ').filter((w) => w.length >= 2);
-  return words.length ? `%${words.join('%')}%` : null;
+// Words in nearly every description say nothing about it, and their index
+// lists are the long ones ("the" took 4s the first time).
+const FILLER = new Set(['the', 'an', 'and', 'or', 'of', 'in', 'on', 'to', 'for', 'with', 'at', 'by', 'from', 'is', 'it', 'its',
+  'his', 'her', 'he', 'she', 'they', 'their', 'as', 'be', 'this', 'that', 'who', 'into', 'but', 'are', 'was', 'when', 'after']);
+
+// "Breaking Bad's" -> '"breaking" "bad"': every word must be in the
+// description (any order). searchNorm leaves only letters, digits and
+// spaces, so nothing typed can act as FTS syntax.
+function relatedMatch(q) {
+  const words = (searchNorm(String(q || '').slice(0, 200)) || '').split(' ')
+    .filter((w) => w.length >= 2 && !FILLER.has(w)).slice(0, 8);
+  return words.length ? words.map((w) => `"${w}"`).join(' ') : null;
 }
 
 async function searchRelated(q, types = ['movies', 'tv', 'books']) {
   const empty = { movies: [], tv: [], books: [] };
-  const pattern = relatedPattern(q);
+  const pattern = relatedMatch(q);
   const kinds = types.filter((t) => TABLES[t]);
   if (!pattern || !kinds.length) return empty;
   const results = await catalogDb.batch(kinds.map((kind) => ({ sql: TABLES[kind].sql, params: [pattern, WINDOW, LIMIT] })), 'read');
@@ -56,4 +63,4 @@ async function searchRelated(q, types = ['movies', 'tv', 'books']) {
   return empty;
 }
 
-module.exports = { searchRelated, relatedPattern, TABLES, WINDOW };
+module.exports = { searchRelated, relatedMatch, TABLES, WINDOW };
