@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const catalogDb = require('../catalogDb');
 const { applySchema } = require('../catalogSchema');
-const { searchRelated, relatedPattern, TABLES } = require('../catalogRelated');
+const { searchRelated, relatedMatch, TABLES } = require('../catalogRelated');
 const { rpc } = require('./client');
 const { executeQuery } = require('./query');
 
@@ -35,10 +35,12 @@ test.before(async () => {
   }
 });
 
-test('the words typed become one LIKE pattern, with nothing that acts as a wildcard', () => {
-  assert.equal(relatedPattern("Breaking Bad's"), '%breaking%bad%');
-  assert.equal(relatedPattern('100%_off'), '%100%off%');
-  assert.equal(relatedPattern('a'), null);
+test('the words typed become quoted index terms, with nothing that acts as FTS syntax', () => {
+  assert.equal(relatedMatch("Breaking Bad's"), '"breaking" "bad"');
+  assert.equal(relatedMatch('heist* OR NEAR("x")'), '"heist" "near"');
+  assert.equal(relatedMatch('a'), null);
+  assert.equal(relatedMatch('The Lord of the Rings'), '"lord" "rings"');
+  assert.equal(relatedMatch('the'), null);
 });
 
 test('finds description matches, best rated first, only listed titles with posters', async () => {
@@ -57,11 +59,19 @@ test('series newest first, books newest first and dated only', async () => {
 
 test('each table is read through an index, never scanned whole', async () => {
   for (const [kind, { sql }] of Object.entries(TABLES)) {
-    const { rows } = await catalogDb.query(`EXPLAIN QUERY PLAN ${sql}`, ['%x%', 5000, 8]);
+    const { rows } = await catalogDb.query(`EXPLAIN QUERY PLAN ${sql}`, ['"x"', 10000, 8]);
     const plan = rows.map((r) => r.detail).join('; ');
-    assert.match(plan, /USING INDEX (movies_popularity|tv_shows_popularity|books_year)/, `${kind}: ${plan}`);
-    assert.doesNotMatch(plan, /SCAN (movies|tv_shows|books)(?! USING)/, `${kind}: ${plan}`);
+    assert.match(plan, /USING (COVERING )?INDEX (movies_popularity|tv_shows_popularity|books_year)/, `${kind}: ${plan}`);
+    assert.match(plan, /VIRTUAL TABLE INDEX/, `${kind}: ${plan}`); // the word index
+    assert.doesNotMatch(plan, /SCAN (movies|tv_shows|books)\b(?! USING)/, `${kind}: ${plan}`);
+    assert.doesNotMatch(plan, /SCAN m\b(?! USING)/, `${kind}: ${plan}`);
   }
+});
+
+test('a description edited later is found by its new words (the triggers keep the index current)', async () => {
+  await catalogDb.query("UPDATE movies SET overview = 'A balloon house floats to a waterfall.' WHERE title = 'Up'");
+  assert.deepEqual((await searchRelated('waterfall', ['movies'])).movies.map((r) => r.title), ['Up']);
+  assert.deepEqual((await searchRelated('balloon house', ['movies'])).movies.map((r) => r.title), ['Up']);
 });
 
 test('the catalog rpc answers search_related and refuses other arguments', async () => {
