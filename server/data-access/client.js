@@ -12,8 +12,24 @@ const SEARCH_CACHE_MAX = 500;
 const searchCache = new Map();
 const searchKey = (q, lim) => `${lim}|${q.normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()}`;
 
+// search_related: search's description matches (catalogRelated.js), cached
+// like searches.
+const relatedCache = new Map();
+async function searchRelatedRpc(args) {
+  if(Object.keys(args).some(k=>!['q','types'].includes(k)))throw new Error('Unsupported search argument');
+  const types=String(args.types||'movies,tv,books').split(',').map(t=>t.trim()).filter(Boolean);
+  const key=`${types.join(',')}|${searchKey(String(args.q||'').slice(0,200),0)}`;
+  const hit=relatedCache.get(key);
+  if(hit&&Date.now()-hit.at<SEARCH_CACHE_TTL_MS)return {data:hit.rows,error:null};
+  const rows=await require('../catalogRelated').searchRelated(args.q,types);
+  relatedCache.set(key,{at:Date.now(),rows});
+  if(relatedCache.size>SEARCH_CACHE_MAX)relatedCache.delete(relatedCache.keys().next().value);
+  return {data:rows,error:null};
+}
+
 async function rpc(name,args={}) {
   try {
+    if(name==='search_related')return await searchRelatedRpc(args||{});
     if(name!=='search_catalog')throw new Error('Unsupported media function');
     if(Object.keys(args).some(k=>!['q','lim'].includes(k)))throw new Error('Unsupported search argument');
     const q=String(args.q||'').slice(0,200);
