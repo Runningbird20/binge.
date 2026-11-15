@@ -134,6 +134,10 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   2. refuses to delete the only admin;
   3. calls `auth.admin.deleteUser`;
   4. removes the user's files in the `avatars` bucket (Storage isn't covered by the cascade).
+- **Invite-only accounts** (`docs/invite-only.md`, `server/routes/invites.js`). `/signup` without an invite is a **Request an account** form. The request goes to `account_requests` (server-only table) and emails the admin (`ACCOUNT_REQUESTS_TO`, else every admin) a review link, `/account-requests/review?token=…`, that approves or denies without signing in. Admin → Requests lists them too.
+  - Approving emails a 14-day invite, `/signup?invite=…`, which opens the regular sign-up form for that address. The **server creates the account** (`POST /api/account/signup`, service role, email confirmed) and the page signs in; an uploaded avatar is saved after that, as before.
+  - **Public sign-ups are off in Supabase** (Authentication → "Allow new users to sign up"), so `supabase.auth.signUp` from the browser no longer works. That also closes the hole where a raw sign-up could set `is_admin` metadata, which `handle_auth_user_changed` trusts. Admin → Users → New user goes through `POST /api/admin/users`.
+  - **Email** is SMTP (`server/mailer.js`, `SMTP_*`). Without it nothing is sent: requests still list in Admin → Requests, and approving returns the invite link to pass on. Links use `SITE_URL` / Vercel's production domain, never the request's Origin.
 - **Password reset.** `/forgot-password` → email → `/reset-password` (`docs/password-reset.md`; the redirect URLs must be listed in Supabase).
 - `src/contexts/AuthContext.js` wraps Supabase auth-state changes. It exposes `user` (with `isAdmin`/`isDev` resolved via `src/utils/userAccess.js`), `signIn`, `signUp`, `logout`, etc.
 - `src/components/ProtectedRoute.js` gates routes, and `allowedUserTypes` restricts them by role (see `/admin` in `src/App.js`).
@@ -653,6 +657,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
     - `GROQ_API_KEY` — Ask binge.;
     - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles;
     - `GOOGLE_BOOKS_API_KEY` — book previews.
+  - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
   - **Optional:** `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` (popular titles for the `media` route's relevance sort), `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
 - **Scripts and tests only:** the Goodreads scraper credentials, `SUPABASE_DB_URL` (`npm run supabase:sql`), and `E2E_*`.
 
