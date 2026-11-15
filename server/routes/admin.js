@@ -83,11 +83,40 @@ router.get('/users', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Account creation goes straight from the client to Supabase's public
-// signUp() (see createSupabaseUserAsAdmin in src/utils/supabaseData.js) —
-// no server route for it. Deletion still has to live here: only the
-// service-role key can remove an auth.users row, and that key must never
-// reach the browser.
+// ─────────────────────────────────────────────────────────────
+// POST /admin/users { username, email, password, bio, isAdmin }
+// Accounts are invite-only (routes/invites.js) and public sign-ups are off in
+// Supabase, so an admin's "Create account" goes through the service role too.
+// The email counts as confirmed: the admin is vouching for it.
+// ─────────────────────────────────────────────────────────────
+router.post('/users', async (req, res) => {
+  const user = await requireAdmin(req, res); if (!user) return;
+  const sb = requireServiceRoleClient(res); if (!sb) return;
+  const username = String(req.body?.username || '').trim().slice(0, 40);
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const bio = String(req.body?.bio || '').trim().slice(0, 280);
+  if (!username || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Add a username and a valid email.' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  try {
+    const { data: taken } = await sb.from('profiles').select('id').eq('username', username).limit(1);
+    if (taken?.length) return res.status(409).json({ error: 'That username is taken.' });
+    const { data, error } = await sb.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { username, bio } });
+    if (error) {
+      const exists = error.code === 'email_exists' || /already/i.test(error.message || '');
+      return res.status(exists ? 409 : 400).json({ error: exists ? 'An account with this email already exists.' : error.message });
+    }
+    const isAdmin = Boolean(req.body?.isAdmin);
+    if (isAdmin) await sb.from('profiles').update({ is_admin: true }).eq('id', data.user.id);
+    res.json({
+      id: data.user.id, username, email, bio, is_admin: isAdmin, is_public: true,
+      created_at: data.user.created_at, last_sign_in_at: null,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Deletion has to live here too: only the service-role key can remove an
+// auth.users row, and that key must never reach the browser.
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /admin/users/:id/toggle-admin

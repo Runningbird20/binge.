@@ -74,35 +74,6 @@ const catalogMedia = createCatalogQueryClient(
 );
 export const supabase = authClient ? splitDatabaseClient(authClient, catalogMedia) : null;
 
-// A second client with session persistence off, used for one-shot signUp()
-// calls made on someone else's behalf (e.g. an admin creating an account).
-// auth.signUp() logs in as the new user on whatever client it's called on —
-// running it here instead of the main `supabase` client keeps the caller's
-// own session untouched.
-let sessionlessClient = null;
-export function getSessionlessSupabaseClient() {
-  if (!isSupabaseConfigured) {
-    throw new Error(getSupabaseConfigErrorMessage());
-  }
-
-  if (!sessionlessClient) {
-    sessionlessClient = createClient(supabaseUrl, supabaseKey, {
-      global: { fetch: trackedFetch },
-      auth: {
-        // A distinct storageKey gives this client its own Navigator LockManager
-        // lock name — without it, GoTrueClient derives the lock from the project
-        // URL alone, so this client fights the main `supabase` client for the
-        // same lock ("Lock ... was released because another request stole it").
-        storageKey: 'sb-admin-signup-auth-token',
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-  }
-
-  return sessionlessClient;
-}
 
 export function getSupabaseConfigErrorMessage() {
   return [

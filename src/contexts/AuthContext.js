@@ -6,13 +6,13 @@ import {
   resolveSupabaseProfile,
   signInWithSupabase,
   signOutFromSupabase,
-  signUpWithSupabase,
   updateSupabasePassword,
   updateSupabaseProfile,
   fetchAccountProfiles,
   createAccountProfile,
 } from '../utils/supabaseData';
 import { normalizeUserType } from '../utils/userAccess';
+import { signUpWithInvite } from '../utils/accountRequests';
 
 import { getActiveProfileId, setActiveProfileId, loadStoredActiveProfileId, clearActiveProfileId, setActiveProfileOwnsLegacyRows } from '../utils/activeProfile';
 import { hydratePlaybackPrefs } from '../utils/streamPreferences';
@@ -280,8 +280,10 @@ export function AuthProvider({ children }) {
     return nextUser;
   }, [commitUser]);
 
+  // Accounts are invite-only: sign-up needs the invite token from the
+  // approval email (utils/accountRequests.js).
   const signUp = useCallback(async (payload) => {
-    const result = await signUpWithSupabase(payload);
+    const result = await signUpWithInvite(payload);
     if (result.user) {
       commitUser(result.user);
     }

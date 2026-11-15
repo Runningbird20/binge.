@@ -1,24 +1,108 @@
-import { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/UserAvatar';
 import AvatarPresetPicker from '../components/AvatarPresetPicker';
+import LoadingBar from '../components/LoadingBar';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
+import { fetchInvite, requestAccount } from '../utils/accountRequests';
 
 const MAX_BIO_LENGTH = 280;
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 
+const BACKGROUND = { backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` };
+
+// /signup. Accounts are invite-only (docs/invite-only.md): without an invite
+// this is the request form; the approval email links back here with
+// ?invite=…, which opens the regular sign-up form for that address.
 export default function Signup() {
+  const [params] = useSearchParams();
+  const invite = params.get('invite');
+  return invite ? <InviteSignup token={invite} /> : <RequestAccount />;
+}
+
+function RequestAccount() {
+  const [form, setForm] = useState({ name: '', email: '', note: '' });
+  const [sentTo, setSentTo] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const email = form.email.trim();
+      await requestAccount({ name: form.name.trim(), email, note: form.note.trim() });
+      setSentTo(email);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="auth-page" style={BACKGROUND}>
+      <div className="auth-card">
+        <Link to="/" className="auth-logo">binge.</Link>
+        <h1>Request an account</h1>
+        <p className="auth-subtitle">
+          binge. is invite-only. Tell us who you are, and we’ll email you a link to create your account once it’s approved.
+        </p>
+
+        {sentTo ? (
+          <div className="settings-success" role="status">
+            Request sent. We’ll email <strong>{sentTo}</strong> when it’s approved.
+          </div>
+        ) : (
+          <form className="auth-form" onSubmit={handleSubmit}>
+            {error && <div className="auth-error" role="alert">{error}</div>}
+            <label>
+              <input aria-label="Your name" placeholder="Your name" type="text" value={form.name} onChange={update('name')} maxLength={80} required autoFocus />
+            </label>
+            <label>
+              <input aria-label="Email" placeholder="Email" type="email" value={form.email} onChange={update('email')} required />
+            </label>
+            <label>
+              <textarea aria-label="Anything we should know? (optional)" placeholder="Anything we should know? (optional)" value={form.note} onChange={update('note')} rows={3} maxLength={500} />
+            </label>
+            <button type="submit" className="btn-primary btn-block" disabled={loading}>
+              {loading ? 'Sending request…' : 'Request account'}
+            </button>
+          </form>
+        )}
+
+        <p className="auth-switch">
+          Already have an account? <Link to="/login">Log in</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function InviteSignup({ token }) {
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const avatarInputRef = useRef(null);
+  // { email, name } once the invite checks out; { error } when it doesn't.
+  const [invite, setInvite] = useState(null);
   const [form, setForm] = useState({
     username: '',
-    email: '',
     password: '',
     bio: '',
     avatarUrl: '',
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    setInvite(null);
+    fetchInvite(token)
+      .then((info) => { if (!cancelled) setInvite(info); })
+      .catch((err) => { if (!cancelled) setInvite({ error: err.message }); });
+    return () => { cancelled = true; };
+  }, [token]);
   const [avatarFileName, setAvatarFileName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -103,8 +187,9 @@ export default function Signup() {
     try {
       const payload = {
         ...form,
+        inviteToken: token,
         username: form.username.trim(),
-        email: form.email.trim(),
+        email: invite.email,
         bio: form.bio.trim(),
       };
       const result = await signUp(payload);
@@ -120,13 +205,34 @@ export default function Signup() {
     }
   }
 
+  if (!invite || invite.error) {
+    return (
+      <div className="auth-page" style={BACKGROUND}>
+        <div className="auth-card">
+          <Link to="/" className="auth-logo">binge.</Link>
+          <h1>Create your account</h1>
+          {!invite ? (
+            <LoadingBar label="Checking your invite…" />
+          ) : (
+            <>
+              <div className="auth-error" role="alert">{invite.error}</div>
+              <p className="auth-switch">
+                <Link to="/signup">Request an account</Link> or <Link to="/login">log in</Link>.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="auth-page" style={{ backgroundImage: `url(${process.env.PUBLIC_URL}/landing-hero.webp)` }}>
+    <div className="auth-page" style={BACKGROUND}>
       <div className="auth-card auth-card-wide">
         <Link to="/" className="auth-logo">binge.</Link>
         <h1>Create your account</h1>
         <p className="auth-subtitle">
-          Add a username, bio, and avatar so your profile is ready for logging and community activity.
+          You’re approved{invite.name ? `, ${invite.name.split(' ')[0]}` : ''}. Add a username, bio, and avatar so your profile is ready for logging and community activity.
         </p>
 
         {error && <div className="auth-error">{error}</div>}
@@ -205,9 +311,9 @@ export default function Signup() {
               aria-label="Email"
               placeholder="Email"
               type="email"
-              value={form.email}
-              onChange={(e) => updateForm('email', e.target.value)}
-              required
+              value={invite.email}
+              readOnly
+              title="Your account is for the address the invite was sent to"
             />
           </label>
 

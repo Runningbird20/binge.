@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { MagnifyingGlass, Plus, ShieldCheck, Trash, X } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
-import { createSupabaseUserAsAdmin } from '../../utils/supabaseData';
 import { ago } from './AdminServers';
 
 const NEW_USER = { username: '', email: '', password: '', bio: '', isAdmin: false };
@@ -26,14 +25,10 @@ function CreateUser({ onCreated, onCancel }) {
     setSaving(true);
     setError('');
     try {
-      const created = await createSupabaseUserAsAdmin(form);
-      if (form.isAdmin) {
-        const updated = await api.patch(`/admin/users/${created.id}/toggle-admin`, {});
-        created.is_admin = updated.is_admin;
-      }
-      onCreated(created, created.requiresEmailConfirmation
-        ? `Created @${created.username}. They need to confirm their email before signing in.`
-        : `Created @${created.username}.`);
+      // Through the server's service role: public sign-ups are off in
+      // Supabase (accounts are invite-only), and it sets admin in one step.
+      const created = await api.post('/admin/users', form);
+      onCreated(created, `Created @${created.username}. They can sign in now.`);
       setForm(NEW_USER);
     } catch (err) {
       setError(err.message);

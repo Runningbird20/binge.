@@ -1,7 +1,7 @@
 import SlidingTabs from '../components/SlidingTabs';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, ChartLineUp, HardDrives, Megaphone, Bug, Users } from '@phosphor-icons/react';
+import { Bell, ChartLineUp, HardDrives, Megaphone, Bug, UserPlus, Users } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
@@ -12,6 +12,8 @@ import AdminErrors from './admin/AdminErrors';
 import AdminAnnouncements from './admin/AdminAnnouncements';
 import AdminBroadcast from './admin/AdminBroadcast';
 import AdminUsersPanel from './admin/AdminUsersPanel';
+import AdminRequestsPanel from './admin/AdminRequestsPanel';
+import { fetchAdminAccountRequests } from '../utils/accountRequests';
 
 const TABS = [
   { id: 'overview', label: 'Overview', Icon: ChartLineUp },
@@ -20,6 +22,7 @@ const TABS = [
   { id: 'announcements', label: 'Announcements', Icon: Megaphone },
   { id: 'notify', label: 'Notifications', Icon: Bell },
   { id: 'users', label: 'Users', Icon: Users },
+  { id: 'requests', label: 'Requests', Icon: UserPlus },
 ];
 
 // Admin control center: site health, what people watch, errors, and tools to
@@ -36,7 +39,11 @@ export default function AdminHome() {
     });
     supabase.from('server_status').select('provider', { count: 'exact', head: true }).eq('status', 'down')
       .then(({ count }) => setBadges((current) => ({ ...current, servers: count || 0 })));
+    fetchAdminAccountRequests()
+      .then(({ pending }) => setBadges((current) => ({ ...current, requests: pending || 0 })))
+      .catch(() => {});
   }, []);
+  const setPendingRequests = useCallback((requests) => setBadges((current) => ({ ...current, requests })), []);
 
   const open = (id) => setParams(id === 'overview' ? {} : { tab: id });
 
@@ -53,7 +60,7 @@ export default function AdminHome() {
 
         <SlidingTabs as="nav" className="st-tabs adm-tabs" aria-label="Admin sections">
           {TABS.map(({ id, label, Icon }) => {
-            const count = id === 'errors' ? badges.errors : id === 'servers' ? badges.servers : 0;
+            const count = id === 'errors' ? badges.errors : id === 'servers' ? badges.servers : id === 'requests' ? badges.requests : 0;
             return (
               <button key={id} type="button" className={`st-tab${tab === id ? ' active' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => open(id)}>
                 <Icon size={16} weight="bold" aria-hidden="true" /> {label}
@@ -69,6 +76,7 @@ export default function AdminHome() {
         {tab === 'announcements' && <AdminAnnouncements />}
         {tab === 'notify' && <AdminBroadcast deviceCount={badges.devices} />}
         {tab === 'users' && <AdminUsersPanel />}
+        {tab === 'requests' && <AdminRequestsPanel onPendingChange={setPendingRequests} />}
       </main>
     </div>
   );
