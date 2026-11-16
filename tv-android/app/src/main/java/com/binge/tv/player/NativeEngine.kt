@@ -86,6 +86,16 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             override fun onLoadCompleted(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData) {
                 Perf.mark("native loaded type=${data.dataType} ${info.bytesLoaded / 1024}KB in ${info.loadDurationMs}ms")
             }
+            override fun onLoadStarted(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData) {
+                if (data.dataType == C.DATA_TYPE_MEDIA) Perf.mark("native loading ${info.uri.host}${info.uri.path?.takeLast(40)}")
+            }
+            override fun onLoadCanceled(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData) {
+                if (data.dataType == C.DATA_TYPE_MEDIA) Perf.mark("native load canceled after ${info.bytesLoaded / 1024}KB in ${info.loadDurationMs}ms")
+            }
+            override fun onLoadError(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData, error: java.io.IOException, wasCanceled: Boolean) {
+                Perf.mark("native load error type=${data.dataType} ${info.uri.host}: $error")
+            }
+            override fun onPlayerError(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, error: PlaybackException) { Perf.mark("native error ${error.errorCodeName}: ${error.cause}") }
             override fun onPlaybackStateChanged(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, state: Int) { Perf.mark("native state $state") }
             override fun onRenderedFirstFrame(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, output: Any, renderTimeMs: Long) { Perf.mark("native first frame") }
             override fun onVideoDecoderInitialized(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, name: String, initializedTimestampMs: Long, initializationDurationMs: Long) { Perf.mark("native decoder $name ${initializationDurationMs}ms") }
@@ -103,6 +113,7 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
                 textList = flatten(tracks, C.TRACK_TYPE_TEXT)
             }
             override fun onPlayerError(error: PlaybackException) {
+                if (destroyed) return
                 // A live stream that fell behind its window: back to the edge.
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition(); player.prepare(); return
