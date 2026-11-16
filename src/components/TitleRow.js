@@ -1,5 +1,6 @@
 import LoadingBar from './LoadingBar';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { readKept, writeKept } from '../utils/keptCache';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import useRowScroll from '../hooks/useRowScroll';
 import TitleCard from './TitleCard';
@@ -34,8 +35,11 @@ function TitleRowInner({
   hideWatched = false,
   limit,
   className = '',
+  keepKey,
 }) {
-  const [loadedItems, setItems] = useState(providedItems || null);
+  // keepKey: the row as it was last visit paints at once (keptCache.js);
+  // the loader still runs and replaces it.
+  const [loadedItems, setItems] = useState(() => providedItems || readKept(keepKey) || null);
   const [state, setState] = useState(providedItems ? 'done' : 'idle');
   const sectionRef = useRef(null);
   const watched = useWatchedKeys(hideWatched);
@@ -61,8 +65,10 @@ function TitleRowInner({
       setState('loading');
       load()
         .then((result) => {
-          setItems(Array.isArray(result) ? result : []);
+          const next = Array.isArray(result) ? result : [];
+          setItems(next);
           setState('done');
+          if (keepKey && next.length) writeKept(keepKey, next);
         })
         .catch(() => setState('error'));
     }
@@ -80,10 +86,10 @@ function TitleRowInner({
     }, { rootMargin: '600px 0px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [providedItems, load, state, eager]);
+  }, [providedItems, load, state, eager, keepKey]);
 
   if (state === 'error') return <RowProblem title={title} onRetry={() => setState('idle')} />;
-  const showSkeleton = loading || state !== 'done' || !items || (hideWatched && !watched);
+  const showSkeleton = loading || !items || (state !== 'done' && !loadedItems) || (hideWatched && !watched);
   if (!showSkeleton && items.length < minItems) return null;
 
   return (

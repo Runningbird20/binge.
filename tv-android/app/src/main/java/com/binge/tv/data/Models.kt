@@ -128,6 +128,9 @@ data class ContinueItem(
     val duration: Double?,
     val newEpisode: String? = null,
     val seasonNote: String? = null,
+    // Newest aired episode watched, nothing saved partway: left out of the
+    // Continue Watching row (New Episodes still has it).
+    val finished: Boolean = false,
 ) {
     val id: String get() = title.id
     val progress: Float?

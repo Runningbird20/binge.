@@ -16,13 +16,14 @@ export function isConversational(query) {
 }
 
 // { summary, items } — items are catalog rows with `_reason`.
-export async function askBinge(query) {
+// kidsSafe: the profile's maturity restriction (picks over it are dropped).
+export async function askBinge(query, { kidsSafe = false } = {}) {
   const result = await api.post('/extras/ai/picks', { q: query });
   const picks = result?.picks || [];
   const normalized = picks.map((pick) => ({ pick, tmdb: normalizeTmdbResult({ ...pick.raw, media_type: pick.mediaType === 'tv_show' ? 'tv' : 'movie' }, pick.mediaType) }));
   const [movies, shows] = await Promise.all([
-    resolveTmdbItems(normalized.filter((entry) => entry.pick.mediaType === 'movie').map((entry) => entry.tmdb), 'movie'),
-    resolveTmdbItems(normalized.filter((entry) => entry.pick.mediaType === 'tv_show').map((entry) => entry.tmdb), 'tv_show'),
+    resolveTmdbItems(normalized.filter((entry) => entry.pick.mediaType === 'movie').map((entry) => entry.tmdb), 'movie', { kidsSafe }),
+    resolveTmdbItems(normalized.filter((entry) => entry.pick.mediaType === 'tv_show').map((entry) => entry.tmdb), 'tv_show', { kidsSafe }),
   ]);
   const byKey = new Map([...movies, ...shows].map((item) => [`${item.media_type}:${item._tmdb?.tmdbId}`, item]));
   const items = normalized

@@ -53,6 +53,8 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
     private var destroyed = false
     private var audioList: List<Pair<Tracks.Group, Int>> = emptyList()
     private var textList: List<Pair<Tracks.Group, Int>> = emptyList()
+    private var stalls = 0
+    private val meter = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(context)
 
     init {
         live++
@@ -84,12 +86,25 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             override fun onLoadCompleted(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData) {
                 Perf.mark("native loaded type=${data.dataType} ${info.bytesLoaded / 1024}KB in ${info.loadDurationMs}ms")
             }
+            override fun onLoadStarted(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData) {
+                if (data.dataType == C.DATA_TYPE_MEDIA) Perf.mark("native loading ${info.uri.host}${info.uri.path?.takeLast(40)}")
+            }
+            override fun onLoadCanceled(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData) {
+                if (data.dataType == C.DATA_TYPE_MEDIA) Perf.mark("native load canceled after ${info.bytesLoaded / 1024}KB in ${info.loadDurationMs}ms")
+            }
+            override fun onLoadError(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, info: androidx.media3.exoplayer.source.LoadEventInfo, data: androidx.media3.exoplayer.source.MediaLoadData, error: java.io.IOException, wasCanceled: Boolean) {
+                Perf.mark("native load error type=${data.dataType} ${info.uri.host}: $error")
+            }
+            override fun onPlayerError(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, error: PlaybackException) { Perf.mark("native error ${error.errorCodeName}: ${error.cause}") }
             override fun onPlaybackStateChanged(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, state: Int) { Perf.mark("native state $state") }
             override fun onRenderedFirstFrame(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, output: Any, renderTimeMs: Long) { Perf.mark("native first frame") }
             override fun onVideoDecoderInitialized(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, name: String, initializedTimestampMs: Long, initializationDurationMs: Long) { Perf.mark("native decoder $name ${initializationDurationMs}ms") }
         })
         player.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() { firstFrame = true }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_BUFFERING && firstFrame && player.playWhenReady) stalls++
+            }
             override fun onCues(cueGroup: CueGroup) {
                 cue = cueGroup.cues.mapNotNull { it.text?.toString() }.joinToString("\n").trim()
             }
@@ -98,6 +113,7 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
                 textList = flatten(tracks, C.TRACK_TYPE_TEXT)
             }
             override fun onPlayerError(error: PlaybackException) {
+                if (destroyed) return
                 // A live stream that fell behind its window: back to the edge.
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition(); player.prepare(); return
@@ -152,6 +168,17 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             },
             cue = cue,
             rendering = firstFrame && state == Player.STATE_READY && player.playWhenReady,
+            native = true,
+            ahead = player.totalBufferedDuration / 1000.0,
+            bitrate = player.videoFormat?.bitrate?.takeIf { it > 0 } ?: 0,
+            bandwidth = meter.bitrateEstimate,
+            stalls = stalls,
+            audioFormat = player.audioFormat?.let { f ->
+                val codec = when (f.sampleMimeType) { MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Digital Plus"; MimeTypes.AUDIO_AC3 -> "Dolby Digital"; MimeTypes.AUDIO_AAC -> "AAC"; else -> "Audio" }
+                val ch = f.channelCount
+                "$codec " + when { ch >= 8 -> "7.1"; ch >= 6 -> "5.1"; ch == 2 -> "stereo"; ch == 1 -> "mono"; ch > 0 -> "$ch channels"; else -> "" }
+            }?.trim().orEmpty(),
+            fps = player.videoFormat?.frameRate?.takeIf { it > 0 } ?: 0f,
         )
     }
 

@@ -9,6 +9,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.binge.tv.data.AppModel
+import com.binge.tv.data.Binge
+import com.binge.tv.data.CrashReporter
+import com.binge.tv.data.DisplayMatch
+import com.binge.tv.data.IntroSkips
 import com.binge.tv.data.EpisodeMarkerStore
 import com.binge.tv.data.EpisodeMarkers
 import com.binge.tv.data.ExternalSubtitleFile
@@ -192,6 +196,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     }
 
     private fun adopt(next: StreamRace) {
+        if (backup != null && backup !== next) dropBackup()
         Warmup.playingKey = next.key
         raced.addAll(next.candidates.map { it.server.id })
         val req = request
@@ -242,6 +247,12 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
                 return
             }
             notice = "No server could play this right now. Press ▼ to try one again."
+            // The admin panel hears about it (once a day per episode).
+            val key = "reported.${request.key}"
+            if (System.currentTimeMillis() - (Prefs.string(key)?.toLongOrNull() ?: 0L) > 86_400_000L) {
+                Prefs.set(key, "${System.currentTimeMillis()}")
+                CrashReporter.report("Fire TV: no server could play ${request.title.name}${episodeLabel?.let { " $it" } ?: ""}", "Raced: ${raced.sorted().joinToString()}", "fire-tv/player")
+            }
         }
     }
 
@@ -251,7 +262,13 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         syncKey?.let { if (syncPending) SubtitleSync.report(it, subtitleOffset) }
         closed = true
         handler.removeCallbacksAndMessages(null)
-        race?.stop()
+        dropBackup()
+        DisplayMatch.clear()
+        // Kept paused for a few minutes: going back in resumes at once. On a
+        // stick only a native stream (a server page is too heavy to keep).
+        val current = race
+        if (current != null && current.winner != null && started && !playback.ended && (isNative || !com.binge.tv.data.Performance.light)) Warmup.park(current)
+        else current?.stop()
         race = null
         dropSwitch()
         Warmup.cancel()
@@ -429,7 +446,12 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     fun dismissSkipIntro() { skippedIntro = true; showSkipIntro = false }
 
     // ▲ during the intro: straight to its end when we know it, else a typical 85s.
-    fun skipIntro() {
+    fun skipIntro(automatic: Boolean = false) {
+        if (!automatic && isEpisode) {
+            val s = request.season; val e = request.episode
+            if (s != null && e != null && IntroSkips.shouldOffer(request.title, IntroSkips.recordManual(request.title, s, e)))
+                notice = "Skip intros on ${request.title.name} automatically? Turn it on in Options (press ▼)."
+        }
         skippedIntro = true
         showSkipIntro = false
         val intro = markers.intro
@@ -580,6 +602,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         if (state.paused || state.ended || Math.abs(state.t - lastClock) > 0.15) { lastClock = state.t; clockMovedAt = t }
         val stuck = if (started) t - clockMovedAt else 0
         buffering = stuck > 1500 || state.cushion
+        // A backup stream is ready: switch to it now rather than wait.
+        if (!request.isLive && stuck > 2000 && backup?.winner != null) { switchToBackup(); return }
         if (stuck > (if (request.isLive) 12_000 else 20_000)) recover("stopped playing")
     }
 
@@ -620,6 +644,9 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         // A shift left alone for 20s of playing is the viewer's answer: shared.
         syncKey?.let { if (syncPending && !state.paused && now() - offsetChangedAt > 20_000) { syncPending = false; SubtitleSync.report(it, subtitleOffset) } }
         watchClock(state)
+        watchBuffer(state)
+        // The TV follows the video's frame rate (native player only).
+        if (started && !displayMatched && state.native && state.fps > 0f) { displayMatched = true; DisplayMatch.request(state.fps) }
         val exp = expected
         if (started && exp != null && ExpectedRuntime.isWrong(state.d, exp)) { expected = null; recover("had the wrong video"); return }
         if (state.audio != audioTracks) audioTracks = state.audio
@@ -665,6 +692,13 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         }
 
         val intro = markers.intro
+        // Binge mode, or this show set to skip intros: only a known intro.
+        if (intro != null && isEpisode && started && !skippedIntro && !state.paused && state.t >= intro.start - 0.5 && state.t < intro.end - 2 &&
+            (Binge.on || IntroSkips.isOn(request.title))) {
+            skipIntro(automatic = true)
+            notice = "Skipped the intro."
+            showHUD()
+        }
         showSkipIntro = PlaybackPrefs.skipIntroButton && isEpisode && started && !skippedIntro &&
             (if (intro != null) state.t >= intro.start - 0.5 && state.t < intro.end - 2 else state.t > 15 && state.t < 240)
         // A viewer's skip has settled: share where the intro was.
@@ -721,6 +755,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
                 }
                 return
             }
+            // Binge mode: straight on to the next episode (unless Up Next was dismissed).
+            if (Binge.on && upNextCountdown != -1) { playNext(automatic = true); return }
             // Counts down once a second (this runs 4× a second).
             if (now() - lastCountdownTick < 1000) return
             lastCountdownTick = now()
@@ -738,6 +774,82 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         if (!automatic && upNextCountdown == null && s != null && e != null)
             EpisodeMarkerStore.reportCredits(request.title, s, e, playback.t, playback.d)
         play(next.first, next.second, automatic)
+    }
+
+    // MARK: Backup stream (movies and episodes)
+
+    // Live games already keep a standby. A movie or episode gets one only
+    // when needed: the buffer has been draining (or the picture froze), so
+    // the next-best server loads silently at this second and takes over the
+    // moment the picture stops. Closed again after a minute of full buffer.
+    // One page at most, and only with room (a stick's memory is short).
+    private var backup: StreamRace? = null
+    private val aheadSamples = ArrayDeque<Pair<Long, Double>>()
+    private var backupStartedAt = 0L
+    private var smoothSince: Long? = null
+    private var displayMatched = false
+
+    val backupStatus: String? get() {
+        val b = backup ?: return null
+        return b.winner?.let { "A backup stream (${it.server.name}) is ready in case this one stalls." } ?: "Loading a backup stream in case this one stalls…"
+    }
+
+    val playbackDiagnosis: String get() {
+        val p = playback
+        return when {
+            !started -> "Starting…"
+            p.native && p.bandwidth > 0 && p.bitrate > 0 && p.bandwidth < p.bitrate * 1.2 -> "Downloads are only just keeping up with this stream. If it buffers, try another server; if every server does, it's the connection."
+            p.stalls > 0 || buffering -> "This stream has stalled. A backup stream takes over if it keeps happening."
+            !p.native -> "This server plays in its own page, which shares fewer details."
+            else -> "Playing smoothly."
+        }
+    }
+
+    private fun watchBuffer(state: MediaState) {
+        if (!started || request.isLive || handPicked || userPaused || state.paused) { aheadSamples.clear(); return }
+        val t = now()
+        aheadSamples.addLast(t to state.ahead)
+        while (aheadSamples.isNotEmpty() && t - aheadSamples.first().first > 20_000) aheadSamples.removeFirst()
+        if (backup == null) {
+            val first = aheadSamples.firstOrNull()
+            val draining = state.ahead > 0 && state.ahead < 10 && first != null && first.second - state.ahead > 3 && t - first.first > 12_000
+            if ((draining || buffering) && t - backupStartedAt > 60_000) startBackup()
+        } else {
+            smoothSince = if (state.ahead > 30) smoothSince ?: t else null
+            smoothSince?.let { if (t - it > 60_000) dropBackup() }
+        }
+    }
+
+    private fun startBackup() {
+        val current = server
+        val others = servers.filter { it != current && it.id !in (race?.rejected ?: emptySet()) }
+        if (others.isEmpty() || WebEngine.live + NativeEngine.live >= 3) return
+        val held = request.copy(startAt = playback.t + 2)
+        val next = StreamRace(context, held, others.take(1), StreamRace.Mode.WARM)
+        next.expectedDuration = expected
+        surface.addView(next.container, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        backup = next
+        backupStartedAt = now()
+        smoothSince = null
+    }
+
+    private fun switchToBackup() {
+        val next = backup ?: return
+        val winner = next.winner ?: return
+        val at = playback.t
+        val from = server?.name ?: "The server"
+        backup = null
+        saveProgress(force = true)
+        if (at > 1) request = request.copy(startAt = at)
+        adopt(next)
+        if (at > 1) winner.web.send(MediaCommand.SeekTo(at))
+        notice = "$from slowed down. Switched to ${winner.server.name} to keep playing."
+    }
+
+    private fun dropBackup() {
+        backup?.let { it.stop(); surface.removeView(it.container) }
+        backup = null
+        smoothSince = null
     }
 
     // MARK: Progress (synced to continue_watching, like the site)

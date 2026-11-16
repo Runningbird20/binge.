@@ -73,8 +73,15 @@ class HybridEngine(
     // when the page is already gone, a fresh native player on the same stream
     // from the same second (a decoder can fail once, e.g. when its surface moves).
     private fun fallBack() {
-        native?.let { frame.removeView(it.view); it.destroy() }
+        // Let go of it first, then release its player before its view leaves
+        // the frame (destroy does both, in that order). Taking the view off a
+        // live player tore down the surface under it, and on a Fire TV that can
+        // fail the player right there, inside removeView: this ran again, the
+        // view was removed twice, and Android crashed (NullPointerException in
+        // ViewGroup.removeFromArray, 2026-11-13 to 15).
+        val old = native
         native = null
+        old?.let { it.onFailed = null; it.destroy() }
         val web = page
         if (web == null) {
             val stream = source ?: return
@@ -112,8 +119,9 @@ class HybridEngine(
             if (state.isPlaying || (state.ready >= 3 && !wantPlay)) {
                 isNative = true
                 Perf.mark("native playing ${state.height}p")
-                page?.let { frame.removeView(it.view); it.destroy() }
+                val web = page
                 page = null
+                web?.destroy() // stops the page, then takes its view off the frame
             }
         }
         return state

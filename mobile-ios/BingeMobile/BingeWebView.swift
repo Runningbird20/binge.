@@ -44,6 +44,13 @@ struct BingeWebView: UIViewRepresentable {
         config.preferences.isElementFullscreenEnabled = true // the players' full-screen buttons
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         config.applicationNameForUserAgent = BingeWebCoordinator.userAgentSuffix()
+        // The frame bridge (frame-bridge.js), in every frame: the site follows
+        // and steers the video inside any server's player (time, seeking,
+        // binge.'s captions). It does nothing in the top page.
+        if let url = Bundle.main.url(forResource: "frame-bridge", withExtension: "js"),
+           let source = try? String(contentsOf: url, encoding: .utf8) {
+            config.userContentController.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        }
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator

@@ -214,3 +214,57 @@ CREATE TRIGGER IF NOT EXISTS books_fts_update AFTER UPDATE OF search_norm, searc
   INSERT INTO books_fts (books_fts, rowid, search_norm, search_author) VALUES ('delete', old.id, old.search_norm, old.search_author);
   INSERT INTO books_fts (rowid, search_norm, search_author) VALUES (new.id, new.search_norm, new.search_author);
 END;
+
+-- Search's related row (server/catalogRelated.js): a word index over the
+-- descriptions, so "titles whose description mentions …" reads only the
+-- matches instead of every row's text. detail=none + columnsize=0 keep it
+-- small (the words only, no positions or lengths). Filled by
+-- `scripts/turso-catalog.js build-text-search`; the triggers keep it in step.
+CREATE VIRTUAL TABLE IF NOT EXISTS movies_text_fts USING fts5(
+  overview, synopsis, content = 'movies', content_rowid = 'id',
+  tokenize = 'unicode61 remove_diacritics 2', detail = 'none', columnsize = 0
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS tv_shows_text_fts USING fts5(
+  overview, synopsis, content = 'tv_shows', content_rowid = 'id',
+  tokenize = 'unicode61 remove_diacritics 2', detail = 'none', columnsize = 0
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS books_text_fts USING fts5(
+  synopsis, content = 'books', content_rowid = 'id',
+  tokenize = 'unicode61 remove_diacritics 2', detail = 'none', columnsize = 0
+);
+
+CREATE TRIGGER IF NOT EXISTS movies_text_fts_insert AFTER INSERT ON movies BEGIN
+  INSERT INTO movies_text_fts (rowid, overview, synopsis) VALUES (new.id, new.overview, new.synopsis);
+END;
+CREATE TRIGGER IF NOT EXISTS movies_text_fts_delete AFTER DELETE ON movies BEGIN
+  INSERT INTO movies_text_fts (movies_text_fts, rowid, overview, synopsis) VALUES ('delete', old.id, old.overview, old.synopsis);
+END;
+CREATE TRIGGER IF NOT EXISTS movies_text_fts_update AFTER UPDATE OF overview, synopsis ON movies
+  WHEN old.overview IS NOT new.overview OR old.synopsis IS NOT new.synopsis BEGIN
+  INSERT INTO movies_text_fts (movies_text_fts, rowid, overview, synopsis) VALUES ('delete', old.id, old.overview, old.synopsis);
+  INSERT INTO movies_text_fts (rowid, overview, synopsis) VALUES (new.id, new.overview, new.synopsis);
+END;
+
+CREATE TRIGGER IF NOT EXISTS tv_shows_text_fts_insert AFTER INSERT ON tv_shows BEGIN
+  INSERT INTO tv_shows_text_fts (rowid, overview, synopsis) VALUES (new.id, new.overview, new.synopsis);
+END;
+CREATE TRIGGER IF NOT EXISTS tv_shows_text_fts_delete AFTER DELETE ON tv_shows BEGIN
+  INSERT INTO tv_shows_text_fts (tv_shows_text_fts, rowid, overview, synopsis) VALUES ('delete', old.id, old.overview, old.synopsis);
+END;
+CREATE TRIGGER IF NOT EXISTS tv_shows_text_fts_update AFTER UPDATE OF overview, synopsis ON tv_shows
+  WHEN old.overview IS NOT new.overview OR old.synopsis IS NOT new.synopsis BEGIN
+  INSERT INTO tv_shows_text_fts (tv_shows_text_fts, rowid, overview, synopsis) VALUES ('delete', old.id, old.overview, old.synopsis);
+  INSERT INTO tv_shows_text_fts (rowid, overview, synopsis) VALUES (new.id, new.overview, new.synopsis);
+END;
+
+CREATE TRIGGER IF NOT EXISTS books_text_fts_insert AFTER INSERT ON books BEGIN
+  INSERT INTO books_text_fts (rowid, synopsis) VALUES (new.id, new.synopsis);
+END;
+CREATE TRIGGER IF NOT EXISTS books_text_fts_delete AFTER DELETE ON books BEGIN
+  INSERT INTO books_text_fts (books_text_fts, rowid, synopsis) VALUES ('delete', old.id, old.synopsis);
+END;
+CREATE TRIGGER IF NOT EXISTS books_text_fts_update AFTER UPDATE OF synopsis ON books
+  WHEN old.synopsis IS NOT new.synopsis BEGIN
+  INSERT INTO books_text_fts (books_text_fts, rowid, synopsis) VALUES ('delete', old.id, old.synopsis);
+  INSERT INTO books_text_fts (rowid, synopsis) VALUES (new.id, new.synopsis);
+END;
