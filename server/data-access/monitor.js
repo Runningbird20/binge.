@@ -42,11 +42,13 @@ function logToErrorLog(entry, req) {
 
 // Runs one catalog request (`what`, e.g. "select movies") and reports it if the
 // database failed or it was slow. Returns the request's result unchanged.
-async function watchCatalog(req, what, run, { log = logToErrorLog, now = Date.now } = {}) {
+// `shape` (optional) says which filters and order it used, so a slow one can
+// be found in the code.
+async function watchCatalog(req, what, run, { log = logToErrorLog, now = Date.now, shape = '' } = {}) {
   const started = now();
   const result = await run();
   const ms = now() - started;
-  const details = `${what}, ${(ms / 1000).toFixed(1)}s`;
+  const details = `${what}, ${(ms / 1000).toFixed(1)}s${shape ? `\n${shape}` : ''}`;
   if (result?.error && !isRequestMistake(result.error)) {
     const message = `Catalog error: ${result.error.message}`;
     if (firstInAWhile(message, started)) log({ message, stack: details }, req);
@@ -57,4 +59,19 @@ async function watchCatalog(req, what, run, { log = logToErrorLog, now = Date.no
   return result;
 }
 
-module.exports = { watchCatalog, isRequestMistake, SLOW_MS, QUIET_MS, _reset: () => lastLogged.clear() };
+// A query spec's filters and order without the values typed into them, e.g.
+// "where or(overview.ilike, synopsis.ilike), source_key.not.is order vote_average desc limit 8".
+function specShape(spec = {}) {
+  const filter = (f) => (f.operator === 'or' || f.operator === 'and')
+    ? `${f.operator}(${String(f.value).split(',').map((part) => part.split('.').slice(0, 2).join('.')).filter((v, i, all) => all.indexOf(v) === i).join(', ')})`
+    : `${f.column}.${f.operator}`;
+  const parts = [];
+  if (spec.filters?.length) parts.push(`where ${spec.filters.map(filter).join(', ')}`.slice(0, 300));
+  if (spec.orders?.length) parts.push(`order ${spec.orders.map((o) => `${o.column} ${o.ascending === false ? 'desc' : 'asc'}`).join(', ')}`);
+  if (spec.limit !== undefined) parts.push(`limit ${spec.limit}`);
+  if (spec.offset) parts.push(`offset ${spec.offset}`);
+  if (spec.count) parts.push(`count ${spec.count}`);
+  return parts.join(' ');
+}
+
+module.exports = { watchCatalog, specShape, isRequestMistake, SLOW_MS, QUIET_MS, _reset: () => lastLogged.clear() };

@@ -36,6 +36,7 @@ export function PlaybackOptionsPanel({
   blockedCount = 0,
   health = {},
   popupsBlockedNow,
+  appCaptions,
   onClose,
 }) {
   const current = servers.find((server) => server.id === currentServer);
@@ -100,6 +101,37 @@ export function PlaybackOptionsPanel({
           <WarningCircle size={16} weight="bold" /> Not playing? Try the next server
         </button>
       </div>
+
+      {appCaptions && (
+        <div className="st-pb-col">
+          <h3>binge. captions</h3>
+          <ul role="radiogroup" aria-label="binge. captions">
+            {[[true, 'On'], [false, 'Off']].map(([value, label]) => (
+              <li key={label}>
+                <button type="button" role="radio" aria-checked={appCaptions.on === value} className={appCaptions.on === value ? 'active' : ''} onClick={() => { if (appCaptions.on !== value) appCaptions.toggle(); }}>
+                  <span className="st-pb-check">{appCaptions.on === value && <Check size={14} weight="bold" />}</span>{label}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {appCaptions.on && (
+            <>
+              <p className="st-pb-hint">
+                {!appCaptions.loaded ? 'Finding captions…'
+                  : appCaptions.shift === 0 ? 'Timing: as the file has them.'
+                  : `Lines show ${Math.abs(appCaptions.shift).toFixed(1)}s ${appCaptions.shift > 0 ? 'later' : 'earlier'}.`}
+              </p>
+              <div className="st-pb-timing">
+                <button type="button" className="st-btn st-btn--ghost" onClick={() => appCaptions.nudge(-0.5)} disabled={!appCaptions.loaded}>Earlier (0.5s)</button>
+                <button type="button" className="st-btn st-btn--ghost" onClick={() => appCaptions.nudge(0.5)} disabled={!appCaptions.loaded}>Later (0.5s)</button>
+                {appCaptions.shift !== 0 && <button type="button" className="st-btn st-btn--ghost" onClick={appCaptions.reset}>Reset</button>}
+                {appCaptions.nextVersion && <button type="button" className="st-btn st-btn--ghost" onClick={appCaptions.nextVersion}>Another version</button>}
+              </div>
+              <p className="st-pb-hint">Drawn by binge. inside the video, in your subtitle language. A timing fix is remembered and shared, so other viewers start in sync. Turn the server's own captions off if both show.</p>
+            </>
+          )}
+        </div>
+      )}
 
       {onClose && (
         <button type="button" className="st-btn st-btn--secondary st-pb-done" onClick={onClose}>Done</button>

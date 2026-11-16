@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS = {
   dataSaver: false,   // ask servers for lower quality
   haptics: true,      // vibration feedback on supported phones
   captionsFirst: true, // prefer servers that turn subtitles on themselves
+  bingeMode: false,   // next episode at the credits, known intros skipped
 };
 
 function storageKey() {

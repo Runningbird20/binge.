@@ -127,9 +127,6 @@ object SportsFeed {
         "Wrestling" to "Combat Sports", "Motorsport" to "Racing", "Motorsports" to "Racing")
     private val durations = mapOf("Basketball" to 3.0, "Soccer" to 2.25, "American Football" to 3.5, "Baseball" to 3.5, "Hockey" to 3.0,
         "Combat Sports" to 5.0, "Tennis" to 3.0, "Golf" to 5.0, "Racing" to 3.0, "Rugby" to 2.0, "Cricket" to 8.0)
-    private val streamedCategories = mapOf("basketball" to "Basketball", "football" to "Soccer", "american-football" to "American Football",
-        "hockey" to "Hockey", "baseball" to "Baseball", "motor-sports" to "Racing", "fight" to "Combat Sports", "tennis" to "Tennis",
-        "rugby" to "Rugby", "golf" to "Golf", "cricket" to "Cricket")
     private val streamfreeCategories = mapOf("soccer" to "Soccer", "basketball" to "Basketball", "hockey" to "Hockey", "combat" to "Combat Sports",
         "baseball" to "Baseball", "football" to "American Football", "racing" to "Racing", "tennis" to "Tennis", "cricket" to "Cricket")
 
@@ -144,11 +141,11 @@ object SportsFeed {
     suspend fun load(): List<SportGame> = loadFresh().also { latest = it; latestAt = System.currentTimeMillis() }
 
     private suspend fun loadFresh(): List<SportGame> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        // Streamed closed in November 2026; its feed is no longer asked.
         val ppv = async { fetchPPV() }
-        val streamed = async { fetchStreamed() }
         val streamfree = async { fetchStreamFree() }
         val disabled = ServerSwitches.disabledServers()
-        val all = (ppv.await() + streamed.await() + streamfree.await()).mapNotNull { game ->
+        val all = (ppv.await() + streamfree.await()).mapNotNull { game ->
             if (disabled.isEmpty()) game else game.copy(streams = game.streams.filter { s -> s.switchKeys.none { it in disabled } })
                 .takeIf { it.streams.isNotEmpty() }
         }
@@ -200,38 +197,6 @@ object SportsFeed {
                     colors = s["colors"].arr().mapNotNull { it.str() }.ifEmpty { null },
                 )
             }
-        }
-        return out
-    }
-
-    private suspend fun fetchStreamed(): List<SportGame> {
-        val matches = fetch("https://streamed.pk/api/matches/all").arr()
-        val now = System.currentTimeMillis()
-        val out = ArrayList<SportGame>()
-        for (match in matches) {
-            val m = match.obj() ?: continue
-            val sources = m["sources"].arr()
-            if (sources.isEmpty()) continue
-            val category = streamedCategories[m["category"].str() ?: ""] ?: "Other"
-            val starts = date(m["date"])
-            val ends = starts?.plus(((durations[category] ?: 3.0) * 3_600_000).toLong())
-            if (ends != null && now > ends) continue
-            val teams = m["teams"].obj()
-            val home = teams?.get("home").obj(); val away = teams?.get("away").obj()
-            fun badge(team: JsonObject?) = team?.get("badge").str()?.let { "https://streamed.pk/api/images/badge/$it.webp" }
-            val names = home?.get("name").str()?.let { h -> away?.get("name").str()?.let { a -> h to a } }
-            out += SportGame(
-                id = "streamed:${m["id"].str() ?: UUID.randomUUID()}", title = m["title"].str() ?: "Live", category = category,
-                startsAt = starts, endsAt = ends, alwaysLive = starts == null, teams = names,
-                logos = if (names == null) null else badge(home) to badge(away),
-                poster = m["poster"].str()?.let { "https://streamed.pk$it" },
-                streams = sources.mapNotNull { src ->
-                    val o = src.obj() ?: return@mapNotNull null
-                    val source = o["source"].str() ?: return@mapNotNull null
-                    val id = o["id"].str() ?: return@mapNotNull null
-                    SportStream("Streamed · $source", streamedSource = source, streamedId = id)
-                },
-            )
         }
         return out
     }

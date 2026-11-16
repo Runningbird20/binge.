@@ -308,7 +308,7 @@ private fun LoadingCard(model: PlayerModel, modifier: Modifier) {
 // a level, then closes; focus can't wander out of the sidebar.
 private enum class Pane(val title: String) {
     MENU("Options"), AUDIO("Audio"), SUBTITLES("Subtitles"), TIMING("Subtitle timing"), SERVER("Server"),
-    PICTURE("Picture"), QUALITY("Quality"), SLEEP("Sleep timer"), EPISODES("Episodes"),
+    PICTURE("Picture"), QUALITY("Quality"), SLEEP("Sleep timer"), EPISODES("Episodes"), INFO("Playback info"),
 }
 
 @Composable
@@ -363,9 +363,16 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                             if (!model.request.isLive) add(Triple(Pane.QUALITY, "Quality", QualityPreference.current.label))
                             add(Triple(Pane.SLEEP, "Sleep timer", model.sleep.label))
                             if (model.isEpisode && episodes.isNotEmpty()) add(Triple(Pane.EPISODES, "Episodes", "Season ${model.request.season ?: 1}"))
+                            add(Triple(Pane.INFO, "Playback info", model.playback.height.takeIf { it > 0 }?.let { "${it}p" } ?: ""))
                         }
                         items(rows, key = { it.first.name }) { (target, label, value) ->
                             SideItem(label, value, chevron = true, modifier = if (target == from || (from == Pane.MENU && target == rows.first().first)) Modifier.focusRequester(firstFocus) else Modifier) { open(target) }
+                        }
+                        if (model.isEpisode) item(key = "autoskip") {
+                            var on by remember { mutableStateOf(com.binge.tv.data.IntroSkips.isOn(model.request.title)) }
+                            SideItem("Skip intros automatically", if (on) "On for ${model.request.title.name}" else "Off · Binge mode skips every show's") {
+                                on = !on; com.binge.tv.data.IntroSkips.set(model.request.title, on)
+                            }
                         }
                         item { Spacer(Modifier.height(10.dp)) }
                         item { SideItem("Close options", "Back to the video") { close() } }
@@ -426,6 +433,27 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                     }
                     Pane.SLEEP -> items(SleepOption.entries.filter { it != SleepOption.EPISODE || model.isEpisode }, key = { it.name }) { option ->
                         SideItem(option.label, selected = model.sleep == option, modifier = if (model.sleep == option) Modifier.focusRequester(firstFocus) else Modifier) { model.chooseSleep(option); close() }
+                    }
+                    Pane.INFO -> {
+                        // What's playing and how well: when something buffers, this
+                        // says whether it's the server, the connection or the stream.
+                        val p = model.playback
+                        fun rate(bits: Long) = if (bits >= 1_000_000) "%.1f Mbps".format(bits / 1_000_000.0) else if (bits > 0) "${bits / 1000} kbps" else "—"
+                        val rows = buildList {
+                            add("Server" to (model.server?.name ?: "Choosing…"))
+                            add("Player" to if (p.native) "Android's player" else "The server's page")
+                            add("Picture" to (p.height.takeIf { it > 0 }?.let { "${it}p" + if (p.fps > 0) " · %.3g fps".format(p.fps) else "" } ?: "Not known yet"))
+                            if (p.native && p.bitrate > 0) add("Stream bitrate" to rate(p.bitrate.toLong()))
+                            if (p.native && p.bandwidth > 0) add("Download speed" to rate(p.bandwidth) + if (p.bitrate > 0) " (%.1f× what it needs)".format(p.bandwidth.toDouble() / p.bitrate) else "")
+                            add("Buffered ahead" to if (p.ahead > 0) "%.0f seconds".format(p.ahead) else if (model.request.isLive) "Live" else "—")
+                            if (p.dropped >= 0) add("Dropped frames" to "${p.dropped}")
+                            if (p.native) add("Stalls" to "${p.stalls}")
+                            if (p.audioFormat.isNotEmpty()) add("Audio" to p.audioFormat)
+                        }
+                        items(rows, key = { it.first }) { (label, value) -> SideItem(label, value) {} }
+                        model.backupStatus?.let { status -> item { Note(status) } }
+                        item { Note(model.playbackDiagnosis) }
+                        item { SideItem("Done", modifier = Modifier.focusRequester(firstFocus)) { open(Pane.MENU) } }
                     }
                     Pane.EPISODES -> items(episodes, key = { it.id }) { episode ->
                         val current = episode.episodeNumber == model.request.episode

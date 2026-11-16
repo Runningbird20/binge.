@@ -51,6 +51,12 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
   - **The other crash** was Compose's `focusRestorer` pinning bug ("Release should only be called once"), fixed since Compose 1.9.
   - **Measured after:** a live game at a steady 60 fps, 0 dropped frames over 2 minutes.
   - **Keep heavy work off the main thread: a Fire Stick ANRs after 5s.**
+- **The native fall-back crash** (2026-11-13 to 15, on the stick, every few minutes on sports).
+  - **The crash.** `NullPointerException` in `ViewGroup.removeFromArray`, from `HybridEngine.fallBack` (retraced with `app/build/outputs/mapping/release/mapping.txt`).
+  - **Why.** `fallBack` took the native player's view off the frame while its player was still alive. Detaching the surface under a busy ExoPlayer fails it right there ("Detaching surface timed out"), inside `removeView`. That ran `fallBack` again, the view was removed twice, and Android crashed.
+  - **The fix.** Let go of the engine first, then `destroy()`: it releases the player before its view leaves the frame. `onPlayerError` is ignored once destroyed. Every other teardown already stopped the engine before removing its view.
+  - **What set it off.** A stick up 14 days had 150 MB available (ambient mode 232 MB, YouTube in the background), media services swapped out, load ~11. Every hardware decoder set-up hung, so every native start timed out and fell back. A restart gave 520 MB, and PPV + StreamFree played natively in ~12s. Debug builds log segment loads, load errors and player errors (`binge-perf`) to tell these apart.
+- **Sports feeds:** PPV and StreamFree. Streamed closed (November 2026) and isn't fetched. StreamFree's segments come from a TikTok image CDN as MPEG-TS behind a 64-byte PNG header; ExoPlayer's TS extractor finds the packets past it (checked on the stick, 1080p).
 - **Low memory.**
   - **Images.** The Coil memory cache is 8%, cleared on `onTrimMemory`.
   - **Lighter effects.** `Performance.light` ("Lighter effects" in Settings; on by default when the device is low-RAM/<2.5 GB) turns off focus zoom and makes ambient mode default off.
@@ -67,6 +73,12 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Focus traps.** Pages trap focus (`focusGroup` + `exit = Cancel`) so it can't fall onto the hidden tab bar. `FocusMemory`/`rememberFocus()` puts focus back on the card that opened a page.
 - **Player options** are a right-hand sidebar (`PlayerPanel`, `Pane`).
 - **Me tab.** Me → My List & Ratings is `LibraryScreen`. Quit (last, with a confirmation) leaves the app.
+
+## Ported from the Apple TV (2026-11-10)
+
+- **Data** (`data/Library.kt`, `People.kt`, `Ops.kt`, `Viewing.kt`): watched titles out of every row (`WatchedTitles`), finished shows, episode marking (`EpisodeStore`, `EpisodeMarking`), reminders, recent searches, Hide scores, people pages, announcements, crash reports (written on the uncaught exception, sent next launch), binge mode, per-show auto-skip (`IntroSkips`), shared server start times (`SharedServerStats`, device `fire-tv`), frame-rate matching (`DisplayMatch`, `preferredDisplayModeId`).
+- **Player:** Playback info (Options; ExoPlayer's buffer, bitrate, `DefaultBandwidthMeter` speed, stalls, audio format, fps), the backup stream (one page, only with fewer than 3 engines live), instant resume (`Warmup.park`; native streams only on a stick), binge mode at the credits, known intros skipped automatically.
+- **Not checked on hardware or with a network:** the emulator here has no DNS, so only "installs and starts without a crash" was checked.
 
 ## Testing
 

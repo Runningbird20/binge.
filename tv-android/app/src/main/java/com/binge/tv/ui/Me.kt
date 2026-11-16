@@ -306,6 +306,7 @@ fun SettingsScreen() {
             item { SettingRow("Subtitle background", "A box behind the words makes them easier to read on bright scenes.", PlaybackPrefs.captionBackgrounds,
                 PlaybackPrefs.captionBackground) { Prefs.set("captionBackground", it) } }
             item { OnOff("Skip intro button", "Shown during an episode's intro. Press ▼ while it shows to hide it for that episode.", PlaybackPrefs.skipIntroButton) { Prefs.set("skipIntroButton", it) } }
+            item { OnOff("Binge mode", "At the credits the next episode starts straight away (no countdown), and intros with a known timing are skipped.", com.binge.tv.data.Binge.on) { Prefs.set("bingeMode", it) } }
             item { SettingRow("Multiview layout", "With 2 or 3 games: equal tiles, or one big game with the others stacked beside it.",
                 listOf("grid" to "Equal tiles", "main" to "One big, others beside"), PlaybackPrefs.multiviewLayout) { Prefs.set("multiviewLayout", it) } }
             item { SettingRow("Multiview playback", "A Fire TV decodes only so much video. Smooth pauses the games it can't keep up with (OK resumes one); All games keeps every game playing, even if the extra ones stutter.",

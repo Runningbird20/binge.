@@ -129,7 +129,11 @@ object ServerSpeed {
     fun record(id: String, ms: Long) {
         val old = of(id)
         Prefs.set("speed.$id", (if (old == null) ms else (old * 2 + ms) / 3).toInt())
+        com.binge.tv.data.SharedServerStats.report(id)
     }
+
+    // A starting point from other Fire TVs, for a server this one hasn't timed.
+    fun seed(id: String, ms: Long) { if (of(id) == null && ms > 0) Prefs.set("speed.$id", ms.toInt()) }
 
     // Gave up without playing: counts as very slow.
     fun failed(id: String) = record(id, 40_000)
