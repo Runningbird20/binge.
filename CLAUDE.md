@@ -170,6 +170,12 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - **Overview** — the `admin_stats()` RPC (aggregates only; refuses non-admins).
   - **Servers** — status, Check now (`POST /api/ops/health-check`), and a per-server on/off switch in `server_config` that the player honors via `fetchDisabledServers`.
   - **Sports feeds** (`AdminSportsServers.js`, under Servers) — keys `sports:ppv` / `sports:streamfree` / `sports:timstreams` (its events and the TV-channel college games). `sports:streamed` / `sports:streamed:<source>` belong to Streamed, which closed. Disabled feeds are dropped before merging by `withoutDisabledFeeds` in `fetchSportsStreams`, and by `switchKeys` on the TVs.
+  - **Databases** (`AdminDatabases.js`). Health and fullness of both databases, from `GET /api/ops/databases` (`server/routes/databaseHealth.js`, admin only), checked when the tab opens and on Check again.
+    - **Health.** Each check shows up, slow (over 1.5s) or down, with its response time. Supabase: a query, Auth's `/auth/v1/health`, Storage. Turso: a catalog query.
+    - **How full.** A meter list against the plan's limits; gold at 80%, red at 95%, and the row says so in words.
+      - **Supabase:** database and file storage from `admin_database_stats()`, which only the service role can call (migration `20261116130000_admin_database_stats.sql`). Also its largest tables.
+      - **Turso:** storage from `PRAGMA page_count × page_size` (no rows read), plus the stored catalog counts. With `TURSO_PLATFORM_TOKEN` + `TURSO_ORG`, also this month's rows read and written from Turso's Platform API, which is what it bills.
+    - **Plan limits.** Free unless `SUPABASE_PLAN=pro`; Turso's plan comes from its API, else `TURSO_PLAN`. They're in `PLANS` in `databaseHealth.js`; update them when the vendors' pricing changes.
   - **Errors.**
   - **Announcements** — `site_announcements` → `AnnouncementBanner` on every page.
   - **Notifications** — `POST /api/ops/broadcast`, a push to every device.
@@ -434,12 +440,16 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 - **Before adding or removing a server, test it embedded in an iframe on a non-provider origin and watch for real HLS/MP4 requests.** A 200 page proves nothing: vsembed.ru serves its page but shows "This media is unavailable", and vidsrc.ru is a different, working service. Test it sandboxed too, and set its `sandbox` flag (below).
 - **Pop-ups are blocked by sandboxing the player** (`utils/popupSandbox.js`, `player/usePopupSandbox.js`).
   - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
-  - **Which servers.** Retested 2026-11-09 in Chrome, every server on three titles: VidRift, CineSrc, VidSpark, VidCore and EmbedWave play sandboxed. Every other server shows a "sandbox detected" page (2Embed goes black), so each server carries a tested `sandbox` flag in `embedProviders.js`.
-  - **The safety net.** A sandboxed server that reports playback but shows none after 12s reloads unsandboxed. If it then plays, the refusal is remembered on that device for 14 days. A server without the flag is only tried sandboxed if it reports playback.
+  - **Which servers.** Retested 2026-11-16 in Chrome and in WebKit (Safari's engine), every server sandboxed and not, on three titles. A server counted as playing once its full-length `<video>` had played 5 seconds. VidRift, CineSrc, VidSpark and EmbedWave play sandboxed, and VidCore does when it plays at all. Sandboxed, every other server shows a refusal or ad page instead (Videasy's domain no longer resolves), so each server carries a tested `sandbox` flag in `embedProviders.js`. Only `true` sandboxes a server; an untested one loads normally.
+  - **Testing a flag.** Watch the `<video>` in every frame, not the server's messages. VidLink, VixSrc and both VidSrcs keep posting playback times behind their "disable the sandbox" page. Watch for a minute too: some players are replaced by ads or gates after the first seconds.
+  - **The safety net** (event servers only). A sandboxed load counts as working only once the server reports 5 seconds of playback (`SANDBOX_PLAY_SECONDS`), not just a time. A resume position or a frozen first frame isn't playback; CineSrc once froze that way in WebKit.
+    - **Reload.** A load that reports nothing within 12s, or doesn't play 5 seconds within 12s of its first time, reloads unsandboxed. If that load plays 5 seconds, the refusal is remembered on that device for 14 days.
+    - **Waiting.** A pause reported after the start holds the countdown. So does a `clickToStart` server (VidSpark) that hasn't started yet: it may be waiting for the viewer's click.
   - **Also sandboxed:** the next-episode preload uses the same decision.
   - **The server lists mark them "No pop-ups"** (`NoPopupsTag` in `PlaybackOptions.js`, a shield on the phone's landscape server chips). It's the same `popupsBlocked()` the player uses, so a refusal this device learned drops the mark. For the server playing now it shows what happened on this load (`popupsBlockedNow`).
   - **Not sandboxed:** Sports. StreamFree refuses the sandbox and PPV shows "Remove sandbox attributes", and sports feeds don't report playback, so a refusal couldn't be noticed.
-  - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site.
+  - **Unsandboxed, the servers misbehave.** VidLink, CineSrc and StreamFree opened pop-ups on the first click, and 2Embed navigated the whole tab to its own site. On 2026-11-16 every click VidSpark needed opened an ad pop-up, and VidCore's gates opened adult and gambling ones.
+  - **A sandbox can't stop a frame navigating itself.** On 2026-11-16, about 13s into playback, VidRift's own page sent the player to ad pages, sandboxed or not.
 
 **Up Next / binge mode.** Servers' own auto-next is turned off in their URLs, except VidRift's, which has no switch for it (nor do VixSrc, VidSpark, VidCore and EmbedWave document one).
 - **Episode changes inside VidRift** (its Next button, Episodes menu or own Up Next) are followed: it posts `vidrift:episode` just before switching, and every VidRift message carries `tmdbId`, `season` and `episode`, which also catches a missed switch (`useServerEpisode`, `readServerEpisode`).
@@ -465,11 +475,22 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
 
 ### Reminders, alerts & calendar
 
-- **New-episode push.** Web Push with the `push_subscriptions`/`push_notified` tables. A daily Vercel cron, `GET /api/cron/new-episodes` (`server/routes/cron.js`), needs `CRON_SECRET`, `VAPID_*` and the service-role key. The `push`/`notificationclick` handlers are in `public/sw.js`. iPhones need the site installed to the Home Screen.
+- **New-episode alerts** (`sendNewEpisodeAlerts`, a daily Vercel cron at `GET /api/cron/new-episodes` in `server/routes/cron.js`):
+  - **For every profile**, notifications on or not. Each show on a profile's list (unless finished) or in its Continue Watching with an episode aired in the last 2 days goes into that profile's notification inbox. A row saved without a profile counts as the default profile's.
+  - **Push.** Web Push (`push_subscriptions`) goes to the devices of those profiles; a device saved without a profile counts as the default profile's. The `push`/`notificationclick` handlers are in `public/sw.js`. iPhones need the site installed to the Home Screen.
+  - **Once per account.** `push_notified` claims each episode before anything is sent, so a re-run never repeats it.
+  - **Needs** `CRON_SECRET`, the service-role key and `TMDB_API_KEY`. `VAPID_*` is needed only for the push part.
 - **Reminders** (`watch_reminders`, `src/utils/reminders.js`, `RemindButton`, `ReminderWatcher`):
   - Delivered in the app when due, and by push via `GET /api/cron/reminders`.
   - Vercel Hobby crons are daily, so frequent delivery needs Supabase pg_cron: `supabase/manual/schedule_reminders.sql` (fill in the site URL + CRON_SECRET, run once).
   - That job also runs the server uptime probe and the followed-team alerts.
+- **Notification inbox** (`notifications`, migration `20261116120000_notifications_inbox.sql`; `utils/notificationsInbox.js`, `hooks/useNotifications.js`, `NotificationBell`):
+  - **Where.** A bell in the header, left of the profile; on phones, the top right, opening a bottom sheet. A gold dot on the bell while anything is unread, and on each unread alert. Opening an alert marks it read and follows its link; "Mark all read" does them all.
+  - **What's kept.** Every alert binge. sends: new episodes (every profile, notifications on or not), due reminders, followed-team game alerts, admin broadcasts and server alerts to admins. Server code writes rows with `recordNotifications` (`server/routes/cron.js`), which never stops the push itself: a failed insert only logs.
+  - **Who sees what.** A row with a `profile_id` belongs to that profile. A null one (broadcasts, server alerts) belongs to the whole account, and every profile sees it. Broadcasts go into every account's inbox, notifications on or not.
+  - **Access.** RLS lets a user read their own rows and change only `read_at`; the service role writes them. The daily new-episodes cron deletes rows past 30 days.
+  - **Empty or missing.** No alerts reads "All caught up". So does a Supabase without the table yet (`PGRST205`, before the migration runs), with a console hint naming the migration. Any other failed load shows "Couldn't load" with Try again.
+  - **Freshness.** The list reloads on a profile switch, every 5 minutes while visible, and when the tab returns or the bell opens, unless the last load is under a minute old.
 - **Release calendar** (`/calendar`, `utils/releaseCalendar.js`): next episodes and premieres of My List + Continue Watching shows, upcoming list movies, and Coming Soon. The `.ics` export uses the share sheet on phones and downloads a file on computers.
 
 ### Wrapped & ticket book
@@ -666,6 +687,10 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
     - `GOOGLE_BOOKS_API_KEY` — book previews.
   - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
   - **Optional:** `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` (popular titles for the `media` route's relevance sort), `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
+  - **Admin → Databases (optional):**
+    - `TURSO_PLATFORM_TOKEN` and `TURSO_ORG`: this month's rows read/written and the real plan. The token is a Turso Platform API token from `turso auth api-tokens mint`, not the database token.
+    - `TURSO_DATABASE_NAME`: only if the hostname isn't `<database>-<org>.…`.
+    - `TURSO_PLAN` / `SUPABASE_PLAN`: the plans whose limits to measure against, `free` by default.
 - **Scripts and tests only:** the Goodreads scraper credentials, `SUPABASE_DB_URL` (`npm run supabase:sql`), and `E2E_*`.
 
 ## Testing notes

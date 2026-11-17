@@ -1,13 +1,14 @@
 import SlidingTabs from '../components/SlidingTabs';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, ChartLineUp, HardDrives, Megaphone, Bug, UserPlus, Users } from '@phosphor-icons/react';
+import { Bell, ChartLineUp, Database, HardDrives, Megaphone, Bug, UserPlus, Users } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import AdminOverview from './admin/AdminOverview';
 import AdminServers from './admin/AdminServers';
 import AdminSportsServers from './admin/AdminSportsServers';
+import AdminDatabases from './admin/AdminDatabases';
 import AdminErrors from './admin/AdminErrors';
 import AdminAnnouncements from './admin/AdminAnnouncements';
 import AdminBroadcast from './admin/AdminBroadcast';
@@ -18,6 +19,7 @@ import { fetchAdminAccountRequests } from '../utils/accountRequests';
 const TABS = [
   { id: 'overview', label: 'Overview', Icon: ChartLineUp },
   { id: 'servers', label: 'Servers', Icon: HardDrives },
+  { id: 'databases', label: 'Databases', Icon: Database },
   { id: 'errors', label: 'Errors', Icon: Bug },
   { id: 'announcements', label: 'Announcements', Icon: Megaphone },
   { id: 'notify', label: 'Notifications', Icon: Bell },
@@ -72,6 +74,7 @@ export default function AdminHome() {
 
         {tab === 'overview' && <AdminOverview onOpenTab={open} />}
         {tab === 'servers' && <><AdminServers /><AdminSportsServers /></>}
+        {tab === 'databases' && <AdminDatabases />}
         {tab === 'errors' && <AdminErrors />}
         {tab === 'announcements' && <AdminAnnouncements />}
         {tab === 'notify' && <AdminBroadcast deviceCount={badges.devices} />}

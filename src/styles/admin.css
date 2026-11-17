@@ -23,7 +23,8 @@
 
 /* ── Admin control center ─────────────────────────────────────── */
 
-.adm-page { max-width: 1180px; }
+/* Wide enough for every tab, badges included, on one line. */
+.adm-page { max-width: 1280px; }
 
 .adm-muted { color: rgba(255, 255, 255, 0.6); font-size: 0.88rem; margin: 0.2rem 0 0; }
 
@@ -241,4 +242,70 @@
   .adm-users td:nth-of-type(2)::before { content: '· Seen '; color: rgba(255, 255, 255, 0.45); }
   .adm-user-email { max-width: 100%; }
   .adm-confirm { flex-wrap: wrap; }
+}
+
+/* Admin: databases (AdminDatabases.js). A checks table per database, then a
+   meter list: name, bar against the plan's limit, figure, with the bars
+   aligned; on narrow screens the bar drops under the name. Track and fill are
+   steps of one hue; near the limit the fill turns warning (80%) or critical
+   (95%) and the row says so in words. */
+
+.adm-db-intro .adm-panel-head:last-child { margin-bottom: 0; }
+
+.adm-db-name { display: flex; align-items: center; gap: 0.55rem; }
+
+.adm-db-name .adm-server-state { margin-left: 0.2rem; }
+
+.adm-db .admin-status-dot { display: inline-block; }
+
+.adm-db-checks { margin-top: 0.9rem; }
+
+.adm-db-detail { color: rgba(255, 255, 255, 0.6); }
+
+.adm-db-sub { margin: 1.4rem 0 0.3rem; font-size: 0.95rem; font-weight: 700; }
+
+/* Rows share the list's columns (subgrid), so every bar starts and ends at
+   the same place; a browser without subgrid sizes each row on its own. */
+.adm-meters { display: grid; grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr) max-content; column-gap: 1.2rem; list-style: none; margin: 0; padding: 0; }
+
+.adm-meter {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr) minmax(12rem, max-content);
+  grid-template-columns: subgrid;
+  align-items: center;
+  column-gap: 1.2rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.adm-meter:last-child { border-bottom: 0; }
+
+.adm-meter-name { color: rgba(255, 255, 255, 0.72); }
+
+.adm-meter-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+
+.adm-meter-fill { display: block; height: 100%; min-width: 3px; border-radius: 4px; background: rgba(255, 255, 255, 0.72); }
+
+.adm-meter--high .adm-meter-fill { background: #f5c451; }
+
+.adm-meter--full .adm-meter-fill { background: #ff7b72; }
+
+.adm-meter-figure { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* No known limit: no bar, the figure takes its place. */
+.adm-meter > .adm-meter-figure:nth-child(2) { grid-column: 2 / -1; }
+
+.adm-meter-flag { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: 0.5rem; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+
+.adm-meter--high .adm-meter-flag { color: #f5c451; }
+
+.adm-meter--full .adm-meter-flag { color: #ff7b72; }
+
+@media (max-width: 700px) {
+  .adm-meters { display: block; }
+  .adm-meter { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name figure' 'bar bar'; row-gap: 0.45rem; }
+  .adm-meter-name { grid-area: name; }
+  .adm-meter-figure { grid-area: figure; white-space: normal; }
+  .adm-meter-track { grid-area: bar; }
 }

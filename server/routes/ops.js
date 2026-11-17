@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { serviceClient, userFromRequest, adminOnly } = require('../middleware/supabaseAdmin');
 const cron = require('./cron');
+const { databaseReport } = require('./databaseHealth');
 
 const router = express.Router();
 
@@ -66,7 +67,17 @@ router.post('/health-check', adminOnly(async (req, res, db) => {
   }
 }));
 
-// Push a message to every device with notifications on.
+// Health of both databases and how full they are (Admin → Databases).
+router.get('/databases', adminOnly(async (req, res, db) => {
+  try {
+    res.json(await databaseReport({ supabase: db }));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}));
+
+// Push a message to every device with notifications on, and put it in every
+// account's notification inbox (notifications on or not).
 router.post('/broadcast', adminOnly(async (req, res, db) => {
   const title = String(req.body?.title || '').trim().slice(0, 80);
   const body = String(req.body?.body || '').trim().slice(0, 200);
@@ -76,7 +87,9 @@ router.post('/broadcast', adminOnly(async (req, res, db) => {
   if (!cron.setupPush()) return res.status(503).json({ error: 'Push isn’t configured (VAPID keys).' });
   const { data: subs } = await db.from('push_subscriptions').select('id, endpoint, p256dh, auth');
   const result = await cron.pushTo(db, subs || [], JSON.stringify({ title, body, url, tag: `broadcast-${Date.now()}` }));
-  res.json({ devices: (subs || []).length, ...result });
+  const { data: accounts } = await db.from('profiles').select('id');
+  const inbox = await cron.recordNotifications(db, (accounts || []).map((account) => cron.inboxRow({ userId: account.id, kind: 'announcement', title, body, url })));
+  res.json({ devices: (subs || []).length, ...result, inbox });
 }));
 
 module.exports = router;

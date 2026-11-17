@@ -4,18 +4,24 @@
 // so the browser itself refuses every pop-up, pop-under and redirect the
 // player or an ad inside it tries (nested frames inherit the sandbox).
 //
-// Some players refuse to run sandboxed. They're loaded normally when:
-//   - testing showed it (PROVIDERS[].sandbox === false in embedProviders.js), or
-//   - this device learned it: a sandboxed load that never started playing,
-//     then an unsandboxed load of the same server that did. Remembered for
-//     14 days, then the sandbox is tried again (servers change).
+// Some players refuse to run sandboxed, so a server is sandboxed only when
+// testing showed its video playing 5+ seconds in a sandboxed frame
+// (PROVIDERS[].sandbox === true in embedProviders.js). An untested server
+// loads normally: what it reports can't prove the sandbox works, because
+// VidLink, VixSrc and VidSrc keep reporting playback time behind their
+// "disable the sandbox" page. A tested server also loads normally where this
+// device learned that it refuses (usePopupSandbox): a sandboxed load that
+// didn't play, then an unsandboxed load of the same server that did.
+// Remembered for 14 days, then the sandbox is tried again (servers change).
 
-import { EVENT_PROVIDERS, PROVIDERS } from './embedProviders';
+import { PROVIDERS } from './embedProviders';
 
 // No allow-popups, allow-popups-to-escape-sandbox, allow-top-navigation*,
 // allow-modals (alert/confirm traps) or allow-downloads. allow-same-origin
 // keeps the player's own storage and CORS requests working; it can't lift
-// the sandbox because the frame is cross-origin.
+// the sandbox because the frame is cross-origin. WebKit (Safari, every iPhone
+// browser) doesn't know allow-presentation or allow-orientation-lock: it logs
+// an error and ignores just those two.
 export const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock';
 
 const KEY = 'binge:popupSandbox:refused';
@@ -25,6 +31,29 @@ export const RETRY_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 // before it's reloaded unsandboxed (well inside FAILOVER_SECONDS, so a
 // title the server doesn't have still fails over on time).
 export const SANDBOX_CHECK_SECONDS = 12;
+
+// A load counts as playing once its video has played this long. A reported
+// time alone proves nothing: it can be the resume position, or the first
+// frame of a video that then froze (CineSrc did once in WebKit, sandboxed).
+export const SANDBOX_PLAY_SECONDS = 5;
+
+// Seconds of video this load has played, from the times the server reports
+// (sampled once a second). Counting starts at the first new time, not at 0:
+// that time may be a resume position, and `staleTime` (what the previous load
+// of the same server last reported) is ignored. A jump back, or further ahead
+// than the clock moved, is a seek and starts the count again.
+export function createPlaybackMeter(staleTime = 0) {
+  let first = null;
+  let last = { time: staleTime, at: 0 };
+  return function read(time, now) {
+    if (time > 0 && time !== last.time) {
+      const seeked = first && (time < last.time || time - last.time > (now - last.at) / 1000 + 3);
+      if (!first || seeked) first = { time };
+      last = { time, at: now };
+    }
+    return { started: Boolean(first), played: first ? last.time - first.time : 0 };
+  };
+}
 
 function readRefusals(storage) {
   try {
@@ -42,20 +71,19 @@ function writeRefusals(storage, refusals) {
 const defaultStorage = () => (typeof window !== 'undefined' ? window.localStorage : null);
 
 // Whether this server's player should load sandboxed. `known` is the
-// server's tested setting (true / false / undefined = untested, try it).
+// server's tested setting: only true sandboxes (false / undefined = refuses
+// or untested).
 export function shouldSandbox(providerId, known, { storage = defaultStorage(), now = Date.now() } = {}) {
-  if (!providerId || known === false) return false;
+  if (!providerId || known !== true) return false;
   const refusedAt = Number(readRefusals(storage)[providerId]) || 0;
   return !(refusedAt && now - refusedAt < RETRY_AFTER_MS);
 }
 
 // Whether this server's player loads with its pop-ups blocked on this
-// device: its tested setting (an untested server only if it reports
-// playback, so a refusal can be noticed), unless this device learned that it
-// refuses the sandbox. The player and the server lists both use this.
+// device: tested to play sandboxed, unless this device learned that it
+// refuses. The player and the server lists both use this.
 export function popupsBlocked(providerId, options) {
-  const tested = PROVIDERS.find((entry) => entry.id === providerId)?.sandbox;
-  return shouldSandbox(providerId, tested ?? (EVENT_PROVIDERS.has(providerId) ? undefined : false), options);
+  return shouldSandbox(providerId, PROVIDERS.find((entry) => entry.id === providerId)?.sandbox, options);
 }
 
 // This server wouldn't play sandboxed on this device.
