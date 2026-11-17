@@ -4,9 +4,9 @@ binge. accounts are by request. Nobody can make an account without the admin's a
 
 ## How it works
 
-1. **Asking.** `/signup` without an invite is the **Request an account** form (name, email, an optional note). The request is saved in `account_requests` and the admin gets an email with a **Review the request** link.
+1. **Asking.** `/signup` without an invite is the **Request an account** form (name, email, an optional note). The request is saved in `account_requests`, and the admin gets an email with a link to approve or deny it.
 2. **Deciding.** The link opens `/account-requests/review?token=…`, which works without signing in (the token is the permission), with **Approve** and **Deny** buttons. Admins can also decide in **Admin → Requests**, which lists every request.
-3. **Approving** emails the person a **Create your account** link: `/signup?invite=…`, valid for 14 days.
+3. **Approving** emails the person their invite ("Your binge. invite"): a link to `/signup?invite=…`, valid for 14 days.
 4. **Signing up.** That link opens the regular sign-up form (username, bio, avatar, password) with their email filled in and locked. The server creates the account (`POST /api/account/signup`, service role, email already confirmed by the invite), marks the request used, and the page signs them in.
 
 Code: `server/routes/invites.js` (+ `invites.test.js`), `server/mailer.js`, `src/utils/accountRequests.js`, `src/pages/Signup.js`, `src/pages/AccountRequestReview.js`, `src/pages/admin/AdminRequestsPanel.js`; table in `supabase/migrations/20261110140000_account_requests.sql`.
@@ -30,6 +30,11 @@ Code: `server/routes/invites.js` (+ `invites.test.js`), `server/mailer.js`, `src
    - `SITE_URL`: the site's address for links, for example `https://binge-26.vercel.app`. Optional on Vercel.
 
    Without email, everything still works: requests show in Admin → Requests, and approving shows the invite link to send by hand.
+
+   **Keeping them out of spam.** The emails are short plain-text notes with one link, on purpose. The earlier designed version (an HTML template with a big "Create your account" button) went to Gmail's spam as "similar to messages that were identified as spam in the past".
+   - Local runs without `SITE_URL` link to `http://localhost:3000`, which looks worse still, so judge delivery from the live site.
+   - Have recipients mark the first one "Not spam".
+   - If invites still land in spam, the lasting fix is a domain of your own for the site and for sending email.
 3. **Deploy**, then **turn off public sign-ups** in Supabase: Authentication → Sign In / Providers → turn off **Allow new users to sign up**. The server's service role can still create accounts. Until this is off, someone could still call Supabase's sign-up directly.
 4. **Optional:** use the same SMTP for Supabase's own emails (Authentication → Emails → SMTP Settings). Supabase's built-in sender only delivers to your Supabase team's addresses, so password-reset emails need it to reach everyone else.
 
