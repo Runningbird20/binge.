@@ -33,7 +33,6 @@ const TOKEN = /^[A-Za-z0-9_-]{20,100}$/;
 const hash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('base64url');
 const oneLine = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function siteUrl() {
   if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
@@ -70,16 +69,6 @@ function publicRequest(row) {
     decidedAt: row.decided_at || null,
     usedAt: row.used_at || null,
   };
-}
-
-function emailLayout(paragraphs, button) {
-  const body = paragraphs.map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.5;color:#1d2230">${p}</p>`).join('');
-  const action = button
-    ? `<p style="margin:22px 0"><a href="${escapeHtml(button.href)}" style="display:inline-block;padding:12px 22px;border-radius:999px;background:#111520;color:#ffffff;font-weight:700;text-decoration:none">${escapeHtml(button.label)}</a></p>
-       <p style="margin:0;font-size:12px;color:#6b7280">Or open this link: ${escapeHtml(button.href)}</p>`
-    : '';
-  return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-  <p style="margin:0 0 18px;font-size:22px;font-weight:800;color:#111520">binge.</p>${body}${action}</div>`;
 }
 
 // ── The data (Supabase, service role) ───────────────────────────────────
@@ -152,16 +141,12 @@ function createInviteHandlers({
     const recipients = to.length ? to : await store.adminEmails();
     if (!recipients.length) return false;
     const link = `${site()}/account-requests/review?token=${reviewToken}`;
-    const note = row.note ? `“${row.note}”` : 'No note.';
+    const note = row.note ? `Their note: “${row.note}”\n\n` : '';
     return sendMail({
       to: recipients.join(', '),
       replyTo: row.email,
-      subject: `binge. account request: ${row.name} (${row.email})`,
-      text: `${row.name} (${row.email}) asked for a binge. account.\n\n${note}\n\nApprove or deny it: ${link}\n`,
-      html: emailLayout([
-        `<strong>${escapeHtml(row.name)}</strong> (${escapeHtml(row.email)}) asked for a binge. account.`,
-        escapeHtml(note),
-      ], { href: link, label: 'Review the request' }),
+      subject: `New binge. account request from ${row.name}`,
+      text: `${row.name} (${row.email}) asked for a binge. account.\n\n${note}Approve or deny it here:\n${link}\n`,
     });
   }
 
@@ -184,12 +169,8 @@ function createInviteHandlers({
     const inviteLink = `${site()}/signup?invite=${inviteToken}`;
     const emailed = await sendMail({
       to: row.email,
-      subject: 'Your binge. account is approved',
-      text: `Hi ${row.name},\n\nYour request for a binge. account was approved. Create your account here (the link works for ${INVITE_DAYS} days):\n\n${inviteLink}\n`,
-      html: emailLayout([
-        `Hi ${escapeHtml(row.name)},`,
-        `Your request for a binge. account was approved. Pick a username and password to finish. The link works for ${INVITE_DAYS} days.`,
-      ], { href: inviteLink, label: 'Create your account' }),
+      subject: 'Your binge. invite',
+      text: `Hi ${row.name},\n\nYou asked for a binge. account, and it's ready for you. Use this link to pick a username and password (it works for ${INVITE_DAYS} days):\n\n${inviteLink}\n\nSee you there!\n`,
     });
     return { request: publicRequest(updated), emailed, inviteLink };
   }
