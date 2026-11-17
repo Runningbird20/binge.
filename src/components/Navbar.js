@@ -5,6 +5,7 @@ import UserAvatar from './UserAvatar';
 import ProfileAvatar from './ProfileAvatar';
 import GlobalSearch from './GlobalSearch';
 import InstallApp from './InstallApp';
+import NotificationBell from './NotificationBell';
 
 const NAV_LINKS = [
   { to: '/home',      label: 'Home',      Icon: House },
@@ -37,6 +38,7 @@ export default function Navbar() {
         {user ? (
           <>
             <div className="navbar-left">
+              <NotificationBell />
               <div className="navbar-profile-wrap">
                 <NavLink
                   to="/profile"
@@ -135,7 +137,7 @@ export default function Navbar() {
         ) : (
           <div className="navbar-links">
             <Link to="/login">Log in</Link>
-            <Link to="/signup" className="btn-primary">Sign up</Link>
+            <Link to="/signup" className="btn-primary">Request account</Link>
           </div>
         )}
       </nav>

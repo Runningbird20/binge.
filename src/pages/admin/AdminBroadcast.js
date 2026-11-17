@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { PaperPlaneTilt } from '@phosphor-icons/react';
 import { api } from '../../api';
 
-// Send a push notification to every device that has notifications on.
+// Send a push notification to every device that has notifications on. It also
+// goes into every account's notification inbox (the bell in the header).
 export default function AdminBroadcast({ deviceCount }) {
   const [form, setForm] = useState({ title: '', body: '', url: '/home' });
   const [state, setState] = useState('');
@@ -14,7 +15,7 @@ export default function AdminBroadcast({ deviceCount }) {
     setState('Sending…');
     try {
       const result = await api.post('/ops/broadcast', form);
-      setState(`Sent to ${result.sent} of ${result.devices} devices${result.removed ? ` (${result.removed} expired ones cleaned up)` : ''}.`);
+      setState(`Sent to ${result.sent} of ${result.devices} devices${result.removed ? ` (${result.removed} expired ones cleaned up)` : ''}${result.inbox ? `, and to ${result.inbox} inboxes` : ''}.`);
       setForm({ title: '', body: '', url: '/home' });
     } catch (error) {
       setState(error.message);
@@ -24,7 +25,7 @@ export default function AdminBroadcast({ deviceCount }) {
   return (
     <section className="adm-panel" aria-labelledby="adm-push-title">
       <h3 id="adm-push-title">Send a notification</h3>
-      <p className="adm-muted">Goes to every device with binge. notifications on ({deviceCount ?? '…'} right now). Use sparingly.</p>
+      <p className="adm-muted">Goes to every device with binge. notifications on ({deviceCount ?? '…'} right now), and into everyone’s notification inbox. Use sparingly.</p>
       <form className="adm-form" onSubmit={(event) => { event.preventDefault(); setConfirming(true); }}>
         <label className="adm-field adm-field--wide">
           <input aria-label="Title" placeholder="Title" type="text" value={form.title} onChange={update('title')} maxLength={80} required />

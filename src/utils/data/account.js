@@ -1,6 +1,6 @@
 // Auth and account data: sign in/up/out, the account profile row, the
 // account's sub-profiles, avatar uploads and the people directory.
-import { getSessionlessSupabaseClient, getSupabaseSession, isSupabaseConfigured, supabase } from '../supabase';
+import { getSupabaseSession, isSupabaseConfigured, supabase } from '../supabase';
 import { resolveUserType } from '../userAccess';
 import { AUTH_REQUEST_TIMEOUT_MS, getAuthenticatedUser, requireSupabase, toFriendlyError, withTimeout, withTimeoutRetry } from './shared';
 import { averageRatingValue } from './library';
@@ -306,98 +306,6 @@ export async function signInWithSupabase({ email, password }) {
   }
 
   return resolveSupabaseProfile(data.user);
-}
-
-export async function signUpWithSupabase({ username, email, password, bio, avatarUrl }) {
-  const client = requireSupabase();
-  const { data, error } = await withTimeoutRetry(
-    () => client.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
-          bio,
-          avatar_url: avatarUrl || null,
-        },
-      },
-    }),
-    AUTH_MUTATION_TIMEOUT_MS,
-    'Supabase sign-up timed out.'
-  );
-
-  if (error) {
-    throw new Error(toFriendlyError(error, 'Unable to create your account.'));
-  }
-
-  if (!data.user) {
-    throw new Error('Unable to create your account.');
-  }
-
-  if (!data.session) {
-    return {
-      user: null,
-      requiresEmailConfirmation: true,
-    };
-  }
-
-  const user = await resolveSupabaseProfile(data.user, {
-    username,
-    email,
-    bio,
-    avatarUrl,
-  });
-
-  return {
-    user,
-    requiresEmailConfirmation: false,
-  };
-}
-
-// Admin-initiated account creation — goes straight to Supabase Auth's public
-// signUp() rather than through the server, using a session-isolated client
-// so it doesn't log the admin out of their own session. Deliberately does
-// NOT accept an is_admin flag here: the on_auth_user_changed trigger reads
-// is_admin off client-supplied signup metadata, so honoring it from this
-// call would let anyone self-grant admin via a raw signUp() call. Grant
-// admin as a separate step through the server-verified toggle-admin route
-// after the account exists.
-export async function createSupabaseUserAsAdmin({ username, email, password, bio }) {
-  const client = getSessionlessSupabaseClient();
-  const { data, error } = await withTimeoutRetry(
-    () => client.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
-          bio: bio || '',
-        },
-      },
-    }),
-    AUTH_MUTATION_TIMEOUT_MS,
-    'Supabase sign-up timed out.'
-  );
-
-  if (error) {
-    throw new Error(toFriendlyError(error, 'Unable to create the account.'));
-  }
-
-  if (!data.user) {
-    throw new Error('Unable to create the account.');
-  }
-
-  return {
-    id: data.user.id,
-    username,
-    email,
-    bio: bio || '',
-    is_admin: false,
-    is_public: true,
-    created_at: data.user.created_at,
-    last_sign_in_at: null,
-    requiresEmailConfirmation: !data.session,
-  };
 }
 
 export async function signOutFromSupabase() {

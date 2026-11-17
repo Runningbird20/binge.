@@ -96,10 +96,12 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/catalog', require('./routes/catalog'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/sports',      require('./routes/sports'));
+app.use('/api/admin/account-requests', require('./routes/invites').adminRouter);
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/manga',       require('./routes/manga'));
 app.use('/api/books',       require('./routes/books'));
 app.use('/api/account', require('./routes/account'));
+app.use('/api/account', require('./routes/invites').publicRouter);
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));
 app.use('/api/og', require('./routes/og'));

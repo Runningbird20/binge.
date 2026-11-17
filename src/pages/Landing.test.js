@@ -33,14 +33,14 @@ describe('Landing', () => {
     jest.clearAllMocks();
   });
 
-  test('shows the hero headline and create account / sign in actions', () => {
+  test('shows the hero headline and request account / sign in actions', () => {
     render(<Landing />);
 
     expect(
       screen.getByRole('heading', { name: /everything you watch and read, in one place/i })
     ).toBeInTheDocument();
 
-    expect(screen.getByRole('link', { name: /create account/i })).toHaveAttribute('href', '/signup');
+    expect(screen.getByRole('link', { name: /request an account/i })).toHaveAttribute('href', '/signup');
     expect(screen.getByRole('link', { name: /^sign in$/i })).toHaveAttribute('href', '/login');
   });
 

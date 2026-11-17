@@ -36,21 +36,32 @@ import { getServerMemory, rankServers } from './streamPreferences';
 //   subtitles: accepts a default subtitle language parameter
 //   idKinds:   which external ids the URL accepts
 //   types:     media types it actually streams
+//   clickToStart: often waits for the viewer's click to start, so no
+//              playback report yet doesn't mean it refuses the sandbox
+//              (usePopupSandbox)
 //   sandbox:   plays in a sandboxed iframe, which blocks its pop-ups and
-//              redirects (utils/popupSandbox.js). Retested 2026-11-09 in
-//              Chrome on a non-provider origin, every server sandboxed on
-//              three titles (Fight Club, a 2026 film, GoT 1x1) plus once
-//              unsandboxed: VidRift, CineSrc, VidSpark, VidCore and EmbedWave
-//              play sandboxed. Vidy, VidLink, VixSrc and both VidSrcs show a
-//              "sandbox detected" page but play unsandboxed. Videasy, 2Embed
-//              and VidSrc Classic played in neither mode that day (see each).
-//              A server without the flag is tried sandboxed only if it
-//              reports playback (so a refusal can be noticed).
+//              redirects (utils/popupSandbox.js). Only true sandboxes it: an
+//              untested server loads normally. Retested 2026-11-16 in Chrome
+//              157 and in WebKit (Safari's engine), on a non-provider origin,
+//              sandboxed and not, on Fight Club, Project Hail Mary (2026) and
+//              GoT 1x1. A server counted as playing once its full-length
+//              video had played 5 seconds. VidRift, CineSrc, VidSpark and
+//              EmbedWave played sandboxed on every title; VidCore played
+//              sandboxed as often as unsandboxed (see it). VidLink, VixSrc and
+//              both VidSrcs show a "disable the sandbox" page (while still
+//              posting playback times), Vidy an ad page, 2Embed an adult ad
+//              page, and VidSrc Classic "can't be embedded in a sandboxed
+//              frame"; all but VidSrc Classic play unsandboxed. Videasy's
+//              domain no longer resolves.
 export const PROVIDERS = [
   {
     // https://vidrift.net/docs — TMDB ids only; posts vidrift:progress
     // (currentTime) every 5s while playing. Played every title tested,
-    // including new K-drama episodes other servers lacked.
+    // including new K-drama episodes other servers lacked. 2026-11-16, in a
+    // fresh browser: about 13s into playback its own page sent the player to
+    // ad pages (an "ad blocker" offer, a suggestive game ad), sandboxed or not. A
+    // sandbox can't stop a frame navigating itself, only pop-ups and redirects
+    // of the whole tab.
     id: 'vidrift',
     label: 'VidRift',
     sandbox: true, // plays sandboxed
@@ -69,7 +80,7 @@ export const PROVIDERS = [
     // https://www.vidy.st (#docs) — posts PLAYER_EVENT play/timeupdate.
     id: 'vidy',
     label: 'Vidy',
-    sandbox: false, // "Iframe Sandbox Detected"
+    sandbox: false, // sandboxed it shows an "Ad Blocker Pro" ad page instead
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -195,7 +206,8 @@ export const PROVIDERS = [
     label: 'Videasy',
     // 2026-11-09: player.videasy.net now 301s to player.videasy.to, whose
     // certificate is self-signed (DDoS-Guard), so browsers refuse it.
-    sandbox: false, // "Iframe Sandbox Detected"
+    // 2026-11-16: player.videasy.to no longer resolves at all.
+    sandbox: false, // "Iframe Sandbox Detected" when it last worked
     events: true,
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
@@ -214,9 +226,12 @@ export const PROVIDERS = [
     // movies and some episodes in testing; on others its player only loads
     // the video after a real click, so it ranks below the servers that
     // autoplay (an automatically chosen server gets FAILOVER_SECONDS).
+    // 2026-11-16: about a third of loads still needed clicks, sandboxed or
+    // not (clickToStart).
     id: 'vidspark',
     label: 'VidSpark',
     sandbox: true, // plays sandboxed (unsandboxed, its first clicks opened pop-ups)
+    clickToStart: true,
     events: true,
     idKinds: ['tmdb', 'imdb'],
     types: ['movie', 'tv_show'],
@@ -233,9 +248,13 @@ export const PROVIDERS = [
     // https://vidcore.org — TMDB ids only (IMDb ids 404). Sends no playback
     // messages and ignores its documented startAt. Now and then it shows a
     // full-page ad instead of the player; sandboxed, that can't open anything.
+    // 2026-11-16: it wraps cdn.vidspark.to's player behind "install Opera GX /
+    // Ad Blocker Pro to unlock the content" gates and fake "not a robot"
+    // checks. It played 3 of 8 loads sandboxed and 2 of 8 unsandboxed (none in
+    // WebKit); unsandboxed, its gates opened adult and gambling pop-ups.
     id: 'vidcore',
     label: 'VidCore',
-    sandbox: true, // plays sandboxed (unsandboxed, clicks opened pop-ups)
+    sandbox: true, // plays sandboxed when it plays at all
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
     buildUrl(id, mediaType, season, episode) {
@@ -250,7 +269,7 @@ export const PROVIDERS = [
     label: '2Embed',
     // 2026-11-09: unsandboxed, it navigated the whole tab to 2embed.stream
     // within seconds of loading, with no click, on every title tried.
-    sandbox: false, // black when sandboxed (and redirects the whole tab when not)
+    sandbox: false, // an adult ad page when sandboxed (and redirects the whole tab when not)
     idKinds: ['tmdb', 'imdb'],
     types: ['tv_show', 'movie'],
     buildUrl(id, mediaType, season, episode) {

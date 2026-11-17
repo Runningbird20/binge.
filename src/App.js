@@ -21,6 +21,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import PasswordReset from './pages/PasswordReset';
 import Signup from './pages/Signup';
+import AccountRequestReview from './pages/AccountRequestReview';
 // Stylesheets, in cascade order: App.css (base + design tokens), then
 // mobile.css (small-screen adaptations), then streaming.css (rows, hero,
 // cards, search, shared controls), whose rules win over both, then one file
@@ -93,7 +94,7 @@ const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
 
 // Routes where we never show the bottom nav
-const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password'];
+const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/account-requests/review'];
 
 function AppShell({ children }) {
   const { isMobile } = useDeviceType();
@@ -159,6 +160,8 @@ function AppRoutes() {
         <Route path="/signup"    element={<Signup />} />
         <Route path="/forgot-password" element={<PasswordReset />} />
         <Route path="/reset-password" element={<PasswordReset recovery />} />
+        {/* The admin's link from an account-request email (invite-only sign-up). */}
+        <Route path="/account-requests/review" element={<AccountRequestReview />} />
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />

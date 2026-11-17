@@ -6,7 +6,6 @@ var mockGetSupabaseSessionProfile = jest.fn();
 var mockResolveSupabaseProfile = jest.fn();
 var mockSignInWithSupabase = jest.fn();
 var mockSignOutFromSupabase = jest.fn();
-var mockSignUpWithSupabase = jest.fn();
 var mockUpdateSupabasePassword = jest.fn();
 var mockUpdateSupabaseProfile = jest.fn();
 
@@ -24,7 +23,6 @@ jest.mock('../utils/supabaseData', () => ({
   resolveSupabaseProfile: (...args) => mockResolveSupabaseProfile(...args),
   signInWithSupabase: (...args) => mockSignInWithSupabase(...args),
   signOutFromSupabase: (...args) => mockSignOutFromSupabase(...args),
-  signUpWithSupabase: (...args) => mockSignUpWithSupabase(...args),
   updateSupabasePassword: (...args) => mockUpdateSupabasePassword(...args),
   updateSupabaseProfile: (...args) => mockUpdateSupabaseProfile(...args),
 }));
