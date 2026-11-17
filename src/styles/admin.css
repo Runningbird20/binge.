@@ -112,11 +112,11 @@
 
 .adm-errors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 
-.adm-errors li { padding: 0.7rem 0.8rem; border-radius: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.07); }
+.adm-errors > li { padding: 0.7rem 0.8rem; border-radius: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.07); }
 
-.adm-errors li.resolved { opacity: 0.55; }
+.adm-errors > li.resolved { opacity: 0.55; }
 
-.adm-error-head { display: flex; align-items: center; gap: 0.6rem; width: 100%; border: 0; background: none; color: #fff; font: inherit; text-align: left; cursor: pointer; padding: 0; }
+.adm-error-head { display: flex; align-items: baseline; gap: 0.6rem; width: 100%; border: 0; background: none; color: #fff; font: inherit; text-align: left; cursor: pointer; padding: 0; }
 
 .adm-src { flex: none; padding: 0.1rem 0.45rem; border-radius: 5px; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
 
@@ -124,13 +124,27 @@
 
 .adm-src--server { background: rgba(255, 170, 90, 0.2); color: #ffd1a3; }
 
-.adm-error-msg { flex: 1; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+/* Wraps (up to 3 lines, all of it once opened) rather than cutting off the table or the cause. */
+.adm-error-msg { display: -webkit-box; flex: 1; min-width: 0; overflow: hidden; font-weight: 700; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+
+.adm-error-head[aria-expanded="true"] .adm-error-msg { display: block; -webkit-line-clamp: unset; }
 
 .adm-error-count { flex: none; font-weight: 900; }
 
 .adm-error-meta { margin-top: 0.3rem; font-size: 0.78rem; }
 
-.adm-error-body pre { max-height: 260px; overflow: auto; margin: 0.6rem 0; padding: 0.7rem; border-radius: 8px; background: rgba(0, 0, 0, 0.45); font-size: 0.75rem; white-space: pre-wrap; }
+/* The requests or pages it came from: one summarized line each (errorRequests.js). */
+.adm-error-requests { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.45rem 0 0; padding: 0; list-style: none; font-size: 0.78rem; }
+
+.adm-error-request { color: rgba(255, 255, 255, 0.62); overflow-wrap: anywhere; }
+
+.adm-error-method { margin-right: 0.4rem; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.5); }
+
+.adm-error-target { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+
+.adm-error-details { margin-left: 0.5rem; }
+
+.adm-error-body pre { max-height: 260px; overflow: auto; margin: 0.6rem 0; padding: 0.7rem; border-radius: 8px; background: rgba(0, 0, 0, 0.45); font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .adm-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin: 1rem 0; }
 

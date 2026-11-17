@@ -2,6 +2,22 @@ import LoadingBar from '../../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../utils/supabase';
 import { ago } from './AdminServers';
+import { describeRequest, readableRequest } from './errorRequests';
+
+const REQUESTS_SHOWN = 3;
+
+// One request (server errors) or page (browser errors), summed up: method,
+// what it read, and its query in short parts. Hover for the whole thing.
+function RequestLine({ raw }) {
+  const { method, target, details } = describeRequest(raw);
+  return (
+    <li className="adm-error-request" title={readableRequest(raw)}>
+      {method && <span className="adm-error-method">{method}</span>}
+      <span className="adm-error-target">{target}</span>
+      {details.length > 0 && <span className="adm-error-details">{details.join(' · ')}</span>}
+    </li>
+  );
+}
 
 // binge.'s own error log, grouped by fingerprint (same message + first
 // stack frame) so one bug hitting 50 people is one row.
@@ -62,11 +78,17 @@ export default function AdminErrors() {
               </button>
               <p className="adm-muted adm-error-meta">
                 Last {ago(latest.created_at)} · first {ago(first.created_at)} · {group.users.size} signed-in user{group.users.size === 1 ? '' : 's'}
-                {group.pages.size ? ` · ${[...group.pages].slice(0, 3).join(', ')}` : ''}
               </p>
+              {group.pages.size > 0 && (
+                <ul className="adm-error-requests" aria-label={latest.source === 'server' ? 'Requests' : 'Pages'}>
+                  {[...group.pages].slice(0, REQUESTS_SHOWN).map((page) => <RequestLine key={page} raw={page} />)}
+                  {group.pages.size > REQUESTS_SHOWN && <li className="adm-muted">and {group.pages.size - REQUESTS_SHOWN} more</li>}
+                </ul>
+              )}
               {expanded && (
                 <div className="adm-error-body">
                   {latest.stack && <pre>{latest.stack}</pre>}
+                  {group.pages.size > 0 && <pre>{[...group.pages].map(readableRequest).join('\n\n')}</pre>}
                   {latest.user_agent && <p className="adm-muted">Browser: {latest.user_agent}</p>}
                   {!latest.resolved && <button type="button" className="st-btn st-btn--ghost" onClick={() => resolve(group.fingerprint)}>Mark resolved</button>}
                 </div>
