@@ -4,11 +4,13 @@ const webpush = require('web-push');
 const router = express.Router();
 
 // Daily new-episode alerts (Vercel cron → GET /api/cron/new-episodes, see
-// vercel.json). For every profile with a push subscription: look at the TV
+// vercel.json). For every profile, notifications on or not: look at the TV
 // shows in its list / Continue Watching, ask TMDB for each show's latest
-// aired episode, and notify once per new episode (push_notified dedupes).
-// Needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY +
-// VAPID_PRIVATE_KEY (+ VAPID_SUBJECT), TMDB_API_KEY, and CRON_SECRET.
+// aired episode, and alert once per new episode (sendNewEpisodeAlerts): in
+// the profile's notification inbox, and by push on its devices where it has
+// any. Needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, TMDB_API_KEY and
+// CRON_SECRET; the push part also VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY
+// (+ VAPID_SUBJECT).
 
 const NEW_WITHIN_DAYS = 2;
 
@@ -58,6 +60,55 @@ async function pushTo(db, subs, payload) {
   return { sent, removed };
 }
 
+// ── Notification inbox ────────────────────────────────────────────────
+// Every alert is also kept in `notifications`, so the bell in the header can
+// list the last 30 days once the push itself is gone (profile_id null: the
+// whole account). Keeping it never stops an alert: a failed insert (before
+// the table's migration has run, say) only logs a warning.
+const INBOX_DAYS = 30;
+const INBOX_CHUNK = 500;
+
+// Push text ends "Tap to watch." — the inbox is clicked as often as tapped.
+function inboxText(text) {
+  return String(text || '').replace(/\s*Tap to [^.]*\.\s*$/, '').trim();
+}
+
+function inboxRow({ userId, profileId = null, kind, title, body = '', url = null }) {
+  return {
+    user_id: userId,
+    profile_id: profileId || null,
+    kind,
+    title: inboxText(title).slice(0, 200),
+    body: inboxText(body).slice(0, 500),
+    url: typeof url === 'string' && url.startsWith('/') ? url.slice(0, 500) : null,
+  };
+}
+
+async function recordNotifications(db, rows) {
+  let recorded = 0;
+  for (let start = 0; start < rows.length; start += INBOX_CHUNK) {
+    const chunk = rows.slice(start, start + INBOX_CHUNK);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const { error } = await db.from('notifications').insert(chunk);
+      if (error) throw error;
+      recorded += chunk.length;
+    } catch (error) {
+      console.warn('[inbox] alerts not kept:', error.message);
+    }
+  }
+  return recorded;
+}
+
+async function pruneNotifications(db, now = Date.now()) {
+  try {
+    const { error } = await db.from('notifications').delete().lt('created_at', new Date(now - INBOX_DAYS * 86400000).toISOString());
+    if (error) throw error;
+  } catch (error) {
+    console.warn('[inbox] old alerts not pruned:', error.message);
+  }
+}
+
 // "Remind me tonight" reminders that are due. Meant to run every ~15 min
 // (Vercel Hobby crons are daily only, so schedule it from Supabase
 // pg_cron — see supabase/manual/schedule_reminders.sql); the daily
@@ -73,14 +124,15 @@ async function sendDueReminders(db) {
     let query = db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', reminder.user_id);
     if (reminder.profile_id) query = query.eq('profile_id', reminder.profile_id);
     const { data: subs } = await query;
-    const result = await pushTo(db, subs || [], JSON.stringify({
+    const message = {
       title: `Time to watch ${reminder.title}`,
       body: 'You asked binge. to remind you. Tap to start watching.',
       url: `${reminder.url}?play=1&reminder=${reminder.id}`,
-      tag: `reminder-${reminder.id}`,
-    }));
+    };
+    const result = await pushTo(db, subs || [], JSON.stringify({ ...message, tag: `reminder-${reminder.id}` }));
     sent += result.sent;
     await db.from('watch_reminders').update({ sent_at: new Date().toISOString() }).eq('id', reminder.id);
+    await recordNotifications(db, [inboxRow({ userId: reminder.user_id, profileId: reminder.profile_id, kind: 'reminder', ...message })]);
   }
   return { due: (due || []).length, sent };
 }
@@ -195,6 +247,7 @@ async function sendGameAlerts(db) {
           // Once per user, game and kind.
           const { error } = await db.from('game_alerts_sent').insert({ user_id: follower.user_id, event_id: String(event.id), kind: alert.kind });
           if (error) continue;
+          await recordNotifications(db, [inboxRow({ userId: follower.user_id, profileId: follower.profile_id, kind: 'game', ...message, url: '/sports' })]);
           let query = db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', follower.user_id);
           if (follower.profile_id) query = query.eq('profile_id', follower.profile_id);
           const { data: subs } = await query;
@@ -263,6 +316,9 @@ async function notifyAdmins(db, title, body) {
   const { data: admins } = await db.from('profiles').select('id').eq('is_admin', true);
   const ids = (admins || []).map((row) => row.id);
   if (!ids.length) return;
+  // The inbox draws its own icons: no status emoji in its text.
+  const plain = (text) => text.replace(/\p{Extended_Pictographic}\uFE0F?\s*/gu, '');
+  await recordNotifications(db, ids.map((id) => inboxRow({ userId: id, kind: 'server', title: plain(title), body: plain(body), url: '/admin?tab=servers' })));
   const { data: subs } = await db.from('push_subscriptions').select('id, endpoint, p256dh, auth').in('user_id', ids);
   await pushTo(db, subs || [], JSON.stringify({ title, body, url: '/admin', tag: `server-${title}` }));
 }
@@ -365,70 +421,97 @@ router.get('/reminders', async (req, res) => {
   }
 });
 
-router.get('/new-episodes', async (req, res) => {
-  if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
-  const db = setupPush();
-  if (!db) return res.status(503).json({ error: 'push not configured' });
-  const reminders = await sendDueReminders(db).catch(() => null);
+// Which of an account's profiles follow each show (its list, unless finished,
+// and Continue Watching): Map of tv_shows.id → Set of profile ids. A row saved
+// without a profile is the default profile's, as everywhere else.
+function showFollowers(profiles, listRows, watchingRows) {
+  const ids = new Set(profiles.map((profile) => profile.id));
+  const fallback = (profiles.find((profile) => profile.is_default) || profiles[0])?.id || null;
+  const follows = new Map();
+  const add = (row) => {
+    const showId = Number(row.media_id);
+    if (!Number.isFinite(showId)) return;
+    if (!follows.has(showId)) follows.set(showId, new Set());
+    follows.get(showId).add(ids.has(row.profile_id) ? row.profile_id : fallback);
+  };
+  listRows.filter((row) => row.status !== 'watched').forEach(add);
+  watchingRows.forEach(add);
+  return follows;
+}
 
-  const { data: subs, error } = await db.from('push_subscriptions').select('id, user_id, profile_id, endpoint, p256dh, auth');
-  if (error) return res.status(500).json({ error: error.message });
+// Every profile following a show gets its new episode in the inbox; the
+// devices of those profiles get a push when canPush (a device saved without a
+// profile counts as the default profile's). push_notified claims each episode
+// once per account before anything is sent, so a re-run never repeats one.
+async function sendNewEpisodeAlerts(db, { canPush = false, latest = latestEpisode, now = Date.now() } = {}) {
+  const [{ data: profiles, error }, { data: subs }] = await Promise.all([
+    db.from('account_profiles').select('id, account_id, is_default'),
+    canPush ? db.from('push_subscriptions').select('id, user_id, profile_id, endpoint, p256dh, auth') : Promise.resolve({ data: [] }),
+  ]);
+  if (error) throw new Error(error.message);
+  const accounts = new Map();
+  (profiles || []).forEach((profile) => accounts.set(profile.account_id, [...(accounts.get(profile.account_id) || []), profile]));
 
-  const cutoff = Date.now() - NEW_WITHIN_DAYS * 86400000;
-  const showCache = new Map(); // tv_shows.id -> latest episode info
-  let sent = 0;
-  let removed = 0;
+  const cutoff = now - NEW_WITHIN_DAYS * 86400000;
+  const episodes = new Map(); // tv_shows.id → its latest aired episode, one TMDB call per run
+  const totals = { accounts: accounts.size, alerts: 0, sent: 0, removedSubscriptions: 0 };
 
-  // Group subscriptions by profile so each profile's list is read once.
-  const byProfile = new Map();
-  (subs || []).forEach((sub) => {
-    const key = `${sub.user_id}|${sub.profile_id || ''}`;
-    byProfile.set(key, [...(byProfile.get(key) || []), sub]);
-  });
-
-  for (const [profileKey, profileSubs] of byProfile) {
-    const [userId, profileId] = profileKey.split('|');
-    const scope = (query) => (profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null));
+  for (const [userId, accountProfiles] of accounts) {
     const [{ data: list }, { data: watching }] = await Promise.all([
-      scope(db.from('watchlist').select('media_id, status').eq('user_id', userId).eq('media_type', 'tv_show')),
-      scope(db.from('continue_watching').select('media_id').eq('user_id', userId).eq('media_type', 'tv_show')),
+      db.from('watchlist').select('media_id, status, profile_id').eq('user_id', userId).eq('media_type', 'tv_show'),
+      db.from('continue_watching').select('media_id, profile_id').eq('user_id', userId).eq('media_type', 'tv_show'),
     ]);
-    const showIds = [...new Set([
-      ...(list || []).filter((row) => row.status !== 'watched').map((row) => Number(row.media_id)),
-      ...(watching || []).map((row) => Number(row.media_id)),
-    ])].slice(0, 60);
+    const follows = showFollowers(accountProfiles, list || [], watching || []);
+    const showIds = [...follows.keys()].slice(0, 100);
     if (!showIds.length) continue;
+    const defaultId = (accountProfiles.find((profile) => profile.is_default) || accountProfiles[0]).id;
 
     const { data: shows } = await db.from('tv_shows').select('id, title, source_key').in('id', showIds);
     for (const show of shows || []) {
       const tmdbId = String(show.source_key || '').match(/^tmdb:tv:(\d+)$/)?.[1];
       if (!tmdbId) continue;
-      if (!showCache.has(show.id)) showCache.set(show.id, await latestEpisode(tmdbId).catch(() => null));
-      const info = showCache.get(show.id);
-      const last = info?.last;
+      if (!episodes.has(show.id)) episodes.set(show.id, (await latest(tmdbId).catch(() => null))?.last || null);
+      const last = episodes.get(show.id);
       if (!last?.air_date || new Date(`${last.air_date}T23:59:59Z`).getTime() < cutoff) continue;
 
+      const followers = [...(follows.get(Number(show.id)) || [])];
       const episodeKey = `S${last.season_number}E${last.episode_number}`;
-      const { data: already } = await db.from('push_notified').select('episode_key')
-        .eq('user_id', userId).eq('media_id', show.id).eq('episode_key', episodeKey).maybeSingle();
-      if (already) continue;
+      const { error: claimed } = await db.from('push_notified').insert({
+        user_id: userId, profile_id: followers.length === 1 ? followers[0] : null, media_id: show.id, episode_key: episodeKey,
+      });
+      if (claimed) continue; // already alerted (or can't be recorded: don't risk repeating it)
 
-      const payload = JSON.stringify({
+      const message = {
         title: `New episode: ${show.title}`,
         body: `S${last.season_number} · E${last.episode_number}${last.name ? ` — ${last.name}` : ''} is out now.`,
         url: `/tv-show/${show.id}?play=1&season=${last.season_number}&episode=${last.episode_number}`,
-        tag: `new-episode-${show.id}`,
-      });
-      const result = await pushTo(db, profileSubs, payload);
-      sent += result.sent;
-      removed += result.removed;
-      if (result.sent) {
-        await db.from('push_notified').insert({ user_id: userId, profile_id: profileId || null, media_id: show.id, episode_key: episodeKey });
+      };
+      totals.alerts += await recordNotifications(db, followers.map((profileId) => inboxRow({ userId, profileId, kind: 'episode', ...message })));
+      const wanted = new Set(followers);
+      const devices = (subs || []).filter((sub) => sub.user_id === userId && wanted.has(sub.profile_id || defaultId));
+      if (devices.length) {
+        const result = await pushTo(db, devices, JSON.stringify({ ...message, tag: `new-episode-${show.id}` }));
+        totals.sent += result.sent;
+        totals.removedSubscriptions += result.removed;
       }
     }
   }
+  return totals;
+}
 
-  res.json({ profiles: byProfile.size, sent, removedSubscriptions: removed, reminders });
+router.get('/new-episodes', async (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
+  // Push is optional here: without VAPID keys the inbox still gets its alerts.
+  const pushDb = setupPush();
+  const db = pushDb || getAdminClient();
+  if (!db) return res.status(503).json({ error: 'database not configured' });
+  const reminders = pushDb ? await sendDueReminders(db).catch(() => null) : null;
+  await pruneNotifications(db);
+  try {
+    res.json({ ...(await sendNewEpisodeAlerts(db, { canPush: Boolean(pushDb) })), reminders });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
@@ -436,3 +519,7 @@ module.exports.gameAlerts = gameAlerts;
 module.exports.checkServers = checkServers;
 module.exports.pushTo = pushTo;
 module.exports.setupPush = setupPush;
+module.exports.inboxRow = inboxRow;
+module.exports.recordNotifications = recordNotifications;
+module.exports.pruneNotifications = pruneNotifications;
+module.exports.sendNewEpisodeAlerts = sendNewEpisodeAlerts;
