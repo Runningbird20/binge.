@@ -168,7 +168,7 @@ async function tursoPlatform({ env, fetchImpl, host }) {
   };
 }
 
-const CATALOG_ROWS = { 'movies.rows': 'Movies', 'tv_shows.rows': 'Series', 'books.rows': 'Books' };
+const CATALOG_ROWS = { 'movies.rows': 'Movies', 'tv_shows.rows': 'Series' };
 
 async function tursoReport({ catalog = catalogDb, env = process.env, fetchImpl = fetch } = {}) {
   const host = tursoHost(env);
@@ -193,7 +193,7 @@ async function tursoReport({ catalog = catalogDb, env = process.env, fetchImpl =
       return result;
     }),
     timed(async () => (await catalog.query('SELECT page_count * page_size AS bytes, freelist_count * page_size AS free FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()')).rows[0]),
-    timed(async () => (await catalog.query("SELECT name, value, updated_at FROM catalog_stats WHERE name IN ('movies.rows', 'tv_shows.rows', 'books.rows')")).rows),
+    timed(async () => (await catalog.query("SELECT name, value, updated_at FROM catalog_stats WHERE name IN ('movies.rows', 'tv_shows.rows')")).rows),
     platformSet ? timed(() => tursoPlatform({ env, fetchImpl, host })) : Promise.resolve(null),
   ]);
 

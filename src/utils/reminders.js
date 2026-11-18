@@ -49,7 +49,7 @@ async function currentUserId() {
 export async function createReminder({ item, mediaType, when }) {
   const userId = await currentUserId();
   if (!userId) throw new Error('Sign in to set reminders.');
-  const path = mediaType === 'tv_show' ? `/tv-show/${item.id}` : mediaType === 'book' ? `/book/${item.id}` : `/movie/${item.id}`;
+  const path = mediaType === 'tv_show' ? `/tv-show/${item.id}` : `/movie/${item.id}`;
   const { data, error } = await supabase.from('watch_reminders').insert({
     user_id: userId,
     profile_id: getActiveProfileId(),

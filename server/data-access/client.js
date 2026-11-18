@@ -17,7 +17,7 @@ const searchKey = (q, lim) => `${lim}|${q.normalize('NFD').replace(/[̀-ͯ]/g, '
 const relatedCache = new Map();
 async function searchRelatedRpc(args) {
   if(Object.keys(args).some(k=>!['q','types'].includes(k)))throw new Error('Unsupported search argument');
-  const types=String(args.types||'movies,tv,books').split(',').map(t=>t.trim()).filter(Boolean);
+  const types=String(args.types||'movies,tv').split(',').map(t=>t.trim()).filter(Boolean);
   const key=`${types.join(',')}|${searchKey(String(args.q||'').slice(0,200),0)}`;
   const hit=relatedCache.get(key);
   if(hit&&Date.now()-hit.at<SEARCH_CACHE_TTL_MS)return {data:hit.rows,error:null};

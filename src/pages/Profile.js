@@ -2,7 +2,7 @@ import LoadingBar from '../components/LoadingBar';
 import SlidingTabs from '../components/SlidingTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FilmSlate, MonitorPlay, BookOpen, X, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal, CalendarBlank } from '@phosphor-icons/react';
+import { FilmSlate, MonitorPlay, X, Star, PencilSimple, Users, ClockCounterClockwise, Sparkle, SlidersHorizontal, CalendarBlank } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import UserAvatar from '../components/UserAvatar';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -24,7 +24,7 @@ import { tmdbGet, tmdbIdFromItem, tmdbImage, tmdbKind } from '../utils/tmdb';
 import { getCached, setCached, buildUserDataCacheKey } from '../utils/sessionCache';
 import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 
-const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay, book: BookOpen };
+const MEDIA_ICONS = { movie: FilmSlate, tv_show: MonitorPlay };
 
 function MediaTypeIcon({ type, size = 16 }) {
   const Icon = MEDIA_ICONS[type];
@@ -36,7 +36,6 @@ const TYPE_FILTERS = [
   { value: '', label: 'All', Icon: null },
   { value: 'movie', label: 'Movies', Icon: FilmSlate },
   { value: 'tv_show', label: 'Series', Icon: MonitorPlay },
-  { value: 'book', label: 'Books', Icon: BookOpen },
 ];
 
 // My List's status filter: finished titles have their own Watched tab.
@@ -48,9 +47,7 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 function getMediaUrl(item) {
-  if (item.media_type === 'movie') return `/movie/${item.media_id}`;
-  if (item.media_type === 'tv_show') return `/tv-show/${item.media_id}`;
-  return `/book/${item.media_id}`;
+  return item.media_type === 'tv_show' ? `/tv-show/${item.media_id}` : `/movie/${item.media_id}`;
 }
 
 function resolvePosterUrl(url) {
@@ -227,7 +224,6 @@ function WatchlistTab({
             <div className="pf-empty-actions">
               <Link to="/movies" className="st-btn st-btn--ghost">Browse movies</Link>
               <Link to="/tv-shows" className="st-btn st-btn--ghost">Browse series</Link>
-              <Link to="/books" className="st-btn st-btn--ghost">Browse books</Link>
             </div>
           )}
         </div>
@@ -409,12 +405,12 @@ export default function Profile() {
   // watchlist tab (display, count, and the in-progress stat).
   const libraryWatchlist = useMemo(() => excludeRated(watchlist, ratings), [watchlist, ratings]);
   // Finished but unrated titles have their own Watched tab, so My List keeps
-  // to what's still to watch, read, or in progress.
+  // to what's still to watch or in progress.
   const { list: myList, finished: watchedUnrated } = useMemo(() => splitFinished(libraryWatchlist), [libraryWatchlist]);
 
   const stats = useMemo(() => {
     const completed = countCompleted(watchlist, ratings);
-    const inProgress = libraryWatchlist.filter((i) => i.status === 'watching' || i.status === 'reading').length;
+    const inProgress = libraryWatchlist.filter((i) => i.status === 'watching').length;
     const scores = ratings.map((r) => computeStarRating(r.media_type, r)).filter((s) => s != null);
     const avg = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
     return { completed, inProgress, avg, totalRatings: ratings.length, minutes: computeWatchMinutes(watchlist, ratings) };
@@ -426,14 +422,14 @@ export default function Profile() {
     const add = (genreText, weight) => String(genreText || '').split(',').map((g) => g.trim()).filter(Boolean)
       .forEach((genre) => weights.set(genre, (weights.get(genre) || 0) + weight));
     ratings.forEach((rating) => add(rating.genre, (computeStarRating(rating.media_type, rating) || 3) - 2.5));
-    watchlist.forEach((item) => add(item.genre, item.status === 'watched' || item.status === 'read' ? 1 : 0.3));
+    watchlist.forEach((item) => add(item.genre, item.status === 'watched' ? 1 : 0.3));
     return [...weights.entries()].filter(([, w]) => w > 0).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([g]) => g);
   }, [ratings, watchlist]);
 
   // Banner art from the profile's top-rated movie/series.
   const [bannerUrl, setBannerUrl] = useState(null);
   const favorite = useMemo(() => [...ratings]
-    .filter((rating) => rating.media_type !== 'book' && tmdbIdFromItem(rating))
+    .filter((rating) => tmdbIdFromItem(rating))
     .sort((a, b) => (computeStarRating(b.media_type, b) || 0) - (computeStarRating(a.media_type, a) || 0))[0] || null, [ratings]);
   useEffect(() => {
     if (!favorite) { setBannerUrl(null); return undefined; }
@@ -551,7 +547,7 @@ export default function Profile() {
               hint="rate one to move it to Ratings & Reviews"
               empty={{
                 title: 'Nothing watched and unrated.',
-                text: 'Titles you mark Watched (or books you mark Read) wait here until you rate them.',
+                text: 'Titles you mark Watched wait here until you rate them.',
               }}
             />
           )}

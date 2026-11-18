@@ -43,7 +43,7 @@ function tvProgressMinutes(item) {
 // Estimated total watch time across both watchlist progress and rated titles.
 // Each title is counted once; when a title has both watchlist progress and a
 // rating, the (more accurate) progress-based estimate wins over the flat rated
-// estimate. Books never contribute to watch time.
+// estimate.
 export function computeWatchMinutes(watchlist, ratings) {
   const counted = new Set();
   let minutes = 0;
@@ -77,13 +77,13 @@ export function computeWatchMinutes(watchlist, ratings) {
   return minutes;
 }
 
-// "Completed" = watched/read watchlist items plus every rated title (a rating
+// "Completed" = watched watchlist items plus every rated title (a rating
 // implies the user finished it). Deduped by media so rating a title you'd
 // already marked watched neither drops nor doubles the count.
 export function countCompleted(watchlist, ratings) {
   const counted = new Set();
   (watchlist || []).forEach((item) => {
-    if (item.status === 'watched' || item.status === 'read') {
+    if (item.status === 'watched') {
       counted.add(mediaKey(item));
     }
   });
@@ -125,10 +125,10 @@ export function describeWatchTime(minutes) {
   return parts.length ? parts.join(' ') : '0 minutes';
 }
 
-// Finished (watched or read) — those leave My List for the Profile's
-// Watched tab until they're rated.
+// Finished (watched) — those leave My List for the Profile's Watched tab
+// until they're rated.
 export function isFinished(item) {
-  return item?.status === 'watched' || item?.status === 'read';
+  return item?.status === 'watched';
 }
 
 // Splits the (unrated) library into My List and Watched; Watched is newest

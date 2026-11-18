@@ -24,7 +24,7 @@ beforeEach(() => {
     row(1, 'Planned Movie', 'movie', 'plan_to_watch'),
     row(2, 'Watching Show', 'tv_show', 'watching'),
     row(3, 'Old Watch', 'movie', 'watched', { updated_at: '2026-01-01T00:00:00Z' }),
-    row(4, 'Finished Book', 'book', 'read', { updated_at: '2026-06-01T00:00:00Z' }),
+    row(4, 'Finished Show', 'tv_show', 'watched', { updated_at: '2026-06-01T00:00:00Z' }),
     row(5, 'Rated Watch', 'movie', 'watched'), // rated: lives under Ratings & Reviews
   ]);
   data.fetchSupabaseRatings.mockResolvedValue([{ media_type: 'movie', media_id: 50, title: 'Rated Watch', created_at: '2026-02-01T00:00:00Z' }]);
@@ -46,8 +46,8 @@ test('finished, unrated titles get their own Watched tab between My List and Rat
   expect(screen.queryByText('Old Watch')).toBeNull();
 
   fireEvent.click(tab('Watched'));
-  const titles = screen.getAllByText(/^(Planned Movie|Watching Show|Old Watch|Finished Book)$/).map((el) => el.textContent);
-  expect(titles).toEqual(['Finished Book', 'Old Watch']); // newest first
+  const titles = screen.getAllByText(/^(Planned Movie|Watching Show|Old Watch|Finished Show)$/).map((el) => el.textContent);
+  expect(titles).toEqual(['Finished Show', 'Old Watch']); // newest first
   expect(screen.getByText(/rate one to move it to Ratings & Reviews/)).toBeInTheDocument();
   expect(screen.queryByText('Planned Movie')).toBeNull();
 });

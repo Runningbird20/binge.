@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  BookOpen,
   CalendarBlank,
   ClockCounterClockwise,
   FilmSlate,
@@ -23,17 +22,20 @@ import { haptic } from '../utils/haptics';
 
 // Phone navigation, all at thumb height: Home · Sports · Browse · Search · Me.
 // Browse goes straight to the last catalog you used (tap again to switch
-// between Movies / Series / Books); Me holds profile, settings and sign out,
+// between Movies / Series); Me holds profile, settings and sign out,
 // so nothing important lives at the top of the screen.
 const BROWSE = [
   { to: '/movies',   label: 'Movies', Icon: FilmSlate },
   { to: '/tv-shows', label: 'Series', Icon: MonitorPlay },
-  { to: '/books',    label: 'Books',  Icon: BookOpen },
 ];
 const BROWSE_KEY = 'binge:last-browse';
 
+// A saved page that's no longer here (Books, before it was removed) falls
+// back to Movies.
 function lastBrowse() {
-  try { return window.localStorage.getItem(BROWSE_KEY) || '/movies'; } catch { return '/movies'; }
+  let saved = '';
+  try { saved = window.localStorage.getItem(BROWSE_KEY) || ''; } catch { /* storage blocked */ }
+  return BROWSE.some((entry) => entry.to === saved) ? saved : '/movies';
 }
 
 export default function BottomNav() {

@@ -15,10 +15,6 @@ export const RATING_TABLES = {
     table: 'tv_show_ratings',
     columns: ['premise', 'originality', 'acting', 'cinematography', 'writing', 'pacing', 'resonance'],
   },
-  book: {
-    table: 'book_ratings',
-    columns: ['prose', 'plot', 'characters', 'originality', 'pacing', 'resonance'],
-  },
 };
 
 const MEDIA_METADATA_TABLES = {
@@ -29,10 +25,6 @@ const MEDIA_METADATA_TABLES = {
   tv_show: {
     table: 'tv_shows',
     columns: 'id, title, year, genre, poster_url, creator, source_key, original_language',
-  },
-  book: {
-    table: 'books',
-    columns: 'id, title, year, genre, cover_url',
   },
 };
 
@@ -188,15 +180,18 @@ export function scopeToProfile(query, profileId) {
     : query.eq('profile_id', profileId);
 }
 
-export async function enrichMediaRecords(records = []) {
-  if (!Array.isArray(records)) {
+// Adds title, year, art etc. to library rows. Leaves out rows of a type the
+// app no longer has: books were removed (2026-11-18), and their rows stay in
+// Supabase until the books migration deletes them.
+export async function enrichMediaRecords(allRecords = []) {
+  if (!Array.isArray(allRecords)) {
     return [];
   }
+  const records = allRecords.filter((record) => MEDIA_METADATA_TABLES[record.media_type]);
 
   const pendingIdsByType = {
     movie: new Set(),
     tv_show: new Set(),
-    book: new Set(),
   };
 
   records.forEach((record) => {

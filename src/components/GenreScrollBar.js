@@ -2,7 +2,7 @@ import { CaretLeft, CaretRight } from '@phosphor-icons/react';
 import useDragScroll from '../hooks/useDragScroll';
 
 // Shared horizontal scroll behavior for the genre/category chip bars used on
-// Movies, TVShows, Books, and Sports: adds mouse-wheel and click-drag
+// Movies, TVShows and Sports: adds mouse-wheel and click-drag
 // scrolling plus hover-revealed arrow buttons, since the bar previously only
 // supported native touch/trackpad scroll (no affordance for a mouse-only
 // desktop user).

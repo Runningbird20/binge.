@@ -48,8 +48,8 @@ function requestTitleDetails(tmdbId, mediaType) {
 }
 
 // The title's logo art, the same one its popup shows (the spotlight uses
-// it as its headline). Resolves to a URL, or null when there is none (books,
-// titles without TMDB art, TMDB unreachable). Shares the popup's request, so
+// it as its headline). Resolves to a URL, or null when there is none (titles
+// without TMDB art, TMDB unreachable). Shares the popup's request, so
 // opening the popup afterwards needs nothing new.
 export async function fetchTitleLogo(item) {
   if (!mayHaveTitleLogo(item)) return null;

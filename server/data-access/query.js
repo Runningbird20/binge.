@@ -9,7 +9,7 @@ const quote = (name) => {
   if (typeof name !== 'string' || !/^[a-z_][a-z0-9_]*$/i.test(name)) throw new Error('Invalid database identifier');
   return `"${name}"`;
 };
-const VIEWS = new Set(['movie_genres', 'tv_show_genres', 'book_genres']);
+const VIEWS = new Set(['movie_genres', 'tv_show_genres']);
 const CONFLICT_KEYS = { title_ratings: 'source_key', episode_ratings_cache: 'imdb_id,season', subtitle_cache: 'key' };
 // Written by the server at any time, so their counts are never stored.
 const CACHE_TABLES = new Set(Object.keys(CONFLICT_KEYS));
@@ -81,8 +81,8 @@ async function plannedCount(table) {
   return rows[0] ? Number(rows[0].value) : null;
 }
 
-// Exact counts read every matching row (the Books page asks for one per genre
-// row), and the catalog only changes when a sync runs. So a count is stored in
+// Exact counts read every matching row, and the catalog only changes when a
+// sync runs. So a count is stored in
 // catalog_stats under a hash of its query the first time, and reused by every
 // server instance until scripts/turso-catalog.js refresh clears them after the
 // next sync. A short in-memory layer skips even that one-row read.

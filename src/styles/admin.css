@@ -183,8 +183,6 @@
   .adm-ann-list .adm-ann-level, .adm-ann-list .adm-muted { display: none; }
 }
 
-/* ── Manga providers & where to read ──────────────────────────── */
-
 /* Admin: users panel */
 
 .adm-panel h3 + .adm-muted { margin-bottom: 1rem; }

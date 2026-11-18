@@ -5,12 +5,7 @@ import {
   toSupabaseError,
 } from './supabase';
 import { fetchSupabaseRatings, fetchSupabaseWatchlist } from './supabaseData';
-import { generateSupabaseRecommendations } from './recommendations';
-import {
-  fetchBookById,
-  fetchBooksPage,
-  fetchCatalogByTmdbIds,
-} from './catalogQueries';
+import { fetchCatalogByTmdbIds } from './catalogQueries';
 import { searchTmdbMulti } from './tmdb';
 import { identityKey } from './mediaIdentity';
 import { isBrowseable } from './releaseWindow';
@@ -190,52 +185,9 @@ async function fetchTmdbShow(searchParams) {
   };
 }
 
-async function fetchAniListId(title) {
-  const gql = `query ($title: String) {
-    Media(search: $title, type: ANIME) { id title { romaji english } }
-  }`;
-  const response = await fetch('https://graphql.anilist.co', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ query: gql, variables: { title } }),
-  });
-  if (!response.ok) throw new Error(`AniList error ${response.status}`);
-  const data = await response.json();
-  const media = data?.data?.Media;
-  if (!media?.id) throw new Error('Not found on AniList');
-  return {
-    id: String(media.id),
-    title: media.title?.english || media.title?.romaji || null,
-  };
-}
-
 // Every /media/* path is answered here, in the browser; none reaches the
 // server. Movies and series are read with catalogQueries.js directly.
 async function handleMediaGet(pathname, searchParams) {
-  if (pathname === '/media/books') {
-    const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 24);
-    return fetchBooksPage({
-      page: Number(searchParams.get('page') || 1),
-      pageSize,
-      search: searchParams.get('search') || '',
-      genre: searchParams.get('genre') || '',
-      sortOrder: searchParams.get('sort') || 'title-asc',
-    });
-  }
-
-  const bookMatch = pathname.match(/^\/media\/books\/([^/]+)$/);
-  if (bookMatch) {
-    const book = await fetchBookById(decodeURIComponent(bookMatch[1]));
-    if (!book) throw new Error('Book not found.');
-    return book;
-  }
-
-  if (pathname === '/media/anilist-id') {
-    const title = searchParams.get('title') || '';
-    if (!title) throw new Error('title required');
-    return fetchAniListId(title);
-  }
-
   if (pathname === '/media/embed-id') {
     return (
       normalizeEmbedRouteId('imdb', searchParams.get('imdb')) ||
@@ -290,18 +242,19 @@ async function rankedSearch(client, rawQuery, types) {
     fetchCatalogByTmdbIds('tv_show', tmdbByType.tv_show).catch(() => new Map()),
   ]);
 
-  const buckets = { movies: new Map(), tv: new Map(), books: new Map() };
+  const buckets = { movies: new Map(), tv: new Map() };
   function add(bucket, row, score) {
     const existing = buckets[bucket].get(row.id);
     if (!existing || existing._score < score) buckets[bucket].set(row.id, { ...row, _score: score });
   }
 
   (rpcResult.data || []).forEach((row) => {
-    const bucket = row.result_type === 'movie' ? 'movies' : row.result_type === 'tv' ? 'tv' : 'books';
+    // Movies and series only.
+    const bucket = row.result_type === 'movie' ? 'movies' : row.result_type === 'tv' ? 'tv' : null;
+    if (!bucket) return;
     const tmdbId = String(row.source_key || '').split(':')[2];
     const boost = tmdbBoost.get(`${row.result_type}:${tmdbId}`) || 0;
-    const item = row.result_type === 'book' ? { ...row, cover_url: row.poster_url, poster_url: undefined } : row;
-    add(bucket, item, Number(row.score) + boost);
+    add(bucket, row, Number(row.score) + boost);
   });
   movieMatches.forEach((row, tmdbId) => add('movies', row, 0.9 + (tmdbBoost.get(`movie:${tmdbId}`) || 0)));
   tvMatches.forEach((row, tmdbId) => add('tv', row, 0.9 + (tmdbBoost.get(`tv:${tmdbId}`) || 0)));
@@ -331,7 +284,6 @@ async function rankedSearch(client, rawQuery, types) {
   return {
     movies: types.has('movies') ? finalize('movies') : [],
     tv: types.has('tv') ? finalize('tv') : [],
-    books: types.has('books') ? finalize('books') : [],
     people,
   };
 }
@@ -340,11 +292,11 @@ async function handleSearch(searchParams) {
   const client = requireSupabaseClient();
   const rawQuery = searchParams.get('q') || '';
   const query = buildIlikePattern(rawQuery);
-  const typesRaw = String(searchParams.get('types') || 'movies,tv,books,people');
+  const typesRaw = String(searchParams.get('types') || 'movies,tv,people');
   const types = new Set(typesRaw.split(',').map((v) => v.trim()).filter(Boolean));
 
   if (!query || normalizeSearchTerm(rawQuery).length < 2) {
-    return { movies: [], tv: [], books: [], people: [] };
+    return { movies: [], tv: [], people: [] };
   }
 
   // Return cached result if still fresh
@@ -411,27 +363,6 @@ async function handleSearch(searchParams) {
     );
   }
 
-  if (types.has('books')) {
-    tasks.push(
-      client
-        .from('books')
-        .select('id, title, author, year, genre, cover_url, source_key, external_id')
-        .or(fuzzyOr('title', 'author'))
-        .not('source_key', 'is', null)
-        .order('year', { ascending: false, nullsFirst: false })
-        .limit(SEARCH_LIMIT)
-        .then(({ data, error }) => {
-          if (error) {
-            throw toSupabaseError(error, 'Unable to search books.', {
-              resourceName: 'books',
-            });
-          }
-
-          return ['books', data || []];
-        })
-    );
-  }
-
   if (types.has('people')) {
     tasks.push(
       client
@@ -452,7 +383,7 @@ async function handleSearch(searchParams) {
   }
 
   const results = await Promise.all(tasks);
-  const payload = { movies: [], tv: [], books: [], people: [] };
+  const payload = { movies: [], tv: [], people: [] };
   for (const [key, value] of results) payload[key] = value;
 
   _searchCache.set(cacheKey, { ts: Date.now(), payload });
@@ -468,16 +399,16 @@ const RELATED_CACHE_TTL = 5 * 60 * 1000;
 async function handleSearchRelated(searchParams) {
   const client = requireSupabaseClient();
   const rawQuery = searchParams.get('q') || '';
-  const typesRaw = String(searchParams.get('types') || 'movies,tv,books');
-  const types = new Set(typesRaw.split(',').map((v) => v.trim()).filter(Boolean));
+  const typesRaw = String(searchParams.get('types') || 'movies,tv');
+  // Movies and series only.
+  const types = new Set(typesRaw.split(',').map((v) => v.trim()).filter((v) => v === 'movies' || v === 'tv'));
   const excludeIds = {
     movies: new Set(String(searchParams.get('excludeMovies') || '').split(',').filter(Boolean).map(Number)),
     tv: new Set(String(searchParams.get('excludeTv') || '').split(',').filter(Boolean).map(Number)),
-    books: new Set(String(searchParams.get('excludeBooks') || '').split(',').filter(Boolean).map(Number)),
   };
 
-  if (normalizeSearchTerm(rawQuery).length < 2) {
-    return { moviesRelated: [], tvRelated: [], booksRelated: [] };
+  if (normalizeSearchTerm(rawQuery).length < 2 || !types.size) {
+    return { moviesRelated: [], tvRelated: [] };
   }
 
   const cacheKey = `${rawQuery.toLowerCase().trim()}|${typesRaw}`;
@@ -485,18 +416,16 @@ async function handleSearchRelated(searchParams) {
   if (cached && Date.now() - cached.ts < RELATED_CACHE_TTL) return cached.payload;
 
   // One server call (server/catalogRelated.js) searches the descriptions within
-  // the most popular movies/series and the newest books; asking the tables
+  // the most popular movies/series; asking the tables
   // here scanned every row (~15s, and Turso bills each one).
   const { data, error } = await client.rpc('search_related', { q: rawQuery, types: [...types].join(',') });
   const payload = {
     moviesRelated: error ? [] : (data?.movies || []),
     tvRelated: error ? [] : (data?.tv || []),
-    booksRelated: error ? [] : (data?.books || []),
   };
 
   payload.moviesRelated = payload.moviesRelated.filter((r) => !excludeIds.movies.has(r.id));
   payload.tvRelated = payload.tvRelated.filter((r) => !excludeIds.tv.has(r.id));
-  payload.booksRelated = payload.booksRelated.filter((r) => !excludeIds.books.has(r.id));
 
   _relatedCache.set(cacheKey, { ts: Date.now(), payload });
   return payload;
@@ -576,14 +505,6 @@ export async function executeSupabaseRoute(method, path, body) {
 
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const { pathname, searchParams } = parseApiPath(path);
-
-  if (pathname === '/chat/recommendations') {
-    if (normalizedMethod !== 'GET') {
-      throw new Error(`Unsupported chat route: ${pathname}`);
-    }
-
-    return generateSupabaseRecommendations();
-  }
 
   if (pathname === '/search') {
     return handleSearch(searchParams);

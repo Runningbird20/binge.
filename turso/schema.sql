@@ -66,23 +66,6 @@ CREATE TABLE IF NOT EXISTS tv_shows (
   search_squash TEXT
 );
 
-CREATE TABLE IF NOT EXISTS books (
-  id INTEGER PRIMARY KEY,
-  title TEXT,
-  author TEXT,
-  year INTEGER,
-  genre TEXT,
-  synopsis TEXT,
-  cover_url TEXT,
-  source_key TEXT,
-  created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  item_url TEXT,
-  external_id TEXT,
-  search_norm TEXT,
-  search_squash TEXT,
-  search_author TEXT
-);
-
 -- Shared caches written by the server (OMDb ratings, IMDb episode ratings,
 -- OpenSubtitles files).
 CREATE TABLE IF NOT EXISTS title_ratings (
@@ -127,7 +110,6 @@ CREATE TABLE IF NOT EXISTS catalog_stats (
 
 CREATE VIEW IF NOT EXISTS movie_genres AS SELECT genre FROM catalog_genres WHERE kind = 'movies';
 CREATE VIEW IF NOT EXISTS tv_show_genres AS SELECT genre FROM catalog_genres WHERE kind = 'tv_shows';
-CREATE VIEW IF NOT EXISTS book_genres AS SELECT genre FROM catalog_genres WHERE kind = 'books';
 
 -- Lookups
 CREATE UNIQUE INDEX IF NOT EXISTS movies_source_key ON movies (source_key);
@@ -136,8 +118,6 @@ CREATE INDEX IF NOT EXISTS movies_imdb_id ON movies (imdb_id);
 CREATE UNIQUE INDEX IF NOT EXISTS tv_shows_source_key ON tv_shows (source_key);
 CREATE UNIQUE INDEX IF NOT EXISTS tv_shows_external_id ON tv_shows (external_id);
 CREATE INDEX IF NOT EXISTS tv_shows_imdb_id ON tv_shows (imdb_id);
-CREATE UNIQUE INDEX IF NOT EXISTS books_source_key ON books (source_key);
-CREATE UNIQUE INDEX IF NOT EXISTS books_external_id ON books (external_id);
 
 -- Browse orders (SQLite sorts NULL lowest, so DESC already puts NULLs last)
 CREATE INDEX IF NOT EXISTS movies_popularity ON movies (popularity DESC) WHERE poster_url IS NOT NULL;
@@ -156,8 +136,6 @@ CREATE INDEX IF NOT EXISTS tv_shows_release_date ON tv_shows (release_date) WHER
 CREATE INDEX IF NOT EXISTS tv_shows_year ON tv_shows (year);
 CREATE INDEX IF NOT EXISTS tv_shows_title ON tv_shows (title COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS tv_shows_vote_average ON tv_shows (vote_average DESC) WHERE poster_url IS NOT NULL;
-CREATE INDEX IF NOT EXISTS books_year ON books (year);
-CREATE INDEX IF NOT EXISTS books_title ON books (title COLLATE NOCASE);
 
 -- Search (server/catalogSearch.js). Exact/prefix matches use these B-trees;
 -- substrings and typos use the trigram FTS tables below.
@@ -165,17 +143,12 @@ CREATE INDEX IF NOT EXISTS movies_search_norm ON movies (search_norm);
 CREATE INDEX IF NOT EXISTS movies_search_squash ON movies (search_squash);
 CREATE INDEX IF NOT EXISTS tv_shows_search_norm ON tv_shows (search_norm);
 CREATE INDEX IF NOT EXISTS tv_shows_search_squash ON tv_shows (search_squash);
-CREATE INDEX IF NOT EXISTS books_search_norm ON books (search_norm);
-CREATE INDEX IF NOT EXISTS books_search_author ON books (search_author);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS movies_fts USING fts5(
   search_norm, search_squash, content = 'movies', content_rowid = 'id', tokenize = 'trigram'
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS tv_shows_fts USING fts5(
   search_norm, search_squash, content = 'tv_shows', content_rowid = 'id', tokenize = 'trigram'
-);
-CREATE VIRTUAL TABLE IF NOT EXISTS books_fts USING fts5(
-  search_norm, search_author, content = 'books', content_rowid = 'id', tokenize = 'trigram'
 );
 
 -- Keep the FTS tables in step with their rows (external-content pattern).
@@ -203,18 +176,6 @@ CREATE TRIGGER IF NOT EXISTS tv_shows_fts_update AFTER UPDATE OF search_norm, se
   INSERT INTO tv_shows_fts (rowid, search_norm, search_squash) VALUES (new.id, new.search_norm, new.search_squash);
 END;
 
-CREATE TRIGGER IF NOT EXISTS books_fts_insert AFTER INSERT ON books BEGIN
-  INSERT INTO books_fts (rowid, search_norm, search_author) VALUES (new.id, new.search_norm, new.search_author);
-END;
-CREATE TRIGGER IF NOT EXISTS books_fts_delete AFTER DELETE ON books BEGIN
-  INSERT INTO books_fts (books_fts, rowid, search_norm, search_author) VALUES ('delete', old.id, old.search_norm, old.search_author);
-END;
-CREATE TRIGGER IF NOT EXISTS books_fts_update AFTER UPDATE OF search_norm, search_author ON books
-  WHEN old.search_norm IS NOT new.search_norm OR old.search_author IS NOT new.search_author BEGIN
-  INSERT INTO books_fts (books_fts, rowid, search_norm, search_author) VALUES ('delete', old.id, old.search_norm, old.search_author);
-  INSERT INTO books_fts (rowid, search_norm, search_author) VALUES (new.id, new.search_norm, new.search_author);
-END;
-
 -- Search's related row (server/catalogRelated.js): a word index over the
 -- descriptions, so "titles whose description mentions …" reads only the
 -- matches instead of every row's text. detail=none + columnsize=0 keep it
@@ -226,10 +187,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS movies_text_fts USING fts5(
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS tv_shows_text_fts USING fts5(
   overview, synopsis, content = 'tv_shows', content_rowid = 'id',
-  tokenize = 'unicode61 remove_diacritics 2', detail = 'none', columnsize = 0
-);
-CREATE VIRTUAL TABLE IF NOT EXISTS books_text_fts USING fts5(
-  synopsis, content = 'books', content_rowid = 'id',
   tokenize = 'unicode61 remove_diacritics 2', detail = 'none', columnsize = 0
 );
 
@@ -257,14 +214,3 @@ CREATE TRIGGER IF NOT EXISTS tv_shows_text_fts_update AFTER UPDATE OF overview, 
   INSERT INTO tv_shows_text_fts (rowid, overview, synopsis) VALUES (new.id, new.overview, new.synopsis);
 END;
 
-CREATE TRIGGER IF NOT EXISTS books_text_fts_insert AFTER INSERT ON books BEGIN
-  INSERT INTO books_text_fts (rowid, synopsis) VALUES (new.id, new.synopsis);
-END;
-CREATE TRIGGER IF NOT EXISTS books_text_fts_delete AFTER DELETE ON books BEGIN
-  INSERT INTO books_text_fts (books_text_fts, rowid, synopsis) VALUES ('delete', old.id, old.synopsis);
-END;
-CREATE TRIGGER IF NOT EXISTS books_text_fts_update AFTER UPDATE OF synopsis ON books
-  WHEN old.synopsis IS NOT new.synopsis BEGIN
-  INSERT INTO books_text_fts (books_text_fts, rowid, synopsis) VALUES ('delete', old.id, old.synopsis);
-  INSERT INTO books_text_fts (rowid, synopsis) VALUES (new.id, new.synopsis);
-END;

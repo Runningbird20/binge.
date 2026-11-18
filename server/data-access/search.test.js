@@ -26,13 +26,10 @@ const shows = [
   { title: 'Breaking Bad', year: 2008, source_key: 'tmdb:tv:1396', popularity: 120, poster_url: 'p' },
   { title: 'Stranger Things', year: 2016, source_key: 'tmdb:tv:66732', popularity: 150, poster_url: 'p' },
 ];
-const books = [
-  { title: 'One Hundred Years of Solitude', author: 'Gabriel García Márquez', year: 1967, source_key: 'ol:works/OL274505W', cover_url: 'c' },
-];
 
 test.before(async () => {
   await applySchema(catalogDb.getClient());
-  for (const [table, values] of [['movies', movies], ['tv_shows', shows], ['books', books]]) {
+  for (const [table, values] of [['movies', movies], ['tv_shows', shows]]) {
     const result = await executeQuery({ table, operation: 'insert', values }, { trusted: true });
     assert.equal(result.error, null);
   }
@@ -77,12 +74,6 @@ test('typos fall back to trigram and word similarity', async () => {
   assert.equal((await top('brekaing bad', 'tv'))[0].title, 'Breaking Bad');
   assert.equal((await top('stranger thigns', 'tv'))[0].title, 'Stranger Things');
   assert.equal((await top('harry poter', 'movie'))[0].title, "Harry Potter and the Philosopher's Stone");
-});
-
-test('books are found by author', async () => {
-  const found = await top('garcia marquez', 'book');
-  assert.equal(found[0].title, 'One Hundred Years of Solitude');
-  assert.equal(found[0].poster_url, 'c');
 });
 
 test('search columns stay in step with title changes', async () => {

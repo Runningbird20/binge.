@@ -29,7 +29,7 @@ export function invalidateCachedPrefix(prefix) {
   }
 }
 
-// Shared key shape for the Movies/TVShows/Books catalog views, so the same
+// Shared key shape for the Movies/TVShows catalog views, so the same
 // browse state (filters + sort + kids-mode) reliably hits the same cache
 // entry across a session regardless of which page built the key.
 export function buildCatalogCacheKey(mediaType, { genreValues = [], searchTerm = '', sortMode = 'featured', kidsSafe = false } = {}) {

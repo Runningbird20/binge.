@@ -14,7 +14,7 @@ let closeOpenPreview = null;
 
 export function titleUrl(item, { play = false } = {}) {
   const id = item.media_id ?? item.id;
-  const base = item.media_type === 'tv_show' ? `/tv-show/${id}` : item.media_type === 'book' ? `/book/${id}` : `/movie/${id}`;
+  const base = item.media_type === 'tv_show' ? `/tv-show/${id}` : `/movie/${id}`;
   return play ? `${base}?play=1` : base;
 }
 
@@ -123,7 +123,7 @@ export default function TitleCard({ item, priority = false, rank = null, showMat
         )}
       </div>
       <p className="st-card-title">{item.title}</p>
-      {item._subtitle ? <p className="st-card-sub">{item._subtitle}</p> : item.author && <p className="st-card-sub">{item.author}</p>}
+      {item._subtitle && <p className="st-card-sub">{item._subtitle}</p>}
       {item._note && <p className="st-card-note">{item._note}</p>}
     </Link>
     {previewRect && (

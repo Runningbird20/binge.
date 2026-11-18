@@ -4,7 +4,7 @@ jest.mock('react-router-dom', () => ({ useLocation: () => ({ pathname: '/home' }
 jest.mock('@phosphor-icons/react', () => new Proxy({}, { get: () => () => null }));
 jest.mock('../api', () => ({ api: { get: jest.fn().mockResolvedValue({}) } }));
 jest.mock('../utils/searchExtras', () => ({
-  getRecentSearches: () => [], groupResults: () => ({ top: null, movies: [], series: [], books: [] }),
+  getRecentSearches: () => [], groupResults: () => ({ top: null, movies: [], series: [] }),
   addRecentSearch: jest.fn(), clearRecentSearches: jest.fn(), removeRecentSearch: jest.fn(),
   searchGames: jest.fn().mockResolvedValue([]), searchPerson: jest.fn().mockResolvedValue(null),
 }));

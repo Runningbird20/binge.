@@ -3,8 +3,7 @@
 // while representing the same title to a user — the Plex importer in
 // particular can create one row per file for what's really one release.
 // identityKey() gives dedup helpers something sturdier than `id` to key on:
-// a shared external id when we have one, else a normalized title+year (or
-// title+author+year for books).
+// a shared external id when we have one, else a normalized title+year.
 function normalizeIdentityText(value) {
   return String(value || '')
     .toLowerCase()
@@ -20,9 +19,5 @@ export function identityKey(item) {
 
   const title = normalizeIdentityText(item.title || item.name);
   const year = item.year ? String(item.year).slice(0, 4) : '';
-  const author = normalizeIdentityText(item.author);
-
-  return author
-    ? `book:${title}|${author}|${year}`
-    : `title:${title}|${year}`;
+  return `title:${title}|${year}`;
 }

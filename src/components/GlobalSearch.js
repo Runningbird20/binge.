@@ -19,19 +19,18 @@ function useDebounce(value, delay) {
   return debounced;
 }
 
-const TYPE_LABEL = { movie: 'Movie', tv_show: 'Series', book: 'Book' };
+const TYPE_LABEL = { movie: 'Movie', tv_show: 'Series' };
 
 function itemUrl(item) {
-  if (item.media_type === 'book') return `/book/${item.id}`;
   return item.media_type === 'tv_show' ? `/tv-show/${item.id}` : `/movie/${item.id}`;
 }
 
 function itemSub(item) {
-  return [TYPE_LABEL[item.media_type], item.media_type === 'book' ? item.author : item.year].filter(Boolean).join(' · ');
+  return [TYPE_LABEL[item.media_type], item.year].filter(Boolean).join(' · ');
 }
 
 // Navbar search: recent searches when empty; grouped results while typing
-// (Top result → Movies → Series → Books → Live games, plus a person match).
+// (Top result → Movies → Series → Live games, plus a person match).
 export default function GlobalSearch() {
   // A restricted profile only sees what its level allows (searchMaturity.js).
   const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
@@ -76,7 +75,7 @@ export default function GlobalSearch() {
     }
     let cancelled = false;
     setLoading(true);
-    api.get(`/search?q=${encodeURIComponent(term)}&types=movies,tv,books`)
+    api.get(`/search?q=${encodeURIComponent(term)}&types=movies,tv`)
       .then((data) => filterSearchPayload(data, kidsSafe))
       .then((data) => { if (!cancelled) setResults(data); })
       .catch(() => { if (!cancelled) setResults(null); })
@@ -100,7 +99,6 @@ export default function GlobalSearch() {
     grouped.top && { key: 'top', label: 'Top result', items: [grouped.top] },
     grouped.movies.length && { key: 'movies', label: 'Movies', items: grouped.movies.slice(0, 3) },
     grouped.series.length && { key: 'series', label: 'Series', items: grouped.series.slice(0, 3) },
-    grouped.books.length && { key: 'books', label: 'Books', items: grouped.books.slice(0, 2) },
   ].filter(Boolean);
   const hasAny = sections.length || games.length || person;
 
@@ -186,8 +184,8 @@ export default function GlobalSearch() {
                   <p className="global-search-dropdown-label">{section.label}</p>
                   {section.items.map((item) => (
                     <button key={`${item.media_type}-${item.id}`} type="button" className="global-search-dropdown-item" onClick={() => go(itemUrl(item))}>
-                      {item.poster_url || item.cover_url ? (
-                        <img src={posterSrc(item.poster_url || item.cover_url)} alt="" referrerPolicy="no-referrer" />
+                      {item.poster_url ? (
+                        <img src={posterSrc(item.poster_url)} alt="" referrerPolicy="no-referrer" />
                       ) : (
                         <span className="global-search-dropdown-item-icon">{item.title?.charAt(0)}</span>
                       )}

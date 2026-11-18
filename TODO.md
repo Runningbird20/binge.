@@ -22,37 +22,14 @@ Ideas for binge., roughly in priority order within each section. Each item names
   - An older `media_lists` table was dropped (`supabase/migrations/20261029120000_record_removed_tables.sql`). Start fresh rather than bringing it back.
 - [ ] **"Worth watching?" for finished games.** A spoiler-free 1–5 rating, worked out from how much the win probability swung and how often the lead changed, so a replay can be picked without seeing the score. It shows on the card and in `LiveScorePanel`, and stays while Hide scores is on, since it gives nothing away. ESPN's game summary (fetched in `src/utils/liveScores.js`) has win probability for some leagues; check which first.
 - [ ] **Smarter "Because you watched"** (on hold until binge. has enough users with overlapping ratings). Mix in the existing `collaborative_*_candidates` RPCs ("people who liked X also liked") as a lightly weighted extra source next to TMDB `/recommendations` (which already covers this from TMDB's audience) in `src/utils/personalization.js`.
+- [ ] Chang reminder bell to notify you if a new season is announced and when new episodes drop.
 
 ## Removing books
 
-Decided 2026-11-18: binge. drops books entirely: browsing, reading, ratings and the catalog table. Movies, series and sports stay.
+Decided 2026-11-18: binge. drops books and Manga & Comics entirely: browsing, reading, ratings and the catalog table. Movies, series and sports stay. The code, the TV apps and the docs are done (2026-11-18); old `/books` and `/book/:id` links redirect to Home. Two steps are left, both on the live databases and both only once this is deployed. Manga kept its list and ratings in each browser's localStorage, so it has no account data to delete.
 
-- [ ] **Decide about Manga & Comics first.** It's a tab on the Books page (`src/components/MangaTab.js`, `src/components/manga/`, `src/utils/mangaProviders.js`, `src/utils/anilist.js`, `server/routes/manga.js`). It either goes with books or moves to a page of its own.
-- [ ] **Tell people before their book data goes.** The migration below deletes book ratings and My List rows. Post an announcement (Admin → Announcements) first, so anyone who wants them can use Download my data.
-- [ ] **The website.**
-  - Delete the Books page and its parts: `src/pages/Books.js`, `src/components/BookBrowseView.js`, `src/components/BookReader.js`, `src/components/books/`, `src/utils/bookAccess.js`, `src/utils/bookRows.js`, `src/utils/adaptations.js`, and their tests.
-  - Delete the book ↔ screen links on movies: `src/components/title/SourceBooks.js`.
-  - Take out `/books` and `/book/:id` (`src/App.js` and its `PAGE_LOADERS`, `src/components/MediaOverlay.js`), and Books in `src/components/Navbar.js` and the phone's Browse sheet (`src/components/BottomNav.js`).
-  - Drop the book branches from shared code:
-    - catalog reads: `src/utils/catalogQueries.js`, `src/utils/supabaseApi.js`;
-    - search: `searchExtras`, `searchFilters`, `searchMaturity`, `GlobalSearch`, `SearchResults`;
-    - ratings: `RatingInput`, `StarRating`, `RatingArtifact`;
-    - the dashboards: `libraryStats` ("read" as a status goes too), `wrapped`;
-    - also `dataExport`, `watchlistStatus`, Home's Books row, `Landing`, and `src/testUtils/pageTestSetup.js`.
-  - Delete `src/utils/recommendations.js`, the older genre-sampling engine. Home's Books row is its last real caller; its other one, `/chat/recommendations` in `supabaseApi.js`, is never requested. It's in the first download today.
-  - Book styles in `App.css`, `streaming.css`, `title.css` and `mobile.css`; the app's name and description in `public/manifest.json` ("Movies, series, books & sports"); `e2e/journey/web-journey.spec.js`.
-- [ ] **The server.**
-  - `server/routes/books.js` and its line in `server/app.js`.
-  - `/book/:id` link previews: `server/routes/og.js`, the bot rule in `vercel.json`.
-  - Books in search (`server/catalogSearch.js`, `server/catalogRelated.js`), `server/data-access/` and `server/utils/databaseHealth.js`.
-  - `GOOGLE_BOOKS_API_KEY` in `.env.example` and on Vercel.
-- [ ] **The catalog (Turso).** About 20,000 rows and 37 MB of the 395 MB catalog (the local copy of 2026-11-04).
-  - Drop `books`, the `book_genres` view, `books_fts`, `books_text_fts` and their triggers and indexes (`turso/schema.sql`), and the books entries in `catalog_genres` and `catalog_stats`.
-  - Update `MEDIA_TABLES` in `src/utils/mediaDatabase.js`, the `MEDIA` list in `scripts/check-database-split.js`, `scripts/turso-catalog.js`, `scripts/catalog-health.js`, and the book cases in `scripts/search-benchmark.js`.
-- [ ] **Account data (Supabase).** A migration that deletes every `media_type = 'book'` row, drops `book_ratings`, and narrows the `media_type` checks to movies and series. Record the dropped table the way `20261029120000_record_removed_tables.sql` does, or `check-supabase-migrations.js` will still expect it. Update `supabase/repeatable_schema.sql` to match.
-- [ ] **The import scripts.** The Goodreads, Internet Archive and Open Library scrapers in `scripts/scrapers/`, and their `import:goodreads*`, `import:books*` and `import:openlibrary*` entries in `package.json`, and their test, `src/importerFilters.test.js`. That empties `scripts/scrapers/`. The Goodreads scraper is the only user of the `playwright` dependency (E2E uses `@playwright/test`), so that goes too, with the Goodreads settings in `.env.example`.
-- [ ] **The TV apps.** They have no books screen. Drop `books`/`book_genres` from the catalog table lists (`tv-apple/BingeTV/Data/Supabase.swift`, `tv-android/app/src/main/java/com/binge/tv/data/Supabase.kt`) and the "Books, manga and account settings are on …" line (`tv-apple/BingeTV/Views/SearchView.swift`, `tv-android/app/src/main/java/com/binge/tv/ui/Me.kt`).
-- [ ] **The docs.** In `CLAUDE.md`: Books & manga reading, "Book ids must stay below 2^53", Book ↔ screen, and the books parts of search, the title popup and the data import notes. The Books & manga row in `DIFF.md`, and `docs/database-split.md`.
+- [ ] **Drop the books table on Turso, right after this is deployed:** `node scripts/turso-catalog.js drop-books` (tested on a copy of the catalog; safe to run again). Not before: the live site and `main`'s scheduled syncs still read `books` until then. Not much later either: from Monday the weekly database-split check reports the leftover table. Then delete the `drop-books` command. Turso keeps the freed pages (~37 MB) for reuse, so its storage figure may not fall.
+- [ ] **Apply the Supabase migration, right after this is deployed:** run `supabase/migrations/20261118120000_remove_books.sql` in the Supabase SQL editor (tested on a local Postgres copy of the schema; safe to run again). It deletes every `media_type = 'book'` row, drops `book_ratings` and `collaborative_book_candidates`, narrows the `media_type` checks to movies and series, and rebuilds `admin_stats()` without books. There's no undo: the book rows are gone for good. Not before deploying: until then the live site still saves book ratings and list rows.
 
 ## Streaming servers
 

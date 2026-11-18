@@ -27,11 +27,10 @@ test('finished titles leave My List for Watched, newest first', () => {
     { id: 1, status: 'plan_to_watch' },
     { id: 2, status: 'watched', updated_at: '2026-01-01T00:00:00Z' },
     { id: 3, status: 'watching' },
-    { id: 4, status: 'read', updated_at: '2026-06-01T00:00:00Z' },
+    { id: 4, status: 'watched', updated_at: '2026-06-01T00:00:00Z' },
     { id: 5, status: 'watched', added_at: '2025-01-01T00:00:00Z' },
-    { id: 6, status: 'reading' },
   ]);
-  expect(list.map((item) => item.id)).toEqual([1, 3, 6]);
+  expect(list.map((item) => item.id)).toEqual([1, 3]);
   expect(finished.map((item) => item.id)).toEqual([4, 2, 5]);
-  expect(isFinished({ status: 'plan_to_read' })).toBe(false);
+  expect(isFinished({ status: 'plan_to_watch' })).toBe(false);
 });

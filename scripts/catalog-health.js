@@ -1,5 +1,5 @@
 // Weekly catalog health report (catalog-health.yml). Read-only.
-//   - row counts for movies / tv_shows / books in the Turso catalog
+//   - row counts for movies / tv_shows in the Turso catalog
 //   - how many movies and shows lack vote_average / popularity / original_language
 //   - coverage: how many of TMDB's trending titles (this week, movies + series,
 //     the ones the browse rows would show) match a catalog row by source_key,
@@ -46,7 +46,7 @@ const fmt = (n) => n.toLocaleString('en-US');
 
 async function main() {
   const counts = {};
-  for (const table of ['movies', 'tv_shows', 'books']) {
+  for (const table of ['movies', 'tv_shows']) {
     counts[table] = Number((await db.query(`select count(*) as count from ${table}`)).rows[0].count);
   }
 
@@ -82,12 +82,12 @@ async function main() {
   const lines = [
     `## Catalog health ${ok ? '' : '— coverage below ' + MIN_COVERAGE + '%'}`.trim(),
     '',
-    '| | Movies | Series | Books |',
-    '|---|---|---|---|',
-    `| Rows | ${fmt(counts.movies)} | ${fmt(counts.tv_shows)} | ${fmt(counts.books)} |`,
-    `| No vote_average | ${gapRow('movies', 'vote_average')} | ${gapRow('tv_shows', 'vote_average')} | |`,
-    `| No popularity | ${gapRow('movies', 'popularity')} | ${gapRow('tv_shows', 'popularity')} | |`,
-    `| No original_language | ${gapRow('movies', 'original_language')} | ${gapRow('tv_shows', 'original_language')} | |`,
+    '| | Movies | Series |',
+    '|---|---|---|',
+    `| Rows | ${fmt(counts.movies)} | ${fmt(counts.tv_shows)} |`,
+    `| No vote_average | ${gapRow('movies', 'vote_average')} | ${gapRow('tv_shows', 'vote_average')} |`,
+    `| No popularity | ${gapRow('movies', 'popularity')} | ${gapRow('tv_shows', 'popularity')} |`,
+    `| No original_language | ${gapRow('movies', 'original_language')} | ${gapRow('tv_shows', 'original_language')} |`,
     `| TMDB trending in the catalog | ${coverage.movies.matched}/${coverage.movies.total} (${pct(coverage.movies.matched, coverage.movies.total).toFixed(0)}%) | ${coverage.tv_shows.matched}/${coverage.tv_shows.total} (${pct(coverage.tv_shows.matched, coverage.tv_shows.total).toFixed(0)}%) | |`,
     '',
     `Overall trending coverage: **${overall.toFixed(1)}%** (fails below ${MIN_COVERAGE}%).`,

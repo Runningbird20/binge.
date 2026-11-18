@@ -114,11 +114,10 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Previous / next live game from the player (◀ ▶) | n/a | n/a | ✓ | — | |
 | A live game in a corner window over other video | — | — | ✓ | — | `Player/Overlay.swift`. |
 
-## Reading, notifications & the rest
+## Notifications & the rest
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| Books & manga (reader, Where to read) | ✓ | ✓ | — | — | |
 | Push notifications (new episodes, reminders, admin broadcasts) | ✓ | ✓ | — | — | iPhones need the site installed to the Home Screen. |
 | Notification inbox (the bell) | ✓ | ✓ | — | — | `NotificationBell`: the last 30 days of alerts (`notifications`), with unread dots. Left of the profile on computers; on phones, the header's top right, opening a sheet. |
 | Announcements banner | ✓ | ✓ | ◐ | ◐ | TV apps: Home, Movies, Series and Sports; links are shown as text (a TV can't open them). |
@@ -133,7 +132,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 **Phone**:
 - Bottom nav (Home · Sports · Browse · Search · Me) with Browse and Me as bottom sheets.
-- Swipe down to close title and book pages, plus a sticky Play bar.
+- Swipe down to close title pages, plus a sticky Play bar.
 - The player's server picker as a bottom sheet.
 - Pull to refresh and haptics.
 - An Install button at the top right of the header: Add to Home Screen, or download the Android / iPhone app.

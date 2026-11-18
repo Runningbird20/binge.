@@ -84,18 +84,6 @@ const TV_SHOW_BROWSE_COLUMNS = [
   'age_rating',
 ].join(', ');
 
-const BOOK_COLUMNS = [
-  'id',
-  'title',
-  'author',
-  'year',
-  'genre',
-  'synopsis',
-  'cover_url',
-  'item_url',
-  'source_key',
-].join(', ');
-
 const DESCRIPTION_FALLBACK = 'No description available yet.';
 
 const THIS_YEAR = new Date().getFullYear();
@@ -158,17 +146,6 @@ function normalizeTvShowBrowseEntry(show) {
   };
 }
 
-function normalizeBook(book) {
-  if (!book) return null;
-
-  return {
-    ...book,
-    synopsis: book.synopsis || DESCRIPTION_FALLBACK,
-    cover_url: book.cover_url || null,
-    item_url: book.item_url || null,
-  };
-}
-
 function normalizeSearchValue(value) {
   return String(value || '')
     .replace(/[,%_"']/g, ' ')
@@ -210,21 +187,6 @@ function applyTitleGenreFilters(query, { search = '', genre = '' } = {}) {
   }
 
   return applyGenreFilter(nextQuery, genre);
-}
-
-function applyBookFilters(query, { search = '', genre = '' } = {}) {
-  let nextQuery = query;
-  const searchPattern = buildIlikePattern(search);
-
-  if (searchPattern) {
-    nextQuery = nextQuery.or(`title.ilike.${searchPattern},author.ilike.${searchPattern}`);
-  }
-
-  if (genre) {
-    nextQuery = nextQuery.ilike('genre', `%${normalizeSearchValue(genre)}%`);
-  }
-
-  return nextQuery;
 }
 
 function applyBrowseSort(query, sortOrder = 'title-asc') {
@@ -275,10 +237,6 @@ function fetchMovieGenres() {
 
 function fetchTvShowGenres() {
   return fetchGenreValues('tv_show_genres');
-}
-
-function fetchBookGenres() {
-  return fetchGenreValues('book_genres');
 }
 
 export async function fetchMovieCatalogSegment({
@@ -414,139 +372,6 @@ export async function fetchTvShowById(showId) {
   }
 
   return normalizeTvShow(data);
-}
-
-export async function fetchBooksPage({
-  page = 1,
-  pageSize = 24,
-  search = '',
-  genre = '',
-  sortOrder = 'title-asc',
-} = {}) {
-  const client = requireSupabaseCatalog();
-  const offset = Math.max(0, (page - 1) * pageSize);
-
-  let booksQuery = client
-    .from('books')
-    .select(BOOK_COLUMNS, { count: 'exact' });
-
-  booksQuery = applyBookFilters(booksQuery, { search, genre });
-  booksQuery = applyBrowseSort(booksQuery, sortOrder);
-
-  const [bookResult, genres] = await Promise.all([
-    booksQuery.range(offset, offset + pageSize - 1),
-    fetchBookGenres().catch(() => []),
-  ]);
-
-  if (bookResult.error) {
-    throw bookResult.error;
-  }
-
-  const items = (bookResult.data || []).map((book) => normalizeBook(book));
-  const total = Number(bookResult.count) || items.length;
-
-  return {
-    items,
-    total,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    facets: { genres },
-  };
-}
-
-// A random stretch of the catalog that stays cheap on Turso, which bills every
-// row scanned: the next `limit` matching rows after a random id, wrapping to
-// the start when that runs short. A random OFFSET read every skipped row (up
-// to the whole table). Book ids are hash-derived (spread over 0..2^52), so a
-// window of books is a random mix; movie/TV ids are sequential, so it is an
-// arbitrary stretch of the catalog. `buildQuery` returns a fresh filtered query.
-export const BOOK_ID_SPACE = 2 ** 52;
-export async function fetchRandomIdWindow(buildQuery, { idSpace, limit }) {
-  const start = Math.floor(Math.random() * idSpace);
-  const first = await buildQuery().gte('id', start).order('id', { ascending: true }).limit(limit);
-  if (first.error) throw first.error;
-  const items = first.data || [];
-  if (items.length >= limit || start === 0) return items;
-  const rest = await buildQuery().lt('id', start).order('id', { ascending: true }).limit(limit - items.length);
-  if (rest.error) throw rest.error;
-  return items.concat(rest.data || []);
-}
-
-// One window of the Books shelf's shuffled "featured" view.
-export async function fetchRandomBookWindow({ size = 60, search = '', genre = '' } = {}) {
-  const client = requireSupabaseCatalog();
-  const rows = await fetchRandomIdWindow(
-    () => applyBookFilters(client.from('books').select(BOOK_COLUMNS), { search, genre }),
-    { idSpace: BOOK_ID_SPACE, limit: size },
-  );
-  return rows.map((book) => normalizeBook(book));
-}
-
-export async function fetchBookById(bookId) {
-  const client = requireSupabaseCatalog();
-  const { data, error } = await client
-    .from('books')
-    .select(BOOK_COLUMNS)
-    .eq('id', bookId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  return normalizeBook(data);
-}
-
-const RECOMMENDATION_SAMPLE_SOURCES = {
-  movie: { table: 'movies', columns: MOVIE_BROWSE_COLUMNS, normalize: normalizeMovieBrowseEntry, filterReleased: true },
-  tv_show: { table: 'tv_shows', columns: TV_SHOW_BROWSE_COLUMNS, normalize: normalizeTvShowBrowseEntry, filterReleased: true },
-  book: { table: 'books', columns: BOOK_COLUMNS, normalize: normalizeBook, filterReleased: false },
-};
-
-// Highest id per table, for random id windows over the sequential movie/TV ids
-// (one row read, kept for the session; new ids only add to the top).
-const maxIdCache = new Map();
-async function maxCatalogId(client, table) {
-  if (!maxIdCache.has(table)) {
-    const { data, error } = await client.from(table).select('id').order('id', { ascending: false }).limit(1);
-    if (error || !data?.length) return null;
-    maxIdCache.set(table, Number(data[0].id));
-  }
-  return maxIdCache.get(table);
-}
-
-// Random catalog window for the recommender: the rows after a random id
-// (fetchRandomIdWindow), which reads about `limit` rows; the old random OFFSET
-// read every skipped row. Never throws — a failed sample just contributes no
-// candidates.
-export async function sampleCatalogForRecommendations(mediaType, { genre = '', limit = 60, kidsSafe = false } = {}) {
-  const source = RECOMMENDATION_SAMPLE_SOURCES[mediaType];
-  if (!source || !isSupabaseConfigured || !supabase) return [];
-
-  const client = supabase;
-
-  function applyFilters(query) {
-    let nextQuery = applyGenreFilter(query, genre);
-    if (source.filterReleased) {
-      nextQuery = nextQuery.lte('year', THIS_YEAR);
-      if (kidsSafe) {
-        nextQuery = nextQuery.in('age_rating', ratingsFor(kidsSafe));
-      }
-    }
-    return nextQuery;
-  }
-
-  try {
-    const idSpace = source.table === 'books' ? BOOK_ID_SPACE : ((await maxCatalogId(client, source.table)) || 0) + 1;
-    const rows = await fetchRandomIdWindow(
-      () => applyFilters(client.from(source.table).select(source.columns)),
-      { idSpace, limit },
-    );
-    return rows.map((item) => source.normalize(item));
-  } catch {
-    return [];
-  }
 }
 
 const BROWSE_SOURCES = {

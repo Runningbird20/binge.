@@ -51,7 +51,7 @@ export default function AdminDatabases() {
           <div>
             <h3 id="adm-db-title">Databases</h3>
             <p className="adm-muted">
-              Supabase holds accounts and everything people save; Turso holds the movie, series and book catalog.
+              Supabase holds accounts and everything people save; Turso holds the movie and series catalog.
               {report && ` Checked ${timeAgo(report.checkedAt)}.`}
             </p>
           </div>
@@ -67,7 +67,7 @@ export default function AdminDatabases() {
           <DatabasePanel id="supabase" name="Supabase" about="Accounts, profiles, lists, ratings and history" report={report.supabase}>
             {report.supabase.tables.length > 0 && <LargestTables tables={report.supabase.tables} />}
           </DatabasePanel>
-          <DatabasePanel id="turso" name="Turso" about="The movie, series and book catalog" report={report.turso}>
+          <DatabasePanel id="turso" name="Turso" about="The movie and series catalog" report={report.turso}>
             {report.turso.rows.length > 0 && <CatalogRows rows={report.turso.rows} />}
           </DatabasePanel>
         </>

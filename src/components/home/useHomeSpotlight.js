@@ -9,7 +9,7 @@ import { asTitle } from './asTitle';
 // hero gets a proper wide image instead of a stretched poster.
 async function withBackdrop(item) {
   const tmdbId = tmdbIdFromItem(item);
-  if (!tmdbId || item.media_type === 'book') return item;
+  if (!tmdbId) return item;
   const details = await tmdbGet(`/${tmdbKind(item.media_type)}/${tmdbId}`);
   return details?.backdrop_path
     ? { ...item, backdrop_url: tmdbImage(details.backdrop_path, 'w1280'), overview: details.overview || item.overview }
@@ -26,7 +26,6 @@ export default function useHomeSpotlight(visibleContinueWatching, personal, kids
     async function buildHero() {
       const watchedKeys = await loadWatchedKeys();
       const resume = visibleContinueWatching
-        .filter((item) => item.media_type !== 'book')
         .slice(0, 1)
         .map((item) => ({ ...asTitle(item), _playUrl: resumeUrl(item), _playLabel: 'Resume', _reason: computeProgressBadge(item) ? `Continue ${computeProgressBadge(item)}` : 'Continue where you left off' }));
       // A mix that changes every visit: a few of your picks (one per

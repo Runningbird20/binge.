@@ -21,7 +21,6 @@ import {
   fetchSupabaseContinueWatching,
   removeSupabaseContinueWatching,
 } from '../utils/supabaseData';
-import { generateSupabaseTypeRecommendations } from '../utils/recommendations';
 import { buildPersonalizedRows } from '../utils/personalization';
 import { loadRowItems, orderRowsForTaste, rowsFor } from '../utils/browseRows';
 import { isChildLevel, maturityRestriction } from '../utils/kidsMode';
@@ -47,19 +46,6 @@ function tasteRowDefinitions(taste, kidsSafe) {
     .slice(0, 2)
     .map((definition) => ({ ...definition, mediaType }));
   return [...pick('tv_show'), ...pick('movie')];
-}
-
-async function loadBookPicks() {
-  const result = await generateSupabaseTypeRecommendations('book');
-  return (result.recommendations || []).map((rec) => ({
-    id: rec.id,
-    title: rec.title,
-    media_type: 'book',
-    year: rec.year,
-    genre: rec.genre,
-    poster_url: rec.posterUrl,
-    _reason: rec.reason,
-  }));
 }
 
 export default function Home() {
@@ -392,10 +378,6 @@ export default function Home() {
               minItems={5}
               hideWatched
             />
-          )}
-
-          {!kidsSafe && (
-            <TitleRow key={`books-${refreshKey}`} title="Books for You" load={loadBookPicks} minItems={3} />
           )}
         </div>
 

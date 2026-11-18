@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**binge.** — watch, track and rate movies, series and books, plus live sports. Three apps share one account system:
+**binge.** — watch, track and rate movies and series, plus live sports. Three apps share one account system:
 - **The website** (`src/`, React 19 + React Router 7, Create React App). It's used on computers, on phones (bottom-nav layout, installable as a PWA) and in smart-TV browsers (TV mode).
 - **The Apple TV app** (`tv-apple/`, SwiftUI).
 - **The Fire TV / Android TV app** (`tv-android/`, Kotlin + Compose for TV).
@@ -15,7 +15,7 @@ Data lives in two databases: Turso holds the media catalog, Supabase holds accou
 - the catalog proxy;
 - everything that needs a server-side key: service-role admin calls, OMDb, Groq, OpenSubtitles, push;
 - the cron jobs;
-- the sports and books proxies.
+- the sports proxy.
 
 `DIFF.md` tracks which features exist on which app.
 
@@ -29,7 +29,7 @@ npm run build             # production build (react-scripts build) — CI=true b
 npm test                  # Jest/RTL in watch mode
 npm run lint              # ESLint on server/, api/, scripts/, src/ and e2e/, tests included (warnings fail it)
 CI=true npx react-scripts test --watchAll=false                    # run the full suite once, non-interactive
-CI=true npx react-scripts test --watchAll=false src/pages/Books.test.js    # run a single test file
+CI=true npx react-scripts test --watchAll=false src/pages/Movies.test.js    # run a single test file
 npm run test:server       # server tests: every server/**/*.test.js, wherever it sits (CI runs these too)
 npm run test:e2e          # Playwright, local only (see Testing notes)
 ```
@@ -52,9 +52,8 @@ Branch from an up-to-date `main` (`git pull` on `main` first, or `git switch -c 
 
 ### Data import / seeding scripts
 
-The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/books, **in Turso**) from external sources. These are standalone Node scripts, not part of the app runtime, and you only touch them when the task is about catalog data, not app features.
+The repo also owns the pipeline that fills the catalog tables (movies/tv_shows, **in Turso**) from external sources. These are standalone Node scripts, not part of the app runtime, and you only touch them when the task is about catalog data, not app features.
 - **Movies and series** come only from the two syncs below. After each bulk sync, `scripts/backfill-catalog-fields.js` fills missing TMDB fields and `scripts/remove-adult-titles.js` deletes titles TMDB flags as adult. The old Plex and TMDB scrapers, which wrote JSON files into `data/` that nothing loaded, were deleted (2026-11-18).
-- **Book scrapers** (Goodreads, Internet Archive, Open Library, in `scripts/scrapers/`, `import:goodreads*` / `import:books*` / `import:openlibrary*`) write to the root `data/` folder. They go with the books removal (`TODO.md`).
 - `scripts/run-supabase-sql.js` (`npm run supabase:sql`) applies `supabase/repeatable_schema.sql` + seed files.
 - **Bulk sync:** `scripts/sync-tmdb-to-turso.js` (`sync-tmdb.yml`; shared TMDB helpers in `scripts/tmdb-records.js`). It works through TMDB's export by popularity, so it misses small new regional releases.
 - **Language sync:** `scripts/sync-language-to-turso.js` fills that gap.
@@ -64,9 +63,9 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 
 ## Repo layout
 
-- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `home/` for Home's cards, stats, Surprise me and its spotlight and Continue Watching hooks, `catalog/` for the Movies/Series grid, `books/` for the book popup, `sports/` for the Sports page, `manga/` for the Manga tab), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
+- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `home/` for Home's cards, stats, Surprise me and its spotlight and Continue Watching hooks, `catalog/` for the Movies/Series grid, `sports/` for the Sports page), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
-- `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
+- `scripts/` — catalog sync, checks and one-off migrations.
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `turso/schema.sql` — the media catalog schema.
 - `tv-apple/`, `tv-android/` — the TV apps; `mobile-ios/`, `mobile-android/` — the phone apps (the website in a native shell); `e2e/` — Playwright; `backups/`, `data/` — local-only (gitignored): catalog exports and scraper output/checkpoints. Built app files go to `dist/mobile/` (gitignored).
 - `docs/` — longer write-ups: `database-split.md` (the split and its measured costs), `profile-locks.md`, `password-reset.md`, and the TV app notes `tv-apps.md`, `apple-tv.md`, `fire-tv.md`.
@@ -83,7 +82,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 ### Two databases: Turso = media catalog, Supabase = accounts + user data
 
 Nothing lives in both (see `docs/database-split.md`). The `supabase` client exported by `src/utils/supabase.js` is split:
-- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows/books, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')` and `rpc('search_related')`. The route is read-only and media tables only. Its Neon-era name, `/api/neon-data`, is gone: a TV build from before 2026-11 calls it and gets no catalog, so reinstall it.
+- These go to the catalog through `/api/catalog` (`server/routes/catalog.js`): `.from()` on movies/tv_shows, the genre views, title_ratings, episode_ratings_cache and subtitle_cache, plus `rpc('search_catalog')` and `rpc('search_related')`. The route is read-only and media tables only. Its Neon-era name, `/api/neon-data`, is gone: a TV build from before 2026-11 calls it and gets no catalog, so reinstall it.
 - Everything else is real Supabase.
 
 Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/catalog/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
@@ -93,25 +92,24 @@ Server code uses the same split (`server/data-access/client.js`); the TV apps se
 - **Turso bills rows scanned** (free plan: 500M reads / 10M writes a month), so every query needs an index.
   - Run the server with `CATALOG_DEBUG=plan` to log each query plan. `FULL SCAN` means one read per row.
   - Write `IS NOT NULL` (the translator does this for `not.is.null`). SQLite only uses the partial `WHERE poster_url IS NOT NULL` indexes for that literal form.
-  - Never page with a deep random `OFFSET`: it reads every skipped row. Random windows use `fetchRandomIdWindow` (the rows after a random id).
+  - Never page with a deep random `OFFSET`: it reads every skipped row. For a random stretch, take the rows after a random id.
   - The HTTP API reports `rows_read` per statement (`POST {url}/v2/pipeline`). That's how the costs in `docs/database-split.md` were measured.
 - **Stored aggregates.** Genre lists (`catalog_genres`, behind the `*_genres` views) and row counts (`catalog_stats`) are stored, and `turso-catalog.js refresh` rebuilds them after each sync. `count: 'planned'` reads the stored count. An exact filtered count is computed once, stored in `catalog_stats` (`count:<hash>`) and cleared by `refresh`.
-- **Search columns.** Rows written to movies/tv_shows/books must carry the `search_*` columns (`withSearchColumns`; the trusted `executeQuery` path adds them for you). They're never returned to clients.
+- **Search columns.** Rows written to movies/tv_shows must carry the `search_*` columns (`withSearchColumns`; the trusted `executeQuery` path adds them for you). They're never returned to clients.
 
 ### Supabase-first, Express as a privileged fallback
 
 This is the one thing every route/feature decision hinges on. There are two ways data gets to the frontend:
 
 1. **Direct Supabase calls** (the default path). Most of the app calls functions in `src/utils/supabaseData.js` directly. It re-exports `src/utils/data/{account,library,progress,shared}.js`; tests `jest.spyOn` it, so keep its exports plain `export const`. These use the Supabase JS client (`src/utils/supabase.js`, anon/publishable key) straight from the browser, protected by Row Level Security policies (see `supabase/repeatable_schema.sql`).
-2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`, loaded on the first call and prefetched while idle, so it and the catalog code stay out of the main bundle), a client-side router that reimplements a handful of REST-shaped endpoints (search, book pages, TMDB/AniList lookups, profile) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
+2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`, loaded on the first call and prefetched while idle, so it and the catalog code stay out of the main bundle), a client-side router that reimplements a handful of REST-shaped endpoints (search, TMDB lookups, profile) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
 
 **The Express backend** (`server/app.js` + `server/routes/*.js`) is deployed unconditionally as a Vercel serverless function (`api/index.js` re-exports `server/app`; `vercel.json` routes `/api/(.*)` to `api/[...slug].js`). Its route files:
 - `catalog` — the catalog proxy (watched by `data-access/monitor.js`, see Catalog monitoring);
 - `extras` — OMDb ratings, episode ratings, Ask binge., subtitles;
 - `sports` — feeds, ESPN, fantasy;
-- `books`, `manga` — reading proxies;
 - `cron`, `ops` — error reports, health checks, broadcasts;
-- `og` — link previews: `vercel.json` sends link-preview bots (by user agent) asking for `/movie/:id`, `/tv-show/:id` or `/book/:id` here, a small page whose og:/twitter: tags carry the title, description and TMDB backdrop (people get the normal site);
+- `og` — link previews: `vercel.json` sends link-preview bots (by user agent) asking for `/movie/:id` or `/tv-show/:id` here, a small page whose og:/twitter: tags carry the title, description and TMDB backdrop (people get the normal site);
 - `admin`, `account` — service role.
 
 There's no server route for catalog reads. Movies and series are read in the browser through `src/utils/catalogQueries.js` (the split client sends them to `/api/catalog`), with no fallback path. The old `/api/media` route was a second SQL copy of the same reads and was removed (2026-11-18).
@@ -160,8 +158,8 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - Catalog filters take `kidsSafe` = `false` or the level (`maturityRestriction(profile)`, `ratingsFor`).
   - Only Toddler/Kids get the kids-only rows (`isChildLevel`).
   - The website lets unrated Family/Animation/Kids titles through. The TV apps leave out every unrated title on a restricted level (see TV apps).
-  - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, a book's screen adaptations, the calendar's Coming Soon row and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
-  - **Website search applies them too** (2026-11-10): title and related matches through `filterSearchPayload` (`utils/searchMaturity.js`: ratings looked up by id, unrated left out, child levels keep children's book genres only, a failed lookup shows nothing); Ask binge. picks and person search pass `kidsSafe` to `resolveTmdbItems`.
+  - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, the calendar's Coming Soon row and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
+  - **Website search applies them too** (2026-11-10): title and related matches through `filterSearchPayload` (`utils/searchMaturity.js`: ratings looked up by id, unrated left out, a failed lookup shows nothing); Ask binge. picks and person search pass `kidsSafe` to `resolveTmdbItems`.
 - **Profile settings** (`/settings`, `src/utils/profileSettings.js`):
   - Autoplay next, previews, data saver, haptics and captions-first live in `account_profiles.settings` (jsonb) + localStorage.
   - Audio/subtitle prefs live in `audio_pref`/`subtitle_pref`.
@@ -195,10 +193,6 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - The probe list is the player's own server list, `src/utils/embedServers.js` (plain data with no imports, loaded by the server on first use like `sportsFeeds.js`), each probed at the URL the player builds for the film. Adding or removing a server there changes both.
 - **Server health for ranking.** The `stream_provider_health()` RPC (counts only, security definer) feeds `rankServers`'s `health`. A provider that's broadly down today (`summarizeHealth`) ranks last and is labelled; title-specific reports still win.
 
-### Book ids must stay below 2^53
-
-Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so opening or saving a book hit the wrong id. The seed generator that made them (since removed; see git history) switched to 52-bit ids, and `supabase/migrations/20261007140000_book_ids_js_safe.sql` remaps existing rows (`id >> 8`). Any new id scheme must stay within `Number.MAX_SAFE_INTEGER`.
-
 ## Website
 
 ### Routing, loading & errors
@@ -210,7 +204,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 ### One responsive layout, two player layouts
 
-- Cards and title/book popups are single responsive components (`TitleCard`, `MediaDetailsModal`, `BookDetailsModal`). The old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone.
+- Cards and the title popup are single responsive components (`TitleCard`, `MediaDetailsModal`). The old `MediaCard`/`MobileMediaCard`, `MobileMediaDetail` and `MobileBookDetail` forks are gone.
 - **The player is the one split.** `EmbedPlayer.js` renders `components/player/MobilePlayer.js` or `DesktopPlayer.js`, chosen by `useDeviceType().isMobile` (`src/hooks/useDeviceType.js`). A phone is a screen whose short side is ≤ 768 px: a landscape phone counts, a tablet doesn't, and TV mode never does. When you change a player control, change both layouts; they don't share markup.
 - **The player is a black stage, and nothing of ours goes on the video.** The server's own controls are inside its iframe, along its top and bottom edges, so anything over the video covers them.
   - **Computer** (`DesktopPlayer`): our bar above the video (title, the "S1 · E1" episode picker, Mark as watched, Servers, Close), the video as big as fits at 16:9, and one quiet line for notices under it. Only in our fullscreen (F) does the bar go over the video, on hover.
@@ -220,7 +214,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
   - **Never close a popup with a plain `history.back()`.** A server's own navigations inside its iframe (its Next button, its server picker) add entries to the same browser history, so one step back only stepped the server back (checked in Chromium). `MediaOverlay` closes with `goBackTo` (`utils/historyBack.js`), which jumps straight to the entry the popup was opened from (Navigation API), or back past every entry added since.
 - **Phones:**
   - The bottom nav is Home · Sports · Browse · Search · Me. Browse and Me open `BottomSheet`s, and `html.has-bottom-nav` hides the top search/profile.
-  - Title/book sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
+  - Title sheets close with a swipe down (`hooks/useSwipeDismiss`) and have a sticky Play bar.
   - The player's server picker is a bottom sheet (`MobilePlaybackPickers`).
   - Fullscreen + landscape lock only works on Android; iPhones get a "turn your phone" hint.
 - **Keyboard** (`components/KeyboardShortcuts.js`, mounted in `AppShell`): spatial arrow-key focus over `.st-card, .st-game, …` (scoped to the open dialog), `/` for search, `?` for help. It stands down while an element with `data-embed-player` is mounted (the player owns the arrows).
@@ -253,7 +247,6 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Seeds.** The strongest recent positives become "Because you watched X" seeds, which pull TMDB `/recommendations` for that exact title. `pickBecauseRows` picks seeds of different language + genre and rotates daily.
   - **Taste profile.** A genre + original-language profile (language taste is a 0–1 share of history) scores candidates and orders the taste rows (`orderRowsForTaste`). `diversify` caps a run from one language or seed.
   - **Exclusions.** Titles already watched, rated, saved or hidden (`recommendation_hidden`) are left out.
-  - `src/utils/recommendations.js` is the older genre-sampling engine, still used for books and the chat route.
 - **Seasonal row** (`src/utils/seasonal.js`, TV `Data/Seasonal.swift` / `data/Seasonal.kt`; the same calendar in all three). It's one row, second on the Movies and TV pages (and on the TV apps' Movies/Series tabs), and its title and TMDB query follow the date:
   - **The calendar:** Spooky Season → Halloween Week → Thanksgiving → Christmas → New Year → Snowed In → Valentine's → Black History Month → March Madness → spring/Easter/May the 4th/Mother's Day → summer/Pride/Father's Day/Fourth of July/Shark Week → Back to School → Cozy Fall Mysteries.
   - **Priority.** Seasons are in priority order (short holidays first). One without a query for a type gives way to the next, and every day has a row for both types (tested).
@@ -290,12 +283,12 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - Styled like the title popup's Trailer button (`st-btn td-resume-control td-play--compact`).
 - **Sent to you** — the household queue (`profile_shares`; RLS requires both profiles to belong to the account). Sent with `SendToProfileButton` on the title popup (`utils/profileShares.js`); the TV apps have "Send to…" and the same row.
 
-### Title popup (movies, series, books)
+### Title popup (movies, series)
 
-`MediaDetailsModal.js` (movies/TV; its episode list, Previously on, source books and More Like This are in `components/title/`) and `components/books/BookDetailsModal.js` share the `td-*` classes in `src/styles/title.css`.
+`MediaDetailsModal.js` (its episode list, Previously on and More Like This are in `components/title/`) uses the `td-*` classes in `src/styles/title.css`.
 - **Layout.** `td-body` is a grid of the main column and `td-aside`.
   - **Main column:** the description, then the full-width **Cast row**. On phones the Cast row comes straight after the description.
-  - **`td-aside`:** the facts list (studio etc.), then **Rating & Review** for movies and books (`td-rate--aside`).
+  - **`td-aside`:** the facts list (studio etc.), then **Rating & Review** for movies (`td-rate--aside`).
   - **Series** keep Rating & Review after the episode list.
   - **Wide TV:** the `td-split--tv` grid uses `display: contents`, so when you move a section, update its grid-row rules too.
   - Both popups close with `td-close td-round-btn`.
@@ -326,11 +319,8 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - OMDb (IMDb/RT/Metacritic) is looked up server-side and cached in `title_ratings` (shared; public read).
   - Cards only read that cache, in batches (`useCachedImdb`). Never spend OMDb quota per card.
   - Needs `OMDB_API_KEY`; falls back to the TMDB score.
-- **Book ↔ screen** (`src/utils/adaptations.js`):
-  - Adaptations are identified by TMDB keyword 818 or a crew job of "Novel"/"Book", and matched to catalog books **by author** (titles only rank).
-  - Books find their adaptations via a TMDB search verified by the credited author.
 - **Remind me** (`RemindButton`) and **Send to profile** (`SendToProfileButton`) sit with the actions.
-- Image sizing goes through `src/utils/imageQuality.js` (TMDB srcsets, full-size Goodreads/Open Library covers).
+- Image sizing goes through `src/utils/imageQuality.js` (TMDB srcsets).
 
 ### Where-to-watch logos
 
@@ -363,14 +353,14 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 ### Search
 
 - **Catalog search** (`server/catalogSearch.js`, a port of Neon's `search_catalog`):
-  - **Normalized matching.** Titles/authors are compared normalized (`searchNorm`): lowercase, unaccented, punctuation → spaces, Indic marks kept. There's a squashed form for "xmen", and a leading the/a/an is ignored.
+  - **Normalized matching.** Titles are compared normalized (`searchNorm`): lowercase, unaccented, punctuation → spaces, Indic marks kept. There's a squashed form for "xmen", and a leading the/a/an is ignored.
   - **Typo pass.** It uses trigram + word similarity, a faithful JS port of pg_trgm, checked against Postgres.
   - **On SQLite.** SQLite has neither, so the normalized text is stored in `search_*` columns at write time. Exact/prefix matches use B-tree indexes; substrings and typo candidates use the trigram FTS5 tables (`*_fts`, kept in step by triggers). Scoring runs in JS with the old formula.
   - **Caching.** Results are cached 10 min per server instance (`server/data-access/client.js`).
-  - **Description matches** (search's related row) are `search_related` (`server/catalogRelated.js`): the words (minus filler like "the") looked up in the description word index `*_text_fts` (FTS5, `detail=none`, kept current by triggers; fill from scratch with `turso-catalog.js build-text-search`), within the 10,000 most popular movies/series and newest books, then only the matching rows read: ~10–26k rows read, under 1.5s cold, ~30ms warm. Asking the tables with `LIKE '%…%'` read every row's text (15s, once 112s: the "Slow catalog query" errors of 2026-11-10). Never add an open-ended `LIKE '%…%'` over a media table.
-  - **Checks.** Run `node scripts/search-benchmark.js` (34/34 found, the same ranks as Neon at the switch). After changing `searchNorm`, run `node scripts/turso-catalog.js rebuild-search`.
+  - **Description matches** (search's related row) are `search_related` (`server/catalogRelated.js`): the words (minus filler like "the") looked up in the description word index `*_text_fts` (FTS5, `detail=none`, kept current by triggers; fill from scratch with `turso-catalog.js build-text-search`), within the 10,000 most popular movies/series, then only the matching rows read: ~10–26k rows read, under 1.5s cold, ~30ms warm. Asking the tables with `LIKE '%…%'` read every row's text (15s, once 112s: the "Slow catalog query" errors of 2026-11-10). Never add an open-ended `LIKE '%…%'` over a media table.
+  - **Checks.** Run `node scripts/search-benchmark.js` (32/32 found on 2026-11-18, after the two book-author cases went with books). After changing `searchNorm`, run `node scripts/turso-catalog.js rebuild-search`.
 - **Search UI** (`src/utils/searchExtras.js`):
-  - **Header dropdown.** Top result → Movies → Series → Books → Live games, plus TMDB person search (actors/directors, real roles only, via `workCredits`) and recent searches per profile. A person result links to their page.
+  - **Header dropdown.** Top result → Movies → Series → Live games, plus TMDB person search (actors/directors, real roles only, via `workCredits`) and recent searches per profile. A person result links to their page.
   - **`/search` page** (`pages/SearchResults.js`). It has its own input; phones reach it from the bottom nav. The best match leads its own section, and there's no "top result" card. Ask binge.'s per-pick reasons aren't listed under its row.
 - **Search filters** (on the results page only, not the header dropdown or the browse pages):
   - Type / decade / language chips (`utils/searchFilters.js`), using `GenreScrollBar` + `genre-chip`, kept in the URL as `?type=&decade=&lang=`.
@@ -388,13 +378,13 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 
 - **A rated title counts as watched** and belongs in "Ratings & Reviews", **not** the watchlist/library. `saveSupabaseRating` (`src/utils/data/library.js`) deletes the matching watchlist row after saving a rating. That delete is best-effort: if it fails, the save must still succeed.
 - **The Profile page has three tabs:**
-  - **My List** — still to watch/read, or in progress.
-  - **Watched** — finished (`watched`/`read`) but not rated, newest first (`isFinished` / `splitFinished` in `libraryStats.js`). Rating a watched title moves it on to Ratings & Reviews.
+  - **My List** — still to watch, or in progress.
+  - **Watched** — finished (`watched`) but not rated, newest first (`isFinished` / `splitFinished` in `libraryStats.js`). Rating a watched title moves it on to Ratings & Reviews.
   - **Ratings & Reviews** — called "Ratings" on phones (`pf-tab-full` / `pf-tab-short`) so all three tabs fit.
 - **`src/utils/libraryStats.js`** centralizes the dashboard math shared by Home (`ProfileStatsHeader`) and Profile. If you change what counts as watched or completed, do it here so both dashboards stay in sync.
   - `excludeRated` hides rated titles from the library view.
   - `computeWatchMinutes` counts both watchlist progress and rated titles toward watch time, deduped so that rating a title you'd already tracked doesn't double-count it.
-  - `countCompleted` counts watched/read + rated titles.
+  - `countCompleted` counts watched + rated titles.
   - **Time watched** is `formatWatchTime`: the units from the first non-zero one, plus `HH:MM:00`. For example `1y 0m 2w 0d 03:00:00` or `2d 14:30:00`; `d` always shows. It uses 365-day years, 30-day months and 7-day weeks. `describeWatchTime` spells it out for screen readers.
 - **Undo after removing** (`components/UndoToast.js`; `<UndoToaster />` in `App.js` is a second sonner Toaster with id `undo`, bottom right):
   - **Where.** Removing from My List / Watched (Profile), Continue Watching (Home) or History takes the item off the page at once. There are no confirm dialogs on those removals.
@@ -407,7 +397,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - **Contents.** The active profile's ratings (stars + categories), My List, watch history and episode progress, as a zip.
   - **Files.** `binge-data.json` (`format: "binge-export"`) plus `letterboxd/{ratings,watched,watchlist}.csv`: films only, Letterboxd's columns + `tmdbID`, half stars, also importable into Letterboxd.
   - **Reading.** Reads page through Supabase's 1000-row limit and enrich titles in batches of 400.
-  - **Re-import.** The zip loads back in through `/import`. The JSON brings back ratings + My List for films and series (books, history and episodes aren't imported), and its own Letterboxd copies are skipped so nothing counts twice.
+  - **Re-import.** The zip loads back in through `/import`. The JSON brings back ratings + My List for films and series (history and episodes aren't imported; book rows in exports from before books were removed are skipped), and its own Letterboxd copies are skipped so nothing counts twice.
 - **History import** (`/import`, `src/utils/historyImport.js`):
   - **Sources.** Letterboxd (zip/CSVs, optional `tmdbID` column), IMDb (ratings/watchlist CSV), Trakt (JSON), Netflix (viewing-history CSV) and binge. exports.
   - **Parsing.** Files are parsed in the browser (fflate for zips) and detected by their columns.
@@ -548,41 +538,22 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
 
 The TV apps merge the same feeds, interleaved so their race spans different feeds (see TV apps).
 
-### Books & manga reading
-
-**Books** go through `src/utils/bookAccess.js`. One Open Library search (~0.4s) decides the best edition, in this order:
-1. Standard Ebooks
-2. Gutenberg
-3. a public Internet Archive scan
-4. a Google Books preview (server route `/api/books/google/preview`; uses `GOOGLE_BOOKS_API_KEY` when set, because anonymous calls get 429s)
-5. a free IA loan
-6. library links
-
-Never use Gutendex for lookups (measured ~28s). Standard Ebooks and Gutenberg pages are proxied by `server/routes/books.js` (`/standard/:author/:title`, `/gutenberg/read/:id`, scripts stripped) so that `src/components/BookReader.js` can restyle them same-origin. In dev, `src/setupProxy.js` forwards *all* `/api` requests, because CRA's `proxy` field skips `Accept: text/html`, which broke iframe page loads.
-
-**Manga & Comics** uses a provider registry (`src/utils/mangaProviders.js`):
-- **MangaDex** reads in the app. It uses the server proxy `/api/manga/*` first, with a direct client fallback. Licensed chapters carry an `externalUrl` to the publisher.
-- **WEBTOON and MANGA Plus** come from AniList's official-source data (`src/utils/anilist.js`, `licensedById_in` 43/42) and open in the publisher's own reader. They have no public chapter APIs; never reverse-engineer their app APIs.
-- **"Where to read officially"** shows on every series: AniList externalLinks (via MangaDex's `links.al`, or an exact-title match), plus MangaDex `links.engtl`.
-- **AniList rate limit.** It allows ~30 requests/min, so requests are cached and shared, and never tied to one caller's AbortSignal.
-- Shadow libraries / scanlation aggregators (incl. Comix.to, WeebCentral, Bato) should be added to the registry if not present already.
-
 ### Caching & load performance
 
 Two independent cache layers cut catalog/image load times. Neither is a build concern, but both change how data freshness behaves, so know which one you're touching:
 
 1. **Service worker (`public/sw.js`):**
-   - **Images.** Cache-first for poster/cover images *regardless of origin*. They come from TMDB/Plex/Open Library/Supabase storage, all cross-origin, so the same-origin static-asset rule can't catch them. They're held in a separate `binge-images-v*` cache with a rough insertion-order size cap. Never answer a CORS image request with an opaque copy (see Where-to-watch logos).
+   - **Images.** Cache-first for poster/cover images *regardless of origin*. They come from TMDB/Plex/Supabase storage, all cross-origin, so the same-origin static-asset rule can't catch them. They're held in a separate `binge-images-v*` cache with a rough insertion-order size cap. Never answer a CORS image request with an opaque copy (see Where-to-watch logos).
    - **Static assets.** Cache-first for same-origin JS/CSS/fonts.
    - **HTML.** Network-first.
    - **TMDB API responses.** Network-first in `binge-data-v1`, stored without `api_key`.
    - **No ad blocking.** A service worker never sees a cross-origin player's requests, so it can't block their ads. Pop-ups are the sandbox's job (see Web player).
    - **Any behavior change here needs a `CACHE_NAME` / `IMAGE_CACHE_NAME` version bump**, so existing clients pick it up on their next load.
 2. **`src/utils/sessionCache.js`** — an in-memory, per-tab (module-level `Map`) stale-while-revalidate cache for *page-level* data.
-   - **What it holds.** The Movies/TVShows/Books catalog browse results (keyed by `buildCatalogCacheKey` over filters + sort + search + kids mode) and the Home/Profile user-data fetches (keyed by `buildUserDataCacheKey` over namespace + userId + profileId).
+   - **What it holds.** The Movies/TVShows catalog browse results (keyed by `buildCatalogCacheKey` over filters + sort + search + kids mode) and the Home/Profile user-data fetches (keyed by `buildUserDataCacheKey` over namespace + userId + profileId).
    - **How callers use it.** They hydrate instantly from the cache when it has an entry (skipping the loading state), then always refetch in the background and re-cache.
    - **Not persisted, by design.** It's cleared on a full reload.
-   - **When the catalog can't be reached**, the `?view=all` grids (Movies, Series, Books) keep results already cached this session, or show "Couldn't load …" with Retry. There's no bundled offline copy.
+   - **When the catalog can't be reached**, the `?view=all` grids (Movies, Series) keep results already cached this session, or show "Couldn't load …" with Retry. There's no bundled offline copy.
 
 Also:
 - **Smart downloads.** `utils/smartPrecache.js` warms the next episodes' TMDB data and art while idle.
@@ -686,22 +657,21 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
   - **Extras:**
     - `OMDB_API_KEY` — outside ratings;
     - `GROQ_API_KEY` — Ask binge.;
-    - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles;
-    - `GOOGLE_BOOKS_API_KEY` — book previews.
+    - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles.
   - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
   - **Optional:** `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
   - **Admin → Databases (optional):**
     - `TURSO_PLATFORM_TOKEN` and `TURSO_ORG`: this month's rows read/written and the real plan. The token is a Turso Platform API token from `turso auth api-tokens mint`, not the database token.
     - `TURSO_DATABASE_NAME`: only if the hostname isn't `<database>-<org>.…`.
     - `TURSO_PLAN` / `SUPABASE_PLAN`: the plans whose limits to measure against, `free` by default.
-- **Scripts and tests only:** the Goodreads scraper credentials, `SUPABASE_DB_URL` (`npm run supabase:sql`), and `E2E_*`.
+- **Scripts and tests only:** `SUPABASE_DB_URL` (`npm run supabase:sql`), and `E2E_*`.
 
 ## Testing notes
 
 **CI** (`.github/workflows/ci.yml`, "Tests and build", meant to be the required check on `main`) runs Jest, `npm run test:server` (`node --test` on every `server/**/*.test.js`), `npm run lint` and `CI=true npm run build` on every PR. The full suite is expected to be green.
 
 **Jest conventions.** Test files sit next to what they test (`*.test.js`), not in a separate directory.
-- **Page tests** sit next to their pages (`src/pages/Books.test.js`, `Movies.test.js`, …) and share `src/testUtils/pageTestSetup.js`: the router mock, `setMockSearchParams`, `renderWithAuth`, the catalog mocks and `installPageTestHooks()`.
+- **Page tests** sit next to their pages (`src/pages/Movies.test.js`, `TVShows.test.js`, …) and share `src/testUtils/pageTestSetup.js`: the router mock, `setMockSearchParams`, `renderWithAuth`, the catalog mocks and `installPageTestHooks()`.
   - Each file declares `jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true })`, because `jest.mock` is hoisted per file.
   - The router mock has no `useParams`. Spread it and add one when a page needs it.
   - The catalog-page tests exercise the grid under `?view=all` (the pages themselves open on TMDB rows). Their catalog mocks return the fixture list on every call rather than predicting the probe/window/sorted-page call sequence.

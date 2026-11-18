@@ -394,7 +394,7 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
 // write) stays on Supabase.
 @Suite struct DatabaseSplitTests {
     @Test func catalogReadsGoThroughTheSite() {
-        for table in ["movies", "tv_shows", "books", "title_ratings", "subtitle_cache"] {
+        for table in ["movies", "tv_shows", "title_ratings", "subtitle_cache"] {
             #expect(Supabase.isMediaRead("GET", table: table))
         }
     }

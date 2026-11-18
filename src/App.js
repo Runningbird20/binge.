@@ -36,7 +36,7 @@ import './styles/admin.css';
 
 // Every page's code, fetched in the background once the first screen is up,
 // so moving between pages never waits on a download (no loading skeleton
-// between Home, Movies, Series, Sports, Books, Search, Profile…). Skipped
+// between Home, Movies, Series, Sports, Search, Profile…). Skipped
 // with data saver / Save-Data. First the api router (src/api.js), which
 // pages need for their first api call.
 const PAGE_LOADERS = [
@@ -45,7 +45,6 @@ const PAGE_LOADERS = [
   () => import('./pages/Movies'),
   () => import('./pages/TVShows'),
   () => import('./pages/Sports'),
-  () => import('./pages/Books'),
   () => import('./pages/SearchResults'),
   () => import('./components/MediaOverlay'),
   () => import('./pages/Profile'),
@@ -89,7 +88,6 @@ captureInstallPrompt();
 const Home           = lazyWithReload(() => import('./pages/Home'));
 const Movies         = lazyWithReload(() => import('./pages/Movies'));
 const TVShows        = lazyWithReload(() => import('./pages/TVShows'));
-const Books          = lazyWithReload(() => import('./pages/Books'));
 const SearchResults  = lazyWithReload(() => import('./pages/SearchResults'));
 const ProfilePicker  = lazyWithReload(() => import('./pages/ProfilePicker'));
 const EditProfile    = lazyWithReload(() => import('./pages/EditProfile'));
@@ -155,7 +153,7 @@ function AppShell({ children }) {
   );
 }
 
-// Movie/TV/book detail routes, registered both in the main switch (so a
+// Movie/TV detail routes, registered both in the main switch (so a
 // direct link/refresh still works) and — when a backgroundLocation is
 // present — in a second overlay switch so the modal renders on top of
 // whatever page the user was already on instead of navigating away.
@@ -164,7 +162,6 @@ function MediaOverlayRoutes() {
     <>
       <Route path="/movie/:id"   element={<ProtectedRoute><MediaOverlay mediaType="movie" /></ProtectedRoute>} />
       <Route path="/tv-show/:id" element={<ProtectedRoute><MediaOverlay mediaType="tv_show" /></ProtectedRoute>} />
-      <Route path="/book/:id"    element={<ProtectedRoute><MediaOverlay mediaType="book" /></ProtectedRoute>} />
     </>
   );
 }
@@ -186,7 +183,9 @@ function AppRoutes() {
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
-        <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
+        {/* Books and Manga were removed (2026-11-18); old links land on Home. */}
+        <Route path="/books"     element={<Navigate to="/home" replace />} />
+        <Route path="/book/:id"  element={<Navigate to="/home" replace />} />
         <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
         <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
         <Route path="/profiles/:profileId/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />

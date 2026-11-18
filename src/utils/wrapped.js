@@ -24,7 +24,7 @@ export function buildWrapped({ episodes, playing, ratings, watchlist }, year) {
   const eps = episodes.filter((row) => inYear(row.watched_at, year));
   const rated = ratings.filter((row) => inYear(row.created_at, year));
   const played = playing.filter((row) => inYear(row.updated_at, year));
-  const finished = watchlist.filter((row) => (row.status === 'watched' || row.status === 'read') && inYear(row.updated_at || row.added_at, year));
+  const finished = watchlist.filter((row) => row.status === 'watched' && inYear(row.updated_at || row.added_at, year));
 
   const titles = new Map(); // key -> record
   [...eps, ...rated, ...played, ...finished].forEach((row) => titles.set(`${row.media_type}:${row.media_id}`, row));
@@ -95,7 +95,7 @@ export function buildTicketBook({ episodes, playing, ratings, watchlist }, year,
   const eps = episodes.filter((row) => inYear(row.watched_at, year));
   const rated = ratings.filter((row) => inYear(row.created_at, year));
   const played = playing.filter((row) => inYear(row.updated_at, year));
-  const finished = watchlist.filter((row) => (row.status === 'watched' || row.status === 'read') && inYear(row.updated_at || row.added_at, year));
+  const finished = watchlist.filter((row) => row.status === 'watched' && inYear(row.updated_at || row.added_at, year));
 
   const months = Array.from({ length: 12 }, (_, month) => ({
     month,
@@ -138,7 +138,6 @@ export function buildTicketBook({ episodes, playing, ratings, watchlist }, year,
   const bestDay = Math.max(0, ...days.values());
   const lateNights = eps.filter((row) => { const h = new Date(row.watched_at).getHours(); return h >= 0 && h < 4; }).length;
   const finishedShows = finished.filter((row) => row.media_type === 'tv_show').length;
-  const books = finished.filter((row) => row.media_type === 'book').length;
 
   const achievement = (key, title, line, progress, goal) => ({ key, title, line, progress: Math.min(progress, goal), goal, earned: progress >= goal });
   const achievements = [
@@ -148,7 +147,6 @@ export function buildTicketBook({ episodes, playing, ratings, watchlist }, year,
     achievement('genres', 'Genre hopper', '10 different genres', genres.size, 10),
     achievement('night', 'Night owl', '10 episodes after midnight', lateNights, 10),
     achievement('finisher', 'Completionist', 'Finish 3 series', finishedShows, 3),
-    achievement('reader', 'Bookworm', 'Finish 5 books', books, 5),
     achievement('films', 'Movie buff', '25 movies', [...allTitles.values()].filter((row) => row.media_type === 'movie').length, 25),
   ];
 

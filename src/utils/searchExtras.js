@@ -1,6 +1,6 @@
 // Search extras layered on the catalog search: recent searches, people
 // (actor / director → their titles in the catalog), live games, and the
-// Top result → Movies → Series → Books → Live games grouping.
+// Top result → Movies → Series → Live games grouping.
 import { getActiveProfileId } from './activeProfile';
 import { normalizeTmdbResult, tmdbGet, tmdbImage } from './tmdb';
 import { resolveTmdbItems } from './catalogLookup';
@@ -42,20 +42,18 @@ export function clearRecentSearches() {
 
 const tag = (list, mediaType) => (list || []).map((item) => ({ ...item, media_type: mediaType }));
 
-// { top, movies, series, books } with the single best video/book match
-// pulled out as the top result.
+// { top, movies, series } with the single best match pulled out as the top
+// result.
 export function groupResults(results) {
   const movies = tag(results?.movies, 'movie');
   const series = tag(results?.tv, 'tv_show');
-  const books = tag(results?.books, 'book');
-  const top = [...movies, ...series, ...books]
+  const top = [...movies, ...series]
     .sort((a, b) => (Number(b.relevance) || 0) - (Number(a.relevance) || 0))[0] || null;
   const notTop = (item) => !top || item.media_type !== top.media_type || item.id !== top.id;
   return {
     top,
     movies: movies.filter(notTop),
     series: series.filter(notTop),
-    books: books.filter(notTop),
   };
 }
 

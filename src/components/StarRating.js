@@ -17,7 +17,7 @@ function valueFromPointer(event, starIndex) {
 }
 
 // A single 5-star rating control (half-star precision) used everywhere a
-// movie/TV/book rating is shown or collected. Pass onChange for an
+// movie/TV rating is shown or collected. Pass onChange for an
 // interactive picker; omit it (or pass readOnly) for a plain display.
 export default function StarRating({ value = 0, onChange, size = 'md', readOnly = false, label }) {
   const [hoverValue, setHoverValue] = useState(null);

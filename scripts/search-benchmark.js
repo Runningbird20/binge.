@@ -37,8 +37,6 @@ const CASES = [
   ['shogun', 'shogun', 'tv'],
   ['mission impossible', 'mission impossible', 'movie'],
   ['pride and prejudice', 'pride and prejudice', null],
-  ['tolkien', null, 'book'], // author
-  ['garcia marquez', null, 'book'], // author with accents
   ['naruto shippuden', 'naruto shippuden', 'tv'],
   ['money heist', 'money heist', 'tv'],
   ['the godfather', 'the godfather', 'movie'],

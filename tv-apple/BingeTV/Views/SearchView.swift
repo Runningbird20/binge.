@@ -232,7 +232,7 @@ struct MeView: View {
                 }
                 Section {
                 } footer: {
-                    Text("Books, manga and account settings are on \(Config.siteHost).")
+                    Text("Account settings are on \(Config.siteHost).")
                         .foregroundStyle(.secondary)
                 }
             }

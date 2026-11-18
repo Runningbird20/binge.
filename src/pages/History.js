@@ -17,7 +17,6 @@ import { getActiveProfileId } from '../utils/activeProfile';
 import { isRemovalPending, removeWithUndo } from '../components/UndoToast';
 
 function titleHref(entry) {
-  if (entry.media_type === 'book') return `/book/${entry.media_id}`;
   return entry.media_type === 'tv_show' ? `/tv-show/${entry.media_id}` : `/movie/${entry.media_id}`;
 }
 

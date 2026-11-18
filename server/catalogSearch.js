@@ -33,20 +33,19 @@ function searchNorm(text) {
 const squash = (norm) => (norm === null ? null : norm.replace(/ /g, ''));
 const dropArticle = (norm) => norm.replace(/^(the|a|an) /, '');
 
-// The search_* columns for a row being written to movies / tv_shows / books.
+// The search_* columns for a row being written to movies / tv_shows.
 // Only fills what the row carries (a partial update without a title keeps the
 // stored values).
 function searchColumns(table, row) {
   const out = {};
   if ('title' in row) {
     out.search_norm = searchNorm(row.title);
-    if (table !== 'books') out.search_squash = squash(out.search_norm);
+    out.search_squash = squash(out.search_norm);
   }
-  if (table === 'books' && 'author' in row) out.search_author = searchNorm(row.author);
   return out;
 }
 
-const SEARCHABLE = new Set(['movies', 'tv_shows', 'books']);
+const SEARCHABLE = new Set(['movies', 'tv_shows']);
 const withSearchColumns = (table, row) => (SEARCHABLE.has(table) ? { ...row, ...searchColumns(table, row) } : row);
 
 // --- pg_trgm, ported (contrib/pg_trgm/trgm_op.c) ----------------------------
@@ -135,11 +134,6 @@ const KINDS = [
     columns: 'id, title, year, genre, poster_url, NULL AS author, source_key, release_date, original_language, popularity, vote_average, search_norm AS sn, NULL AS sa',
     filter: 'source_key IS NOT NULL AND coalesce(year, 0) <= :maxYear',
   },
-  {
-    type: 'book', table: 'books', fts: 'books_fts', squashed: false,
-    columns: 'id, title, year, genre, cover_url AS poster_url, author, source_key, NULL AS release_date, NULL AS original_language, NULL AS popularity, NULL AS vote_average, search_norm AS sn, search_author AS sa',
-    filter: 'source_key IS NOT NULL',
-  },
 ];
 
 function isoDate(date) {
@@ -163,10 +157,6 @@ function substringStatements(kind, { qn, qc, qs }, args) {
     else for (const article of ['', 'the ', 'a ', 'an ']) stmts.push(prefixRange('search_norm', article + qc));
   }
   if (kind.squashed && qs.length >= 4) terms.push(`search_squash : ${phrase(qs)}`);
-  if (kind.table === 'books') {
-    if (qn.length >= 4) terms.push(`search_author : ${phrase(qn)}`);
-    else stmts.push(prefixRange('search_author', qn));
-  }
   // Exact and prefix matches always make it in, whatever the substring cap.
   if (qn.length >= 4) stmts.push(prefixRange('search_norm', qn));
   if (qc !== qn && qc.length >= 3) for (const article of ['the ', 'a ', 'an ']) stmts.push(prefixRange('search_norm', article + qc));
@@ -188,10 +178,9 @@ function typoStatement(kind, qn, args) {
     for (let i = 0; i + 3 <= chars.length; i += 1) grams.add(chars.slice(i, i + 3).join(''));
   }
   if (!grams.size) return null;
-  const columns = kind.table === 'books' ? '{search_norm search_author}' : 'search_norm';
   return {
     sql: `SELECT ${kind.columns} FROM ${kind.table} WHERE id IN (SELECT rowid FROM ${kind.fts} WHERE ${kind.fts} MATCH :match ORDER BY rank LIMIT ${TYPO_CAP}) AND ${kind.filter}`,
-    args: { ...args, match: `${columns} : (${[...grams].map(phrase).join(' OR ')})` },
+    args: { ...args, match: `search_norm : (${[...grams].map(phrase).join(' OR ')})` },
   };
 }
 
@@ -205,7 +194,6 @@ function substringScore(kind, row, { qn, qc, qs }) {
   if (norm === qn || squashed === qs) bonus = 1.0;
   else if (core === qc) bonus = 0.85;
   else if (norm.startsWith(qn) || core.startsWith(qc) || squashed.startsWith(qs)) bonus = 0.45;
-  if (kind.type === 'book') return Math.max(similarity(core, qc), similarity(row.sa || '', qn)) + bonus;
   return similarity(core, qc) + bonus + popularityBoost(row);
 }
 
@@ -213,9 +201,7 @@ function typoScore(kind, row, qn) {
   const norm = row.sn || '';
   const sim = similarity(norm, qn);
   const wsim = wordSimilarity(qn, norm);
-  const asim = kind.type === 'book' ? wordSimilarity(qn, row.sa || '') : 0;
-  if (sim < SIMILARITY_THRESHOLD && wsim < WORD_SIMILARITY_THRESHOLD && asim < WORD_SIMILARITY_THRESHOLD) return null;
-  if (kind.type === 'book') return Math.max(sim, wsim, asim);
+  if (sim < SIMILARITY_THRESHOLD && wsim < WORD_SIMILARITY_THRESHOLD) return null;
   return Math.max(sim, wsim) + popularityBoost(row);
 }
 

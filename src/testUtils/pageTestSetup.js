@@ -40,32 +40,6 @@ export const routerMock = {
 // count "probe", random windows, sorted pages) and dedupe what comes back,
 // so these mocks simply return the (genre-filtered) fixture list on every
 // call instead of trying to predict the call sequence.
-export function mockBookCatalog(books) {
-  // Every call returns the (genre-filtered) fixture list. Books.js dedupes
-  // by id when it merges its probe + window batches, so returning the same
-  // items each time is safe — and unlike counting calls, it doesn't break
-  // when a genre click cancels a load cycle part-way through.
-  const filterBooks = (genre) => {
-    const genreValues = Array.isArray(genre) ? genre : (genre ? [genre] : []);
-    return genreValues.length === 0 ? books : books.filter((book) => genreValues.includes(book.genre));
-  };
-  // The "featured" shelf's random windows (used when the list spans several).
-  jest.spyOn(supabaseCatalogModule, 'fetchRandomBookWindow').mockImplementation(({ genre } = {}) => (
-    Promise.resolve(filterBooks(genre))
-  ));
-  return jest.spyOn(supabaseCatalogModule, 'fetchBooksPage').mockImplementation(({ pageSize, genre } = {}) => {
-    const filtered = filterBooks(genre);
-
-    return Promise.resolve({
-      items: filtered,
-      total: filtered.length,
-      page: 1,
-      pageSize: pageSize || filtered.length,
-      totalPages: 1,
-      facets: { genres: [...new Set(books.map((b) => b.genre).filter(Boolean))] },
-    });
-  });
-}
 
 // Movies/TV catalog segments: every call returns the genre-filtered list,
 // with the count and genre facets. Covers both load paths — the default

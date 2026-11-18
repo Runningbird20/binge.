@@ -37,7 +37,7 @@ describe('Landing', () => {
     render(<Landing />);
 
     expect(
-      screen.getByRole('heading', { name: /everything you watch and read, in one place/i })
+      screen.getByRole('heading', { name: /everything you watch, in one place/i })
     ).toBeInTheDocument();
 
     expect(screen.getByRole('link', { name: /request an account/i })).toHaveAttribute('href', '/signup');
