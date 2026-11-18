@@ -1,58 +1,46 @@
 import LoadingBar from '../components/LoadingBar';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { CalendarPlus, CalendarBlank } from '@phosphor-icons/react';
+import { CalendarPlus } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
-import TitleRow from '../components/TitleRow';
-import { exportToCalendar, loadReleaseCalendar } from '../utils/releaseCalendar';
+import MonthView from '../components/calendar/MonthView';
+import ReleaseList, { dayHeading } from '../components/calendar/ReleaseList';
+import { eventsByDate, exportToCalendar, loadReleaseCalendar } from '../utils/releaseCalendar';
+import useProfileSetting from '../hooks/useProfileSetting';
 import { maturityRestriction } from '../utils/kidsMode';
 import { useAuth } from '../contexts/AuthContext';
 
-function dayHeading(iso) {
-  const date = new Date(`${iso}T12:00:00`);
-  const today = new Date();
-  const start = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diff = Math.round((start(date) - start(today)) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff < 7) return date.toLocaleDateString([], { weekday: 'long' });
-  return date.toLocaleDateString([], { weekday: 'short', month: 'long', day: 'numeric', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
-}
-
-const KIND_LABEL = { episode: 'New episode', season: 'Season premiere', movie: 'Movie' };
-
 export default function ReleaseCalendar() {
-  const location = useLocation();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const kidsSafe = maturityRestriction(useAuth()?.activeProfile);
+  // Month grid by default; Settings › Browsing switches the profile to a list.
+  const listView = Boolean(useProfileSetting('calendarList'));
 
   useEffect(() => {
     let cancelled = false;
     loadReleaseCalendar({ kidsSafe })
       .then((result) => { if (!cancelled) setData(result); })
-      .catch(() => { if (!cancelled) setError('Couldn’t load your calendar.'); });
+      .catch(() => { if (!cancelled) setError('Couldn’t load the calendar.'); });
     return () => { cancelled = true; };
   }, [kidsSafe]);
 
-  const groups = useMemo(() => {
-    const map = new Map();
-    (data?.events || []).forEach((event) => map.set(event.date, [...(map.get(event.date) || []), event]));
-    return [...map.entries()];
-  }, [data]);
+  const groups = useMemo(() => [...eventsByDate(data?.events || []).entries()], [data]);
+  const hasEvents = data?.events?.length > 0;
+  // Your phone calendar gets your releases; anything else has its own button.
+  const mine = useMemo(() => (data?.events || []).filter((event) => event.mine), [data]);
 
   return (
     <div className="app-layout">
       <Navbar />
-      <main className="page-content cal-page">
+      <main className={`page-content cal-page${listView ? '' : ' cal-page--month'}`}>
         <header className="st-page-head">
           <div>
             <h1 className="st-page-title">Release Calendar</h1>
-            <p className="st-page-sub">New episodes and releases from your list and what you’re watching.</p>
+            <p className="st-page-sub">What’s coming to binge., with your shows’ new episodes first.</p>
           </div>
-          {data?.events?.length > 0 && (
-            <button type="button" className="st-btn st-btn--primary" onClick={() => exportToCalendar(data.events)}>
-              <CalendarPlus size={18} weight="bold" /> Add all to my calendar
+          {mine.length > 0 && (
+            <button type="button" className="st-btn st-btn--primary" onClick={() => exportToCalendar(mine)}>
+              <CalendarPlus size={18} weight="bold" /> Add my releases to my calendar
             </button>
           )}
         </header>
@@ -60,57 +48,22 @@ export default function ReleaseCalendar() {
         {!data && !error && <LoadingBar />}
         {error && <p className="hist-message" role="alert">{error}</p>}
 
-        {data && data.events.length === 0 && (
-          <div className="pf-empty">
-            <CalendarBlank size={32} weight="duotone" />
-            <p>Nothing scheduled yet. Add shows to My List and their next episodes will show up here.</p>
-          </div>
-        )}
+        {data && !listView && <MonthView events={data.events} />}
 
-        {groups.map(([date, events]) => (
+        {data && listView && !hasEvents && <p className="cal-month-empty">No releases are scheduled yet.</p>}
+
+        {listView && groups.map(([date, events]) => (
           <section key={date} className="cal-day" aria-label={dayHeading(date)}>
             <h2 className="cal-day-title">{dayHeading(date)}</h2>
-            <ul className="cal-list">
-              {events.map((event) => (
-                <li key={event.id} className={`cal-item cal-item--${event.kind}`}>
-                  <Link to={event.url} state={{ backgroundLocation: location }} className="cal-poster" tabIndex={-1} aria-hidden="true">
-                    {event.image ? <img src={event.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span>{event.title.charAt(0)}</span>}
-                  </Link>
-                  <div className="cal-body">
-                    <span className="cal-kind">{KIND_LABEL[event.kind]}</span>
-                    <Link to={event.url} state={{ backgroundLocation: location }} className="cal-title">{event.title}</Link>
-                    <span className="cal-detail">{event.detail}</span>
-                  </div>
-                  <button type="button" className="pf-icon-btn" onClick={() => exportToCalendar([event], `${event.title.replace(/[^\w]+/g, '-')}.ics`)} aria-label={`Add ${event.title} to my calendar`} title="Add to my calendar">
-                    <CalendarPlus size={18} weight="bold" />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ReleaseList entries={events} />
           </section>
         ))}
 
         {data?.renewed?.length > 0 && (
           <section className="cal-day" aria-label="Renewed">
             <h2 className="cal-day-title">Renewed — date not announced</h2>
-            <ul className="cal-list">
-              {data.renewed.map((entry) => (
-                <li key={entry.id} className="cal-item">
-                  <Link to={entry.url} state={{ backgroundLocation: location }} className="cal-poster" tabIndex={-1} aria-hidden="true">
-                    {entry.image ? <img src={entry.image} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span>{entry.title.charAt(0)}</span>}
-                  </Link>
-                  <div className="cal-body">
-                    <Link to={entry.url} state={{ backgroundLocation: location }} className="cal-title">{entry.title}</Link>
-                    <span className="cal-detail">{entry.detail}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <ReleaseList entries={data.renewed} />
           </section>
-        )}
-
-        {data?.comingSoon?.length > 0 && (
-          <TitleRow title="Coming soon to binge." subtitle="Not on your list yet" items={data.comingSoon} />
         )}
       </main>
     </div>

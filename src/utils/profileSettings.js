@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS = {
   haptics: true,      // vibration feedback on supported phones
   captionsFirst: true, // prefer servers that turn subtitles on themselves
   bingeMode: false,   // next episode at the credits, known intros skipped
+  calendarList: false, // Release Calendar as a list of dates instead of a month grid
+  spoilerFree: false, // episodes past your progress: blurred picture, no summary (utils/spoilers.js)
 };
 
 function storageKey() {

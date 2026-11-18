@@ -7,6 +7,7 @@ import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { AUDIO_CHOICES, SUBTITLE_CHOICES, getPlaybackPrefs, savePlaybackPrefs } from '../utils/streamPreferences';
 import { getSettings, saveSettings } from '../utils/profileSettings';
+import { fetchEmailAlerts, saveEmailAlerts } from '../utils/emailAlerts';
 import {
   disableNewEpisodeAlerts, enableNewEpisodeAlerts, isSubscribed, pushPermission, pushSupported,
 } from '../utils/pushNotifications';
@@ -139,10 +140,11 @@ function TeamsSettings() {
 // One place for everything a profile can tune. Saved per profile and
 // synced, so it follows the profile to other devices.
 export default function Settings() {
-  const { activeProfile, refreshProfiles } = useAuth();
+  const { activeProfile, refreshProfiles, user } = useAuth();
   const [prefs, setPrefs] = useState(() => getPlaybackPrefs());
   const [settings, setSettings] = useState(() => getSettings());
   const [alerts, setAlerts] = useState(null);
+  const [emailAlerts, setEmailAlerts] = useState(null); // null while loading
   const [reminders, setReminders] = useState([]);
   const [message, setMessage] = useState('');
   const [kidsPrompt, setKidsPrompt] = useState(false);
@@ -150,6 +152,7 @@ export default function Settings() {
   const isKids = Boolean(activeProfile?.is_kids);
 
   useEffect(() => { isSubscribed().then(setAlerts).catch(() => setAlerts(false)); }, []);
+  useEffect(() => { fetchEmailAlerts().then((on) => setEmailAlerts(Boolean(on))).catch(() => setEmailAlerts(false)); }, []);
   const loadReminders = useCallback(() => { listReminders().then(setReminders).catch(() => {}); }, []);
   useEffect(() => {
     loadReminders();
@@ -166,6 +169,15 @@ export default function Settings() {
       if (next) await enableNewEpisodeAlerts(); else await disableNewEpisodeAlerts();
       setAlerts(next);
       flash(next ? 'Notifications on' : 'Notifications off');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function toggleEmailAlerts(next) {
+    try {
+      setEmailAlerts(await saveEmailAlerts(next));
+      flash(next ? 'Email alerts on' : 'Email alerts off');
     } catch (error) {
       setMessage(error.message);
     }
@@ -262,6 +274,18 @@ export default function Settings() {
             onChange={(previews) => updateSettings({ previews })}
           />
           <Switch
+            label="Spoiler-free episodes"
+            description="Episodes you haven’t reached in a show get a blurred picture and no summary, until you tap the eye on its picture."
+            checked={Boolean(settings.spoilerFree)}
+            onChange={(spoilerFree) => updateSettings({ spoilerFree })}
+          />
+          <Switch
+            label="Release Calendar as a list"
+            description="Upcoming releases as a list of dates. Off: a month grid."
+            checked={Boolean(settings.calendarList)}
+            onChange={(calendarList) => updateSettings({ calendarList })}
+          />
+          <Switch
             label="Kids profile"
             description="Only titles rated for kids. Turning this off asks for the account password."
             checked={isKids}
@@ -294,6 +318,13 @@ export default function Settings() {
           ) : (
             <p className="set-note">This browser can’t show notifications. On iPhone, add binge. to your Home Screen first. Reminders still appear in the app.</p>
           )}
+          <Switch
+            label="Email alerts"
+            description={`Reminders when they’re due, and one email a day with new episodes and announcements you haven’t seen in binge. yet${user?.email ? `, to ${user.email}` : ''}. For the whole account.`}
+            checked={Boolean(emailAlerts)}
+            onChange={toggleEmailAlerts}
+            disabled={emailAlerts === null}
+          />
           <div className="set-reminders">
             <span className="set-row-label">Upcoming reminders</span>
             {reminders.length === 0 ? (

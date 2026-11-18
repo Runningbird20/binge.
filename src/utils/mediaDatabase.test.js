@@ -6,6 +6,15 @@ test('media metadata goes to the catalog while user tables and all auth stay Sup
  for(const table of ['profiles','account_profiles','watchlist','movie_ratings','book_ratings','continue_watching','episode_progress','profile_locks','fantasy_leagues','push_subscriptions'])expect(split.from(table)).toBe(`supabase:${table}`);
  expect(split.auth).toBe(sb.auth);expect(split.storage).toBe(sb.storage);
 });
+test('Realtime channels are Supabase’s', () => {
+  const channel = { topic: 'inbox' };
+  const sb = { ...client('supabase'), channel: jest.fn(() => channel), removeChannel: jest.fn() };
+  const split = splitDatabaseClient(sb, client('catalog'));
+  expect(split.channel('inbox:u1')).toBe(channel);
+  expect(sb.channel).toHaveBeenCalledWith('inbox:u1');
+  split.removeChannel(channel);
+  expect(sb.removeChannel).toHaveBeenCalledWith(channel);
+});
 test('search RPC uses the catalog; PIN and community RPCs stay Supabase',()=>{
  const sb=client('supabase'),catalog=client('catalog');const split=splitDatabaseClient(sb,catalog);
  expect(split.rpc('search_catalog',{q:'Alien'})).toBe('catalog:search_catalog');

@@ -173,9 +173,12 @@ async function fetchMediaMetadataMap(mediaType, mediaIds) {
 // profile) also owns rows saved before profiles existed or with no profile
 // picked (profile_id null), the same rule the TV app uses — otherwise those
 // titles show up on the TV but silently never on the website.
-export function scopeToProfile(query, profileId) {
+// `ownsLegacy` is the active profile's unless another profile's is given
+// (reading another profile of the account: { id, ownsLegacy } in the
+// `profile` option of the history reads, used by group picks).
+export function scopeToProfile(query, profileId, ownsLegacy = activeProfileOwnsLegacyRows()) {
   if (!profileId) return query;
-  return activeProfileOwnsLegacyRows()
+  return ownsLegacy
     ? query.or(`profile_id.eq.${profileId},profile_id.is.null`)
     : query.eq('profile_id', profileId);
 }

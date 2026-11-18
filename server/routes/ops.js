@@ -85,11 +85,11 @@ router.post('/broadcast', adminOnly(async (req, res, db) => {
   if (!title || !body) return res.status(400).json({ error: 'Title and message are required.' });
   if (!url.startsWith('/')) return res.status(400).json({ error: 'Link must be a path on binge., like /movies.' });
   if (!cron.setupPush()) return res.status(503).json({ error: 'Push isn’t configured (VAPID keys).' });
-  const { data: subs } = await db.from('push_subscriptions').select('id, endpoint, p256dh, auth');
-  const result = await cron.pushTo(db, subs || [], JSON.stringify({ title, body, url, tag: `broadcast-${Date.now()}` }));
   const { data: accounts } = await db.from('profiles').select('id');
-  const inbox = await cron.recordNotifications(db, (accounts || []).map((account) => cron.inboxRow({ userId: account.id, kind: 'announcement', title, body, url })));
-  res.json({ devices: (subs || []).length, ...result, inbox });
+  const kept = await cron.recordNotifications(db, (accounts || []).map((account) => cron.inboxRow({ userId: account.id, kind: 'announcement', title, body, url })));
+  const { data: subs } = await db.from('push_subscriptions').select(cron.PUSH_FIELDS);
+  const result = await cron.pushTo(db, subs || [], cron.pushPayload({ title, body, url, tag: `broadcast-${Date.now()}` }, kept));
+  res.json({ devices: (subs || []).length, ...result, inbox: kept.length });
 }));
 
 module.exports = router;

@@ -7,7 +7,8 @@ import { X } from '@phosphor-icons/react';
 //   arrows  move between titles (spatially — across rows, grids and modals)
 //   Enter   opens the focused title (it's a link/button already)
 //   /       jumps to search      ?  shows this list      Esc  closes things
-const NAV_SELECTOR = '.st-card, .st-game, .poster-tile, .td-more-card, .st-hero-cta';
+// (and between release days on the Release Calendar's month grid)
+const NAV_SELECTOR = '.st-card, .st-game, .poster-tile, .td-more-card, .st-hero-cta, .cal-day-btn';
 // TV remotes have no mouse, so every control must be reachable by d-pad:
 // links, buttons, fields, and the video itself (iframe — the player then
 // takes the remote's keys until Back).

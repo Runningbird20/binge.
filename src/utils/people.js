@@ -70,7 +70,9 @@ async function onBinge(credits, kidsSafe) {
 }
 
 // The person page: who they are and their work on binge., as rows.
-// → { person, rows: [{ id, title, items }] } or null when TMDB doesn't know them.
+// → { person, rows: [{ id, title, items }], work } or null when TMDB doesn't
+// know them. work is every title in the rows once, most widely known first
+// (for the page's "Where you've seen them" row).
 export async function fetchPerson(id, { kidsSafe = false } = {}) {
   const data = await tmdbGet(`/person/${id}`, { append_to_response: 'combined_credits' });
   if (!data?.id) return null;
@@ -86,6 +88,10 @@ export async function fetchPerson(id, { kidsSafe = false } = {}) {
     { id: 'series', title: `Series with ${data.name}`, items: acted.shows },
   ];
   const rows = (directs ? [crewRow, ...actingRows] : [...actingRows, crewRow]).filter((row) => row.items.length);
+  const seen = new Set();
+  const work = [...acted.all, ...directed.all]
+    .filter((item) => { const key = `${item.media_type}:${item.id}`; return !seen.has(key) && seen.add(key); })
+    .sort((a, b) => (b._tmdb?.voteCount || 0) - (a._tmdb?.voteCount || 0));
   return {
     person: {
       id: data.id,
@@ -98,6 +104,7 @@ export async function fetchPerson(id, { kidsSafe = false } = {}) {
       placeOfBirth: data.place_of_birth || null,
     },
     rows,
+    work,
   };
 }
 

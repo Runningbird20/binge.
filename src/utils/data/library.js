@@ -21,7 +21,7 @@ export function averageRatingValue(rating) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-export async function fetchSupabaseWatchlist({ mediaType = '', status = '', userId = null } = {}) {
+export async function fetchSupabaseWatchlist({ mediaType = '', status = '', userId = null, profile = null } = {}) {
   if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
@@ -33,13 +33,14 @@ export async function fetchSupabaseWatchlist({ mediaType = '', status = '', user
   // Only scope by the active profile when reading our own watchlist — a
   // followed user's watchlist (userId passed explicitly) has its own,
   // unrelated profile ids, so filtering by ours there would just 0-out.
-  const profileId = isOwnWatchlist ? getActiveProfileId() : null;
+  // `profile` ({ id, ownsLegacy }) reads another profile of this account.
+  const profileId = profile ? profile.id : (isOwnWatchlist ? getActiveProfileId() : null);
 
   function applyFilters(query) {
     let nextQuery = query.eq('user_id', userId);
 
     if (profileId) {
-      nextQuery = scopeToProfile(nextQuery, profileId);
+      nextQuery = scopeToProfile(nextQuery, profileId, profile ? profile.ownsLegacy : undefined);
     }
 
     if (mediaType) {
@@ -248,7 +249,7 @@ export async function undoMarkMoviesWatched({ added = [], changed = [] }) {
 // resolves a concrete userId before calling this (even for "my own"
 // lookups), so `!userId` alone can't distinguish "own" from "someone else's"
 // by the time it reaches this function.
-async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRatings = !userId) {
+async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRatings = !userId, profile = null) {
   if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
@@ -264,7 +265,7 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRating
   }
   // Only scope by the active profile for our own ratings — see the same
   // note on fetchSupabaseWatchlist above.
-  const profileId = isOwnRatings ? getActiveProfileId() : null;
+  const profileId = profile ? profile.id : (isOwnRatings ? getActiveProfileId() : null);
 
   const selectColumns = ['id', 'user_id', 'media_id', ...schema.columns, 'created_at'].join(', ');
   let query = client
@@ -272,7 +273,7 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRating
     .select(selectColumns)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  if (profileId) query = scopeToProfile(query, profileId);
+  if (profileId) query = scopeToProfile(query, profileId, profile ? profile.ownsLegacy : undefined);
   const { data, error } = await query;
 
   if (error) {
@@ -285,17 +286,17 @@ async function fetchRawRatingsForMediaType(mediaType, userId = null, isOwnRating
   }));
 }
 
-export async function fetchSupabaseRatings({ mediaType = '', userId = null } = {}) {
+export async function fetchSupabaseRatings({ mediaType = '', userId = null, profile = null } = {}) {
   const isOwn = !userId;
 
   if (mediaType) {
-    const ratings = await fetchRawRatingsForMediaType(mediaType, userId, isOwn);
+    const ratings = await fetchRawRatingsForMediaType(mediaType, userId, isOwn, profile);
     return enrichMediaRecords(ratings);
   }
 
   const selectedUserId = userId || (await getAuthenticatedUser()).id;
   const grouped = await Promise.all(
-    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type, selectedUserId, isOwn))
+    Object.keys(RATING_TABLES).map((type) => fetchRawRatingsForMediaType(type, selectedUserId, isOwn, profile))
   );
 
   const enrichedRatings = await enrichMediaRecords(grouped.flat());

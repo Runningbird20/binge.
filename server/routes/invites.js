@@ -34,12 +34,6 @@ const hash = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('base64url');
 const oneLine = (value, max) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
 
-function siteUrl() {
-  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  return 'http://localhost:3000';
-}
-
 function clientIp(req) {
   return String(req.headers?.['x-real-ip'] || String(req.headers?.['x-forwarded-for'] || '').split(',')[0] || req.ip || '').trim();
 }
@@ -125,7 +119,7 @@ function createInviteHandlers({
   getStore = () => { const db = serviceClient(); return db ? supabaseStore(db) : null; },
   sendMail = mailer.sendMail,
   now = () => new Date(),
-  site = siteUrl,
+  site = mailer.siteUrl,
   requestLimiter = createLimiter(5, 60 * 60 * 1000),
   signupLimiter = createLimiter(10, 60 * 60 * 1000),
 } = {}) {

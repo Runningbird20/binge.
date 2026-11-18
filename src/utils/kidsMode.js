@@ -28,6 +28,26 @@ export function maturityRestriction(profile) {
   return level === 'all' ? false : level;
 }
 
+// Profiles watching together keep to the youngest viewer's rating: the
+// strictest of their levels (a group with a Kids profile in it gets Kids
+// titles, movies and series alike). strictestProfile is that viewer, or null
+// when nobody in the group is restricted.
+export function strictestProfile(profiles) {
+  const order = MATURITY_LEVELS.map((level) => level.value);
+  const [first] = (profiles || []).filter(Boolean)
+    .sort((a, b) => order.indexOf(profileMaturity(a)) - order.indexOf(profileMaturity(b)));
+  return first && profileMaturity(first) !== 'all' ? first : null;
+}
+
+export function strictestRestriction(profiles) {
+  const youngest = strictestProfile(profiles);
+  return youngest ? maturityRestriction(youngest) : false;
+}
+
+export function maturityLabel(level) {
+  return MATURITY_LEVELS.find((entry) => entry.value === level)?.label || '';
+}
+
 // Allowed age ratings for a `kidsSafe` value (`true` means Kids).
 export function ratingsFor(kidsSafe) {
   if (!kidsSafe) return null;

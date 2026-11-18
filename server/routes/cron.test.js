@@ -1,21 +1,30 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
-const { inboxRow, recordNotifications, pruneNotifications, sendNewEpisodeAlerts } = require('./cron');
+const {
+  inboxRow, recordNotifications, pruneNotifications, pushPayload, sendNewEpisodeAlerts,
+} = require('./cron');
 
-// A stand-in for the service-role client: records inserts and deletes.
+// A stand-in for the service-role client: records inserts (which hand back
+// their new ids, like insert().select()) and deletes.
 function fakeDb({ error = null, throws = false } = {}) {
   const inserts = [];
   const deletes = [];
+  let nextId = 1;
   return {
     inserts,
     deletes,
     from(table) {
       return {
-        async insert(rows) {
-          if (throws) throw new Error('network down');
-          if (!error) inserts.push({ table, rows });
-          return { error };
+        insert(rows) {
+          return {
+            async select() {
+              if (throws) throw new Error('network down');
+              if (error) return { data: null, error };
+              inserts.push({ table, rows });
+              return { data: rows.map((row) => ({ id: nextId++, user_id: row.user_id, profile_id: row.profile_id })), error: null };
+            },
+          };
         },
         delete() {
           return {
@@ -51,16 +60,37 @@ test('no profile means the whole account, and only links on binge. are kept', ()
 test('alerts are kept in batches of 500', async () => {
   const db = fakeDb();
   const rows = Array.from({ length: 1201 }, (_, index) => inboxRow({ userId: `u${index}`, kind: 'announcement', title: 'Hi' }));
-  assert.equal(await recordNotifications(db, rows), 1201);
+  const kept = await recordNotifications(db, rows);
+  assert.equal(kept.length, 1201);
+  assert.deepEqual(kept[1200], { id: 1201, user_id: 'u1200', profile_id: null });
   assert.deepEqual(db.inserts.map((insert) => [insert.table, insert.rows.length]), [['notifications', 500], ['notifications', 500], ['notifications', 201]]);
 });
 
 test('keeping an alert never stops it: a missing table or a network error only warns', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   const row = inboxRow({ userId: 'u1', kind: 'episode', title: 'New episode: Severance' });
-  assert.equal(await recordNotifications(fakeDb({ error: { message: 'relation "notifications" does not exist' } }), [row]), 0);
-  assert.equal(await recordNotifications(fakeDb({ throws: true }), [row]), 0);
+  assert.deepEqual(await recordNotifications(fakeDb({ error: { message: 'relation "notifications" does not exist' } }), [row]), []);
+  assert.deepEqual(await recordNotifications(fakeDb({ throws: true }), [row]), []);
   assert.equal(warn.mock.callCount(), 2);
+});
+
+test('each device’s push carries its own inbox row: its profile’s, else the account’s', () => {
+  const message = { title: 'Hi', url: '/home' };
+  const kept = [
+    { id: 7, user_id: 'u1', profile_id: 'pA' },
+    { id: 8, user_id: 'u1', profile_id: 'pB' },
+    { id: 9, user_id: 'u2', profile_id: null },
+  ];
+  const payload = pushPayload(message, kept, 'pA');
+  const inboxOf = (sub) => JSON.parse(payload(sub)).inbox;
+  assert.equal(inboxOf({ user_id: 'u1', profile_id: 'pB' }), 8);
+  // Saved without a profile: the default profile's.
+  assert.equal(inboxOf({ user_id: 'u1', profile_id: null }), 7);
+  // An account-wide alert (a broadcast) is the account's one row, on every device.
+  assert.equal(inboxOf({ user_id: 'u2', profile_id: 'pZ' }), 9);
+  // No row for this device (the alert wasn't kept): the push goes without one.
+  assert.deepEqual(JSON.parse(payload({ user_id: 'u3', profile_id: null })), message);
+  assert.deepEqual(JSON.parse(pushPayload(message, [])({ user_id: 'u1', profile_id: 'pA' })), message);
 });
 
 test('alerts older than 30 days are deleted, and a failure there only warns', async (t) => {
@@ -90,14 +120,24 @@ function memoryDb(tables, unique = { push_notified: ['user_id', 'media_id', 'epi
           const rows = (tables[table] || []).filter((row) => filters.every((keep) => keep(row)));
           return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
         },
-        async insert(input) {
-          const rows = Array.isArray(input) ? input : [input];
-          const key = unique[table];
-          if (key && rows.some((row) => (tables[table] || []).some((old) => key.every((column) => old[column] === row[column])))) {
-            return { error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
-          }
-          tables[table] = [...(tables[table] || []), ...rows];
-          return { error: null };
+        insert(input) {
+          let result = null;
+          const run = () => {
+            if (result) return result;
+            const rows = (Array.isArray(input) ? input : [input]).map((row) => ({ id: tables.nextId = (tables.nextId || 0) + 1, ...row }));
+            const key = unique[table];
+            if (key && rows.some((row) => (tables[table] || []).some((old) => key.every((column) => old[column] === row[column])))) {
+              result = { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+            } else {
+              tables[table] = [...(tables[table] || []), ...rows];
+              result = { data: rows, error: null };
+            }
+            return result;
+          };
+          return {
+            then: (resolve, reject) => Promise.resolve(run()).then(({ error }) => ({ error })).then(resolve, reject),
+            select: async () => run(),
+          };
         },
       };
       return query;
@@ -171,14 +211,18 @@ test('running again adds nothing: each episode is alerted once per account', asy
 
 test('with push set up, the devices of the profiles that follow it get the push too', async (t) => {
   const pushed = [];
-  t.mock.method(webpush, 'sendNotification', async (subscription) => { pushed.push(subscription.endpoint); });
+  t.mock.method(webpush, 'sendNotification', async (subscription, payload) => { pushed.push([subscription.endpoint, JSON.parse(payload)]); });
   const db = memoryDb(library());
   const totals = await sendNewEpisodeAlerts(db, { canPush: true, latest, now: TODAY });
   // pB's device, and the one saved without a profile (the default profile's);
   // not a device of a profile that doesn't follow the show.
-  assert.deepEqual(pushed, ['https://push.example/b', 'https://push.example/no-profile']);
+  assert.deepEqual(pushed.map(([endpoint]) => endpoint), ['https://push.example/b', 'https://push.example/no-profile']);
   assert.equal(totals.sent, 2);
   assert.equal(totals.alerts, 3);
+  // Each carries its own profile's inbox row, which opening it marks read.
+  const rowOf = (profileId) => db.tables.notifications.find((row) => row.profile_id === profileId).id;
+  assert.deepEqual(pushed.map(([, payload]) => payload.inbox), [rowOf('pB'), rowOf('pA')]);
+  assert.equal(pushed[0][1].url, '/tv-show/10?play=1&season=2&episode=5');
 });
 
 // The uptime probe reads the player's own server list (src/utils/embedServers.js,

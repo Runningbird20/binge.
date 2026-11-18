@@ -1,4 +1,6 @@
-import { buildIcs, exportToCalendar, loadReleaseCalendar } from './releaseCalendar';
+import {
+  buildIcs, calendarMonths, eventsByDate, exportToCalendar, firstDayOfWeek, loadReleaseCalendar, monthWeeks,
+} from './releaseCalendar';
 import { fetchSupabaseContinueWatching, fetchSupabaseWatchlist } from './supabaseData';
 import { fetchDiscover, tmdbGet } from './tmdb';
 import { resolveTmdbItems } from './catalogLookup';
@@ -50,6 +52,7 @@ describe('loadReleaseCalendar: your shows', () => {
       detail: 'S2 · E5 — “Cold Harbor”',
       url: '/tv-show/10?play=1&season=2&episode=5',
       image: 'https://image.tmdb.org/t/p/w342/sev.jpg',
+      mine: true,
     }]);
     expect(renewed).toEqual([]);
   });
@@ -204,6 +207,7 @@ describe('loadReleaseCalendar: your movies', () => {
       detail: 'Movie release',
       url: '/movie/20',
       image: '/dune-row.jpg',
+      mine: true,
     }]);
     expect(tmdbGet).not.toHaveBeenCalledWith('/movie/220');
   });
@@ -250,53 +254,154 @@ describe('loadReleaseCalendar: putting it together', () => {
   });
 });
 
-describe('loadReleaseCalendar: Coming Soon', () => {
-  const upcoming = [{ tmdbId: 1 }, { tmdbId: 2 }];
+describe('loadReleaseCalendar: everything coming to binge.', () => {
+  const CUTOFF = '2026-07-10'; // 30 days after June 10
+  const result = (tmdbId, releaseDate, extra = {}) => ({ tmdbId, releaseDate, posterPath: `/p${tmdbId}.jpg`, popularity: 10, ...extra });
+  const eventsOf = async (options) => (await loadReleaseCalendar(options)).events;
 
-  test('popular movies from tomorrow to the coming-soon cutoff, at the profile’s maturity level', async () => {
-    fetchDiscover.mockResolvedValue(upcoming);
-    resolveTmdbItems.mockResolvedValue([{ id: 50, title: 'Upcoming' }]);
-
-    const { comingSoon } = await loadReleaseCalendar({ kidsSafe: 'kids' });
-
-    expect(fetchDiscover).toHaveBeenCalledWith('movie', {
-      'primary_release_date.gte': '2026-06-11',
-      'primary_release_date.lte': comingSoonCutoffIso(),
-      sort_by: 'popularity.desc',
+  // Which TMDB discover list a call is, by its parameters.
+  function discover(lists) {
+    fetchDiscover.mockImplementation(async (mediaType, params) => {
+      if (mediaType === 'movie') return (params.page === 2 ? lists.moviePage2 : lists.movies) || [];
+      return (params['first_air_date.gte'] ? lists.newSeries : lists.airing) || [];
     });
-    expect(resolveTmdbItems).toHaveBeenCalledWith(upcoming, 'movie', { kidsSafe: 'kids' });
-    expect(comingSoon).toEqual([{ id: 50, title: 'Upcoming' }]);
+  }
+
+  beforeEach(() => {
+    // Every TMDB title is on binge., as catalog id tmdbId + 1000.
+    resolveTmdbItems.mockImplementation(async (list) => list.map((item) => ({ id: item.tmdbId + 1000, title: `Title ${item.tmdbId}`, poster_url: '/catalog.jpg', _tmdb: item })));
   });
 
-  test('with no maturity level given, Coming Soon is unrestricted', async () => {
-    fetchDiscover.mockResolvedValue(upcoming);
-    await loadReleaseCalendar();
-    expect(resolveTmdbItems).toHaveBeenCalledWith(upcoming, 'movie', { kidsSafe: false });
+  test('popular movies from today to the end of the coming-soon window, two pages, at the profile’s maturity level', async () => {
+    discover({ movies: [result(1, '2026-06-10'), result(2, '2026-06-20', { posterPath: null })], moviePage2: [result(3, CUTOFF)] });
+
+    const events = await eventsOf({ kidsSafe: 'kids' });
+
+    const window = { sort_by: 'popularity.desc', 'primary_release_date.gte': '2026-06-10', 'primary_release_date.lte': comingSoonCutoffIso() };
+    expect(fetchDiscover).toHaveBeenCalledWith('movie', window);
+    expect(fetchDiscover).toHaveBeenCalledWith('movie', { ...window, page: 2 });
+    expect(resolveTmdbItems).toHaveBeenCalledWith([result(1, '2026-06-10'), result(2, '2026-06-20', { posterPath: null }), result(3, CUTOFF)], 'movie', { kidsSafe: 'kids' });
+    expect(events).toEqual([
+      { id: 'movie:1001', date: '2026-06-10', kind: 'movie', title: 'Title 1', detail: 'Movie release', url: '/movie/1001', image: 'https://image.tmdb.org/t/p/w342/p1.jpg', popularity: 10 },
+      { id: 'movie:1002', date: '2026-06-20', kind: 'movie', title: 'Title 2', detail: 'Movie release', url: '/movie/1002', image: '/catalog.jpg', popularity: 10 },
+      { id: 'movie:1003', date: CUTOFF, kind: 'movie', title: 'Title 3', detail: 'Movie release', url: '/movie/1003', image: 'https://image.tmdb.org/t/p/w342/p3.jpg', popularity: 10 },
+    ]);
   });
 
-  test('movies already on your list are left out, and at most 12 are shown', async () => {
-    follow({ watchlist: [movie(5, 500)] });
-    tmdb['/movie/500'] = { release_date: '2026-06-20' };
-    fetchDiscover.mockResolvedValue(upcoming);
-    resolveTmdbItems.mockResolvedValue(Array.from({ length: 20 }, (_, i) => ({ id: i + 1 })));
+  test('new series premiering in the window, leaving out news, soaps and talk shows', async () => {
+    discover({ newSeries: [result(7, '2026-06-15')] });
 
-    const { comingSoon, events } = await loadReleaseCalendar();
+    const events = await eventsOf();
 
-    expect(events.map((event) => event.id)).toEqual(['movie:5']);
-    expect(comingSoon.map((item) => item.id)).toEqual([1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(fetchDiscover).toHaveBeenCalledWith('tv_show', {
+      sort_by: 'popularity.desc', 'first_air_date.gte': '2026-06-10', 'first_air_date.lte': comingSoonCutoffIso(), without_genres: '10763|10766|10767',
+    });
+    expect(events).toEqual([{ id: 'series:1007', date: '2026-06-15', kind: 'series', title: 'Title 7', detail: 'Series premiere', url: '/tv-show/1007', image: 'https://image.tmdb.org/t/p/w342/p7.jpg', popularity: 10 }]);
   });
 
-  test('Coming Soon is empty when TMDB or the catalog can’t be reached', async () => {
-    fetchDiscover.mockResolvedValue(null);
-    expect((await loadReleaseCalendar()).comingSoon).toEqual([]);
-    expect(resolveTmdbItems).not.toHaveBeenCalled();
+  test('popular returning shows add their season premieres, not their weekly episodes', async () => {
+    discover({ airing: [result(8, '2019-01-01'), result(9, '2020-01-01')] });
+    tmdb['/tv/8'] = { poster_path: '/s8.jpg', next_episode_to_air: episode(3, 1, '2026-06-18', 'Pilot'), seasons: [{ season_number: 4, air_date: '2026-12-01' }] };
+    tmdb['/tv/9'] = { next_episode_to_air: episode(2, 6, '2026-06-12') };
+
+    const events = await eventsOf();
+
+    expect(fetchDiscover).toHaveBeenCalledWith('tv_show', {
+      sort_by: 'popularity.desc', 'air_date.gte': '2026-06-10', 'air_date.lte': comingSoonCutoffIso(), 'first_air_date.lte': '2026-06-09', without_genres: '10763|10766|10767',
+    });
+    // Season 4 is past the window.
+    expect(events).toEqual([{
+      id: 'ep:1008:3:1', date: '2026-06-18', kind: 'season', title: 'Title 8', detail: 'Season 3 premiere — “Pilot”', url: '/tv-show/1008?play=1&season=3&episode=1', image: 'https://image.tmdb.org/t/p/w342/s8.jpg', popularity: 10,
+    }]);
+  });
+
+  test('at most 20 returning shows are looked up, and a show premiering as a new series isn’t looked up again', async () => {
+    discover({ newSeries: [result(1, '2026-06-15')], airing: Array.from({ length: 30 }, (_, i) => result(i + 1, '2020-01-01')) });
+
+    await eventsOf();
+
+    const looked = tmdbGet.mock.calls.map(([path]) => path);
+    expect(looked).toHaveLength(20);
+    expect(looked).not.toContain('/tv/1');
+    expect(looked).toContain('/tv/21');
+  });
+
+  test('titles you follow come from your own list, first in their day, then the most popular', async () => {
+    follow({ watchlist: [movie(1005, 5, { title: 'Yours' })] });
+    tmdb['/movie/5'] = { release_date: '2026-06-20' };
+    discover({ movies: [result(5, '2026-06-20'), result(6, '2026-06-20', { popularity: 5 }), result(4, '2026-06-20', { popularity: 50 })] });
+
+    const events = await eventsOf();
+
+    expect(events.map((event) => [event.id, Boolean(event.mine)])).toEqual([['movie:1005', true], ['movie:1004', false], ['movie:1006', false]]);
+  });
+
+  test('a release date outside the window (the catalog’s, when TMDB has none) leaves a title out', async () => {
+    discover({ movies: [result(1, '2026-06-09'), result(2, '2026-07-11'), result(3, null)] });
+    resolveTmdbItems.mockImplementation(async (list) => list.map((item) => ({ id: item.tmdbId, title: 'T', release_date: item.tmdbId === 3 ? '2026-06-30' : null, _tmdb: item })));
+
+    expect((await eventsOf()).map((event) => event.id)).toEqual(['movie:3']);
+  });
+
+  test('with no maturity level given, nothing is restricted', async () => {
+    discover({ movies: [result(1, '2026-06-20')] });
+    await eventsOf();
+    expect(resolveTmdbItems).toHaveBeenCalledWith([result(1, '2026-06-20')], 'movie', { kidsSafe: false });
+  });
+
+  test('your calendar still loads when TMDB or the catalog can’t be reached', async () => {
+    follow({ watchlist: [show(1, 100)] });
+    tmdb['/tv/100'] = { next_episode_to_air: episode(1, 2, '2026-06-12') };
 
     fetchDiscover.mockRejectedValue(new Error('TMDB down'));
-    expect((await loadReleaseCalendar()).comingSoon).toEqual([]);
+    expect((await eventsOf()).map((event) => event.id)).toEqual(['ep:1:1:2']);
 
-    fetchDiscover.mockResolvedValue(upcoming);
+    discover({ movies: [result(1, '2026-06-20')], airing: [result(2, '2020-01-01')] });
     resolveTmdbItems.mockRejectedValue(new Error('catalog down'));
-    expect((await loadReleaseCalendar()).comingSoon).toEqual([]);
+    expect((await eventsOf()).map((event) => event.id)).toEqual(['ep:1:1:2']);
+  });
+});
+
+describe('month view', () => {
+  const on = (date, id = date) => ({ id, date });
+
+  test('months run from this one to the month of the last release, empty months included', () => {
+    expect(calendarMonths([on('2026-06-12'), on('2026-09-01'), on('2026-07-04')], '2026-06-10')).toEqual(['2026-06', '2026-07', '2026-08', '2026-09']);
+    expect(calendarMonths([on('2027-02-01')], '2026-11-18')).toEqual(['2026-11', '2026-12', '2027-01', '2027-02']);
+    expect(calendarMonths([], '2026-11-18')).toEqual(['2026-11']);
+  });
+
+  test('weeks start on the given day, padded with null before the 1st and after the last', () => {
+    // November 2026 starts on a Sunday and has 30 days.
+    const sunday = monthWeeks('2026-11', 0);
+    expect(sunday).toHaveLength(5);
+    expect(sunday[0]).toEqual(['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07']);
+    expect(sunday[4]).toEqual(['2026-11-29', '2026-11-30', null, null, null, null, null]);
+
+    const monday = monthWeeks('2026-11', 1);
+    expect(monday[0]).toEqual([null, null, null, null, null, null, '2026-11-01']);
+    expect(monday).toHaveLength(6);
+    expect(monday[5]).toEqual(['2026-11-30', null, null, null, null, null, null]);
+  });
+
+  test('every day of a month appears once, leap years included', () => {
+    const days = (month) => monthWeeks(month).flat().filter(Boolean);
+    expect(days('2028-02')).toHaveLength(29);
+    expect(days('2026-02')).toHaveLength(28);
+    expect(days('2026-12').at(-1)).toBe('2026-12-31');
+    monthWeeks('2026-12').forEach((week) => expect(week).toHaveLength(7));
+  });
+
+  test('the week starts where the locale starts it, Sunday when it can’t be told', () => {
+    expect(firstDayOfWeek('en-US')).toBe(0);
+    expect(firstDayOfWeek('en-GB')).toBe(1);
+    expect(firstDayOfWeek('not a locale!')).toBe(0);
+  });
+
+  test('events are grouped by day, keeping their order', () => {
+    const grouped = eventsByDate([on('2026-06-12', 'a'), on('2026-06-12', 'b'), on('2026-06-14', 'c')]);
+    expect([...grouped.keys()]).toEqual(['2026-06-12', '2026-06-14']);
+    expect(grouped.get('2026-06-12').map((event) => event.id)).toEqual(['a', 'b']);
   });
 });
 

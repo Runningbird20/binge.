@@ -33,6 +33,20 @@ export function withoutWatched(items, keys) {
   return items.filter((item) => !keys.has(titleKey(item)));
 }
 
+// The opposite: only the items in `keys`, each once, in the order given
+// (none when keys is empty or unknown). The person page's "Where you've seen
+// {name}" row.
+export function onlyWatched(items, keys) {
+  if (!Array.isArray(items) || !keys?.size) return [];
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = titleKey(item);
+    if (!keys.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function publish(next) {
   state = next;
   listeners.forEach((listener) => listener());

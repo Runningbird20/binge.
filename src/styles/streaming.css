@@ -1948,6 +1948,136 @@ kbd {
 
 .cal-detail { font-size: 0.85rem; color: rgba(255, 255, 255, 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Month view (components/calendar/MonthView.js, the default): the grid, and
+   the picked day's releases beside it on wide screens, below it otherwise.
+   Phones draw a day's releases as dots. */
+
+.cal-page--month { max-width: 1240px; }
+
+.cal-month { display: grid; gap: 1.5rem; margin-bottom: 2rem; }
+
+@media (min-width: 1100px) {
+  .cal-month { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+  .cal-month-day { padding-top: 3.1rem; }
+}
+
+.cal-month-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }
+
+.cal-month-title { margin: 0; font-size: 1.3rem; font-weight: 800; color: #fff; }
+
+.cal-month-nav { display: flex; gap: 0.25rem; }
+
+.cal-month-nav .pf-icon-btn { width: 40px; height: 40px; color: #fff; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+
+.cal-weekday { padding: 0 0.45rem 0.35rem; font-size: 0.75rem; font-weight: 700; color: var(--exp-text-dim); }
+
+.cal-cell { display: flex; min-width: 0; min-height: 6.4rem; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); }
+
+.cal-cell--out { background: transparent; border-color: transparent; }
+
+.cal-cell--has { background: none; border: 0; }
+
+.cal-num {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 1.7rem; height: 1.7rem; border-radius: 999px;
+  font-size: 0.82rem; font-weight: 700; color: rgba(255, 255, 255, 0.75);
+}
+
+.cal-cell > .cal-num { margin: 0.35rem; }
+
+.cal-cell--past .cal-num { color: rgba(255, 255, 255, 0.3); }
+
+.cal-cell--today .cal-num { background: #fff; color: #0b0d12; }
+
+.cal-day-btn {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; padding: 0.35rem;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.07);
+  color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+
+.cal-day-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+.cal-day-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.cal-day-btn.selected { border-color: var(--st-soon); background: rgba(245, 196, 81, 0.1); }
+
+.cal-day-btn .cal-num { color: #fff; }
+
+.cal-cell--today .cal-day-btn .cal-num { color: #0b0d12; }
+
+.cal-chips { display: flex; flex-direction: column; gap: 4px; width: 100%; min-width: 0; }
+
+.cal-chip { display: flex; align-items: center; gap: 0.4rem; min-width: 0; font-size: 0.74rem; font-weight: 600; line-height: 1.2; color: rgba(255, 255, 255, 0.9); }
+
+.cal-chip img, .cal-chip-art { width: 16px; height: 24px; flex-shrink: 0; border-radius: 3px; object-fit: cover; background: #1a1f2b; }
+
+.cal-chip-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.cal-chip-more { font-size: 0.72rem; font-weight: 700; color: var(--exp-text-dim); }
+
+.cal-month-empty { margin: 0 0 1rem; color: var(--exp-text-dim); }
+
+@media (max-width: 600px) {
+  .cal-grid { gap: 3px; }
+  .cal-weekday { padding: 0 0 0.3rem; text-align: center; }
+  .cal-cell { min-height: 3.2rem; border-radius: 8px; justify-content: center; }
+  .cal-cell > .cal-num { margin: 0.25rem 0 0; }
+  .cal-day-btn { align-items: center; gap: 0.2rem; padding: 0.25rem 0; border-radius: 8px; }
+  .cal-chips { flex-direction: row; justify-content: center; gap: 3px; }
+  .cal-chip { width: 5px; height: 5px; flex-shrink: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.85); }
+  .cal-chip img, .cal-chip-art, .cal-chip-title, .cal-chip-more { display: none; }
+}
+
+/* ── A one-question dialog (AskDialog: email reminders, who's watching) ─
+   Above the title popup it's opened from; a centered card on every screen. */
+
+.ask-overlay {
+  position: fixed; inset: 0; z-index: 2600; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(5, 6, 9, 0.72);
+}
+
+.ask-card {
+  width: min(420px, 100%); display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem;
+  padding: 1.5rem; border-radius: 16px; background: #15171d; border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55); color: #fff;
+}
+
+.ask-icon { color: #fff; }
+
+.ask-card h2 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em; }
+
+.ask-card p { margin: 0; color: var(--exp-text-dim); line-height: 1.5; overflow-wrap: anywhere; }
+
+.ask-card p strong { color: #fff; font-weight: 700; }
+
+.ask-card .ask-error { color: #ff8589; }
+
+.ask-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.4rem; }
+
+/* Who's watching (WatchingWith): the account's other profiles, toggled. */
+.ask-people { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.ask-person {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 0.9rem 0 0.4rem;
+  border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.05);
+  color: #fff; font: inherit; font-weight: 600; cursor: pointer; transition: background-color 0.15s, border-color 0.15s;
+}
+
+.ask-person:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+
+.ask-person:focus-visible { outline: none; box-shadow: var(--st-focus); }
+
+.ask-person.on { border-color: var(--st-soon); background: rgba(245, 196, 81, 0.12); }
+
+.ask-person.on svg { color: var(--st-soon); }
+
+.ask-person:disabled { cursor: default; opacity: 0.6; }
+
+.ask-card .loading-bar-state { width: 100%; }
+
+.ask-card .ask-note { font-size: 0.88rem; }
+
 /* ── Teams ────────────────────────────────────────────────────── */
 
 .set-teams { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }

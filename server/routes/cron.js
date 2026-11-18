@@ -1,5 +1,7 @@
 const express = require('express');
 const webpush = require('web-push');
+const mailer = require('../mailer');
+const { digestEmail, reminderEmail } = require('../alertEmails');
 
 const router = express.Router();
 
@@ -10,7 +12,7 @@ const router = express.Router();
 // the profile's notification inbox, and by push on its devices where it has
 // any. Needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, TMDB_API_KEY and
 // CRON_SECRET; the push part also VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY
-// (+ VAPID_SUBJECT).
+// (+ VAPID_SUBJECT), and email alerts SMTP_* (mailer.js).
 
 const NEW_WITHIN_DAYS = 2;
 
@@ -42,13 +44,15 @@ function setupPush() {
   return db;
 }
 
-// Push one payload to each subscription; prunes expired ones.
+// Push a payload to each subscription (the same text, or payload(sub) for
+// one per device); prunes expired ones.
 async function pushTo(db, subs, payload) {
   let sent = 0;
   let removed = 0;
   for (const sub of subs) {
     try {
-      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload, { TTL: 86400 });
+      const body = typeof payload === 'function' ? payload(sub) : payload;
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body, { TTL: 86400 });
       sent += 1;
     } catch (err) {
       if (err.statusCode === 404 || err.statusCode === 410) {
@@ -84,21 +88,39 @@ function inboxRow({ userId, profileId = null, kind, title, body = '', url = null
   };
 }
 
+// The rows kept, with their ids ({ id, user_id, profile_id }), for the
+// pushes to carry (pushPayload).
 async function recordNotifications(db, rows) {
-  let recorded = 0;
+  const kept = [];
   for (let start = 0; start < rows.length; start += INBOX_CHUNK) {
     const chunk = rows.slice(start, start + INBOX_CHUNK);
     try {
       // eslint-disable-next-line no-await-in-loop
-      const { error } = await db.from('notifications').insert(chunk);
+      const { data, error } = await db.from('notifications').insert(chunk).select('id, user_id, profile_id');
       if (error) throw error;
-      recorded += chunk.length;
+      kept.push(...(data || []));
     } catch (error) {
       console.warn('[inbox] alerts not kept:', error.message);
     }
   }
-  return recorded;
+  return kept;
 }
+
+// One device's push, carrying the id of its own inbox row so that opening the
+// push marks the row read (public/sw.js adds it to the link as ?notif=, and
+// the page marks it). Its profile's row (a device saved without a profile
+// counts as defaultProfileId's), else the account's (profile_id null); a
+// device with no row of its own gets the push without one.
+function pushPayload(message, kept, defaultProfileId = null) {
+  return (sub) => {
+    const own = kept.filter((row) => row.user_id === sub.user_id);
+    const profileId = sub.profile_id || defaultProfileId;
+    const row = (profileId && own.find((candidate) => candidate.profile_id === profileId)) || own.find((candidate) => !candidate.profile_id);
+    return JSON.stringify(row ? { ...message, inbox: row.id } : message);
+  };
+}
+
+const PUSH_FIELDS = 'id, user_id, profile_id, endpoint, p256dh, auth';
 
 async function pruneNotifications(db, now = Date.now()) {
   try {
@@ -109,32 +131,102 @@ async function pruneNotifications(db, now = Date.now()) {
   }
 }
 
+// ── Email alerts ──────────────────────────────────────────────────────
+// Opt-in per account (email_alerts.enabled: Settings, or the question asked
+// when someone first sets a reminder). Reminders are emailed when they're
+// due; new episodes and announcements the account hasn't read in the app go
+// out once a day as one digest (sendEmailDigests, after the daily new-episode
+// run). Game alerts aren't emailed: by the next day they're old news. Without
+// SMTP (mailer.js) nothing is sent.
+const DIGEST_KINDS = ['episode', 'announcement'];
+const DIGEST_HOURS = 48; // a missed daily run still catches up; emailed_at stops repeats
+
+// Map of user id → email for the accounts with email alerts on: among
+// userIds, or all of them. Empty without SMTP, or before the migration.
+async function emailRecipients(db, userIds = null) {
+  if (!mailer.emailConfigured()) return new Map();
+  const ids = userIds && [...new Set(userIds)].filter(Boolean);
+  if (ids && !ids.length) return new Map();
+  try {
+    let query = db.from('email_alerts').select('user_id').eq('enabled', true);
+    if (ids) query = query.in('user_id', ids);
+    const { data: chosen, error } = await query;
+    if (error) throw error;
+    const on = (chosen || []).map((row) => row.user_id);
+    if (!on.length) return new Map();
+    const { data: people, error: peopleError } = await db.from('profiles').select('id, email').in('id', on);
+    if (peopleError) throw peopleError;
+    return new Map((people || []).filter((person) => person.email).map((person) => [person.id, person.email]));
+  } catch (error) {
+    console.warn('[email] who wants alerts couldn\'t be read:', error.message);
+    return new Map();
+  }
+}
+
+// One email per account with alerts on: its unread, not yet emailed new
+// episodes and announcements (one per alert across its profiles).
+async function sendEmailDigests(db, { now = Date.now() } = {}) {
+  const recipients = await emailRecipients(db);
+  const since = new Date(now - DIGEST_HOURS * 3600000).toISOString();
+  let emailed = 0;
+  for (const [userId, email] of recipients) {
+    const { data: rows, error } = await db.from('notifications')
+      .select('id, title, body, url, created_at')
+      .eq('user_id', userId)
+      .in('kind', DIGEST_KINDS)
+      .is('emailed_at', null)
+      .is('read_at', null)
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error || !rows?.length) continue;
+    const seen = new Set();
+    const alerts = rows.filter((row) => {
+      const key = `${row.title}|${row.url}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (!(await mailer.sendMail({ to: email, ...digestEmail(alerts, mailer.siteUrl()) }))) continue;
+    emailed += 1;
+    await db.from('notifications').update({ emailed_at: new Date(now).toISOString() }).in('id', rows.map((row) => row.id));
+  }
+  return { accounts: recipients.size, emailed };
+}
+
 // "Remind me tonight" reminders that are due. Meant to run every ~15 min
 // (Vercel Hobby crons are daily only, so schedule it from Supabase
 // pg_cron — see supabase/manual/schedule_reminders.sql); the daily
-// new-episodes run also sweeps it as a fallback.
-async function sendDueReminders(db) {
+// new-episodes run also sweeps it as a fallback. Pushed when push is set up
+// (canPush), emailed to accounts with email alerts on, and kept in the inbox.
+async function sendDueReminders(db, { canPush = true } = {}) {
   const { data: due } = await db.from('watch_reminders')
     .select('id, user_id, profile_id, title, url')
     .is('sent_at', null).is('dismissed_at', null)
     .lte('remind_at', new Date().toISOString())
     .limit(500);
   let sent = 0;
+  let emailed = 0;
+  const recipients = await emailRecipients(db, (due || []).map((reminder) => reminder.user_id));
   for (const reminder of due || []) {
-    let query = db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', reminder.user_id);
-    if (reminder.profile_id) query = query.eq('profile_id', reminder.profile_id);
-    const { data: subs } = await query;
     const message = {
       title: `Time to watch ${reminder.title}`,
       body: 'You asked binge. to remind you. Tap to start watching.',
       url: `${reminder.url}?play=1&reminder=${reminder.id}`,
     };
-    const result = await pushTo(db, subs || [], JSON.stringify({ ...message, tag: `reminder-${reminder.id}` }));
-    sent += result.sent;
+    const kept = await recordNotifications(db, [inboxRow({ userId: reminder.user_id, profileId: reminder.profile_id, kind: 'reminder', ...message })]);
+    if (canPush) {
+      let query = db.from('push_subscriptions').select(PUSH_FIELDS).eq('user_id', reminder.user_id);
+      if (reminder.profile_id) query = query.eq('profile_id', reminder.profile_id);
+      const { data: subs } = await query;
+      const result = await pushTo(db, subs || [], pushPayload({ ...message, tag: `reminder-${reminder.id}` }, kept));
+      sent += result.sent;
+    }
+    const email = recipients.get(reminder.user_id);
+    if (email && await mailer.sendMail({ to: email, ...reminderEmail({ title: reminder.title, url: message.url }, mailer.siteUrl()) })) emailed += 1;
     await db.from('watch_reminders').update({ sent_at: new Date().toISOString() }).eq('id', reminder.id);
-    await recordNotifications(db, [inboxRow({ userId: reminder.user_id, profileId: reminder.profile_id, kind: 'reminder', ...message })]);
   }
-  return { due: (due || []).length, sent };
+  return { due: (due || []).length, sent, emailed };
 }
 
 // ── Followed-team game alerts ─────────────────────────────────────────
@@ -247,11 +339,11 @@ async function sendGameAlerts(db) {
           // Once per user, game and kind.
           const { error } = await db.from('game_alerts_sent').insert({ user_id: follower.user_id, event_id: String(event.id), kind: alert.kind });
           if (error) continue;
-          await recordNotifications(db, [inboxRow({ userId: follower.user_id, profileId: follower.profile_id, kind: 'game', ...message, url: '/sports' })]);
-          let query = db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', follower.user_id);
+          const kept = await recordNotifications(db, [inboxRow({ userId: follower.user_id, profileId: follower.profile_id, kind: 'game', ...message, url: '/sports' })]);
+          let query = db.from('push_subscriptions').select(PUSH_FIELDS).eq('user_id', follower.user_id);
           if (follower.profile_id) query = query.eq('profile_id', follower.profile_id);
           const { data: subs } = await query;
-          const result = await pushTo(db, subs || [], JSON.stringify({ ...message, url: '/sports', tag: `game-${event.id}-${alert.kind}` }));
+          const result = await pushTo(db, subs || [], pushPayload({ ...message, url: '/sports', tag: `game-${event.id}-${alert.kind}` }, kept));
           sent += result.sent;
         }
       }
@@ -314,9 +406,9 @@ async function notifyAdmins(db, title, body) {
   if (!ids.length) return;
   // The inbox draws its own icons: no status emoji in its text.
   const plain = (text) => text.replace(/\p{Extended_Pictographic}\uFE0F?\s*/gu, '');
-  await recordNotifications(db, ids.map((id) => inboxRow({ userId: id, kind: 'server', title: plain(title), body: plain(body), url: '/admin?tab=servers' })));
-  const { data: subs } = await db.from('push_subscriptions').select('id, endpoint, p256dh, auth').in('user_id', ids);
-  await pushTo(db, subs || [], JSON.stringify({ title, body, url: '/admin', tag: `server-${title}` }));
+  const kept = await recordNotifications(db, ids.map((id) => inboxRow({ userId: id, kind: 'server', title: plain(title), body: plain(body), url: '/admin?tab=servers' })));
+  const { data: subs } = await db.from('push_subscriptions').select(PUSH_FIELDS).in('user_id', ids);
+  await pushTo(db, subs || [], pushPayload({ title, body, url: '/admin', tag: `server-${title}` }, kept));
 }
 
 async function checkServers(db, { force = false } = {}) {
@@ -402,14 +494,17 @@ router.get('/sports', async (req, res) => {
 
 router.get('/reminders', async (req, res) => {
   if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
-  const db = setupPush();
-  if (!db) return res.status(503).json({ error: 'push not configured' });
+  // Reminders go out by push, email or both; game alerts and the server check
+  // need push.
+  const pushDb = setupPush();
+  const db = pushDb || (mailer.emailConfigured() ? getAdminClient() : null);
+  if (!db) return res.status(503).json({ error: 'neither push nor email is configured' });
   try {
     // The same frequent job also checks followed teams' games.
     const [reminders, games, servers] = await Promise.all([
-      sendDueReminders(db),
-      sendGameAlerts(db).catch((err) => ({ error: err.message })),
-      checkServers(db).catch((err) => ({ error: err.message })), // throttled to every 15 min
+      sendDueReminders(db, { canPush: Boolean(pushDb) }),
+      pushDb ? sendGameAlerts(db).catch((err) => ({ error: err.message })) : null,
+      pushDb ? checkServers(db).catch((err) => ({ error: err.message })) : null, // throttled to every 15 min
     ]);
     res.json({ ...reminders, games, servers });
   } catch (err) {
@@ -482,11 +577,12 @@ async function sendNewEpisodeAlerts(db, { canPush = false, latest = latestEpisod
         body: `S${last.season_number} · E${last.episode_number}${last.name ? ` — ${last.name}` : ''} is out now.`,
         url: `/tv-show/${show.id}?play=1&season=${last.season_number}&episode=${last.episode_number}`,
       };
-      totals.alerts += await recordNotifications(db, followers.map((profileId) => inboxRow({ userId, profileId, kind: 'episode', ...message })));
+      const kept = await recordNotifications(db, followers.map((profileId) => inboxRow({ userId, profileId, kind: 'episode', ...message })));
+      totals.alerts += kept.length;
       const wanted = new Set(followers);
       const devices = (subs || []).filter((sub) => sub.user_id === userId && wanted.has(sub.profile_id || defaultId));
       if (devices.length) {
-        const result = await pushTo(db, devices, JSON.stringify({ ...message, tag: `new-episode-${show.id}` }));
+        const result = await pushTo(db, devices, pushPayload({ ...message, tag: `new-episode-${show.id}` }, kept, defaultId));
         totals.sent += result.sent;
         totals.removedSubscriptions += result.removed;
       }
@@ -501,10 +597,13 @@ router.get('/new-episodes', async (req, res) => {
   const pushDb = setupPush();
   const db = pushDb || getAdminClient();
   if (!db) return res.status(503).json({ error: 'database not configured' });
-  const reminders = pushDb ? await sendDueReminders(db).catch(() => null) : null;
+  const reminders = pushDb || mailer.emailConfigured() ? await sendDueReminders(db, { canPush: Boolean(pushDb) }).catch(() => null) : null;
   await pruneNotifications(db);
   try {
-    res.json({ ...(await sendNewEpisodeAlerts(db, { canPush: Boolean(pushDb) })), reminders });
+    const alerts = await sendNewEpisodeAlerts(db, { canPush: Boolean(pushDb) });
+    // After the alerts, so today's new episodes are in today's digest.
+    const emails = await sendEmailDigests(db).catch((err) => ({ error: err.message }));
+    res.json({ ...alerts, reminders, emails });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -518,5 +617,10 @@ module.exports.pushTo = pushTo;
 module.exports.setupPush = setupPush;
 module.exports.inboxRow = inboxRow;
 module.exports.recordNotifications = recordNotifications;
+module.exports.pushPayload = pushPayload;
+module.exports.PUSH_FIELDS = PUSH_FIELDS;
 module.exports.pruneNotifications = pruneNotifications;
 module.exports.sendNewEpisodeAlerts = sendNewEpisodeAlerts;
+module.exports.sendDueReminders = sendDueReminders;
+module.exports.sendEmailDigests = sendEmailDigests;
+module.exports.emailRecipients = emailRecipients;

@@ -26,6 +26,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Where to watch (legal streaming services row) | ✓ | ✓ | — | — | `WhereToWatch.js`, TMDB `watch/providers`. |
 | Cast & crew photo row | ✓ | ✓ | ✓ | ✓ | Both TV apps: the Cast row (`CastRow`), each photo opening the person's page. |
 | Actor / director pages (`/person/:id`) | ✓ | ✓ | ✓ | ✓ | `pages/Person.js`, `utils/people.js`; Apple TV `PersonView`, Fire TV `PersonScreen` (`data/People.kt`), same rules. |
+| "Where you've seen {name}" (first row of a person page) | ✓ | ✓ | — | — | `onlyWatched` in `utils/watchedTitles.js`. |
 | Episode heatmap | ✓ | ✓ | ✓ | — | Fire TV has no `EpisodeHeatmap`. |
 | Franchise "Mark all watched" | ✓ | ✓ | — | — | `FranchiseOrder.js`. Story / release order itself is on every app. |
 | Mark season watched / Watched up to here | ✓ | ✓ | ✓ | ✓ | TV apps: a pill before the season picker, and "Watched up to here" / "Mark as not watched" when you hold an episode, with Undo. |
@@ -41,6 +42,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Trailer previews when hovering a card | ✓ | — | — | — | `HoverPreview.js`, needs a mouse or trackpad. |
 | Watched titles left out of every recommendation | ✓ | ✓ | ✓ | ✓ | `utils/watchedTitles.js`; Apple TV and Fire TV `WatchedTitles`. |
 | Finished shows leave Continue Watching | ✓ | ✓ | ✓ | ✓ | Newest episode marked watched and nothing saved partway (`Home.js`; the TV apps' `finishedShows` / `EpisodeStore.finished`). |
+| Surprise me for a group ("Just you?" / with other profiles) | ✓ | ✓ | — | — | Picks all the chosen profiles should like and none has seen, at the youngest viewer's rating (`buildGroupPicks`). The TV apps' Surprise is for the profile on screen. |
 | Home opens instantly from the last visit | ✓ | ✓ | ✓ | ✓ | The TV apps save Home to disk for 7 days (`HomeSnapshot`); the website keeps Home's and the browse rows the same way (`utils/keptCache.js`, cleared on sign-out). |
 | Pull to refresh | — | ✓ | — | — | Touch only. |
 | Rows loop back to the start (Netflix-style) | — | — | ✓ | — | Apple TV: rows of 8+ titles carry on past the last one (`RowLoop` in `Components.swift`). |
@@ -63,9 +65,12 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | "Time watched" counter (1y 2m 3w 4d …) | ✓ | ✓ | — | — | Profile page. |
 | Undo after removing (10-second popup) | ✓ | ✓ | — | — | My List, Continue Watching and History (`UndoToast.js`). |
 | Calendar export (.ics) | ✓ | ✓ | — | — | Phones get the share sheet; computers download a file. |
+| Release Calendar as a month grid | ✓ | ✓ | — | — | The website's default; Settings switches a profile to the list. The TV apps show the list. |
+| Release Calendar with everything coming to binge. | ✓ | ✓ | — | — | Popular movies, new series and season premieres for the next 30 days, beside your own shows. The TV apps' calendars show only your list and Continue Watching. |
 | Ticket book (monthly stubs, passport, achievements) | ✓ | ✓ | — | — | *By decision*: phones and computers only, also hidden in the website's TV mode. |
 | Create / edit profiles, choose avatars, set maturity | ✓ | ✓ | — | — | TV apps only read profiles. |
 | Autoplay next, previews, data saver, captions first | ✓ | ✓ | — | — | TV apps have no autoplay toggle. |
+| Spoiler-free episodes (blurred stills, hidden summaries ahead of your progress) | ✓ | ✓ | — | — | Settings › Browsing, off by default (`utils/spoilers.js`). |
 | Sign up, delete account, download my data, import history | ✓ | ✓ | — | — | TV apps send people to the website. |
 | Admin panel | ✓ | ✓ | — | — | TV apps do follow the admin's server on/off switches. |
 
@@ -118,7 +123,9 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| Push notifications (new episodes, reminders, admin broadcasts) | ✓ | ✓ | — | — | iPhones need the site installed to the Home Screen. |
+| Push notifications (new episodes, reminders, admin broadcasts) | ✓ | ✓ | — | — | iPhones need the site installed to the Home Screen. Opening one marks it read in the inbox. |
+| Notification inbox updates live | ✓ | ✓ | — | — | Supabase Realtime. The TV apps load it when the app opens, every 5 minutes, and when Notifications opens. |
+| Email alerts switch (reminders, daily digest) | ✓ | ✓ | — | — | The emails reach any account that turns them on, whichever app it uses; the switch and the reminder question are on the website. |
 | Announcements banner | ✓ | ✓ | ◐ | ◐ | TV apps: Home, Movies, Series and Sports; links are shown as text (a TV can't open them). |
 | Error reporting to the admin panel | ✓ | ✓ | ✓ | ✓ | TV apps: crashes (sent on the next launch) and "no server could play" (Apple TV `CrashReporter.swift`, Fire TV `data/Ops.kt`). |
 | Offline banner, app shortcuts, share to binge. | ✓ | ✓ | — | — | PWA features. Sharing links to binge. is mostly used on phones. |

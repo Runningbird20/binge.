@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { User } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
@@ -6,11 +6,13 @@ import TitleRow from '../components/TitleRow';
 import { useAuth } from '../contexts/AuthContext';
 import { maturityRestriction } from '../utils/kidsMode';
 import { fetchPerson, lifeLine } from '../utils/people';
+import { onlyWatched, useWatchedKeys } from '../utils/watchedTitles';
 
 // An actor's or director's page (/person/:id): who they are, then their
 // work that's on binge. as rows (opened from the cast photos in a title
 // popup, or a person found by search). Titles follow the profile's maturity
-// level and the release window, like every browse row.
+// level and the release window, like every browse row. The first row is
+// where this profile has already seen them, when it has.
 export default function Person() {
   const { id } = useParams();
   const { activeProfile } = useAuth();
@@ -28,7 +30,9 @@ export default function Person() {
     return () => { cancelled = true; };
   }, [id, kidsSafe]);
 
-  const { person, rows = [] } = state;
+  const { person, rows = [], work } = state;
+  const watched = useWatchedKeys();
+  const seen = useMemo(() => onlyWatched(work, watched), [work, watched]);
   const life = person ? lifeLine(person) : '';
   const longBio = (person?.biography || '').length > 420;
 
@@ -86,6 +90,7 @@ export default function Person() {
               </div>
             ) : (
               <div className="st-rows person-rows">
+                {seen.length > 0 && <TitleRow title={`Where you’ve seen ${person.name}`} items={seen} />}
                 {rows.map((row) => <TitleRow key={row.id} title={row.title} items={row.items} />)}
               </div>
             )}

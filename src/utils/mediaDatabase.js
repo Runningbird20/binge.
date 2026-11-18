@@ -12,6 +12,9 @@ function splitDatabaseClient(supabase, catalog) {
     storage: supabase.storage,
     from: (table) => MEDIA_TABLES.has(table) ? catalog.from(table) : supabase.from(table),
     rpc: (name, args) => CATALOG_RPCS.has(name) ? catalog.rpc(name, args) : supabase.rpc(name, args),
+    // Realtime is Supabase's alone (the notification inbox listens for new rows).
+    channel: (...args) => supabase.channel(...args),
+    removeChannel: (channel) => supabase.removeChannel(channel),
   };
 }
 module.exports = { MEDIA_TABLES, CATALOG_RPCS, splitDatabaseClient };

@@ -25,6 +25,7 @@ import {
   fetchSupabaseContinueWatching,
   fetchEpisodeProgressCounts,
   fetchHiddenRecommendations,
+  fetchWatchedTitleKeys,
   averageRatingValue,
 } from './supabaseData';
 import {
@@ -295,32 +296,34 @@ function dedupe(items) {
   });
 }
 
-let hiddenKeys = new Set();
-
-async function loadHistory() {
-  const [ratings, watchlist, continueWatching, episodeCounts, hidden] = await Promise.all([
-    fetchSupabaseRatings().catch(() => []),
-    fetchSupabaseWatchlist().catch(() => []),
-    fetchSupabaseContinueWatching().catch(() => []),
-    fetchEpisodeProgressCounts().catch(() => new Map()),
-    fetchHiddenRecommendations().catch(() => []),
+// The active profile's history, or another profile's of this account
+// (`profile`: { id, ownsLegacy }). → { history, hidden }.
+async function loadHistory(profile = null) {
+  const scope = profile ? [{ profile }] : [];
+  const [ratings, watchlist, continueWatching, episodeCounts, hiddenRows] = await Promise.all([
+    fetchSupabaseRatings(...scope).catch(() => []),
+    fetchSupabaseWatchlist(...scope).catch(() => []),
+    fetchSupabaseContinueWatching(...scope).catch(() => []),
+    fetchEpisodeProgressCounts(...scope).catch(() => new Map()),
+    fetchHiddenRecommendations(...scope).catch(() => []),
   ]);
   // "Hide from recommendations": never recommended, and no longer a taste
   // signal (so it can't seed "Because you watched…").
-  hiddenKeys = new Set(hidden.map((row) => `${row.media_type}:${row.media_id}`));
-  const notHidden = (row) => !hiddenKeys.has(`${row.media_type}:${row.media_id}`);
-  return buildHistory({
+  const hidden = new Set(hiddenRows.map((row) => `${row.media_type}:${row.media_id}`));
+  const notHidden = (row) => !hidden.has(`${row.media_type}:${row.media_id}`);
+  const history = buildHistory({
     ratings: ratings.filter(notHidden),
     watchlist: watchlist.filter(notHidden),
     continueWatching: continueWatching.filter(notHidden),
     episodeCounts,
   });
+  return { history, hidden };
 }
 
-function excludedKeySet(history) {
+function excludedKeySet(history, hidden) {
   // Anything already rated, watched, in progress or saved — the point of
   // these rows is discovering something new — plus anything hidden.
-  return new Set([...history.map((entry) => `${entry.mediaType}:${entry.mediaId}`), ...hiddenKeys]);
+  return new Set([...history.map((entry) => `${entry.mediaType}:${entry.mediaId}`), ...hidden]);
 }
 
 function seedsFor(history, mediaType) {
@@ -336,8 +339,8 @@ function seedReason(seed) {
   return `Because you watched ${seed.title}`;
 }
 
-async function candidatesForType(mediaType, history, taste, { kidsSafe }) {
-  const excluded = excludedKeySet(history);
+async function candidatesForType(mediaType, history, taste, { kidsSafe, hidden = new Set() }) {
+  const excluded = excludedKeySet(history, hidden);
   const seeds = seedsFor(history, mediaType);
   const negativeSeeds = history.filter((entry) => entry.mediaType === mediaType && entry.tmdbId && entry.polarity < 0);
 
@@ -476,7 +479,7 @@ export async function buildPersonalizedRows({ mediaTypes = ['movie', 'tv_show'],
   const cached = resultCache.get(key);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
 
-  const history = await loadHistory();
+  const { history, hidden } = await loadHistory();
   const taste = buildTaste(history);
   const hasHistory = history.some((entry) => entry.polarity > 0);
 
@@ -492,7 +495,7 @@ export async function buildPersonalizedRows({ mediaTypes = ['movie', 'tv_show'],
   }
 
   const perType = await Promise.all(
-    mediaTypes.map((mediaType) => candidatesForType(mediaType, history, taste, { kidsSafe }))
+    mediaTypes.map((mediaType) => candidatesForType(mediaType, history, taste, { kidsSafe, hidden }))
   );
 
   // Weight each type by how much of the profile's positive history it is,
@@ -534,3 +537,69 @@ export async function buildPersonalizedRows({ mediaTypes = ['movie', 'tv_show'],
   return value;
 }
 
+
+// How far apart a group's scores for a title may be before it sinks: the
+// group score is the average less this share of the spread, so a title one
+// of them would love and another would dislike loses to one they'd all like.
+const GROUP_DISAGREEMENT = 0.5;
+
+// Each person's score for a title, and the group's.
+export function groupScore(scores) {
+  if (!scores.length) return 0;
+  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  return mean - (Math.max(...scores) - Math.min(...scores)) * GROUP_DISAGREEMENT;
+}
+
+/**
+ * Picks for profiles watching together (Surprise me › "With …"): titles of
+ * one type they should all like and none of them has watched.
+ *
+ * Each profile with a history brings its own candidates (its seeds' TMDB
+ * recommendations and its taste discovery), and every candidate is scored
+ * with each of their tastes (groupScore). Anything any of them has watched
+ * (rated, marked Watched, in Continue Watching, any episode; the same rule as
+ * utils/watchedTitles.js) or hidden is left out. No reasons are attached:
+ * "Because you watched …" would tell one person what another watched.
+ *
+ * @param profiles [{ id, ownsLegacy }], the active profile included
+ * @param kidsSafe the strictest level among them (kidsMode.strictestRestriction)
+ * @returns {{ picks: object[], exclude: Set<string>, hasHistory: boolean }}
+ *   exclude: every key any of them watched, for a fallback pool
+ */
+export async function buildGroupPicks({ profiles, mediaType, kidsSafe = false }) {
+  const key = `group|${profiles.map((profile) => profile.id).sort().join(',')}|${mediaType}|${kidsSafe || 'all'}`;
+  const cached = resultCache.get(key);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
+
+  const people = await Promise.all(profiles.map(async (profile) => {
+    const [{ history, hidden }, watched] = await Promise.all([
+      loadHistory(profile),
+      fetchWatchedTitleKeys({ profile }).catch(() => new Set()),
+    ]);
+    return { history, hidden, watched, taste: buildTaste(history), hasHistory: history.some((entry) => entry.polarity > 0) };
+  }));
+  const exclude = new Set(people.flatMap((person) => [...person.watched, ...person.hidden]));
+  const voters = people.filter((person) => person.hasHistory);
+
+  let picks = [];
+  if (voters.length) {
+    const pools = await Promise.all(voters.map((person) => candidatesForType(mediaType, person.history, person.taste, { kidsSafe, hidden: person.hidden })));
+    const byKey = new Map();
+    pools.forEach(({ scored }) => scored.forEach((item) => {
+      const itemKey = `${item.media_type}:${item.id}`;
+      if (exclude.has(itemKey)) return;
+      // The strongest seed support any of them gives it.
+      if (!byKey.has(itemKey) || item._seedScore > byKey.get(itemKey)._seedScore) byKey.set(itemKey, item);
+    }));
+    const ranked = [...byKey.values()]
+      .map((item) => ({ ...item, _score: groupScore(voters.map((person) => scoreCandidate(item, person.taste))) }))
+      .sort((a, b) => b._score - a._score);
+    // Diversified with the seeds still on (one person's favourite can't fill
+    // the list), then without them.
+    picks = diversify(dedupe(ranked)).slice(0, TOP_PICKS).map(({ _seed, _reason, ...item }) => item);
+  }
+
+  const value = { picks, exclude, hasHistory: voters.length > 0 };
+  resultCache.set(key, { ts: Date.now(), value });
+  return value;
+}

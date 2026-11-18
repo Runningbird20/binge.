@@ -18,7 +18,11 @@
 // counted and closed.
 //
 // Prints what each server did, and exits 1 when a server's flag disagrees
-// with what was seen or the server played nowhere.
+// with what was seen or the server played nowhere. The browsers are automated,
+// and some players' ads notice: in Playwright's WebKit (and in Chrome given a
+// user agent that contradicts it) VidRift's and Vidy's players go to ad pages
+// about 11 seconds in, sandboxed or not. Real Chrome doesn't get that (checked
+// 2026-11-18), so a "went to" note from WebKit says little about viewers.
 //   --server vidrift,cinesrc   only these servers (ids in embedServers.js)
 //   --title fight-club         only these titles (fight-club, hail-mary, got)
 //   --browser chrome           chrome and/or webkit (default both), or
@@ -122,8 +126,8 @@ function playbackMeter() {
 
 const hostOf = (url) => { try { return new URL(url).host; } catch { return ''; } };
 
-async function runLoad(browser, load, base, opts, userAgent) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, ...(userAgent ? { userAgent } : {}) });
+async function runLoad(browser, load, base, opts) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const result = {
     server: load.server.id, title: load.title.key, browser: load.browserName, sandboxed: load.sandboxed,
     played: false, playedAfter: null, videoSeconds: 0, stillPlaying: false, popups: 0, dialogs: 0,
@@ -283,20 +287,18 @@ async function main() {
     const launcher = name === 'webkit' ? webkit : chromium;
     // eslint-disable-next-line no-await-in-loop
     const browser = await launcher.launch({ headless: !opts.headed, ...(name === 'chrome' ? { channel: 'chrome' } : {}) });
-    const version = browser.version();
-    // Headless Chrome says so in its user agent, and some players refuse it.
-    const userAgent = name === 'webkit' || opts.headed ? null
-      : `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version.split('.')[0]}.0.0.0 Safari/537.36`;
-    browsers[name] = { browser, userAgent };
-    versions.push(`${name === 'webkit' ? 'WebKit' : name === 'chrome' ? 'Chrome' : 'Chromium'} ${version}`);
+    // Each browser's own user agent: VidRift's and Vidy's ads send the player
+    // to ad pages ~11 s in when the user agent contradicts the browser.
+    browsers[name] = browser;
+    versions.push(`${name === 'webkit' ? 'WebKit' : name === 'chrome' ? 'Chrome' : 'Chromium'} ${browser.version()}`);
   }
 
   console.log(`Checking ${servers.length} servers on ${titles.length} titles, sandboxed and not, in ${versions.join(' and ')}: ${tasks.length} loads of up to ${opts.seconds} s.`);
   let results;
   try {
-    results = await pool(tasks, opts.concurrency, (load) => runLoad(browsers[load.browserName].browser, load, base, opts, browsers[load.browserName].userAgent));
+    results = await pool(tasks, opts.concurrency, (load) => runLoad(browsers[load.browserName], load, base, opts));
   } finally {
-    await Promise.all(Object.values(browsers).map(({ browser }) => browser.close().catch(() => {})));
+    await Promise.all(Object.values(browsers).map((browser) => browser.close().catch(() => {})));
     site.close();
   }
 

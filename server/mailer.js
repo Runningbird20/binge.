@@ -1,5 +1,5 @@
 // Sends binge.'s own emails (account requests and approvals,
-// routes/invites.js) over SMTP. Supabase Auth only sends its auth emails
+// routes/invites.js; email alerts, routes/cron.js) over SMTP. Supabase Auth only sends its auth emails
 // (confirm, reset), so anything else needs a sender of our own.
 //
 // Configure with SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM, for
@@ -21,6 +21,13 @@ function smtpConfig() {
 
 function emailConfigured() {
   return Boolean(smtpConfig());
+}
+
+// Links in emails point at the site itself, never a request's Origin.
+function siteUrl() {
+  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return 'http://localhost:3000';
 }
 
 // Resolves to true when the message was handed to the SMTP server, false when
@@ -46,4 +53,4 @@ async function sendMail({ to, subject, text, html, replyTo }) {
   }
 }
 
-module.exports = { sendMail, emailConfigured };
+module.exports = { sendMail, emailConfigured, siteUrl };

@@ -1,16 +1,37 @@
 import LoadingBar from '../LoadingBar';
-import { useEffect, useState } from 'react';
-import { Check, CheckCircle, Play } from '@phosphor-icons/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, CheckCircle, Eye, EyeSlash, Play } from '@phosphor-icons/react';
 import ThemedSelect from '../ThemedSelect';
 import { episodeKey, episodesUpTo, lastOf, seasonEpisodes, unwatchedOnly } from '../../utils/episodeMarking';
 import { useSeasonEpisodes } from '../../hooks/useTitleDetails';
 import { formatRuntime } from './format';
+import useProfileSetting from '../../hooks/useProfileSetting';
+import { isSpoiler, progressPoint } from '../../utils/spoilers';
 
 // onMark / onUnmark are only given when the viewer can keep track (signed
-// in); without them the list just plays episodes.
-export function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay, onMark, onUnmark, busy, status }) {
+// in); without them the list just plays episodes. With Spoiler-free episodes
+// on (utils/spoilers.js), an episode past the profile's progress (furthest
+// watched, or currentSeason/currentEpisode where it resumes) has a blurred
+// picture and "Summary hidden" until the eye button on its picture shows them.
+// The eye sits in a layer over the row laid out like it (td-episode-overlay):
+// a button can't hold another one.
+export function EpisodeList({ tmdbId, seasons, watched, currentSeason, currentEpisode, onPlay, onMark, onUnmark, busy, status }) {
   const [season, setSeason] = useState(currentSeason || seasons[0]?.season_number || 1);
   const episodes = useSeasonEpisodes(tmdbId, season);
+  const spoilerFree = Boolean(useProfileSetting('spoilerFree'));
+  const progress = useMemo(
+    () => progressPoint(watched, currentSeason ? { season: currentSeason, episode: currentEpisode } : null),
+    [watched, currentSeason, currentEpisode],
+  );
+  const [shown, setShown] = useState(() => new Set()); // spoilers asked for, "season:episode"
+
+  function toggleShown(key) {
+    setShown((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (currentSeason) setSeason(currentSeason);
@@ -66,31 +87,55 @@ export function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay, o
       <ol className="td-episodes">
         {!episodes && <li style={{ listStyle: 'none' }}><LoadingBar compact label="Loading episodes…" /></li>}
         {episodes?.map((episode) => {
-          const isWatched = watched.has(episodeKey(season, episode.number));
+          const key = episodeKey(season, episode.number);
+          const isWatched = watched.has(key);
           const upcoming = episode.airDate && new Date(episode.airDate) > new Date();
+          const spoiler = spoilerFree && Boolean(episode.still || episode.overview) && isSpoiler(season, episode.number, watched, progress);
+          const hidden = spoiler && !shown.has(key);
           return (
             <li key={episode.number} className="td-episode-item">
-              <button
-                type="button"
-                className={`td-episode${isWatched ? ' watched' : ''}`}
-                onClick={() => !upcoming && onPlay(season, episode.number)}
-                disabled={upcoming}
-                aria-label={`Play episode ${episode.number}: ${episode.title}${isWatched ? ' (watched)' : ''}`}
-              >
-                <span className="td-episode-num">{episode.number}</span>
-                <span className="td-episode-still">
-                  {episode.still ? <img src={episode.still} alt="" loading="lazy" /> : <span className="td-episode-still-empty" />}
-                  {!upcoming && <span className="td-episode-play"><Play size={18} weight="fill" /></span>}
-                  {isWatched && <span className="td-episode-watched"><Check size={12} weight="bold" /> Watched</span>}
-                </span>
-                <span className="td-episode-body">
-                  <span className="td-episode-title">
-                    <strong>{episode.title}</strong>
-                    <span className="td-muted">{upcoming ? `Airs ${new Date(episode.airDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : formatRuntime(episode.runtime)}</span>
+              <div className="td-episode-main">
+                <button
+                  type="button"
+                  className={`td-episode${isWatched ? ' watched' : ''}`}
+                  onClick={() => !upcoming && onPlay(season, episode.number)}
+                  disabled={upcoming}
+                  aria-label={`Play episode ${episode.number}: ${episode.title}${isWatched ? ' (watched)' : ''}`}
+                >
+                  <span className="td-episode-num">{episode.number}</span>
+                  <span className={`td-episode-still${hidden ? ' td-episode-still--hidden' : ''}`}>
+                    {episode.still ? <img src={episode.still} alt="" loading="lazy" /> : <span className="td-episode-still-empty" />}
+                    {!upcoming && <span className="td-episode-play"><Play size={18} weight="fill" /></span>}
+                    {isWatched && <span className="td-episode-watched"><Check size={12} weight="bold" /> Watched</span>}
                   </span>
-                  {episode.overview && <span className="td-episode-overview">{episode.overview}</span>}
-                </span>
-              </button>
+                  <span className="td-episode-body">
+                    <span className="td-episode-title">
+                      <strong>{episode.title}</strong>
+                      <span className="td-muted">{upcoming ? `Airs ${new Date(episode.airDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : formatRuntime(episode.runtime)}</span>
+                    </span>
+                    {episode.overview && (hidden
+                      ? <span className="td-episode-overview td-episode-overview--hidden">Summary hidden</span>
+                      : <span className="td-episode-overview">{episode.overview}</span>)}
+                  </span>
+                </button>
+                {spoiler && (
+                  <div className="td-episode-overlay">
+                    <span className="td-episode-num" aria-hidden="true" />
+                    <span className="td-episode-still-slot">
+                      <button
+                        type="button"
+                        className="td-episode-reveal"
+                        onClick={() => toggleShown(key)}
+                        aria-pressed={!hidden}
+                        aria-label={`Show the picture and summary of episode ${episode.number}`}
+                        title={hidden ? 'Show the picture and summary' : 'Hide them again'}
+                      >
+                        {hidden ? <Eye size={18} weight="bold" aria-hidden="true" /> : <EyeSlash size={18} weight="bold" aria-hidden="true" />}
+                      </button>
+                    </span>
+                  </div>
+                )}
+              </div>
               {canMark && !upcoming && (
                 <button
                   type="button"

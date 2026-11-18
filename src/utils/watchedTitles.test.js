@@ -1,5 +1,5 @@
 import * as supabaseData from './supabaseData';
-import { loadWatchedKeys, resetWatchedKeys, titleKey, withoutWatched } from './watchedTitles';
+import { loadWatchedKeys, onlyWatched, resetWatchedKeys, titleKey, withoutWatched } from './watchedTitles';
 
 let mockTables = {};
 
@@ -68,6 +68,20 @@ test('withoutWatched drops watched titles whatever id field the item uses', () =
   expect(withoutWatched(items, new Set())).toBe(items);
   expect(withoutWatched(items, null)).toBe(items);
   expect(titleKey({ media_type: 'movie', id: '5' })).toBe('movie:5');
+});
+
+test('onlyWatched keeps just the watched titles, each once, in order (the person page’s first row)', () => {
+  const keys = new Set(['movie:5', 'tv_show:11']);
+  const items = [
+    { media_type: 'tv_show', media_id: 11, id: 99 },
+    { media_type: 'movie', id: '6' },
+    { media_type: 'movie', id: 5 },
+    { media_type: 'movie', id: '5' },
+  ];
+  expect(onlyWatched(items, keys)).toEqual([{ media_type: 'tv_show', media_id: 11, id: 99 }, { media_type: 'movie', id: 5 }]);
+  expect(onlyWatched(items, new Set())).toEqual([]);
+  expect(onlyWatched(items, null)).toEqual([]);
+  expect(onlyWatched(undefined, keys)).toEqual([]);
 });
 
 test('one request is shared and reused; a history change loads again', async () => {

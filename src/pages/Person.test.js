@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import Person from './Person';
 import { fetchPerson } from '../utils/people';
+import { useWatchedKeys } from '../utils/watchedTitles';
 
 jest.mock('react-router-dom', () => ({ ...require('../testUtils/pageTestSetup').routerMock, useParams: () => ({ id: '1892' }) }), { virtual: true });
 jest.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ activeProfile: { id: 'p', is_kids: true, settings: { maturity: 'teens' } } }) }));
@@ -9,6 +10,9 @@ jest.mock('../components/TitleRow', () => ({ title, items }) => (
   <section aria-label={title}>{items.map((item) => <span key={item.id}>{item.title}</span>)}</section>
 ));
 jest.mock('../utils/people', () => ({ ...jest.requireActual('../utils/people'), fetchPerson: jest.fn() }));
+jest.mock('../utils/watchedTitles', () => ({ ...jest.requireActual('../utils/watchedTitles'), useWatchedKeys: jest.fn() }));
+
+beforeEach(() => { useWatchedKeys.mockReturnValue(new Set()); });
 
 const MATT = {
   person: { id: 1892, name: 'Matt Damon', photo: 'https://image.tmdb.org/t/p/h632/m.jpg', department: 'Actor', biography: 'Matthew Paige Damon is an American actor. '.repeat(14), birthday: '1970-10-08', placeOfBirth: 'Cambridge, Massachusetts, USA' },
@@ -46,4 +50,24 @@ test('someone TMDB doesn’t know', async () => {
   render(<Person />);
   expect(await screen.findByText('We couldn’t find that person.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Back to Home' })).toBeInTheDocument();
+});
+
+test('the first row is where this profile has already seen them, best known first', async () => {
+  useWatchedKeys.mockReturnValue(new Set(['movie:2', 'tv_show:3']));
+  fetchPerson.mockResolvedValue({
+    ...MATT,
+    work: [{ id: 1, media_type: 'movie', title: 'The Martian' }, { id: 2, media_type: 'movie', title: 'Good Will Hunting' }, { id: 3, media_type: 'tv_show', title: 'Project Greenlight' }],
+  });
+  render(<Person />);
+  const rows = await screen.findAllByRole('region');
+  expect(rows[0]).toHaveAccessibleName('Where you’ve seen Matt Damon');
+  expect(rows[0]).toHaveTextContent('Good Will HuntingProject Greenlight');
+  expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual(['Where you’ve seen Matt Damon', 'Movies with Matt Damon', 'Series with Matt Damon']);
+});
+
+test('nothing of theirs watched: no such row', async () => {
+  fetchPerson.mockResolvedValue({ ...MATT, work: [{ id: 1, media_type: 'movie', title: 'The Martian' }] });
+  render(<Person />);
+  await screen.findByRole('region', { name: 'Movies with Matt Damon' });
+  expect(screen.queryByRole('region', { name: /^Where you’ve seen/ })).not.toBeInTheDocument();
 });

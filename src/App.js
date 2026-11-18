@@ -15,6 +15,7 @@ import OfflineBanner from './components/OfflineBanner';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ReminderWatcher from './components/ReminderWatcher';
+import PushOpenedWatcher from './components/PushOpenedWatcher';
 import useDeviceType from './hooks/useDeviceType';
 import { captureInstallPrompt } from './utils/installApp';
 import { loadSupabaseRoutes } from './api';
@@ -149,6 +150,7 @@ function AppShell({ children }) {
       {showBottomNav && <BottomNav />}
       <KeyboardShortcuts />
       {user && <ReminderWatcher />}
+      {user && <PushOpenedWatcher />}
     </>
   );
 }

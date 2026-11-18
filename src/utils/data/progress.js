@@ -56,7 +56,8 @@ export async function fetchWatchedAmong(episodes) {
 
 // media_id -> number of episodes watched, across every show — an engagement
 // signal for recommendations (binging 30 episodes says more than one).
-export async function fetchEpisodeProgressCounts() {
+// `profile` ({ id, ownsLegacy }) reads another profile of this account.
+export async function fetchEpisodeProgressCounts({ profile = null } = {}) {
   if (!isSupabaseConfigured || !supabase) {
     return new Map();
   }
@@ -64,13 +65,13 @@ export async function fetchEpisodeProgressCounts() {
   const client = requireSupabase();
   const { data: { user } } = await getSupabaseUser();
   if (!user) return new Map();
-  const profileId = getActiveProfileId();
+  const profileId = profile ? profile.id : getActiveProfileId();
   let query = client
     .from('episode_progress')
     .select('media_id')
     .eq('user_id', user.id)
     .limit(5000);
-  if (profileId) query = scopeToProfile(query, profileId);
+  if (profileId) query = scopeToProfile(query, profileId, profile ? profile.ownsLegacy : undefined);
   const { data, error } = await query;
   if (error) return new Map();
   const counts = new Map();
@@ -90,20 +91,20 @@ export async function fetchEpisodeProgressCounts() {
 const WATCHED_STATUSES = ['watched', 'watching'];
 const PAGE = 1000;
 
-export async function fetchWatchedTitleKeys() {
+export async function fetchWatchedTitleKeys({ profile = null } = {}) {
   const keys = new Set();
   if (!isSupabaseConfigured || !supabase) return keys;
   try {
     const { data: { user } = {} } = await getSupabaseUser();
     if (!user) return keys;
     const client = requireSupabase();
-    const profileId = getActiveProfileId();
+    const profileId = profile ? profile.id : getActiveProfileId();
 
     async function allRows(table, columns, refine = (query) => query) {
       const rows = [];
       for (let page = 0; page < 20; page += 1) {
         let query = refine(client.from(table).select(columns).eq('user_id', user.id));
-        if (profileId) query = scopeToProfile(query, profileId);
+        if (profileId) query = scopeToProfile(query, profileId, profile ? profile.ownsLegacy : undefined);
         // eslint-disable-next-line no-await-in-loop
         const { data, error } = await query.order('id').range(page * PAGE, page * PAGE + PAGE - 1);
         if (error) throw error;
@@ -249,19 +250,19 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 // playback writes here only; adding to the library is a separate, explicit
 // action (addSupabaseWatchlistItem).
 
-export async function fetchSupabaseContinueWatching() {
+export async function fetchSupabaseContinueWatching({ profile = null } = {}) {
   if (!isSupabaseConfigured || !supabase) return [];
 
   const client = requireSupabase();
   const authUser = await getAuthenticatedUser();
-  const profileId = getActiveProfileId();
+  const profileId = profile ? profile.id : getActiveProfileId();
 
   let query = client
     .from('continue_watching')
     .select('id, media_type, media_id, current_season, current_episode, current_page, current_chapter, position_seconds, duration_seconds, updated_at')
     .eq('user_id', authUser.id)
     .order('updated_at', { ascending: false });
-  if (profileId) query = scopeToProfile(query, profileId);
+  if (profileId) query = scopeToProfile(query, profileId, profile ? profile.ownsLegacy : undefined);
   const { data, error } = await query;
 
   if (error) {
@@ -403,11 +404,11 @@ export async function removeTitleFromHistory({ mediaType, mediaId, profileId: fo
   window.dispatchEvent(new CustomEvent('binge:historyChanged'));
 }
 
-export async function fetchHiddenRecommendations() {
+export async function fetchHiddenRecommendations({ profile = null } = {}) {
   if (!isSupabaseConfigured || !supabase) return [];
   const { data: { user } } = await getSupabaseUser();
   if (!user) return [];
-  const profileId = getActiveProfileId();
+  const profileId = profile ? profile.id : getActiveProfileId();
   let query = supabase.from('recommendation_hidden').select('media_type, media_id').eq('user_id', user.id);
   query = profileId ? query.eq('profile_id', profileId) : query.is('profile_id', null);
   const { data, error } = await query;

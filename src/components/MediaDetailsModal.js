@@ -491,6 +491,7 @@ export default function MediaDetailsModal({
               seasons={details.seasons}
               watched={watched}
               currentSeason={resumeSeason ? Number(resumeSeason) : null}
+              currentEpisode={resumeEpisode ? Number(resumeEpisode) : null}
               onPlay={play}
               onMark={allowActions ? markEpisodes : undefined}
               onUnmark={allowActions ? unmarkEpisodes : undefined}

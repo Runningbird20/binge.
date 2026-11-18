@@ -550,6 +550,9 @@
 
 .st-upnext-still { width: 150px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
 
+/* Spoiler-free episodes: the next episode's picture, blurred and kept inside its corners. */
+.st-upnext-still--hidden { filter: blur(10px) brightness(0.8); clip-path: inset(0 round 8px); }
+
 .st-upnext-body { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 
 .st-upnext-meta { font-size: 0.85rem; color: var(--exp-text-dim); }

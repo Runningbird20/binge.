@@ -4,12 +4,19 @@ import { toast } from 'sonner';
 import { createReminder, formatReminderTime, reminderPresets } from '../utils/reminders';
 import { enableNewEpisodeAlerts, isSubscribed, pushPermission, pushSupported } from '../utils/pushNotifications';
 import { haptic } from '../utils/haptics';
+import { fetchEmailAlerts } from '../utils/emailAlerts';
+import { useAuth } from '../contexts/AuthContext';
+import EmailRemindersPrompt from './EmailRemindersPrompt';
 
 // "Remind me" — tonight / tomorrow / Saturday. Delivered as a notification
-// when they're enabled, and in the app either way.
+// when they're enabled, by email when the account turned that on, and in the
+// app either way. An account that has never chosen about email is asked once,
+// after the reminder is set (not on kids profiles: it's the grown-up's inbox).
 export default function RemindButton({ item, mediaType }) {
+  const { user, activeProfile } = useAuth() || {};
   const [open, setOpen] = useState(false);
   const [set, setSet] = useState(null);
+  const [askEmail, setAskEmail] = useState(false);
   const wrapRef = useRef(null);
 
   useEffect(() => {
@@ -39,9 +46,15 @@ export default function RemindButton({ item, mediaType }) {
         note = 'We’ll send a notification.';
       }
       toast(`Reminder set for ${formatReminderTime(preset.when)}`, { description: note });
+      if (!activeProfile?.is_kids && (await fetchEmailAlerts().catch(() => false)) === null) setAskEmail(true);
     } catch (error) {
       toast(error.message);
     }
+  }
+
+  function emailChosen(enabled) {
+    setAskEmail(false);
+    if (enabled) toast('Email reminders on', { description: user?.email ? `They’ll go to ${user.email}.` : undefined });
   }
 
   return (
@@ -65,6 +78,7 @@ export default function RemindButton({ item, mediaType }) {
           ))}
         </div>
       )}
+      {askEmail && <EmailRemindersPrompt email={user?.email} onClose={emailChosen} />}
     </div>
   );
 }

@@ -45,3 +45,43 @@ export async function markNotificationsRead(ids, now = new Date()) {
     .is('read_at', null);
   if (error) throw error;
 }
+
+// ── Opening a push ─────────────────────────────────────────────────────
+// A push carries its inbox row's id; the service worker adds it to the link it
+// opens as ?notif= (public/sw.js), and PushOpenedWatcher marks it read, then
+// says so with INBOX_READ_EVENT so a bell already on screen drops the dot.
+export const INBOX_LINK_PARAM = 'notif';
+export const INBOX_READ_EVENT = 'binge:inbox-read';
+
+export function inboxIdFromLink(search) {
+  const value = new URLSearchParams(search || '').get(INBOX_LINK_PARAM);
+  return /^\d{1,15}$/.test(value || '') ? Number(value) : null;
+}
+
+// The same address without ?notif=, the rest (play=1, season…) untouched.
+export function withoutInboxId(href) {
+  const url = new URL(href);
+  url.searchParams.delete(INBOX_LINK_PARAM);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+// ── Realtime ───────────────────────────────────────────────────────────
+// New rows (and read marks from other devices, as updates) for this account,
+// through Supabase Realtime (migration 20261118130000_notifications_realtime.sql
+// adds the table to its publication; RLS keeps each account to its own rows).
+// onStatus gets the channel's status: 'SUBSCRIBED' when live, 'CHANNEL_ERROR',
+// 'TIMED_OUT' or 'CLOSED' when not. Returns the unsubscribe.
+export function subscribeToInbox(userId, { onChange, onStatus }) {
+  if (!INBOX_AVAILABLE || !supabase?.channel || !userId) return () => {};
+  const filter = `user_id=eq.${userId}`;
+  const channel = supabase.channel(`inbox:${userId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter }, (payload) => onChange(payload.new, 'INSERT'))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter }, (payload) => onChange(payload.new, 'UPDATE'))
+    .subscribe((status) => onStatus(status));
+  return () => { supabase.removeChannel(channel); };
+}
+
+// Whether a row is this profile's to see: its own, or the account's (profile_id null).
+export function belongsToProfile(row, profileId) {
+  return !profileId || !row?.profile_id || row.profile_id === profileId;
+}

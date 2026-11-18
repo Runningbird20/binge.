@@ -25,10 +25,10 @@ function alertTime(iso) {
 // to its link. A dropdown on computers and TVs, a bottom sheet on phones
 // (portaled: the header's backdrop-filter would trap a fixed overlay inside it).
 export default function NotificationBell() {
-  const { activeProfile } = useAuth();
+  const { activeProfile, user } = useAuth();
   const { isMobile } = useDeviceType();
   const navigate = useNavigate();
-  const inbox = useNotifications(activeProfile?.id || null);
+  const inbox = useNotifications(activeProfile?.id || null, user?.id || null);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const buttonRef = useRef(null);

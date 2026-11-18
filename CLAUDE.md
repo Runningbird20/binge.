@@ -63,7 +63,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows, 
 
 ## Repo layout
 
-- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `home/` for Home's cards, stats, Surprise me and its spotlight and Continue Watching hooks, `catalog/` for the Movies/Series grid, `sports/` for the Sports page), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
+- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `home/` for Home's cards, stats, Surprise me and its spotlight and Continue Watching hooks, `catalog/` for the Movies/Series grid, `sports/` for the Sports page, `calendar/` for the Release Calendar), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations.
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `turso/schema.sql` — the media catalog schema.
@@ -158,10 +158,10 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - Catalog filters take `kidsSafe` = `false` or the level (`maturityRestriction(profile)`, `ratingsFor`).
   - Only Toddler/Kids get the kids-only rows (`isChildLevel`).
   - The website lets unrated Family/Animation/Kids titles through. The TV apps leave out every unrated title on a restricted level (see TV apps).
-  - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, the calendar's Coming Soon row and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
+  - **Every TMDB list goes through `resolveTmdbItems(…, { kidsSafe })`.** That covers browse rows, More Like This, search's "More like {title}", franchise lists, the calendar's releases for everyone and person pages. A new call that shows titles must pass the level too; leaving it out shows everything.
   - **Website search applies them too** (2026-11-10): title and related matches through `filterSearchPayload` (`utils/searchMaturity.js`: ratings looked up by id, unrated left out, a failed lookup shows nothing); Ask binge. picks and person search pass `kidsSafe` to `resolveTmdbItems`.
 - **Profile settings** (`/settings`, `src/utils/profileSettings.js`):
-  - Autoplay next, previews, data saver, haptics and captions-first live in `account_profiles.settings` (jsonb) + localStorage.
+  - Autoplay next, previews, data saver, haptics, captions-first, spoiler-free episodes and the calendar view live in `account_profiles.settings` (jsonb) + localStorage. Components that must follow a change read them with `hooks/useProfileSetting`.
   - Audio/subtitle prefs live in `audio_pref`/`subtitle_pref`.
   - `AuthContext` hydrates both from the profile row on load. The row wins, because it's written on every change.
 
@@ -281,6 +281,10 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - The title comes from the profile's Top Picks / "Because you watched" rows, which `buildPersonalizedRows` has already filtered for maturity and the release window. Picks lean toward the top and skip Coming Soon titles, watched titles (`exclude`) and the last 6 surprises.
   - A profile with no history gets the spotlight's trending titles of that type. A type with nothing to offer loses its button.
   - Styled like the title popup's Trailer button (`st-btn td-resume-control td-play--compact`).
+  - **Watching together.** On an account with other profiles, the button first asks "Just you?" (`home/WatchingWith.js`, an `AskDialog`): "Just me" is the usual surprise; choosing other profiles ("Surprise Alex and me" / "Surprise all 3 of us") picks from `buildGroupPicks` (`personalization.js`). The choice is kept for the next surprise on that visit.
+    - **Picks.** Each chosen profile with a history brings its own candidates, and every candidate is scored with each profile's taste: the group score is the average less half the spread (`groupScore`), so what one would love and another dislike sinks. Anything any of them has watched (`fetchWatchedTitleKeys`) or hidden is left out. No reasons are attached ("Because you watched …" would tell one what another watched).
+    - **Rating.** The picks keep to the youngest viewer's rating, the strictest maturity level in the group (`strictestRestriction` in `kidsMode.js`), for movies and series alike; the dialog says whose rating when it's stricter than yours. Home's trending titles stand in when nobody has a history, but only if the group's level is yours (they were filtered for it).
+    - **Reading another profile.** The history reads (`fetchSupabaseRatings`, `fetchSupabaseWatchlist`, `fetchSupabaseContinueWatching`, `fetchEpisodeProgressCounts`, `fetchHiddenRecommendations`, `fetchWatchedTitleKeys`) take an optional `profile: { id, ownsLegacy }`; without it they read the active profile, as everywhere else. `ownsLegacy` is the default-profile rule of `scopeToProfile`.
 - **Sent to you** — the household queue (`profile_shares`; RLS requires both profiles to belong to the account). Sent with `SendToProfileButton` on the title popup (`utils/profileShares.js`); the TV apps have "Send to…" and the same row.
 
 ### Title popup (movies, series)
@@ -306,6 +310,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
     - **Resume point.** When marking catches you up past the resume point, Continue Watching + the library row move to the next aired episode.
     - **Undo.** Every change shows a note with Undo, which restores the resume point and the original watch times.
     - **Timing.** Marking waits for the episode progress to load (`progressLoaded`).
+  - **Spoiler-free episodes** (Settings › Browsing, off by default; `utils/spoilers.js`). An episode past the profile's progress (the later of its furthest watched episode and the resume point; a show not started has none) gets a blurred still and "Summary hidden", until the eye button on its picture shows them (and hides them again). The eye sits in `td-episode-overlay`, a click-through layer over the row with the row's own grid columns (a button can't hold another), so keep the two grids in step. Watched episodes and those behind the progress show as usual. The player's Up Next card blurs the next episode's still too. Episode titles stay.
   - **Previously on…** — Resume on a show after ≥14 days away first shows the last 3 TMDB episode summaries.
   - **Episode heatmap** (`EpisodeHeatmap`): all seasons via one TMDB call per 20 seasons (`append_to_response=season/N`), plus IMDb episode ratings via `/api/extras/episodes` (cached in `episode_ratings_cache`) when OMDb is configured.
 - **Franchise order** (`utils/franchises.js`, `FranchiseOrder`):
@@ -349,6 +354,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - most widely known first.
 
   A credit listed as a TV "Director" isn't a creator credit.
+- **"Where you've seen {name}"**: the person page's first row, the titles of theirs this profile has watched (`onlyWatched` in `utils/watchedTitles.js` over `fetchPerson`'s `work`, best known first, so only `workCredits` count). It's on the person page only, by decision: the title popup's Cast row doesn't say where you've seen someone.
 
 ### Search
 
@@ -474,18 +480,30 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
   - **Once per account.** `push_notified` claims each episode before anything is sent, so a re-run never repeats it.
   - **Needs** `CRON_SECRET`, the service-role key and `TMDB_API_KEY`. `VAPID_*` is needed only for the push part.
 - **Reminders** (`watch_reminders`, `src/utils/reminders.js`, `RemindButton`, `ReminderWatcher`):
-  - Delivered in the app when due, and by push via `GET /api/cron/reminders`.
+  - Delivered in the app when due, and by push and email (see Email alerts) via `GET /api/cron/reminders`. The route runs with push or SMTP set up; game alerts and the uptime probe need push.
   - Vercel Hobby crons are daily, so frequent delivery needs Supabase pg_cron: `supabase/manual/schedule_reminders.sql` (fill in the site URL + CRON_SECRET, run once).
   - That job also runs the server uptime probe and the followed-team alerts.
-- **Notification inbox** (`notifications`, migration `20261116120000_notifications_inbox.sql`; `utils/notificationsInbox.js`, `hooks/useNotifications.js`, `NotificationBell`):
+- **Email alerts** (`email_alerts`, migration `20261118140000_email_alerts.sql`, NOT applied yet; `utils/emailAlerts.js`, `EmailRemindersPrompt`; server `emailRecipients` / `sendEmailDigests` in `server/routes/cron.js`, words in `server/alertEmails.js`, sent by `server/mailer.js`):
+  - **Opt-in per account, off until chosen.** One row per account (owner-only RLS; its own table because `profiles` is readable by every signed-in user). No row = never asked; `enabled = false` = said no or turned off. Settings › Notifications › "Email alerts" switches it.
+  - **Asked once.** The first time an account sets a reminder (`RemindButton`, not on kids profiles), a dialog asks "Email you reminders too?" "Email me" turns it on; "Not now", Escape or a click outside saves no. It's portaled above the title popup and keeps Escape from closing the popup too.
+  - **What's sent.** Reminders, by email when due (`sendDueReminders`). Once a day, after the new-episode run, one digest per account of its unread new episodes and announcements from the last 48 hours not yet emailed (`emailed_at` on `notifications`), one per alert across profiles, at most 20 listed. Game alerts aren't emailed (stale by then). Every email links to Settings to turn them off.
+  - **Needs** `SMTP_*`; without it nothing is sent and nothing is marked. Addresses come from `profiles.email`.
+- **Notification inbox** (`notifications`, migrations `20261116120000_notifications_inbox.sql` and `20261118130000_notifications_realtime.sql`, the second NOT applied yet; `utils/notificationsInbox.js`, `hooks/useNotifications.js`, `NotificationBell`):
   - **Where.** A bell in the header, left of the profile; on phones, the top right, opening a bottom sheet. A gold dot on the bell while anything is unread, and on each unread alert. Opening an alert marks it read and follows its link; "Mark all read" does them all.
   - **What's kept.** Every alert binge. sends: new episodes (every profile, notifications on or not), due reminders, followed-team game alerts, admin broadcasts and server alerts to admins. Server code writes rows with `recordNotifications` (`server/routes/cron.js`), which never stops the push itself: a failed insert only logs.
   - **Who sees what.** A row with a `profile_id` belongs to that profile. A null one (broadcasts, server alerts) belongs to the whole account, and every profile sees it. Broadcasts go into every account's inbox, notifications on or not.
   - **Access.** RLS lets a user read their own rows and change only `read_at`; the service role writes them. The daily new-episodes cron deletes rows past 30 days.
   - **Empty or missing.** No alerts reads "All caught up". So does a Supabase without the table yet (`PGRST205`, before the migration runs), with a console hint naming the migration. Any other failed load shows "Couldn't load" with Try again.
-  - **Freshness.** The list reloads on a profile switch, every 5 minutes while visible, and when the tab returns or the bell opens, unless the last load is under a minute old.
+  - **Freshness.** New alerts arrive at once through Supabase Realtime (`subscribeToInbox`: one channel per account, inserts and read marks, each reloading the list). That needs the table in the `supabase_realtime` publication (the realtime migration). Every (re)connection reloads, so nothing sent while it was down is missed. While the channel isn't connected, the list reloads every 5 minutes the tab is visible (every 30 while it is, as a safety net). It also reloads on a profile switch, and when the tab returns or the bell opens, unless the last load is under a minute old. The split client passes `channel`/`removeChannel` to Supabase (`mediaDatabase.js`).
+  - **Opening a push marks it read.** `recordNotifications` returns the kept rows with their ids, and `pushPayload` gives each device the id of its own row: its profile's (a device saved without one counts as the default profile's), else the account's. So keep the rows before pushing. The service worker has no Supabase session, so `notificationclick` adds the id to the link as `?notif=`. `PushOpenedWatcher` (in `AppShell`, on every page) marks it read, takes it out of the address with `replaceState` (not a navigation, so `play=1` isn't acted on twice) and announces `INBOX_READ_EVENT`, which reloads a bell on screen.
   - **On the TV apps** (`Data/Inbox.swift`, `data/Inbox.kt`): Me → Notifications, first in the list, with a dot on the Me tab while anything is unread. Same query and read marks as the website, so an alert read on one is read on all. Opening one plays or opens what its link names (`/movie/…`, `/tv-show/…?play=1&season=&episode=`) or switches to Sports for `/sports`; other links (admin pages, announcements') only mark it read.
-- **Release calendar** (`/calendar`, `utils/releaseCalendar.js`): next episodes and premieres of My List + Continue Watching shows, upcoming list movies, and Coming Soon. The `.ics` export uses the share sheet on phones and downloads a file on computers.
+- **Release calendar** (`/calendar`, `utils/releaseCalendar.js`). It's everything coming to binge., not only your shows, so it's never empty:
+  - **Yours** (`followedEvents`, `mine: true`): next episodes and dated seasons of My List + Continue Watching shows, upcoming list movies, and "Renewed — date not announced". First in each day.
+  - **Everyone's** (`bingeEvents`), from today to the end of the coming-soon window (30 days), matched to the catalog at the profile's maturity level, most popular first: movies (two pages of TMDB discover), new series premieres, and season premieres of the 20 most popular returning shows (one `/tv/{id}` request each; never their weekly episodes). News, soaps and talk shows are left out (`DAILY_TV`): they air every weekday. Titles you follow only come from your side, so nothing shows twice.
+  - **Export.** "Add my releases to my calendar" exports only yours; every release has its own `.ics` button. The `.ics` export uses the share sheet on phones and downloads a file on computers.
+  - **Month grid by default** (`components/calendar/MonthView.js`). It opens on the first month with a release, and the arrows step from this month to the last release's. Each release day is a button; the picked day's releases are listed beside the grid, below it on phones, where days draw their releases as dots. The week starts on the locale's first day (`firstDayOfWeek`).
+  - **The list of dates** is a per-profile setting: Settings › Browsing › "Release Calendar as a list" (`calendarList`). Both views share `ReleaseList`.
+  - The TV apps show only your releases, as a list (`DIFF.md`).
 
 ### Wrapped & ticket book
 
@@ -659,7 +677,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
     - `OMDB_API_KEY` — outside ratings;
     - `GROQ_API_KEY` — Ask binge.;
     - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles.
-  - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
+  - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails, and email alerts), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
   - **Optional:** `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
   - **Admin → Databases (optional):**
     - `TURSO_PLATFORM_TOKEN` and `TURSO_ORG`: this month's rows read/written and the real plan. The token is a Turso Platform API token from `turso auth api-tokens mint`, not the database token.

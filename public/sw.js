@@ -1,5 +1,5 @@
-// v6: the ad host/path blocking is gone (it only ever saw binge.'s own requests).
-const CACHE_NAME = 'binge-shell-v6';
+// v7: opening a push marks its inbox entry read (?notif= on the link it opens).
+const CACHE_NAME = 'binge-shell-v7';
 // v2: full-resolution TMDB art (1-3 MB each) is no longer cached here.
 const IMAGE_CACHE_NAME = 'binge-images-v3';
 const IMAGE_CACHE_MAX_ENTRIES = 400;
@@ -136,7 +136,10 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// ── New-episode alerts (sent by /api/cron/new-episodes) ─────────────
+// ── Alerts (server/routes/cron.js pushTo) ────────────────────────────
+// A push carries the id of its notification-inbox row (`inbox`). The service
+// worker has no Supabase session to mark it read with, so opening the push
+// adds it to the link as ?notif=, and the page marks it (PushOpenedWatcher).
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'binge.', body: event.data?.text() }; }
@@ -145,13 +148,16 @@ self.addEventListener('push', (event) => {
     icon: '/logo192.png',
     badge: '/favicon-32.png',
     tag: data.tag,
-    data: { url: data.url || '/home' },
+    data: { url: data.url || '/home', inbox: data.inbox },
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || '/home', self.location.origin).href;
+  const link = new URL(event.notification.data?.url || '/home', self.location.origin);
+  const inbox = event.notification.data?.inbox;
+  if (Number.isInteger(inbox)) link.searchParams.set('notif', String(inbox));
+  const target = link.href;
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const existing = windows.find((client) => client.url.startsWith(self.location.origin));
