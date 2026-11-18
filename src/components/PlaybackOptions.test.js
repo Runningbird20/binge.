@@ -5,7 +5,7 @@ import { rememberRefusal } from '../utils/popupSandbox';
 
 jest.mock('./BottomSheet', () => ({ open, title, children }) => (open ? <div role="dialog" aria-label={title}>{children}</div> : null));
 
-const SERVERS = [{ id: 'cinesrc' }, { id: 'vidrift' }, { id: 'vidy' }, { id: 'vidlink' }, { id: '2embed' }];
+const SERVERS = [{ id: 'cinesrc' }, { id: 'vidrift' }, { id: 'vidy' }, { id: 'vidlink' }, { id: 'vixsrc' }];
 const props = {
   servers: SERVERS,
   currentServer: 'cinesrc',
@@ -24,7 +24,7 @@ test('the server list marks the servers that play with pop-ups blocked', () => {
   expect(marked('VidRift')).toBe(true);
   expect(marked('Vidy')).toBe(false);
   expect(marked('VidLink')).toBe(false);
-  expect(marked('2Embed')).toBe(false);
+  expect(marked('VixSrc')).toBe(false);
   expect(screen.getByText(/Servers marked No pop-ups play with their pop-ups and redirects blocked/)).toBeInTheDocument();
 });
 

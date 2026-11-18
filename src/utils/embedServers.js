@@ -54,6 +54,16 @@
 //              page, and VidSrc Classic "can't be embedded in a sandboxed
 //              frame"; all but VidSrc Classic play unsandboxed. Videasy's
 //              domain no longer resolves.
+// The sandbox a server with `sandbox: true` loads in (popupSandbox.js).
+// No allow-popups, allow-popups-to-escape-sandbox, allow-top-navigation*,
+// allow-modals (alert/confirm traps) or allow-downloads. allow-same-origin
+// keeps the player's own storage and CORS requests working; it can't lift
+// the sandbox because the frame is cross-origin. WebKit (Safari, every iPhone
+// browser) doesn't know allow-presentation or allow-orientation-lock: it logs
+// an error and ignores just those two. `npm run check:sandbox` retests every
+// server's flag with these.
+export const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock';
+
 export const EMBED_SERVERS = [
   {
     // https://vidrift.net/docs — TMDB ids only; posts vidrift:progress
@@ -204,22 +214,6 @@ export const EMBED_SERVERS = [
     },
   },
   {
-    id: 'videasy',
-    label: 'Videasy',
-    // 2026-11-09: player.videasy.net now 301s to player.videasy.to, whose
-    // certificate is self-signed (DDoS-Guard), so browsers refuse it.
-    // 2026-11-16: player.videasy.to no longer resolves at all.
-    sandbox: false, // "Iframe Sandbox Detected" when it last worked
-    events: true,
-    idKinds: ['tmdb'],
-    types: ['movie', 'tv_show'],
-    buildUrl(id, mediaType, season, episode) {
-      return mediaType === 'tv_show'
-        ? `https://player.videasy.net/tv/${id.value}/${season}/${episode}?nextEpisode=true`
-        : `https://player.videasy.net/movie/${id.value}`;
-    },
-  },
-  {
     // https://vidspark.to — movie/{tmdb|imdb}, tv/{id}/{s}/{e}. Posts
     // { source: 'vidspark-player', event, currentTime, duration } and takes
     // { action } commands. It never starts by itself (there's no autoplay
@@ -263,40 +257,6 @@ export const EMBED_SERVERS = [
       const path = mediaType === 'tv_show' ? `/embed/tv/${id.value}/${season}/${episode}` : `/embed/movie/${id.value}`;
       const url = new URL(path, 'https://vidcore.org');
       url.searchParams.set('autoplay', 'true');
-      return url.toString();
-    },
-  },
-  {
-    id: '2embed',
-    label: '2Embed',
-    // 2026-11-09: unsandboxed, it navigated the whole tab to 2embed.stream
-    // within seconds of loading, with no click, on every title tried.
-    sandbox: false, // an adult ad page when sandboxed (and redirects the whole tab when not)
-    idKinds: ['tmdb', 'imdb'],
-    types: ['tv_show', 'movie'],
-    buildUrl(id, mediaType, season, episode) {
-      return mediaType === 'tv_show'
-        ? `https://www.2embed.stream/embed/tv/${id.value}/${season}/${episode}`
-        : `https://www.2embed.stream/embed/movie/${id.value}`;
-    },
-  },
-  {
-    id: 'vidsrc-embed-ru',
-    label: 'VidSrc Classic',
-    // 2026-11-09: unsandboxed, an ad page and a pop-up, no video, on 3 titles.
-    sandbox: false, // "This content can’t be embedded in a sandboxed frame"
-    subtitles: true,
-    idKinds: ['tmdb', 'imdb'],
-    types: ['movie', 'tv_show'],
-    silentPreload: true,
-    buildUrl(id, mediaType, season, episode, subtitleLang, { noAutoplay } = {}) {
-      const isTV = mediaType === 'tv_show';
-      const url = new URL(isTV ? '/embed/tv' : '/embed/movie', 'https://vsembed.ru');
-      url.searchParams.set(id.kind, id.value);
-      if (isTV) { url.searchParams.set('season', season); url.searchParams.set('episode', episode); }
-      url.searchParams.set('autoplay', noAutoplay ? '0' : '1');
-      // Documented: default subtitle language, ISO 639-1.
-      if (subtitleLang) url.searchParams.set('ds_lang', subtitleLang);
       return url.toString();
     },
   },

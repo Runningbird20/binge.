@@ -63,9 +63,6 @@ class StreamServer(val id: String, val name: String, val build: (tmdbId: Int, ki
             StreamServer("vidlink", "VidLink") { id, kind, s, e ->
                 if (kind == MediaKind.TV) "https://vidlink.pro/tv/$id/$s/$e?autoplay=true" else "https://vidlink.pro/movie/$id?autoplay=true"
             },
-            StreamServer("videasy", "Videasy") { id, kind, s, e ->
-                if (kind == MediaKind.TV) "https://player.videasy.net/tv/$id/$s/$e" else "https://player.videasy.net/movie/$id"
-            },
             StreamServer("vidsrc-ru", "VidSrc") { id, kind, s, e ->
                 url(if (kind == MediaKind.TV) "https://vidsrc.ru/tv/$id/$s/$e" else "https://vidsrc.ru/movie/$id",
                     listOfNotNull("autoplay" to "true", "colour" to "f4f6f8", if (kind == MediaKind.TV) "autonextepisode" to "false" else null))
@@ -86,7 +83,7 @@ class StreamServer(val id: String, val name: String, val build: (tmdbId: Int, ki
         private const val UNTIMED_MS = 9_000L
         // Before anything is timed: the servers whose stream the native player
         // takes over first (they start ~3x faster on a stick than page-only ones).
-        private val DEFAULT_ORDER = listOf("vidy", "cinesrc", "vidlink", "vidrift", "videasy", "vidsrc-ru")
+        private val DEFAULT_ORDER = listOf("vidy", "cinesrc", "vidlink", "vidrift", "vidsrc-ru")
 
         fun rememberWorking(server: StreamServer, title: Title) = Prefs.set("server.${title.id}", server.id)
     }

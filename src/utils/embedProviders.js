@@ -63,7 +63,7 @@ export const FAILOVER_SECONDS = 25;
 // Servers that report pause/play as well as time, so "time stopped moving"
 // can be told apart from "viewer paused" — buffering detection only runs
 // for these.
-export const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'videasy', 'vixsrc', 'vidspark']);
+export const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'vixsrc', 'vidspark']);
 
 // Servers that can start at a given second (URL param or message), so a
 // mid-play switch keeps the viewer's place.

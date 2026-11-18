@@ -3,7 +3,7 @@
 const { test, expect } = require('@playwright/test');
 const { requireAccount, findMovieUrl } = require('./helpers');
 
-const SERVER_HOSTS = /vidrift|vidy|vidlink|cinesrc|vidsrc|videasy|2embed|vsembed/;
+const SERVER_HOSTS = /vidrift|vidy|vidlink|cinesrc|vixsrc|vidsrc|vidspark|embedwave/;
 
 test.beforeEach(() => requireAccount());
 

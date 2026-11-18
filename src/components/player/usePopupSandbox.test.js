@@ -113,6 +113,6 @@ test('the next episode or server starts sandboxed again', () => {
 
 test('servers known to refuse the sandbox load normally from the start', () => {
   expect(setup({ provider: 'vidy' }).result.current.sandboxed).toBe(false);
-  expect(setup({ provider: '2embed' }).result.current.sandboxed).toBe(false);
+  expect(setup({ provider: 'vidlink' }).result.current.sandboxed).toBe(false);
   expect(setup({ provider: 'cinesrc' }).result.current.sandboxed).toBe(true);
 });

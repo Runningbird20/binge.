@@ -19,20 +19,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
-      // Whitelist every domain we embed so no rogue iframe can be injected
-      'frame-src': [
-        "'self'",
-        // Video providers
-        'https://vsembed.ru',
-        'https://vsembed.su',
-        'https://www.2embed.stream',
-        'https://2embed.stream',
-        'https://autoembed.co',
-        'https://vidlink.pro',
-        'https://multiembed.mov',
-        // Sports streams and any other HTTPS embeds (CDN domains vary per provider)
-        'https:',
-      ],
+      // Only this API's own responses carry this header (JSON, and the link
+      // preview pages, which frame nothing). The site's pages, and so the
+      // players' iframes, are static files Vercel serves without it.
+      'frame-src': ["'self'", 'https:'],
       'connect-src': ["'self'", 'https://api.themoviedb.org'],
       // Scripts: self + inline needed for React, plus allow data: URIs
       'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],

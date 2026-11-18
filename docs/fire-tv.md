@@ -23,7 +23,7 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
   - **Never crash.** `onRenderProcessGone` returns true.
   - **Click-to-play players.** Players waiting for a click on their own Play button (JW/Clappr/Video.js/Plyr) get it pressed (`startPlayer`).
   - **Headers.** The UA drops `; wv`/`Version/x`, and `X-Requested-With` is turned off where the WebView supports it.
-- **Race.** VOD races 3 servers (VidRift, Vidy, CineSrc first; VidLink/Videasy/VidSrc are backups). Live races 3 and gives up after 20s, so recovery tries the next batch. `SportsMemory` (Prefs `sportsFeed.<family>`) ranks the feed families that played on this TV first.
+- **Race.** VOD races 3 servers (VidRift, Vidy, CineSrc first; VidLink and VidSrc are backups). Live races 3 and gives up after 20s, so recovery tries the next batch. `SportsMemory` (Prefs `sportsFeed.<family>`) ranks the feed families that played on this TV first.
 
 ## Native playback and startup (2026-11-06, measured on a Fire TV Stick 4K Max, AFTKRT)
 

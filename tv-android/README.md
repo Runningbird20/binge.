@@ -62,7 +62,7 @@ Debug builds take launch extras for testing, e.g.
 - The Android emulator gets flagged as a bot by some sports pages (PPV shows
   "Remove sandbox attributes"), so sports feeds should be checked on a real
   Fire TV. StreamFree played in the emulator.
-- Servers: VidRift, Vidy and CineSrc race first (the Apple TV's set); VidLink,
-  Videasy and VidSrc are backups, tried when those fail. In the Android 12
+- Servers: VidRift, Vidy and CineSrc race first (the Apple TV's set); VidLink
+  and VidSrc are backups, tried when those fail. In the Android 12
   emulator (WebView = Chrome 91) only VidRift and Vidy played, so check the
   others on a real Fire TV, whose WebView is much newer.
