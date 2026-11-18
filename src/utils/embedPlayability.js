@@ -38,7 +38,3 @@ export function getEmbeddedId(item) {
 
   return candidates.find(Boolean) || null;
 }
-
-export function isPlayableViaEmbed(item) {
-  return Boolean(getEmbeddedId(item));
-}

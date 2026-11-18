@@ -114,7 +114,7 @@ import Testing
         StreamServer(id: id, name: name) { _, _, _, _ in URL(string: "https://example.com")! }
     }
 
-    @Test(arguments: [("StreamFree 4K", 2160), ("Feed 2160p", 2160), ("StreamFree 1080p", 1080), ("Streamed · admin 1 HD", 720),
+    @Test(arguments: [("StreamFree 4K", 2160), ("Feed 2160p", 2160), ("StreamFree 1080p", 1080), ("PPV · ESPN HD", 720),
                       ("PPV 720p", 720), ("SD 480p", 480), ("PPV · ESPN", 0), ("VidRift", 0), ("HDTV", 0)] as [(String, Int)])
     func nominal(_ name: String, _ expected: Int) {
         #expect(QualityMemory.nominal(name) == expected)

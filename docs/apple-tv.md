@@ -70,7 +70,7 @@ Native SwiftUI tvOS app with no dependencies. The project is a hand-written `Bin
 
 - **Sports** mirrors the website's page: spotlight, category chips, 16:9 thumbnail rows per league (the same `inferLeague` rules), 24/7 channels and an ESPN Scores row.
   - **Art.** `SportArt` is team logos on split team colours, else the provider poster, else a sport icon.
-  - **Feeds.** `Data/SportsFeed.swift` fetches PPV/Streamed/StreamFree directly. It merges per game by team nicknames or, failing that, by each side sharing a distinctive word (`sides`/`sameMatchup`, also in Fire TV `Sports.kt`), and matches ESPN events the same way.
+  - **Feeds.** `Data/SportsFeed.swift` fetches PPV and StreamFree directly. It merges per game by team nicknames or, failing that, by each side sharing a distinctive word (`sides`/`sameMatchup`, also in Fire TV `Sports.kt`), and matches ESPN events the same way.
   - **The race.** Feeds are interleaved so the 4-page live race (`StreamRace.maxLiveContenders`) spans different feeds; the rest are backups that recovery tries first.
   - **Memory.** `SportsMemory` (UserDefaults `binge.sportsFeed.<family>`) ranks the feed families that played on this Apple TV first.
   - **Preloading.** Focusing a game card for ~0.9s preloads it (live warm races stay running, muted), and stream lookups are cached for 90s.

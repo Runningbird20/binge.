@@ -15,28 +15,11 @@ export const RATING_CATEGORIES = {
     { key: 'pacing',        label: 'Pacing',       max: 5 },
     { key: 'resonance',     label: 'Resonance',    max: 5 },
   ],
-  book: [
-    { key: 'prose',         label: 'Prose',        max: 5 },
-    { key: 'plot',          label: 'Plot',         max: 5 },
-    { key: 'characters',    label: 'Characters',   max: 5 },
-    { key: 'originality',   label: 'Originality',  max: 5 },
-    { key: 'pacing',        label: 'Pacing',       max: 5 },
-    { key: 'resonance',     label: 'Resonance',    max: 5 },
-  ],
-  manga: [
-    { key: 'art',           label: 'Art',          max: 5 },
-    { key: 'story',         label: 'Story',        max: 5 },
-    { key: 'characters',    label: 'Characters',   max: 5 },
-    { key: 'pacing',        label: 'Pacing',       max: 5 },
-    { key: 'enjoyment',     label: 'Enjoyment',    max: 5 },
-  ],
 };
 
 const PALETTE = {
   movie:   { primary: '#c7c7c7', fill: 'rgba(199,199,199,0.20)', glow: 'rgba(199,199,199,0.18)', grid: 'rgba(199,199,199,0.13)' },
   tv_show: { primary: '#a07de8', fill: 'rgba(160,125,232,0.20)', glow: 'rgba(160,125,232,0.18)', grid: 'rgba(160,125,232,0.13)' },
-  book:    { primary: '#5db88a', fill: 'rgba(93,184,138,0.20)',  glow: 'rgba(93,184,138,0.18)',  grid: 'rgba(93,184,138,0.13)'  },
-  manga:   { primary: '#e85a7a', fill: 'rgba(232,90,122,0.20)',  glow: 'rgba(232,90,122,0.18)',  grid: 'rgba(232,90,122,0.13)'  },
 };
 
 export function computeNormalizedScore(mediaType, scores) {
@@ -48,7 +31,7 @@ export function computeNormalizedScore(mediaType, scores) {
   return Math.round((total / max) * 100) / 10; // 0-10 with one decimal
 }
 
-// Movie/TV/book ratings collapse to a single "star" value in most of the
+// Movie/TV ratings collapse to a single "star" value in most of the
 // UI, but the underlying columns are still per-category. A quick rating
 // spreads one value uniformly (buildUniformCategories), so averaging it
 // back out is exact — but a *detailed* rating has genuinely different

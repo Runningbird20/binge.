@@ -30,15 +30,6 @@ app.use(helmet({
         'https://autoembed.co',
         'https://vidlink.pro',
         'https://multiembed.mov',
-        // Manga / comics
-        'https://mangakatana.com',
-        'https://*.mangakatana.com',
-        'https://asurascan.com',
-        'https://*.asurascan.com',
-        'https://webtoon.com',
-        'https://*.webtoon.com',
-        // Books
-        'https://archive.org',
         // Sports streams and any other HTTPS embeds (CDN domains vary per provider)
         'https:',
       ],
@@ -94,12 +85,9 @@ app.get('/api/health', async (_req, res) => {
 
 // The media catalog (Turso), read-only.
 app.use('/api/catalog', require('./routes/catalog'));
-app.use('/api/media', require('./routes/media'));
 app.use('/api/sports',      require('./routes/sports'));
 app.use('/api/admin/account-requests', require('./routes/invites').adminRouter);
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/manga',       require('./routes/manga'));
-app.use('/api/books',       require('./routes/books'));
 app.use('/api/account', require('./routes/account'));
 app.use('/api/account', require('./routes/invites').publicRouter);
 app.use('/api/cron', require('./routes/cron'));

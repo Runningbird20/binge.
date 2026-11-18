@@ -1,7 +1,7 @@
 // Shared by the browser and server: this is the complete media catalog
 // (Turso) allowlist. Everything else is Supabase.
 const MEDIA_TABLES = new Set([
-  'movies', 'tv_shows', 'books', 'movie_genres', 'tv_show_genres', 'book_genres',
+  'movies', 'tv_shows', 'movie_genres', 'tv_show_genres',
   'title_ratings', 'episode_ratings_cache', 'subtitle_cache',
 ]);
 // Catalog functions (server/data-access/client.js rpc); every other rpc is Supabase's.

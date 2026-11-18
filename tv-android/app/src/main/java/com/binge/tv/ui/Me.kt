@@ -120,7 +120,7 @@ fun MeScreen() {
             item { MeRow("Calendar", "Upcoming episodes and releases", Icons.Rounded.CalendarMonth) { Nav.push(Screen.Calendar) } }
             item { MeRow("Wrapped", "Your year on binge.", Icons.Rounded.AutoAwesome) { Nav.push(Screen.Wrapped) } }
             item { MeRow("Playback & accessibility", "Quality, audio, subtitles, larger text", Icons.Rounded.ClosedCaption) { Nav.push(Screen.Settings) } }
-            item { Text("Books, manga and account settings are on ${Config.siteHost}.", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 10.dp, start = 4.dp)) }
+            item { Text("Account settings are on ${Config.siteHost}.", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(top = 10.dp, start = 4.dp)) }
         }
     }
 }

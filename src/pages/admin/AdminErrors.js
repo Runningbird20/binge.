@@ -1,7 +1,7 @@
 import LoadingBar from '../../components/LoadingBar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../utils/supabase';
-import { ago } from './AdminServers';
+import { timeAgo } from '../../utils/timeAgo';
 import { describeRequest, readableRequest } from './errorRequests';
 
 const REQUESTS_SHOWN = 3;
@@ -63,7 +63,11 @@ export default function AdminErrors() {
         <label className="adm-check"><input type="checkbox" checked={showResolved} onChange={(event) => setShowResolved(event.target.checked)} /> Show resolved</label>
       </div>
       {!events && <LoadingBar />}
-      {events && groups.length === 0 && <p className="adm-empty">No errors 🎉</p>}
+      {events && groups.length === 0 && (
+        <p className="adm-empty">
+          {showResolved ? 'No errors in the last 14 days.' : 'No open errors.'} New ones show up here as they happen.
+        </p>
+      )}
       <ul className="adm-errors">
         {groups.map((group) => {
           const latest = group.events[0];
@@ -77,7 +81,7 @@ export default function AdminErrors() {
                 <span className="adm-error-count">{group.events.length}×</span>
               </button>
               <p className="adm-muted adm-error-meta">
-                Last {ago(latest.created_at)} · first {ago(first.created_at)} · {group.users.size} signed-in user{group.users.size === 1 ? '' : 's'}
+                Last {timeAgo(latest.created_at)} · first {timeAgo(first.created_at)} · {group.users.size} signed-in user{group.users.size === 1 ? '' : 's'}
               </p>
               {group.pages.size > 0 && (
                 <ul className="adm-error-requests" aria-label={latest.source === 'server' ? 'Requests' : 'Pages'}>

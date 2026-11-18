@@ -24,7 +24,7 @@
       "dest": "/404.html"
     },
     {
-      "src": "/(movie|tv-show|book)/([0-9]+)/?",
+      "src": "/(movie|tv-show)/([0-9]+)/?",
       "has": [
         {
           "type": "header",

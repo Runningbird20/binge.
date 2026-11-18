@@ -14,7 +14,6 @@ jest.mock('./RateReviewPanel', () => () => null);
 jest.mock('../utils/catalogLookup', () => ({ resolveTmdbItems: jest.fn(() => Promise.resolve([])) }));
 let mockAuth = null;
 jest.mock('../contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
-jest.mock('../utils/adaptations', () => ({ ...jest.requireActual('../utils/adaptations'), findSourceBooks: () => Promise.resolve([]) }));
 jest.mock('../utils/tmdb', () => ({ ...jest.requireActual('../utils/tmdb'), fetchTmdbRecommendations: () => Promise.resolve([]) }));
 
 const mockSeasons = [

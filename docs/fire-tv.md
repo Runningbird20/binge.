@@ -85,4 +85,4 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Testing.** There's an Android TV emulator in the scratchpad (`$S/android`, AVD `firetv`).
   - **Debug launch extras:** `--ez demo true --es tab sports --es open tv_show:58132 --es play 1:1 --es server vidrift --es live <team> --es multi "a,b" --es embed <url>`.
   - **DevTools.** Debug builds enable WebView DevTools (`adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>`).
-  - **Use real hardware for sports and the backup servers.** embed.st flags the emulator as a bot (PPV/Streamed sources show "Remove sandbox attributes"), and its Android 12 WebView is Chrome 91.
+  - **Use real hardware for sports and the backup servers.** embed.st flags the emulator as a bot (PPV shows "Remove sandbox attributes"), and its Android 12 WebView is Chrome 91.

@@ -4,7 +4,7 @@ const items = [
   { id: 1, media_type: 'movie', year: 2014, original_language: 'en' },
   { id: 2, media_type: 'tv_show', release_date: '2019-04-01', original_language: 'ko' },
   { id: 3, _type: 'tv', year: 2021, original_language: 'ko' },
-  { id: 4, _type: 'book', year: 1954 }, // no language
+  { id: 4, _type: 'tv', year: 1954 }, // no language
   { id: 5, media_type: 'movie', year: null, original_language: 'ja' }, // no year
   { id: 6, media_type: 'movie', release_date: '2011-07-07', _tmdb: { originalLanguage: 'en' } },
 ];
@@ -12,6 +12,8 @@ const ids = (list) => list.map((item) => item.id);
 
 test('filters come from the address and the result tags', () => {
   expect(readFilters(new URLSearchParams('q=x&type=movie&lang=ko'))).toEqual({ type: 'movie', decade: '', lang: 'ko' });
+  // An old link to a type that's gone (Books) shows everything instead of nothing.
+  expect(readFilters(new URLSearchParams('q=x&type=book')).type).toBe('');
   expect(hasFilters({ type: '', decade: '', lang: '' })).toBe(false);
   expect(mediaTypeOf({ _type: 'tv' })).toBe('tv_show');
   expect(decadeOf({ year: 2019 })).toBe('2010');
@@ -20,7 +22,7 @@ test('filters come from the address and the result tags', () => {
 });
 
 test('each filter narrows every kind of result; unknown years and languages drop out', () => {
-  expect(ids(filterItems(items, { type: 'tv_show', decade: '', lang: '' }))).toEqual([2, 3]);
+  expect(ids(filterItems(items, { type: 'tv_show', decade: '', lang: '' }))).toEqual([2, 3, 4]);
   expect(ids(filterItems(items, { type: '', decade: '2010', lang: '' }))).toEqual([1, 2, 6]);
   expect(ids(filterItems(items, { type: '', decade: '', lang: 'en' }))).toEqual([1, 6]);
   expect(ids(filterItems(items, { type: 'movie', decade: '2010', lang: 'en' }))).toEqual([1, 6]);
@@ -30,7 +32,7 @@ test('each filter narrows every kind of result; unknown years and languages drop
 
 test('the chips offer what the results hold, newest decade first, busiest language first', () => {
   const options = filterOptions(items, { type: '', decade: '', lang: '' });
-  expect(options.type.map((o) => o.label)).toEqual(['Movies', 'Series', 'Books']);
+  expect(options.type.map((o) => o.label)).toEqual(['Movies', 'Series']);
   expect(options.decade.map((o) => o.label)).toEqual(['2020s', '2010s', 'Before 1970']);
   expect(options.lang.map((o) => o.label)).toEqual(['English', 'Korean', 'Japanese']);
 });
@@ -52,7 +54,7 @@ test('the other filters shape each list (no chip leads to nothing)', () => {
   // Every dated movie is from the 2010s: one choice isn't worth a bar.
   expect(options.decade).toEqual([]);
   // The type list itself still offers every type.
-  expect(options.type.map((o) => o.value)).toEqual(['movie', 'tv_show', 'book']);
+  expect(options.type.map((o) => o.value)).toEqual(['movie', 'tv_show']);
 });
 
 test('languages outside the app’s own list still get a name', () => {

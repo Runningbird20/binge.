@@ -5,8 +5,8 @@ stored in both. (The catalog moved from Neon Postgres to Turso on 2026-11-04.)
 
 | Turso (media only) | Supabase (accounts + user data) |
 | --- | --- |
-| movies, tv_shows, books | Auth (users, passwords, recovery, sessions) |
-| movie_genres, tv_show_genres, book_genres (views over catalog_genres) | profiles, account_profiles, profile PINs |
+| movies, tv_shows | Auth (users, passwords, recovery, sessions) |
+| movie_genres, tv_show_genres (views over catalog_genres) | profiles, account_profiles, profile PINs |
 | title_ratings, episode_ratings_cache, subtitle_cache | watchlist, ratings, continue_watching, episode_progress |
 | catalog search (`server/catalogSearch.js` + the `*_fts` trigram tables), catalog_stats | everything else user-owned or operational (shares, teams, fantasy, reminders, push, reports, markers, server config/status, announcements, errors), admin_stats and the collaborative_* RPCs |
 
@@ -45,16 +45,15 @@ reads. So:
 - genre lists and row counts are stored (`catalog_genres`, `catalog_stats`)
   and rebuilt by `node scripts/turso-catalog.js refresh`, the last step of
   each sync workflow;
-- exact filtered counts (the Books page's per-genre counts) are computed once,
+- exact filtered counts are computed once,
   stored in `catalog_stats` as `count:<hash>` and cleared by `refresh`;
 - search uses the trigram FTS tables and fetches candidates by id;
-- random windows (the Books shelf, `sampleCatalogForRecommendations`) start at
-  a random id (`fetchRandomIdWindow` in `src/utils/catalogQueries.js`), never
-  a random `OFFSET`, which reads every skipped row.
+- a random stretch of the catalog starts at a random id, never a random
+  `OFFSET`, which reads every skipped row.
 
 Measured on Turso at the switch (rows read per visit): Movies or Series page a
-few hundred, a grid page ~60 per query, Books ~1,900 (was ~72,000 with
-offsets), an uncached search ~1–15k (cached 10 min). The one-time load wrote
+few hundred, a grid page ~60 per query, an uncached search ~1–15k (cached
+10 min). The one-time load wrote
 ~4M rows (search and other indexes count too).
 
 ## Keeping it split

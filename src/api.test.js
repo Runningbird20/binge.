@@ -69,3 +69,24 @@ test('throws a readable error when a successful API request returns HTML', async
     /returned html instead of json/i
   );
 });
+
+test('a failed load of the api router is retried on the next call, and reloads once after a deploy', async () => {
+  jest.resetModules();
+  const reloadForNewBuild = jest.fn();
+  let chunkMissing = true;
+  jest.doMock('./utils/lazyWithReload', () => ({ isChunkLoadError: () => true, reloadForNewBuild }));
+  jest.doMock('./utils/supabaseApi', () => {
+    if (chunkMissing) throw new Error('Loading chunk 123 failed.');
+    return { executeSupabaseRoute: async () => ({ answered: 'in the browser' }) };
+  });
+  const fresh = require('./api');
+
+  await expect(fresh.api.get('/search?q=x')).rejects.toThrow('Loading chunk 123 failed.');
+  expect(reloadForNewBuild).toHaveBeenCalledTimes(1);
+
+  chunkMissing = false;
+  await expect(fresh.api.get('/search?q=x')).resolves.toEqual({ answered: 'in the browser' });
+
+  jest.dontMock('./utils/lazyWithReload');
+  jest.dontMock('./utils/supabaseApi');
+});

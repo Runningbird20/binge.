@@ -4,8 +4,8 @@ import lazyWithReload from './utils/lazyWithReload';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
+import { MagnifyingGlass } from '@phosphor-icons/react';
 import { AuthProvider } from './contexts/AuthContext';
-import { ToastProvider } from './contexts/ToastContext';
 import { UndoToaster } from './components/UndoToast';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -17,11 +17,8 @@ import KeyboardShortcuts from './components/KeyboardShortcuts';
 import ReminderWatcher from './components/ReminderWatcher';
 import useDeviceType from './hooks/useDeviceType';
 import { captureInstallPrompt } from './utils/installApp';
+import { loadSupabaseRoutes } from './api';
 import Landing from './pages/Landing';
-import Login from './pages/Login';
-import PasswordReset from './pages/PasswordReset';
-import Signup from './pages/Signup';
-import AccountRequestReview from './pages/AccountRequestReview';
 // Stylesheets, in cascade order: App.css (base + design tokens), then
 // mobile.css (small-screen adaptations), then streaming.css (rows, hero,
 // cards, search, shared controls), whose rules win over both, then one file
@@ -39,14 +36,15 @@ import './styles/admin.css';
 
 // Every page's code, fetched in the background once the first screen is up,
 // so moving between pages never waits on a download (no loading skeleton
-// between Home, Movies, Series, Sports, Books, Search, Profile…). Skipped
-// with data saver / Save-Data.
+// between Home, Movies, Series, Sports, Search, Profile…). Skipped
+// with data saver / Save-Data. First the api router (src/api.js), which
+// pages need for their first api call.
 const PAGE_LOADERS = [
+  loadSupabaseRoutes,
   () => import('./pages/Home'),
   () => import('./pages/Movies'),
   () => import('./pages/TVShows'),
   () => import('./pages/Sports'),
-  () => import('./pages/Books'),
   () => import('./pages/SearchResults'),
   () => import('./components/MediaOverlay'),
   () => import('./pages/Profile'),
@@ -56,17 +54,31 @@ const PAGE_LOADERS = [
   () => import('./pages/Wrapped'),
   () => import('./pages/Person'),
 ];
+
+// The sign-in pages stay out of the main bundle, since a signed-in visit never
+// needs them. Signed-out visitors get them fetched in the background instead
+// (AppShell), so Sign in from the landing page doesn't wait on a download.
+// The account-request review page is only opened from the admin's email link.
+const SIGN_IN_PAGE_LOADERS = [
+  () => import('./pages/Login'),
+  () => import('./pages/Signup'),
+  () => import('./pages/PasswordReset'),
+];
+
+// Fetches each page's code in turn while the browser is idle.
+function prefetchWhenIdle(loaders) {
+  if (typeof window === 'undefined' || navigator.connection?.saveData) return;
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+  let index = 0;
+  const next = () => {
+    if (index >= loaders.length) return;
+    loaders[index++]().catch(() => {}).finally(() => idle(next));
+  };
+  idle(next);
+}
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('load', () => {
-    if (navigator.connection?.saveData) return;
-    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
-    let index = 0;
-    const next = () => {
-      if (index >= PAGE_LOADERS.length) return;
-      PAGE_LOADERS[index++]().catch(() => {}).finally(() => idle(next));
-    };
-    idle(next);
-  }, { once: true });
+  window.addEventListener('load', () => prefetchWhenIdle(PAGE_LOADERS), { once: true });
 }
 
 // Chrome's offer to install the site can come before any header is on screen:
@@ -76,7 +88,6 @@ captureInstallPrompt();
 const Home           = lazyWithReload(() => import('./pages/Home'));
 const Movies         = lazyWithReload(() => import('./pages/Movies'));
 const TVShows        = lazyWithReload(() => import('./pages/TVShows'));
-const Books          = lazyWithReload(() => import('./pages/Books'));
 const SearchResults  = lazyWithReload(() => import('./pages/SearchResults'));
 const ProfilePicker  = lazyWithReload(() => import('./pages/ProfilePicker'));
 const EditProfile    = lazyWithReload(() => import('./pages/EditProfile'));
@@ -92,15 +103,23 @@ const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
 const Person         = lazyWithReload(() => import('./pages/Person'));
 const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
+const Login          = lazyWithReload(() => import('./pages/Login'));
+const Signup         = lazyWithReload(() => import('./pages/Signup'));
+const PasswordReset  = lazyWithReload(() => import('./pages/PasswordReset'));
+const AccountRequestReview = lazyWithReload(() => import('./pages/AccountRequestReview'));
 
 // Routes where we never show the bottom nav
 const NO_NAV_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/account-requests/review'];
 
 function AppShell({ children }) {
   const { isMobile } = useDeviceType();
-  const { user }     = useAuth();
+  const { user, authLoading } = useAuth();
   const location     = useLocation();
   const showBottomNav = isMobile && !!user && !NO_NAV_PATHS.includes(location.pathname);
+
+  useEffect(() => {
+    if (!authLoading && !user) prefetchWhenIdle(SIGN_IN_PAGE_LOADERS);
+  }, [authLoading, user]);
 
   // Search and profile move to the bottom nav on phones (thumb reach).
   useEffect(() => {
@@ -134,7 +153,7 @@ function AppShell({ children }) {
   );
 }
 
-// Movie/TV/book detail routes, registered both in the main switch (so a
+// Movie/TV detail routes, registered both in the main switch (so a
 // direct link/refresh still works) and — when a backgroundLocation is
 // present — in a second overlay switch so the modal renders on top of
 // whatever page the user was already on instead of navigating away.
@@ -143,7 +162,6 @@ function MediaOverlayRoutes() {
     <>
       <Route path="/movie/:id"   element={<ProtectedRoute><MediaOverlay mediaType="movie" /></ProtectedRoute>} />
       <Route path="/tv-show/:id" element={<ProtectedRoute><MediaOverlay mediaType="tv_show" /></ProtectedRoute>} />
-      <Route path="/book/:id"    element={<ProtectedRoute><MediaOverlay mediaType="book" /></ProtectedRoute>} />
     </>
   );
 }
@@ -165,7 +183,9 @@ function AppRoutes() {
         <Route path="/home"      element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/movies"    element={<ProtectedRoute><Movies /></ProtectedRoute>} />
         <Route path="/tv-shows"  element={<ProtectedRoute><TVShows /></ProtectedRoute>} />
-        <Route path="/books"     element={<ProtectedRoute><Books /></ProtectedRoute>} />
+        {/* Books and Manga were removed (2026-11-18); old links land on Home. */}
+        <Route path="/books"     element={<Navigate to="/home" replace />} />
+        <Route path="/book/:id"  element={<Navigate to="/home" replace />} />
         <Route path="/search"    element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
         <Route path="/profiles"  element={<ProtectedRoute><ProfilePicker /></ProtectedRoute>} />
         <Route path="/profiles/:profileId/edit" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
@@ -186,7 +206,7 @@ function AppRoutes() {
         <Route path="*" element={
           <div className="app-layout">
             <div className="page-content" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'60vh',textAlign:'center',gap:'1rem'}}>
-              <p style={{fontSize:'3rem'}}>🔍</p>
+              <MagnifyingGlass size={48} weight="duotone" aria-hidden="true" />
               <h2 style={{color:'#e0e0e0',margin:0}}>Page not found</h2>
               <p style={{color:'#555',margin:0}}>The page you're looking for doesn't exist.</p>
               <a href="/home" style={{color:'#f4f6f8',fontSize:'0.9rem'}}>← Go home</a>
@@ -211,33 +231,31 @@ function AppRouteFallback() {
 export default function App() {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <BrowserRouter>
-          <Suspense fallback={<AppRouteFallback />}>
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
-          </Suspense>
+      <BrowserRouter>
+        <Suspense fallback={<AppRouteFallback />}>
+          <AppShell>
+            <AppRoutes />
+          </AppShell>
+        </Suspense>
 
-          {/* "Removed · Undo" popups, bottom right. */}
-          <UndoToaster />
-          {/* Sonner toasts — positioned above bottom nav on mobile */}
-          <Toaster
-            theme="dark"
-            position="bottom-center"
-            offset={{ bottom: 80 }}
-            toastOptions={{
-              style: {
-                background: '#1c1c1e',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: '#fff',
-                borderRadius: '12px',
-                fontSize: '14px',
-              },
-            }}
-          />
-        </BrowserRouter>
-      </ToastProvider>
+        {/* "Removed · Undo" popups, bottom right. */}
+        <UndoToaster />
+        {/* Sonner toasts — positioned above bottom nav on mobile */}
+        <Toaster
+          theme="dark"
+          position="bottom-center"
+          offset={{ bottom: 80 }}
+          toastOptions={{
+            style: {
+              background: '#1c1c1e',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#fff',
+              borderRadius: '12px',
+              fontSize: '14px',
+            },
+          }}
+        />
+      </BrowserRouter>
       <Analytics />
     </AuthProvider>
   );

@@ -1,26 +1,21 @@
 import Foundation
 
-// The same three feeds the website's Sports page uses (see
-// src/utils/sportsProviders.js), fetched directly (the site's
-// /api/sports/streams proxy is just a cache in front of them). Entries are
-// merged into one game each; each game's feeds become the servers raced by
-// the player, exactly like movie servers.
+// The feeds the website's Sports page uses (see src/utils/sportsProviders.js),
+// PPV and StreamFree, fetched directly (the site's /api/sports/streams proxy
+// is just a cache in front of them). Entries are merged into one game each;
+// each game's feeds become the servers raced by the player, exactly like
+// movie servers.
 struct SportStream: Hashable {
     enum Source: Hashable {
         case embed(URL)
-        case streamed(source: String, id: String)
     }
     let label: String
     let source: Source
 
     // Admin switches (server_config, same keys as the website's
-    // sportsSwitchKeys): sports:ppv, sports:streamfree, sports:streamed and
-    // sports:streamed:<source>.
+    // sportsSwitchKeys): sports:ppv and sports:streamfree.
     var switchKeys: [String] {
-        switch source {
-        case .streamed(let source, _): return ["sports:streamed", "sports:streamed:\(source)"]
-        case .embed: return [label.hasPrefix("PPV") ? "sports:ppv" : "sports:streamfree"]
-        }
+        [label.hasPrefix("PPV") ? "sports:ppv" : "sports:streamfree"]
     }
 }
 
@@ -108,11 +103,6 @@ enum SportsFeed {
         "Basketball": 3, "Soccer": 2.25, "American Football": 3.5, "Baseball": 3.5, "Hockey": 3,
         "Combat Sports": 5, "Tennis": 3, "Golf": 5, "Racing": 3, "Rugby": 2, "Cricket": 8,
     ]
-    private static let streamedCategories: [String: String] = [
-        "basketball": "Basketball", "football": "Soccer", "american-football": "American Football",
-        "hockey": "Hockey", "baseball": "Baseball", "motor-sports": "Racing", "fight": "Combat Sports",
-        "tennis": "Tennis", "rugby": "Rugby", "golf": "Golf", "cricket": "Cricket",
-    ]
     private static let streamfreeCategories: [String: String] = [
         "soccer": "Soccer", "basketball": "Basketball", "hockey": "Hockey", "combat": "Combat Sports",
         "baseball": "Baseball", "football": "American Football", "racing": "Racing", "tennis": "Tennis", "cricket": "Cricket",
@@ -122,12 +112,11 @@ enum SportsFeed {
 
     static func load() async -> [SportGame] {
         async let ppv = fetchPPV()
-        async let streamed = fetchStreamed()
         async let streamfree = fetchStreamFree()
         let disabled = await ServerSwitches.shared.disabledServers()
         // Feeds an admin switched off go before merging; a game stays if
         // another feed still carries it.
-        let all = await (ppv + streamed + streamfree).compactMap { game -> SportGame? in
+        let all = await (ppv + streamfree).compactMap { game -> SportGame? in
             guard !disabled.isEmpty else { return game }
             var game = game
             game.streams = game.streams.filter { !$0.switchKeys.contains(where: disabled.contains) }
@@ -186,35 +175,6 @@ enum SportsFeed {
                     streams: streams,
                     tag: s["tag"] as? String, colors: s["colors"] as? [String]))
             }
-        }
-        return out
-    }
-
-    private static func fetchStreamed() async -> [SportGame] {
-        guard let matches = await json("https://streamed.pk/api/matches/all") as? [[String: Any]] else { return [] }
-        let now = Date()
-        var out: [SportGame] = []
-        for m in matches {
-            guard let sources = m["sources"] as? [[String: Any]], !sources.isEmpty else { continue }
-            let category = streamedCategories[m["category"] as? String ?? ""] ?? "Other"
-            let starts = date(m["date"])
-            let ends = starts?.addingTimeInterval((durations[category] ?? 3) * 3600)
-            if let ends, now > ends { continue }
-            let teams = m["teams"] as? [String: Any]
-            let home = teams?["home"] as? [String: Any], away = teams?["away"] as? [String: Any]
-            let badge = { (team: [String: Any]?) -> URL? in
-                (team?["badge"] as? String).flatMap { URL(string: "https://streamed.pk/api/images/badge/\($0).webp") }
-            }
-            let names = (home?["name"] as? String).flatMap { h in (away?["name"] as? String).map { (home: h, away: $0) } }
-            out.append(SportGame(
-                id: "streamed:\(m["id"] ?? UUID().uuidString)", title: m["title"] as? String ?? "Live",
-                category: category, startsAt: starts, endsAt: ends, alwaysLive: starts == nil,
-                teams: names, logos: names == nil ? nil : (badge(home), badge(away)),
-                poster: (m["poster"] as? String).flatMap { URL(string: "https://streamed.pk\($0)") },
-                streams: sources.compactMap { src in
-                    guard let source = src["source"] as? String, let id = src["id"] as? String else { return nil }
-                    return SportStream(label: "Streamed · \(source)", source: .streamed(source: source, id: id))
-                }))
         }
         return out
     }
@@ -356,12 +316,12 @@ enum SportsFeed {
 
     // MARK: Streams → player servers
 
-    // Streamed sources resolve to one or more embeds (HD first). Capped so a
-    // race never opens too many pages at once.
+    // A game's feeds as player servers, capped so a race never opens too many
+    // pages at once.
     @MainActor private static var serverCache: [String: (at: Date, servers: [StreamServer])] = [:]
 
     // Cached for 90s: focusing a card and then pressing Play shouldn't
-    // resolve the same streams twice.
+    // rank the same servers twice.
     @MainActor
     static func servers(for game: SportGame, limit: Int = 10) async -> [StreamServer] {
         let key = "\(game.id):\(limit)"
@@ -372,26 +332,15 @@ enum SportsFeed {
     }
 
     private static func resolveServers(for game: SportGame, limit: Int) async -> [StreamServer] {
-        // Each feed's streams, looked up in parallel, kept in feed order.
-        let perFeed: [[(String, URL)]] = await withTaskGroup(of: (Int, [(String, URL)]).self) { group in
-            for (position, stream) in game.streams.enumerated() {
-                group.addTask { (position, await streams(of: stream)) }
-            }
-            var found = Array(repeating: [(String, URL)](), count: game.streams.count)
-            for await (position, list) in group { found[position] = list }
-            return found
-        }
-        // Interleave (each feed's best, then each feed's second…) so the
-        // first few raced are from different feeds; the rest are backups.
+        // Each feed's embed, in feed order, once each.
         var urls: [(String, URL)] = []
         var seen = Set<URL>()
-        for round in 0..<(perFeed.map(\.count).max() ?? 0) {
-            for list in perFeed where round < list.count && seen.insert(list[round].1).inserted {
-                urls.append(list[round])
-            }
+        for stream in game.streams {
+            guard case .embed(let url) = stream.source, seen.insert(url).inserted else { continue }
+            urls.append((stream.label, url))
         }
         // Feed families that played on this Apple TV go first (stable, so
-        // equal scores keep the interleaved order).
+        // equal scores keep the feed order).
         // Best quality: the sharpest feeds seen here (or labelled 1080p / 4K)
         // come before the merely reliable ones, so they're among those raced.
         let best = QualityPreference.current == .best
@@ -409,41 +358,15 @@ enum SportsFeed {
             StreamServer(id: url.absoluteString, name: label) { _, _, _, _ in url }
         }
     }
-
-    // Streamed sources resolve to every stream of that source (numbered
-    // feeds, HD and SD, commentary languages), HD first, up to 4.
-    private static func streams(of stream: SportStream) async -> [(String, URL)] {
-        switch stream.source {
-        case .embed(let url):
-            return [(stream.label, url)]
-        case .streamed(let source, let id):
-            let path = "https://streamed.pk/api/stream/\(source)/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)"
-            let list = await json(path) as? [[String: Any]] ?? []
-            let sorted = list.sorted {
-                (truthy($0["hd"]) ? 0 : 1, ($0["streamNo"] as? NSNumber)?.intValue ?? 0)
-                    < (truthy($1["hd"]) ? 0 : 1, ($1["streamNo"] as? NSNumber)?.intValue ?? 0)
-            }
-            return sorted.prefix(4).compactMap { item in
-                guard let url = (item["embedUrl"] as? String).flatMap(URL.init(string:)) else { return nil }
-                let number = list.count > 1 ? " \((item["streamNo"] as? NSNumber)?.intValue ?? 1)" : ""
-                let language = (item["language"] as? String).flatMap { $0.isEmpty || $0.lowercased() == "main" ? nil : " · \($0)" } ?? ""
-                return ("\(stream.label)\(number)\(truthy(item["hd"]) ? " HD" : "")\(language)", url)
-            }
-        }
-    }
 }
 
 // Which sports feeds play on this Apple TV (as on Fire TV and the website):
 // a feed family that worked goes first next time, one that keeps failing
-// goes last. Families: "PPV", "StreamFree", "Streamed · admin"…
+// goes last. Families: "PPV", "StreamFree"…
 enum SportsMemory {
     static func family(_ label: String) -> String {
         if label.hasPrefix("PPV") { return "PPV" }
         if label.hasPrefix("StreamFree") { return "StreamFree" }
-        if label.hasPrefix("Streamed") {
-            let source = label.components(separatedBy: " · ").dropFirst().first?.components(separatedBy: " ").first ?? ""
-            return "Streamed · " + source
-        }
         return label.components(separatedBy: " ·").first ?? label
     }
 

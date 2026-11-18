@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import LoadingBar from '../../components/LoadingBar';
 import { decideAdminAccountRequest, fetchAdminAccountRequests } from '../../utils/accountRequests';
 import { InviteLink } from '../AccountRequestReview';
-import { ago } from './AdminServers';
+import { timeAgo } from '../../utils/timeAgo';
 
 const STATUS = { pending: 'Waiting', approved: 'Approved', used: 'Joined', denied: 'Denied' };
 
@@ -83,7 +83,7 @@ export default function AdminRequestsPanel({ onPendingChange }) {
                   <span className="adm-user-email">{row.email}</span>
                 </th>
                 <td>{row.note || <span className="adm-muted">—</span>}</td>
-                <td title={new Date(row.createdAt).toLocaleString()}>{ago(row.createdAt)}</td>
+                <td title={new Date(row.createdAt).toLocaleString()}>{timeAgo(row.createdAt)}</td>
                 <td><span className={`adm-pill${row.status === 'used' || row.status === 'approved' ? ' on' : ''}`}>{STATUS[row.status] || row.status}</span></td>
                 <td className="adm-actions">
                   {row.status === 'pending' && (

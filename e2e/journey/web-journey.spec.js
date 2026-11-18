@@ -17,9 +17,9 @@ const SHOW = { id: 45424, name: 'Breaking Bad' }; // S1E1 is 58 minutes
 const SHOTS = path.join(__dirname, '..', '..', 'e2e-report', 'journey');
 const REPORT = path.join(SHOTS, 'report.jsonl');
 
-const PAGES = ['/home', '/movies', '/tv-shows', '/books', '/sports', '/search?q=breaking%20bad', '/calendar', '/history',
+const PAGES = ['/home', '/movies', '/tv-shows', '/sports', '/search?q=breaking%20bad', '/calendar', '/history',
   '/wrapped', '/profile', '/profiles', '/settings', '/account-settings', '/import', '/admin', '/admin?tab=users', '/admin?tab=errors',
-  '/movie/197851', `/tv-show/${SHOW.id}`, '/book/1', '/does-not-exist'];
+  '/movie/197851', `/tv-show/${SHOW.id}`, '/does-not-exist'];
 
 // Third-party noise that isn't ours to fix (ads blocked, trackers, embeds).
 const NOISE = /favicon|ERR_BLOCKED_BY_CLIENT|ERR_NAME_NOT_RESOLVED|net::ERR_FAILED|googlesyndication|doubleclick|chrome-extension|Failed to load resource: the server responded with a status of 404|status of 403|due to access control checks|cdn-cgi|Permissions-Policy|preload but not used|third-party cookie/i;

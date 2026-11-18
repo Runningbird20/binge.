@@ -76,7 +76,7 @@ function AiPicks({ query, auto, filters, onItems, kidsSafe }) {
   );
 }
 
-const MEDIA_TYPE = { movie: 'movie', tv: 'tv_show', book: 'book' };
+const MEDIA_TYPE = { movie: 'movie', tv: 'tv_show' };
 
 // "More … like X" rows: a normal horizontal row, with a row-shaped skeleton
 // while loading (a stacked grid skeleton made the page jump on phones).
@@ -95,7 +95,6 @@ function GridSkeleton() {
   return <LoadingBar label="Loading results…" />;
 }
 
-const TYPE_LABELS = { movie: 'Movies', tv: 'TV Shows', book: 'Books' };
 function GameTile({ game }) {
   const live = isGameLive(game);
   return (
@@ -268,7 +267,7 @@ export default function SearchResults() {
 
     setPrimaryState('loading');
     // A restricted profile only sees what its level allows (searchMaturity.js).
-    api.get(`/search?q=${encodeURIComponent(query)}&types=movies,tv,books`)
+    api.get(`/search?q=${encodeURIComponent(query)}&types=movies,tv`)
       .then((data) => filterSearchPayload(data, kidsSafe))
       .then((data) => {
         if (cancelled) return;
@@ -284,7 +283,7 @@ export default function SearchResults() {
     addRecentSearch(query);
 
     setRelatedState('loading');
-    api.get(`/search-related?q=${encodeURIComponent(query)}&types=movies,tv,books`)
+    api.get(`/search-related?q=${encodeURIComponent(query)}&types=movies,tv`)
       .then((data) => filterSearchPayload(data, kidsSafe))
       .then((data) => {
         if (cancelled) return;
@@ -298,18 +297,14 @@ export default function SearchResults() {
 
   const primaryMovies = tagType(primary?.movies, 'movie');
   const primaryTv = tagType(primary?.tv, 'tv');
-  const primaryBooks = tagType(primary?.books, 'book');
 
   // Related rows exclude anything already shown in the matching primary row.
   const primaryMovieIds = new Set(primaryMovies.map((r) => r.id));
   const primaryTvIds = new Set(primaryTv.map((r) => r.id));
-  const primaryBookIds = new Set(primaryBooks.map((r) => r.id));
   const allRelatedMovies = tagType(related?.moviesRelated, 'movie').filter((r) => !primaryMovieIds.has(r.id));
   const allRelatedTv = tagType(related?.tvRelated, 'tv').filter((r) => !primaryTvIds.has(r.id));
-  const allRelatedBooks = tagType(related?.booksRelated, 'book').filter((r) => !primaryBookIds.has(r.id));
   const relatedMovies = filterItems(allRelatedMovies, filters);
   const relatedTv = filterItems(allRelatedTv, filters);
-  const relatedBooks = filterItems(allRelatedBooks, filters);
   const personItems = filterItems(person?.items, filters);
   const filtering = hasFilters(filters);
 
@@ -331,28 +326,26 @@ export default function SearchResults() {
   const best = groupResults({
     movies: filterItems(primaryMovies, filters),
     tv: filterItems(primaryTv, filters),
-    books: filterItems(primaryBooks, filters),
   });
   const leadWithBest = (list, mediaType) => (best.top?.media_type === mediaType ? [best.top, ...list] : list);
   const grouped = {
     movies: leadWithBest(best.movies, 'movie'),
     series: leadWithBest(best.series, 'tv_show'),
-    books: leadWithBest(best.books, 'book'),
   };
 
   // The chips offer what's in the results (every section, before filtering).
   const options = filterOptions([
-    ...primaryMovies, ...primaryTv, ...primaryBooks,
-    ...allRelatedMovies, ...allRelatedTv, ...allRelatedBooks,
+    ...primaryMovies, ...primaryTv,
+    ...allRelatedMovies, ...allRelatedTv,
     ...(person?.items || []), ...(aiItems || []),
   ], filters);
 
-  const primaryTotal = primaryMovies.length + primaryTv.length + primaryBooks.length;
-  const relatedTotal = allRelatedMovies.length + allRelatedTv.length + allRelatedBooks.length;
+  const primaryTotal = primaryMovies.length + primaryTv.length;
+  const relatedTotal = allRelatedMovies.length + allRelatedTv.length;
   const nothingFound = primaryState === 'done' && relatedState === 'done' && primaryTotal === 0 && relatedTotal === 0 && !games.length && !person?.items?.length;
   // Filters set and, once everything has arrived, nothing left to show.
-  const shownCount = grouped.movies.length + grouped.series.length + grouped.books.length
-    + personItems.length + relatedMovies.length + relatedTv.length + relatedBooks.length + filterItems(aiItems, filters).length;
+  const shownCount = grouped.movies.length + grouped.series.length
+    + personItems.length + relatedMovies.length + relatedTv.length + filterItems(aiItems, filters).length;
   const filteredAway = filtering && !nothingFound && primaryState === 'done' && relatedState !== 'loading' && aiItems !== null && shownCount === 0;
 
   return (
@@ -410,7 +403,6 @@ export default function SearchResults() {
             )}
             <ResultGrid title="Movies" items={grouped.movies} />
             <ResultGrid title="Series" items={grouped.series} />
-            {grouped.books.length > 0 && <TitleRow title={TYPE_LABELS.book} items={grouped.books} />}
             {games.length > 0 && !filtering && (
               <section className="st-search-section" aria-label="Live games">
                 <h2 className="st-row-title">Live games</h2>
@@ -429,14 +421,11 @@ export default function SearchResults() {
               />
             )}
 
-            {((relatedState === 'loading' && filters.type !== 'tv_show' && filters.type !== 'book') || relatedMovies.length > 0) && (
+            {((relatedState === 'loading' && filters.type !== 'tv_show') || relatedMovies.length > 0) && (
               <ResultRow heading={`More movies like "${query}"`} items={relatedMovies} loading={relatedState === 'loading'} />
             )}
-            {((relatedState === 'loading' && filters.type !== 'movie' && filters.type !== 'book') || relatedTv.length > 0) && (
+            {((relatedState === 'loading' && filters.type !== 'movie') || relatedTv.length > 0) && (
               <ResultRow heading={`More TV shows like "${query}"`} items={relatedTv} loading={relatedState === 'loading'} />
-            )}
-            {((relatedState === 'loading' && (!filters.type || filters.type === 'book')) || relatedBooks.length > 0) && (
-              <ResultRow heading={`More books like "${query}"`} items={relatedBooks} loading={relatedState === 'loading'} />
             )}
           </div>
         )}

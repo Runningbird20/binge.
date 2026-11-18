@@ -87,8 +87,8 @@ async function debugLog(statement, args, ms) {
   }
   // FULL SCAN reads every row; SORT means every matching row is read and
   // sorted before LIMIT applies (no index gives that order).
-  const scan = /\bSCAN (movies|tv_shows|books)\b(?! USING)/.test(plan) ? ' FULL SCAN'
-    : /\b(SEARCH|SCAN) (movies|tv_shows|books)\b/.test(plan) && /TEMP B-TREE FOR ORDER BY/.test(plan) ? ' SORT' : '';
+  const scan = /\bSCAN (movies|tv_shows)\b(?! USING)/.test(plan) ? ' FULL SCAN'
+    : /\b(SEARCH|SCAN) (movies|tv_shows)\b/.test(plan) && /TEMP B-TREE FOR ORDER BY/.test(plan) ? ' SORT' : '';
   console.log(`[catalog ${ms}ms${scan}] ${statement.replace(/\s+/g, ' ').slice(0, 2000)}${plan ? `\n    plan: ${plan}` : ''}\n    args: ${JSON.stringify(args).slice(0, 2000)}`);
 }
 

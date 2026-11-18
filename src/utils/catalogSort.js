@@ -1,4 +1,4 @@
-// Shared "sort by" options for the Movies/TV Shows/Books browse pages.
+// Shared "sort by" options for the Movies/TV Shows browse pages.
 // 'featured' keeps each page's existing random-window discovery mode
 // (unchanged); every other option switches to a real sequential, sorted
 // paginated fetch — see sortModeToQuery().

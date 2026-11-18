@@ -1,6 +1,22 @@
 import { trackedFetch } from './utils/loadingProgress';
-import { executeSupabaseRoute } from './utils/supabaseApi';
 import { isSupabaseConfigured } from './utils/supabase';
+import { isChunkLoadError, reloadForNewBuild } from './utils/lazyWithReload';
+
+// The client-side router (supabaseApi.js) and the catalog code it pulls in
+// load on the first api call instead of with the first page; App.js also
+// fetches them while idle (PAGE_LOADERS). A failed load is retried on the
+// next call, and after a deploy reloads the page once, like a page chunk.
+let supabaseRoutes = null;
+export function loadSupabaseRoutes() {
+  if (!supabaseRoutes) {
+    supabaseRoutes = import('./utils/supabaseApi').catch((error) => {
+      supabaseRoutes = null;
+      if (isChunkLoadError(error)) reloadForNewBuild();
+      throw error;
+    });
+  }
+  return supabaseRoutes;
+}
 
 function isLegacyBackendEnabled() {
   return String(process.env.REACT_APP_ENABLE_LEGACY_BACKEND || '')
@@ -192,6 +208,7 @@ async function requestLegacyApi(method, path, body) {
 }
 
 async function request(method, path, body) {
+  const { executeSupabaseRoute } = await loadSupabaseRoutes();
   const directResult = await executeSupabaseRoute(method, path, body);
   if (directResult !== null) {
     return directResult;

@@ -44,13 +44,6 @@ const resolvedSupabaseAnonKey = readFirstEnv(SUPABASE_ANON_KEY_ENV_KEYS);
 const supabaseUrl = resolvedSupabaseUrl.value;
 const supabaseKey = resolvedSupabaseAnonKey.value;
 
-export const supabaseEnv = {
-  url: supabaseUrl,
-  anonKey: supabaseKey,
-  urlKey: resolvedSupabaseUrl.key,
-  anonKeyKey: resolvedSupabaseAnonKey.key,
-};
-
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
 const authClient = isSupabaseConfigured
@@ -93,7 +86,6 @@ export function requireSupabaseClient() {
 
 let sessionRequestPromise = null;
 let userRequestPromise = null;
-let refreshRequestPromise = null;
 let authOperationQueue = Promise.resolve();
 
 function runSerializedAuthOperation(operation) {
@@ -105,7 +97,7 @@ function runSerializedAuthOperation(operation) {
 // GoTrueClient serializes its own critical sections (init, token refresh,
 // session save) behind a single Navigator LockManager lock keyed off the
 // project URL. That lock is shared across every caller on the page —
-// our own getSession/getUser/refreshSession calls, the SDK's internal
+// our own getSession/getUser calls, the SDK's internal
 // auto-refresh timer, and onAuthStateChange's internal notifications all
 // queue for the same name. If whichever caller is holding it runs long
 // (slow network, a dev-only React Strict Mode double-mount, etc.), a
@@ -165,23 +157,6 @@ export async function getSupabaseUser() {
   return userRequestPromise;
 }
 
-export async function refreshSupabaseSession() {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: { session: null, user: null }, error: null };
-  }
-
-  const client = requireSupabaseClient();
-  if (!refreshRequestPromise) {
-    refreshRequestPromise = runSerializedAuthOperation(() =>
-      withLockStealRetry(() => client.auth.refreshSession())
-    ).finally(() => {
-      refreshRequestPromise = null;
-    });
-  }
-
-  return refreshRequestPromise;
-}
-
 function looksLikeNetworkError(message) {
   return /failed to fetch|networkerror|network request failed|load failed|fetch failed|network issue/i.test(message);
 }
@@ -196,10 +171,6 @@ function looksLikeInvalidSupabaseKey(message) {
 
 function looksLikeAuthSessionError(message) {
   return /auth session missing|auth session|invalid refresh token|refresh token|jwt expired|session missing|session expired|invalid claim/i.test(message);
-}
-
-function looksLikeMissingAuthorizationHeader(message) {
-  return /missing authorization header|authorization header/i.test(message);
 }
 
 function looksLikeRlsError(message) {
@@ -218,7 +189,6 @@ export function toSupabaseError(error, fallbackMessage, options = {}) {
   const message = String(error.message || '').trim();
   const code = String(error.code || '').trim();
   const resourceName = options.resourceName || options.resource || 'resource';
-  const edgeFunctionName = options.edgeFunctionName || options.functionName || '';
 
   if (!isSupabaseConfigured) {
     return new Error(getSupabaseConfigErrorMessage());
@@ -236,12 +206,6 @@ export function toSupabaseError(error, fallbackMessage, options = {}) {
     return new Error('Your Supabase auth session is missing or invalid. Please sign in again.');
   }
 
-  if (edgeFunctionName && looksLikeMissingAuthorizationHeader(message)) {
-    return new Error(
-      `The Supabase Edge Function "${edgeFunctionName}" requires a bearer token. Disable JWT verification for that function or make sure the user has an active Supabase session.`
-    );
-  }
-
   if (looksLikeMissingRelationError(code, message)) {
     return new Error(`Supabase is missing the required "${resourceName}" table or view. Run the latest migration and verify the schema exists.`);
   }
@@ -250,141 +214,10 @@ export function toSupabaseError(error, fallbackMessage, options = {}) {
     return new Error(`Supabase denied access to "${resourceName}". Check the table's RLS policies.`);
   }
 
-  if (edgeFunctionName && /function|functions/i.test(message)) {
-    return new Error(`The Supabase Edge Function "${edgeFunctionName}" failed. Check the function deployment and logs.`);
-  }
-
   if (looksLikeNetworkError(message) || error.name === 'TypeError') {
     return new Error('Unable to reach Supabase. Check your Supabase URL, anon key, and network connection.');
   }
 
   return new Error(message || fallbackMessage);
-}
-
-async function getSupabaseFunctionHeaders() {
-  const headers = {
-    'Content-Type': 'application/json',
-    apikey: supabaseKey,
-  };
-
-  if (!supabase) {
-    return headers;
-  }
-
-  try {
-    const { data } = await getSupabaseSession();
-    const accessToken = data?.session?.access_token;
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`;
-    }
-  } catch {}
-
-  return headers;
-}
-
-function isJwtAuthError(response, data) {
-  const message =
-    typeof data === 'string'
-      ? data
-      : data && typeof data === 'object'
-        ? [data.error, data.message, data.code].filter(Boolean).join(' ')
-        : '';
-
-  return response.status === 401 && /jwt|authorization|token/i.test(message);
-}
-
-async function retryFunctionWithRefresh(functionName, body) {
-  if (!supabase) {
-    return null;
-  }
-
-  try {
-    const { data, error } = await refreshSupabaseSession();
-    if (error || !data?.session?.access_token) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
-  const retryHeaders = await getSupabaseFunctionHeaders();
-  return trackedFetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
-    method: 'POST',
-    headers: retryHeaders,
-    body: JSON.stringify(body ?? {}),
-  });
-}
-
-async function parseFunctionResponse(response) {
-  const text = await response.text();
-  if (!text) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
-function buildFunctionErrorMessage(response, data) {
-  if (data && typeof data === 'object') {
-    return data.error || data.message || data.code || `Function request failed with status ${response.status}`;
-  }
-
-  if (typeof data === 'string' && data.trim()) {
-    return data.trim();
-  }
-
-  return `Function request failed with status ${response.status}`;
-}
-
-export async function invokeSupabaseFunction(functionName, body) {
-  if (!isSupabaseConfigured || !supabase) {
-    throw new Error(getSupabaseConfigErrorMessage());
-  }
-
-  const headers = await getSupabaseFunctionHeaders();
-  let response;
-
-  try {
-    response = await trackedFetch(`${supabaseUrl.replace(/\/+$/, '')}/functions/v1/${encodeURIComponent(functionName)}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body ?? {}),
-    });
-  } catch (error) {
-    throw toSupabaseError(error, `Unable to reach the Supabase Edge Function "${functionName}".`, {
-      resourceName: 'edge function',
-      edgeFunctionName: functionName,
-    });
-  }
-
-  let data = await parseFunctionResponse(response);
-
-  if (isJwtAuthError(response, data)) {
-    const retryResponse = await retryFunctionWithRefresh(functionName, body);
-    if (retryResponse) {
-      data = await parseFunctionResponse(retryResponse);
-      if (!retryResponse.ok) {
-        throw new Error(buildFunctionErrorMessage(retryResponse, data));
-      }
-      return data;
-    }
-  }
-
-  if (!response.ok) {
-    throw toSupabaseError(
-      new Error(buildFunctionErrorMessage(response, data)),
-      `The Supabase Edge Function "${functionName}" failed.`,
-      {
-        resourceName: 'edge function',
-        edgeFunctionName: functionName,
-      }
-    );
-  }
-
-  return data;
 }
 

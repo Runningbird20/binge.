@@ -33,7 +33,6 @@ import { isComingSoon, formatReleaseDay } from '../utils/releaseWindow';
 import { splitList, formatRuntime } from './title/format';
 import { EpisodeList } from './title/EpisodeList';
 import { RECAP_AFTER_DAYS, PreviouslyOn } from './title/PreviouslyOn';
-import { SourceBooks } from './title/SourceBooks';
 import { MoreLikeThis } from './title/MoreLikeThis';
 
 // Netflix-style title page, shared by desktop and mobile (it reflows to a
@@ -505,8 +504,6 @@ export default function MediaDetailsModal({
           )}
 
           {!isTV && details?.tmdbId && <FranchiseOrder tmdbId={details.tmdbId} currentId={item.id} canMark={allowActions} onLibraryChange={onLibraryChange} />}
-
-          <SourceBooks mediaType={mediaType} tmdbId={details?.tmdbId} title={item.title} />
 
           <MoreLikeThis mediaType={mediaType} tmdbId={details?.tmdbId} />
 

@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // Cache-first for poster/cover art, regardless of origin — this is the
-  // bulk of what's slow to re-load on Movies/TV/Books/Home/Profile, and
+  // bulk of what's slow to re-load on Movies/TV/Home/Profile, and
   // previously fell through the origin check below and was never cached
   // by the app at all (only whatever the remote host's own HTTP caching
   // happened to provide, which several of these hosts don't set well).

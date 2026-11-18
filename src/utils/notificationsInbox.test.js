@@ -1,4 +1,4 @@
-import { fetchNotifications, timeAgo } from './notificationsInbox';
+import { fetchNotifications } from './notificationsInbox';
 import { supabase } from './supabase';
 
 jest.mock('./supabase', () => ({ isSupabaseConfigured: true, supabase: { from: jest.fn() } }));
@@ -14,16 +14,6 @@ function answers(result) {
 
 const NOW = Date.parse('2026-11-16T20:00:00Z');
 const minutesAgo = (minutes) => new Date(NOW - minutes * 60000).toISOString();
-
-test('alert times read like a notification list', () => {
-  expect(timeAgo(minutesAgo(0.2), NOW)).toBe('Just now');
-  expect(timeAgo(minutesAgo(5), NOW)).toBe('5 min ago');
-  expect(timeAgo(minutesAgo(3 * 60), NOW)).toBe('3 h ago');
-  expect(timeAgo(minutesAgo(30 * 60), NOW)).toBe('Yesterday');
-  expect(timeAgo(minutesAgo(4 * 24 * 60), NOW)).toBe('4 days ago');
-  // A clock a little ahead of the server's never shows "in the future".
-  expect(timeAgo(minutesAgo(-2), NOW)).toBe('Just now');
-});
 
 test('before the inbox migration has run, the inbox is just empty', async () => {
   const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});

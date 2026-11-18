@@ -1,24 +1,16 @@
 import LoadingBar from '../../components/LoadingBar';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowClockwise } from '@phosphor-icons/react';
+import { ArrowClockwise, Check, X } from '@phosphor-icons/react';
 import { supabase } from '../../utils/supabase';
 import { api } from '../../api';
 import { PROVIDERS } from '../../utils/embedProviders';
+import { timeAgo } from '../../utils/timeAgo';
 
 // Servers the player still has. A removed server's old server_status row stays in
 // the table but isn't listed.
 const CURRENT = new Set(PROVIDERS.map((entry) => entry.id));
 
 const DOT = { up: 'green', slow: 'yellow', down: 'red', unknown: 'gray' };
-
-export function ago(iso) {
-  if (!iso) return 'never';
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`;
-}
 
 // Streaming servers: automatic status (every 15 min), viewer reports, a
 // "check now" button, and a switch to take a server out of rotation for
@@ -71,7 +63,7 @@ export default function AdminServers() {
       <div className="adm-panel-head">
         <div>
           <h3 id="adm-servers-title">Streaming servers</h3>
-          <p className="adm-muted">Checked automatically every 15 minutes · last {ago(lastCheck)}. Admins get a push when one goes down or recovers.</p>
+          <p className="adm-muted">Checked automatically every 15 minutes · last {timeAgo(lastCheck)}. Admins get a push when one goes down or recovers.</p>
         </div>
         <button type="button" className="st-btn st-btn--ghost" onClick={checkNow} disabled={checking}>
           <ArrowClockwise size={16} weight="bold" aria-hidden="true" /> {checking ? 'Checking…' : 'Check now'}
@@ -93,10 +85,14 @@ export default function AdminServers() {
                   <th scope="row"><span className={`admin-status-dot ${DOT[row.status] || 'gray'}`} aria-hidden="true" /> {row.label || row.provider}</th>
                   <td>
                     <span className={`adm-server-state adm-server-state--${row.status}`}>{row.status}</span>
-                    <span className="adm-muted adm-detail">{row.detail || `since ${ago(row.changed_at)}`}</span>
+                    <span className="adm-muted adm-detail">{row.detail || `since ${timeAgo(row.changed_at)}`}</span>
                   </td>
                   <td>{row.latency_ms != null && row.status !== 'unknown' ? `${(row.latency_ms / 1000).toFixed(1)}s` : '—'}</td>
-                  <td>{row.reports_works_24h}✓ · {row.reports_broken_24h}✗</td>
+                  <td>
+                    <span className="icon-label">{row.reports_works_24h}<Check size={14} weight="bold" aria-hidden="true" /><span className="sr-only"> work</span></span>
+                    {' · '}
+                    <span className="icon-label">{row.reports_broken_24h}<X size={14} weight="bold" aria-hidden="true" /><span className="sr-only"> broken</span></span>
+                  </td>
                   <td>
                     <button
                       type="button"

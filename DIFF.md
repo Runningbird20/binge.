@@ -84,7 +84,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
 | Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift, CineSrc, VidSpark, VidCore and EmbedWave, not Sports (`utils/popupSandbox.js`). |
-| Servers VixSrc, VidSpark, VidCore, EmbedWave | ✓ | ✓ | — | — | Added to the website 2026-11-09 (`embedProviders.js`). Not tried in the TV apps yet; Apple TV can only use servers that play without MSE. |
+| Servers VixSrc, VidSpark, VidCore, EmbedWave | ✓ | ✓ | — | — | Added to the website 2026-11-09 (`embedServers.js`). Not tried in the TV apps yet; Apple TV can only use servers that play without MSE. |
 | Streams play in the TV's own player (native HLS) | — | — | ✓ | ✓ | Once the server's page finds its stream (`HybridEngine`). Apple TV also saves a stream that played for 3 hours, so playing it again skips the page (`StreamCache`). |
 | TV switches to the video's frame rate (Match Content) | — | — | ✓ | ✓ | Apple TV: Match Content (`NativeEngine.displayCriteria`). Fire TV: `preferredDisplayModeId` to a mode at the video's rate, when the TV has one (`DisplayMatch`). Native player only. |
 | Now Playing in Control Center / the phone's TV remote | — | — | ✓ | — | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. |
@@ -104,7 +104,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| TimStreams feed, and college games on TV channels | ✓ | ✓ | — | — | Added 2026-11-09 (`sportsFeeds.js`): every college game on a TV network TimStreams carries gets that channel as a server. The TV apps still request Streamed, which closed in November 2026. |
+| TimStreams feed, and college games on TV channels | ✓ | ✓ | — | — | Added 2026-11-09 (`sportsFeeds.js`): every college game on a TV network TimStreams carries gets that channel as a server. |
 | Multiview | ✓ | — | ✓ | ✓ | *By decision* not on phones (too small). Apple TV: up to 4 games (2 on an Apple TV HD). Fire TV: up to 4, and it learns the device's limit. |
 | Multiview layout (one big + others) | — | — | ✓ | ✓ | The website uses an equal grid. |
 | Followed teams & game alerts | ✓ | ✓ | ◐ | — | Website: push alerts. Apple TV: in-app banners only, with a "Your teams" row. |
@@ -114,11 +114,10 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Previous / next live game from the player (◀ ▶) | n/a | n/a | ✓ | — | |
 | A live game in a corner window over other video | — | — | ✓ | — | `Player/Overlay.swift`. |
 
-## Reading, notifications & the rest
+## Notifications & the rest
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| Books & manga (reader, Where to read) | ✓ | ✓ | — | — | |
 | Push notifications (new episodes, reminders, admin broadcasts) | ✓ | ✓ | — | — | iPhones need the site installed to the Home Screen. |
 | Notification inbox (the bell) | ✓ | ✓ | — | — | `NotificationBell`: the last 30 days of alerts (`notifications`), with unread dots. Left of the profile on computers; on phones, the header's top right, opening a sheet. |
 | Announcements banner | ✓ | ✓ | ◐ | ◐ | TV apps: Home, Movies, Series and Sports; links are shown as text (a TV can't open them). |
@@ -133,7 +132,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 **Phone**:
 - Bottom nav (Home · Sports · Browse · Search · Me) with Browse and Me as bottom sheets.
-- Swipe down to close title and book pages, plus a sticky Play bar.
+- Swipe down to close title pages, plus a sticky Play bar.
 - The player's server picker as a bottom sheet.
 - Pull to refresh and haptics.
 - An Install button at the top right of the header: Add to Home Screen, or download the Android / iPhone app.

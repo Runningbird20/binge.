@@ -45,7 +45,6 @@ function fakeCatalog({ configured = true, healthy = true } = {}) {
       if (sql.includes('pragma_page_count')) return { rows: [{ bytes: 477634560, free: 1114112 }] };
       if (sql.includes('catalog_stats')) {
         return { rows: [
-          { name: 'books.rows', value: 19844, updated_at: '2026-11-16T19:35:16.986Z' },
           { name: 'movies.rows', value: 198481, updated_at: '2026-11-16T19:35:16.986Z' },
           { name: 'tv_shows.rows', value: 114996, updated_at: '2026-11-16T19:35:16.986Z' },
         ] };
@@ -96,7 +95,7 @@ test('Turso: size from SQLite, the stored row counts, and a note until the Platf
   assert.equal(report.host, 'binge-catalog-me.aws-us-east-1.turso.io');
   assert.deepEqual(report.checks.map((entry) => [entry.label, entry.detail]), [['Catalog queries', 'SQLite 3.47.0 · 35 tables']]);
   assert.deepEqual(report.usage, [{ id: 'storage', label: 'Storage', unit: 'bytes', used: 477634560, limit: 5 * GB }]);
-  assert.deepEqual(report.rows.map((row) => [row.name, row.rows]), [['Movies', 198481], ['Series', 114996], ['Books', 19844]]);
+  assert.deepEqual(report.rows.map((row) => [row.name, row.rows]), [['Movies', 198481], ['Series', 114996]]);
   assert.match(report.notes[0], /TURSO_PLATFORM_TOKEN and TURSO_ORG/);
 });
 

@@ -1,6 +1,6 @@
 # binge.
 
-A media-tracking web app for movies, TV shows, and books. Users build a personal profile, track what they watch and read, rate titles, and get personalized picks from a taste-matching algorithm — all with a clean dark UI.
+A media-tracking web app for movies and TV shows, plus live sports. Users build a personal profile, track what they watch, rate titles, and get personalized picks from a taste-matching algorithm — all with a clean dark UI.
 
 ## Tech Stack
 
@@ -8,23 +8,23 @@ A media-tracking web app for movies, TV shows, and books. Users build a personal
 |---|---|
 | Frontend | React 19, React Router 7, custom CSS |
 | Backend | Express 5 (deployed as Vercel serverless functions) |
-| Database / Auth | Supabase (Postgres + Row Level Security + Auth) |
+| Database / Auth | Turso (the media catalog); Supabase (accounts and user data: Postgres + Row Level Security + Auth) |
 | Recommendations | Local taste-matching algorithm over your ratings (genre / type / recency weighting) |
 | Deployment | Vercel (frontend + API serverless functions in one project) |
-| Media Data | TMDB, Plex, Internet Archive, Open Library |
+| Media Data | TMDB, Plex |
 
 ---
 
 ## Features
 
 **Content Browsing**
-- Movies, series, and books with search, filtering, and detail modals
+- Movies and series with search, filtering, and detail modals
 - Global search across all media (Cmd+K or S)
 - Live Sports — browse live/upcoming games and open a stream
 
 **Personal Tracking**
-- Watchlist with status per item (Plan to Watch / Watching / Watched, and reading equivalents)
-- Progress tracking — season/episode for series, chapter/page for books
+- Watchlist with status per item (Plan to Watch / Watching / Watched)
+- Progress tracking — season/episode for series
 - Continue Watching row to resume a title from where you left off
 - Star and numeric ratings for all media types
 - Rating a title moves it into your Ratings & Reviews section and counts toward your watch-time stats

@@ -104,8 +104,6 @@
 
 .adm-table tr.off { opacity: 0.5; }
 
-.adm-table tr.adm-subrow th { padding-left: 1.75rem; font-weight: 500; }
-
 .adm-detail { display: block; font-size: 0.78rem; }
 
 .adm-check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
@@ -184,8 +182,6 @@
   .adm-ann-list li { grid-template-columns: minmax(0, 1fr) auto auto; }
   .adm-ann-list .adm-ann-level, .adm-ann-list .adm-muted { display: none; }
 }
-
-/* ── Manga providers & where to read ──────────────────────────── */
 
 /* Admin: users panel */
 

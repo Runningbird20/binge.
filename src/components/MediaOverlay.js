@@ -1,32 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
 import MediaDetailsModal from './MediaDetailsModal';
 import { goBackTo, historyMark } from '../utils/historyBack';
-import { BookDetailsModal } from './books/BookDetailsModal';
 import {
   addSupabaseWatchlistItem,
   fetchSupabaseRatingMap,
-  fetchSupabaseWatchlist,
   fetchSupabaseWatchlistStatusMap,
   updateSupabaseWatchlistStatus,
   saveSupabaseRating,
 } from '../utils/supabaseData';
 import {
-  fetchBookById,
   fetchMovieById,
   fetchTvShowById,
 } from '../utils/catalogQueries';
 
 const CONFIG = {
-  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    homePath: '/movies' },
-  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', homePath: '/tv-shows' },
-  book:     { fetchById: fetchBookById,   apiPath: 'books',    homePath: '/books' },
+  movie:    { fetchById: fetchMovieById,  homePath: '/movies' },
+  tv_show:  { fetchById: fetchTvShowById, homePath: '/tv-shows' },
 };
 
-// Renders a movie/TV/book details modal as an overlay on top of whatever
+// Renders a movie/TV details modal as an overlay on top of whatever
 // page the user was already on (Home, Profile, search results, etc.),
-// instead of navigating to the full Movies/TV Shows/Books catalog page.
+// instead of navigating to the full Movies/TV Shows catalog page.
 // See App.js's background-location routing for how this gets mounted.
 export default function MediaOverlay({ mediaType }) {
   const { id } = useParams();
@@ -43,7 +38,6 @@ export default function MediaOverlay({ mediaType }) {
 
   const [item, setItem] = useState(null);
   const [userRating, setUserRating] = useState(null);
-  const [isInLibrary, setIsInLibrary] = useState(false);
   const [watchlistEntry, setWatchlistEntry] = useState(null);
   const [detailMessage, setDetailMessage] = useState('');
   const [isAddingWatchlist, setIsAddingWatchlist] = useState(false);
@@ -56,11 +50,6 @@ export default function MediaOverlay({ mediaType }) {
     async function load() {
       try {
         const result = await config.fetchById(numericId);
-        if (!cancelled && result?.id) { setItem(result); return; }
-      } catch { /* fall through */ }
-
-      try {
-        const result = await api.get(`/media/${config.apiPath}/${numericId}`);
         if (!cancelled && result?.id) setItem(result);
       } catch { /* nothing to open */ }
     }
@@ -77,22 +66,10 @@ export default function MediaOverlay({ mediaType }) {
     return () => { cancelled = true; };
   }, [mediaType, numericId]);
 
-  useEffect(() => {
-    if (mediaType !== 'book') return undefined;
-    let cancelled = false;
-    fetchSupabaseWatchlist({ mediaType: 'book' })
-      .then((list) => {
-        if (!cancelled) setIsInLibrary((list || []).some((entry) => entry.media_id === numericId));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [mediaType, numericId]);
-
   // libraryVersion: bumped when the popup changes library rows itself (a
   // franchise's "Mark all watched" can include this title).
   const [libraryVersion, setLibraryVersion] = useState(0);
   useEffect(() => {
-    if (mediaType === 'book') return undefined;
     let cancelled = false;
     fetchSupabaseWatchlistStatusMap(mediaType)
       .then((map) => { if (!cancelled) setWatchlistEntry(map[numericId] || null); })
@@ -144,41 +121,7 @@ export default function MediaOverlay({ mediaType }) {
     });
   }
 
-  async function handleAddToLibrary(book) {
-    setDetailMessage('');
-    setIsAddingWatchlist(true);
-    try {
-      await addSupabaseWatchlistItem({ mediaType: 'book', mediaId: book.id, status: 'plan_to_read', media: book });
-      setIsInLibrary(true);
-      setDetailMessage('Added to your Library.');
-    } catch (err) {
-      if (/already in watchlist/i.test(err.message)) {
-        setIsInLibrary(true);
-        setDetailMessage('This book is already in your Library.');
-      } else {
-        setDetailMessage(err.message);
-      }
-    } finally {
-      setIsAddingWatchlist(false);
-    }
-  }
-
   if (!item) return null;
-
-  if (mediaType === 'book') {
-    return (
-      <BookDetailsModal
-        book={item}
-        onClose={goBack}
-        onAddToLibrary={handleAddToLibrary}
-        isInLibrary={isInLibrary}
-        isAddingToLibrary={isAddingWatchlist}
-        onRate={handleRate}
-        userRating={userRating}
-        detailMessage={detailMessage}
-      />
-    );
-  }
 
   return (
     <MediaDetailsModal

@@ -113,9 +113,3 @@ export function cacheMediaMetadata(mediaType, item) {
 
   return metadata;
 }
-
-export function cacheMediaMetadataList(mediaType, items = []) {
-  items.forEach((item) => {
-    cacheMediaMetadata(mediaType, item);
-  });
-}

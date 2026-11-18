@@ -9,14 +9,14 @@ export const FILTER_KEYS = ['type', 'decade', 'lang'];
 const TYPES = [
   { value: 'movie', label: 'Movies' },
   { value: 'tv_show', label: 'Series' },
-  { value: 'book', label: 'Books' },
 ];
 const OLDEST_DECADE = 1970; // earlier years share one "Before 1970" chip
 const MAX_LANGUAGES = 8;
 
 export function readFilters(searchParams) {
   return {
-    type: searchParams.get('type') || '',
+    // A type that's no longer offered (an old ?type=book link) is ignored.
+    type: TYPES.some(({ value }) => value === searchParams.get('type')) ? searchParams.get('type') : '',
     decade: searchParams.get('decade') || '',
     lang: searchParams.get('lang') || '',
   };
@@ -29,7 +29,7 @@ export function hasFilters(filters) {
 // Results come tagged either way: media_type ('tv_show') or _type ('tv').
 export function mediaTypeOf(item) {
   if (item?.media_type) return item.media_type;
-  return { movie: 'movie', tv: 'tv_show', book: 'book' }[item?._type] || '';
+  return { movie: 'movie', tv: 'tv_show' }[item?._type] || '';
 }
 
 export function itemYear(item) {

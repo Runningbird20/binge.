@@ -2,12 +2,10 @@
 // the profile's level allows, like every browse row. Search rows don't
 // carry age ratings, so they're looked up by id (cached). Movies and series
 // need an allowed rating (unrated ones are left out, as on the catalog grid
-// and the TV apps); books have no ratings, so child levels keep children's
-// genres only. A failed lookup shows nothing rather than everything.
+// and the TV apps). A failed lookup shows nothing rather than everything.
 import { isSupabaseConfigured, supabase } from './supabase';
-import { isChildLevel, ratingsFor } from './kidsMode';
+import { ratingsFor } from './kidsMode';
 
-const CHILD_BOOK = /\b(child|children'?s?|kids?|juvenile|picture books?|middle grade|nursery|fairy tales?)\b/i;
 const ratingCache = new Map(); // `${table}:${id}` → age_rating or null
 
 async function ratingsById(table, ids) {
@@ -24,12 +22,9 @@ async function ratingsById(table, ids) {
   return new Map(wanted.map((id) => [id, ratingCache.get(`${table}:${id}`)]));
 }
 
-// mediaType: 'movie' | 'tv' | 'tv_show' | 'book'.
+// mediaType: 'movie' | 'tv' | 'tv_show'.
 export async function allowedForProfile(items, mediaType, kidsSafe) {
   if (!kidsSafe || !Array.isArray(items) || !items.length) return items || [];
-  if (mediaType === 'book') {
-    return isChildLevel(kidsSafe) ? items.filter((item) => CHILD_BOOK.test(item.genre || '')) : items;
-  }
   if (!isSupabaseConfigured || !supabase) return [];
   const allowed = ratingsFor(kidsSafe);
   try {
@@ -44,8 +39,8 @@ export async function allowedForProfile(items, mediaType, kidsSafe) {
 export async function filterSearchPayload(payload, kidsSafe) {
   if (!kidsSafe || !payload) return payload;
   const sections = [
-    ['movies', 'movie'], ['tv', 'tv'], ['books', 'book'],
-    ['moviesRelated', 'movie'], ['tvRelated', 'tv'], ['booksRelated', 'book'],
+    ['movies', 'movie'], ['tv', 'tv'],
+    ['moviesRelated', 'movie'], ['tvRelated', 'tv'],
   ].filter(([key]) => Array.isArray(payload[key]));
   const filtered = await Promise.all(sections.map(([key, type]) => allowedForProfile(payload[key], type, kidsSafe)));
   const next = { ...payload };

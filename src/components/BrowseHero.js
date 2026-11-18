@@ -236,34 +236,19 @@ function BrowseHeroInner({ items = [], kicker, emptyTitle = 'What will you binge
           {genres.map((genre) => <span key={genre} className="st-chip">{genre}</span>)}
           {language && <span className="st-chip">{language}</span>}
         </div>
-        {item.author && <p className="st-hero-byline">by {item.author}</p>}
         {item._reason && <p className="st-hero-reason">{item._reason}</p>}
         {overview && <p className="st-hero-overview">{overview}</p>}
         <div className="st-hero-actions">
-          {item._onOpen ? (
-            // Items that open in-page (e.g. manga) instead of a route.
-            <>
-              <button type="button" className="st-hero-play" aria-label={`${item._playLabel || playLabel} ${item.title}`} title={item._playLabel || playLabel} onClick={() => item._onOpen(item)}>
-                <Play size={22} weight="fill" aria-hidden="true" />
-              </button>
-              <button type="button" className="st-preview-icon st-hero-info" aria-label={`More info about ${item.title}`} title="More info" onClick={() => item._onOpen(item)}>
-                <Info size={20} weight="bold" aria-hidden="true" />
-              </button>
-            </>
+          {item._comingSoon ? (
+            <span className="st-badge st-badge--soon st-badge--lg">Coming soon</span>
           ) : (
-            <>
-              {item._comingSoon ? (
-                <span className="st-badge st-badge--soon st-badge--lg">Coming soon</span>
-              ) : (
-                <Link className="st-hero-play" aria-label={`${item._playLabel || playLabel} ${item.title}`} title={item._playLabel || playLabel} to={item._playUrl || titleUrl(item, { play: true })} state={{ backgroundLocation: location }}>
-                  <Play size={22} weight="fill" aria-hidden="true" />
-                </Link>
-              )}
-              <Link className="st-preview-icon st-hero-info" aria-label={`More info about ${item.title}`} title="More info" to={titleUrl(item)} state={{ backgroundLocation: location }}>
-                <Info size={20} weight="bold" aria-hidden="true" />
-              </Link>
-            </>
+            <Link className="st-hero-play" aria-label={`${item._playLabel || playLabel} ${item.title}`} title={item._playLabel || playLabel} to={item._playUrl || titleUrl(item, { play: true })} state={{ backgroundLocation: location }}>
+              <Play size={22} weight="fill" aria-hidden="true" />
+            </Link>
           )}
+          <Link className="st-preview-icon st-hero-info" aria-label={`More info about ${item.title}`} title="More info" to={titleUrl(item)} state={{ backgroundLocation: location }}>
+            <Info size={20} weight="bold" aria-hidden="true" />
+          </Link>
         </div>
       </div>
 

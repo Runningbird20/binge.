@@ -7,9 +7,9 @@
 //   - the words are looked up in the description word index (schema.sql
 //     *_text_fts), which reads only the index;
 //   - within a window an index hands over in order (the 10,000 most popular
-//     movies/series, the 10,000 newest books), so common words stay bounded
-//     and the row keeps to titles people know;
-//   - only the matching rows are read. One round trip for all three.
+//     movies/series), so common words stay bounded and the row keeps to
+//     titles people know;
+//   - only the matching rows are read. One round trip for both.
 // Measured on Turso (2026-11-11): 10–26k rows read, ~0.5–1.7s cold, ~30ms warm.
 const catalogDb = require('./catalogDb');
 const { searchNorm } = require('./catalogSearch');
@@ -33,10 +33,6 @@ const TABLES = {
     sql: related({ table: 'tv_shows', columns: ['id', 'title', 'year', 'genre', 'poster_url', 'source_key', 'external_id'],
       window: 'poster_url IS NOT NULL ORDER BY popularity DESC', order: 'm.year DESC NULLS LAST' }),
   },
-  books: {
-    sql: related({ table: 'books', columns: ['id', 'title', 'author', 'year', 'genre', 'cover_url', 'source_key', 'external_id'],
-      window: 'year IS NOT NULL ORDER BY year DESC', order: 'm.year DESC' }),
-  },
 };
 
 // Words in nearly every description say nothing about it, and their index
@@ -53,8 +49,8 @@ function relatedMatch(q) {
   return words.length ? words.map((w) => `"${w}"`).join(' ') : null;
 }
 
-async function searchRelated(q, types = ['movies', 'tv', 'books']) {
-  const empty = { movies: [], tv: [], books: [] };
+async function searchRelated(q, types = ['movies', 'tv']) {
+  const empty = { movies: [], tv: [] };
   const pattern = relatedMatch(q);
   const kinds = types.filter((t) => TABLES[t]);
   if (!pattern || !kinds.length) return empty;

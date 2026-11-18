@@ -2,7 +2,7 @@ import { splitDatabaseClient } from './mediaDatabase';
 function client(prefix) { return { auth:{provider:prefix}, storage:{provider:prefix}, from:jest.fn(t=>`${prefix}:${t}`), rpc:jest.fn(n=>`${prefix}:${n}`) }; }
 test('media metadata goes to the catalog while user tables and all auth stay Supabase',()=>{
  const sb=client('supabase'),catalog=client('catalog');const split=splitDatabaseClient(sb,catalog);
- for(const table of ['movies','tv_shows','books','movie_genres','title_ratings','episode_ratings_cache','subtitle_cache'])expect(split.from(table)).toBe(`catalog:${table}`);
+ for(const table of ['movies','tv_shows','movie_genres','title_ratings','episode_ratings_cache','subtitle_cache'])expect(split.from(table)).toBe(`catalog:${table}`);
  for(const table of ['profiles','account_profiles','watchlist','movie_ratings','book_ratings','continue_watching','episode_progress','profile_locks','fantasy_leagues','push_subscriptions'])expect(split.from(table)).toBe(`supabase:${table}`);
  expect(split.auth).toBe(sb.auth);expect(split.storage).toBe(sb.storage);
 });

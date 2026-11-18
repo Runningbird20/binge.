@@ -75,9 +75,9 @@ test('exact counts are counted once, stored, then reused',async()=>{
   if(/count\(\*\)/.test(sql))return {rows:[{count:7}]};
   return {rows:[]};};
  try{
-  const spec={table:'books',columns:'id',count:'exact',head:true,filters:[{column:'genre',operator:'ilike',value:'%Fantasy%'}]};
+  const spec={table:'movies',columns:'id',count:'exact',head:true,filters:[{column:'genre',operator:'ilike',value:'%Fantasy%'}]};
   assert.equal((await executeQuery(spec)).count,7);
-  assert.ok(sent.some(s=>/SELECT count\(\*\) AS count FROM "books" WHERE "genre" LIKE \?1/.test(s)));
+  assert.ok(sent.some(s=>/SELECT count\(\*\) AS count FROM "movies" WHERE "genre" LIKE \?1/.test(s)));
   assert.ok(sent.some(s=>/INSERT INTO catalog_stats/.test(s)),'stored for other instances');
   const before=sent.length;
   assert.equal((await executeQuery(spec)).count,7);

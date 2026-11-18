@@ -32,7 +32,7 @@ actor Supabase {
 
     /// The media catalog lives in Turso and is read through the site's
     /// /api/catalog (read-only, public). Accounts and user data stay here.
-    static let mediaTables: Set<String> = ["movies", "tv_shows", "books", "movie_genres", "tv_show_genres", "book_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache"]
+    static let mediaTables: Set<String> = ["movies", "tv_shows", "movie_genres", "tv_show_genres", "title_ratings", "episode_ratings_cache", "subtitle_cache"]
 
     static func isMediaRead(_ method: String, table: String) -> Bool {
         method == "GET" && mediaTables.contains(table)

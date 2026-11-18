@@ -44,14 +44,8 @@ test('ratings are looked up once', async () => {
   expect(supabase.calls.count).toBe(1);
 });
 
-test('child levels keep children\'s books only', async () => {
-  const books = [{ id: 1, genre: "Children's, Fantasy" }, { id: 2, genre: 'Thriller' }, { id: 3, genre: 'Middle Grade' }];
-  expect((await allowedForProfile(books, 'book', 'kids')).map((b) => b.id)).toEqual([1, 3]);
-  expect((await allowedForProfile(books, 'book', 'teens')).map((b) => b.id)).toEqual([1, 2, 3]);
-});
-
 test('every section of a payload is filtered', async () => {
-  const payload = { movies: [{ id: 1 }, { id: 2 }], tv: [{ id: 10 }], books: [], moviesRelated: [{ id: 4 }], people: ['x'] };
+  const payload = { movies: [{ id: 1 }, { id: 2 }], tv: [{ id: 10 }], moviesRelated: [{ id: 4 }], people: ['x'] };
   const next = await filterSearchPayload(payload, 'kids');
   expect(next.movies.map((item) => item.id)).toEqual([2]);
   expect(next.tv).toEqual([]);

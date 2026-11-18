@@ -9,6 +9,10 @@
 //   node scripts/turso-catalog.js pull --db file:data/turso/catalog.db
 //                                                   copy the Turso catalog into a local file for
 //                                                   development (~310k rows read; resumes by id)
+//   node scripts/turso-catalog.js drop-books        one-off (books were removed, 2026-11): drop the
+//                                                   books table, its search indexes, triggers and
+//                                                   genre view, and its genre/count rows. Safe to
+//                                                   run again. Remove once Turso no longer has them.
 //
 // Target: TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN), or --db file:data/turso/catalog.db
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env.local'), quiet: true });
@@ -19,7 +23,7 @@ const { createClient } = require('@libsql/client');
 const { searchColumns } = require('../server/catalogSearch');
 const { applySchema: applyCatalogSchema } = require('../server/catalogSchema');
 
-const TABLES = ['movies', 'tv_shows', 'books', 'title_ratings', 'episode_ratings_cache', 'subtitle_cache'];
+const TABLES = ['movies', 'tv_shows', 'title_ratings', 'episode_ratings_cache', 'subtitle_cache'];
 const KEYS = { title_ratings: ['source_key'], episode_ratings_cache: ['imdb_id', 'season'], subtitle_cache: ['key'] };
 const PAGE = 2000;
 const ROWS_PER_INSERT = 200;
@@ -102,7 +106,7 @@ async function refresh(db) {
   // Stored filter counts (server/data-access/query.js exactCount) are stale
   // once a sync has changed the catalog.
   const statements = [{ sql: 'DELETE FROM catalog_genres' }, { sql: "DELETE FROM catalog_stats WHERE name LIKE 'count:%'" }];
-  for (const table of ['movies', 'tv_shows', 'books']) {
+  for (const table of ['movies', 'tv_shows']) {
     const r = await db.execute(`SELECT DISTINCT genre FROM ${table} WHERE genre IS NOT NULL`);
     const genres = new Set();
     for (const row of r.rows) for (const g of String(row.genre).split(',')) if (g.trim()) genres.add(g.trim());
@@ -116,7 +120,7 @@ async function refresh(db) {
 
 // The description word index (schema.sql *_text_fts) from scratch, in id
 // ranges so no single request runs long. Reads every row once.
-const TEXT_FTS = { movies: 'overview, synopsis', tv_shows: 'overview, synopsis', books: 'synopsis' };
+const TEXT_FTS = { movies: 'overview, synopsis', tv_shows: 'overview, synopsis' };
 async function buildTextSearch(db) {
   for (const [table, columns] of Object.entries(TEXT_FTS)) {
     const fts = `${table}_text_fts`;
@@ -134,14 +138,13 @@ async function buildTextSearch(db) {
 }
 
 async function rebuildSearch(db) {
-  for (const table of ['movies', 'tv_shows', 'books']) {
-    const extra = table === 'books' ? ', author' : '';
+  for (const table of ['movies', 'tv_shows']) {
     let after = -1; let done = 0;
     for (;;) {
-      const r = await db.execute({ sql: `SELECT id, title${extra} FROM ${table} WHERE id > ? ORDER BY id LIMIT ${PAGE}`, args: [after] });
+      const r = await db.execute({ sql: `SELECT id, title FROM ${table} WHERE id > ? ORDER BY id LIMIT ${PAGE}`, args: [after] });
       if (!r.rows.length) break;
       const statements = r.rows.map((row) => {
-        const cols = searchColumns(table, { title: row.title, ...(table === 'books' ? { author: row.author } : {}) });
+        const cols = searchColumns(table, { title: row.title });
         const names = Object.keys(cols);
         return { sql: `UPDATE ${table} SET ${names.map((n) => `${n} = ?`).join(', ')} WHERE id = ?`, args: [...names.map((n) => cols[n]), row.id] };
       });
@@ -151,6 +154,25 @@ async function rebuildSearch(db) {
     }
     console.log('');
   }
+}
+
+// Books were removed from binge. (2026-11-18). Triggers and the view first
+// (they name the table), then the FTS tables and the table itself (its
+// indexes go with it), then its genre and count rows.
+async function dropBooks(db) {
+  const before = (await db.execute("SELECT count(*) AS n FROM sqlite_master WHERE name = 'books'")).rows[0].n;
+  await db.batch([
+    ...['books_fts_insert', 'books_fts_delete', 'books_fts_update', 'books_text_fts_insert', 'books_text_fts_delete', 'books_text_fts_update']
+      .map((name) => `DROP TRIGGER IF EXISTS ${name}`),
+    'DROP VIEW IF EXISTS book_genres',
+    'DROP TABLE IF EXISTS books_fts',
+    'DROP TABLE IF EXISTS books_text_fts',
+    'DROP TABLE IF EXISTS books',
+    "DELETE FROM catalog_genres WHERE kind = 'books'",
+    "DELETE FROM catalog_stats WHERE name LIKE 'books.%' OR name LIKE 'count:%'",
+  ], 'write');
+  const left = (await db.execute("SELECT name FROM sqlite_master WHERE name LIKE 'book%'")).rows.map((row) => row.name);
+  console.log(Number(before) ? 'books dropped' : 'books was already gone', left.length ? `(still there: ${left.join(', ')})` : '');
 }
 
 async function main() {
@@ -164,7 +186,8 @@ async function main() {
   else if (command === 'rebuild-search') await rebuildSearch(db);
   else if (command === 'build-text-search') await buildTextSearch(db);
   else if (command === 'pull') await pull(db);
-  else { console.error('Usage: node scripts/turso-catalog.js schema|refresh|rebuild-search|build-text-search|pull [--db file:...]'); process.exitCode = 2; }
+  else if (command === 'drop-books') await dropBooks(db);
+  else { console.error('Usage: node scripts/turso-catalog.js schema|refresh|rebuild-search|build-text-search|pull|drop-books [--db file:...]'); process.exitCode = 2; }
   db.close();
 }
 

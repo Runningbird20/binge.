@@ -1,4 +1,4 @@
-/* The title popup (movies, series, books): hero, facts, episodes, cast, ratings, franchise order.
+/* The title popup (movies, series): hero, facts, episodes, cast, ratings, franchise order.
    Split out of streaming.css; App.js imports it after streaming.css. */
 
 /* ═══════════════════════════════════════════════════════════════
@@ -504,92 +504,6 @@
   .td-mark-season { justify-content: center; }
 }
 
-/* ── Books: modal hero, shelves, tabs ─────────────────────────── */
-
-.td-book-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: clamp(1.25rem, 3vw, 2.5rem);
-  align-items: end;
-  padding: clamp(28px, 5vw, 56px) clamp(20px, 4vw, 48px) 1.75rem;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.td-book-hero-bg {
-  position: absolute;
-  inset: -40px;
-  width: calc(100% + 80px);
-  height: calc(100% + 80px);
-  object-fit: cover;
-  filter: blur(40px) saturate(1.4);
-  opacity: 0.45;
-  z-index: -2;
-}
-
-.td-book-hero-scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(0deg, #12151d 0%, rgba(18, 21, 29, 0.5) 60%, rgba(18, 21, 29, 0.2) 100%);
-  z-index: -1;
-}
-
-.td-book-cover {
-  width: clamp(140px, 18vw, 220px);
-  aspect-ratio: 2 / 3;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #1c2130;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-.td-book-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.td-book-head { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
-
-.td-book-head .td-title { max-width: 100%; font-size: clamp(1.6rem, 3.2vw, 2.5rem); }
-
-.td-book-head .td-meta { margin-bottom: 0.2rem; }
-
-.td-book-author { margin: 0; font-size: 1.1rem; color: var(--exp-text); }
-
-.td-downloads { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1.25rem; }
-
-.td-shelf {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: clamp(96px, 11vw, 128px);
-  gap: 0.9rem;
-  overflow-x: auto;
-  padding-bottom: 0.4rem;
-  scrollbar-width: thin;
-}
-
-.td-shelf-item { display: flex; flex-direction: column; gap: 0.4rem; color: var(--exp-text-dim); text-decoration: none; font-size: 0.78rem; }
-
-.td-shelf-item img {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  border-radius: 6px;
-  background: #1c2130;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.td-shelf-item:hover img { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5); }
-
-.td-shelf-item span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-.td-shelf-item:focus-visible { outline: none; }
-
-.td-shelf-item:focus-visible img { box-shadow: var(--st-focus); }
-
-@media (max-width: 768px) {
-  .td-book-hero { grid-template-columns: minmax(0, 1fr); justify-items: start; }
-  .td-book-cover { width: 140px; }
-}
-
 /* ═══════════════════════════════════════════════════════════════
    LANDING, AUTH & GLOBAL BUTTON POLISH
 ═══════════════════════════════════════════════════════════════ */
@@ -618,17 +532,6 @@
   .td-actions .st-btn { min-height: 44px; }
   .td-round-btn { width: 44px; height: 44px; }
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   BOOK READER (br-*)
-═══════════════════════════════════════════════════════════════ */
-
-.td-availability { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--exp-text-dim); }
-
-.td-availability--free { color: var(--st-match); }
-
-.td-availability--preview,
-.td-availability--borrow { color: var(--st-soon); }
 
 /* ── "Previously on…" catch-up ────────────────────────────────── */
 
@@ -680,46 +583,6 @@
   .td-recap-list img { width: 96px; }
   .td-recap-actions .st-btn { flex: 1; }
 }
-
-/* ── Book ↔ screen links ──────────────────────────────────────── */
-
-.td-adapt-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; }
-
-.td-adapt {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 0.85rem;
-  align-items: center;
-  padding: 0.6rem;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: inherit;
-  text-decoration: none;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.td-adapt:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
-
-.td-adapt:focus-visible { outline: none; box-shadow: var(--st-focus); }
-
-.td-adapt img, .td-adapt-fallback { width: 72px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
-
-.td-adapt-fallback { display: flex; align-items: center; justify-content: center; }
-
-.td-adapt--screen { grid-template-columns: 128px minmax(0, 1fr); }
-
-.td-adapt--screen img { width: 128px; aspect-ratio: 16 / 9; }
-
-.td-adapt-body { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-
-.td-adapt-body .td-muted { font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.td-adapt-title { font-weight: 800; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-.td-adapt-cta { margin-top: 0.3rem; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
-
-@media (max-width: 600px) { .td-adapt-list { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── Mobile: one-handed reach ─────────────────────────────────── */
 

@@ -148,7 +148,7 @@ async function renderShareImage(data, name, year) {
   }
   ctx.fillStyle = 'rgba(244,239,230,0.6)';
   ctx.font = '500 34px -apple-system, Helvetica, Arial, sans-serif';
-  ctx.fillText('Movies · Series · Books · Sports', 120, 1830);
+  ctx.fillText('Movies · Series · Sports', 120, 1830);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
 

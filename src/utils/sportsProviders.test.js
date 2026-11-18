@@ -1,4 +1,4 @@
-import { canonicalCategory, countFeedsBySwitch, expandStreamProviders, mergeNormalized, splitTeamsFromTitle, sportsSwitchKeys, teamsMatch, withoutDisabledFeeds } from './sportsProviders';
+import { canonicalCategory, countFeedsBySwitch, mergeNormalized, splitTeamsFromTitle, sportsSwitchKeys, teamsMatch, withoutDisabledFeeds } from './sportsProviders';
 
 const T = 1791500000;
 
@@ -27,7 +27,7 @@ test('team names match across city/abbreviation differences but not across teams
 test('the same game from three providers becomes one entry with every server', () => {
   const merged = mergeNormalized([
     raw('Baltimore Ravens at Atlanta Falcons', 'American Football', T, { id: 'ppv', embedUrl: 'a', label: 'PPV · NBC' }, { tag: 'NFL' }),
-    raw('Baltimore Ravens vs Atlanta Falcons', 'American Football', T + 600, { id: 'streamed', source: 'admin', matchId: 'x' }, { teams: { home: 'Baltimore Ravens', away: 'Atlanta Falcons' } }),
+    raw('Baltimore Ravens vs Atlanta Falcons', 'American Football', T + 600, { id: 'timstreams', embedUrl: 'c', label: 'TimStreams' }, { teams: { home: 'Baltimore Ravens', away: 'Atlanta Falcons' } }),
     raw('Atlanta Falcons vs Baltimore Ravens', 'American Football', T, { id: 'streamfree', embedUrl: 'b' }),
   ]);
   expect(merged).toHaveLength(1);
@@ -48,7 +48,7 @@ test('different games and far-apart times stay separate', () => {
 test('racing sessions are not parsed as two teams, and schedule listings are dropped', () => {
   const merged = mergeNormalized([
     raw('Singapore Grand Prix - Practice 1', 'Racing', T, { id: 'ppv', embedUrl: 'a' }),
-    raw('NFL Streams Schedule', 'Basketball', T, { id: 'streamed', source: 'delta', matchId: 'y' }),
+    raw('NFL Streams Schedule', 'Basketball', T, { id: 'timstreams', embedUrl: 'd' }),
   ]);
   expect(merged).toHaveLength(1);
   expect(merged[0].name).toBe('Singapore Grand Prix - Practice 1');
@@ -58,53 +58,24 @@ test('racing sessions are not parsed as two teams, and schedule listings are dro
 describe('admin feed switches', () => {
   const feeds = [
     { name: 'A vs B', provider: { id: 'ppv', embedUrl: 'x' } },
-    { name: 'A vs B', provider: { id: 'streamed', source: 'alpha', matchId: '1' } },
-    { name: 'A vs B', provider: { id: 'streamed', source: 'bravo', matchId: '1' } },
+    { name: 'A vs B', provider: { id: 'timstreams', embedUrl: 'z' } },
+    { name: 'E vs F', provider: { id: 'timstreams', embedUrl: 'w' } },
     { name: 'C vs D', provider: { id: 'streamfree', embedUrl: 'y' } },
   ];
 
-  test('keys cover the provider and a Streamed source', () => {
-    expect(sportsSwitchKeys(feeds[1].provider)).toEqual(['sports:streamed', 'sports:streamed:alpha']);
+  test('one switch per provider', () => {
+    expect(sportsSwitchKeys(feeds[1].provider)).toEqual(['sports:timstreams']);
     expect(sportsSwitchKeys(feeds[0].provider)).toEqual(['sports:ppv']);
+    expect(sportsSwitchKeys(undefined)).toEqual([]);
   });
 
-  test('a switched-off source or provider drops only its feeds', () => {
-    expect(withoutDisabledFeeds(feeds, new Set(['sports:streamed:alpha']))).toHaveLength(3);
-    expect(withoutDisabledFeeds(feeds, new Set(['sports:streamed'])).map((f) => f.provider.id)).toEqual(['ppv', 'streamfree']);
+  test('a switched-off provider drops only its feeds', () => {
+    expect(withoutDisabledFeeds(feeds, new Set(['sports:timstreams'])).map((f) => f.provider.id)).toEqual(['ppv', 'streamfree']);
     expect(withoutDisabledFeeds(feeds, new Set())).toBe(feeds);
   });
 
   test('counts feeds per switch', () => {
-    expect(countFeedsBySwitch(feeds)).toEqual({
-      'sports:ppv': 1, 'sports:streamed': 2, 'sports:streamed:alpha': 1, 'sports:streamed:bravo': 1, 'sports:streamfree': 1,
-    });
-  });
-});
-
-describe('expandStreamProviders', () => {
-  const realFetch = global.fetch;
-  const realTimeout = AbortSignal.timeout;
-  beforeEach(() => { AbortSignal.timeout = () => undefined; }); // jsdom has none
-  afterEach(() => { global.fetch = realFetch; AbortSignal.timeout = realTimeout; });
-
-  test('turns a Streamed source into its streams, HD first, and keeps the rest', async () => {
-    global.fetch = jest.fn(async (url) => ({
-      ok: true,
-      json: async () => (String(url).includes('/admin/')
-        ? { streams: [
-          { embedUrl: 'https://e/admin/m/2', streamNo: 2, hd: false, language: 'English' },
-          { embedUrl: 'https://e/admin/m/1', streamNo: 1, hd: true, language: 'Main' },
-        ] }
-        : { streams: [] }),
-    }));
-    const ppv = { id: 'ppv', embedUrl: 'https://p/x', label: 'PPV' };
-    const admin = { id: 'streamed', source: 'admin', matchId: 'm', label: 'Streamed · admin' };
-    const golf = { id: 'streamed', source: 'golf', matchId: 'm', label: 'Streamed · golf' };
-    const out = await expandStreamProviders([ppv, admin, golf]);
-    expect(out.map((p) => p.embedUrl || p.label)).toEqual(['https://p/x', 'https://e/admin/m/1', 'https://e/admin/m/2', 'Streamed · golf']);
-    expect(out[1].label).toBe('Streamed · admin 1 HD');
-    expect(out[2].label).toBe('Streamed · admin 2 · English');
-    expect(sportsSwitchKeys(out[2])).toEqual(['sports:streamed', 'sports:streamed:admin']);
+    expect(countFeedsBySwitch(feeds)).toEqual({ 'sports:ppv': 1, 'sports:timstreams': 2, 'sports:streamfree': 1 });
   });
 });
 

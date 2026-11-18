@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Trash } from '@phosphor-icons/react';
 import { supabase } from '../../utils/supabase';
 import { ANNOUNCEMENTS_EVENT } from '../../components/AnnouncementBanner';
-import { ago } from './AdminServers';
+import { timeAgo } from '../../utils/timeAgo';
 
 // Site-wide banner: maintenance notices, "VidRift is down, use another
 // server", new features. Shows on every page until it ends or is turned off.
@@ -83,7 +83,7 @@ export default function AdminAnnouncements() {
             <li key={row.id}>
               <span className={`adm-ann-level adm-ann-level--${row.level}`}>{row.level}</span>
               <span className="adm-ann-msg">{row.message}</span>
-              <span className="adm-muted">{expired ? 'ended' : row.active ? 'live' : 'off'} · {ago(row.created_at)}</span>
+              <span className="adm-muted">{expired ? 'ended' : row.active ? 'live' : 'off'} · {timeAgo(row.created_at)}</span>
               <button
                 type="button"
                 role="switch"

@@ -7,7 +7,6 @@ const RAW = {
   ratings: [
     { media_type: 'movie', media_id: 11, title: 'Arrival', year: 2016, source_key: 'tmdb:movie:329865', acting: 4, writing: 5, originality: 4, pacing: 4, cinematography: 5, created_at: '2026-03-02T10:00:00Z' },
     { media_type: 'tv_show', media_id: 22, title: 'The Bear', year: 2022, source_key: 'tmdb:tv:136315', premise: 5, originality: 5, acting: 5, cinematography: 4, writing: 5, pacing: 4, resonance: 5, created_at: '2026-04-01T10:00:00Z' },
-    { media_type: 'book', media_id: 33, title: 'Dune', year: 1965, prose: 4, plot: 5, characters: 4, originality: 5, pacing: 3, resonance: 5, created_at: '2026-05-01T10:00:00Z' },
   ],
   list: [
     { media_type: 'movie', media_id: 44, title: 'Heat, Director’s "Cut"', year: 1995, source_key: 'tmdb:movie:949', status: 'watched', added_at: '2026-01-05T00:00:00Z', updated_at: '2026-01-06T00:00:00Z' },
@@ -29,11 +28,10 @@ test('builds the JSON with stars, categories, progress and TMDB ids', () => {
   expect(data).toMatchObject({ format: 'binge-export', version: 1, profile: 'Cristal', exported_at: '2026-11-05T12:00:00.000Z' });
   expect(data.ratings[0]).toMatchObject({ type: 'movie', title: 'Arrival', tmdb_id: 329865, binge_id: 11, stars: 4.4, rated_at: '2026-03-02T10:00:00Z' });
   expect(data.ratings[0].categories).toEqual({ acting: 4, writing: 5, originality: 4, pacing: 4, cinematography: 5 });
-  expect(data.ratings[2]).toMatchObject({ type: 'book', tmdb_id: null });
   expect(data.my_list[3]).toMatchObject({ type: 'tv', status: 'watching', progress: { season: 2, episode: 3, page: null, chapter: null } });
   expect(data.history[0]).toMatchObject({ type: 'tv', position_seconds: 1200, last_watched_at: '2026-06-01T20:00:00Z' });
   expect(data.episodes[0]).toMatchObject({ title: 'Severance', season: 2, episode: 2 });
-  expect(summarizeExport(data)).toBe('3 ratings · 4 on My List · 1 in history · 1 episode');
+  expect(summarizeExport(data)).toBe('2 ratings · 4 on My List · 1 in history · 1 episode');
 });
 
 test('Letterboxd CSVs hold films only, in Letterboxd’s columns, with half stars', () => {
@@ -60,7 +58,6 @@ test('the zip loads back in through /import with ratings and My List intact', ()
   expect(byTitle['The Bear|rated']).toMatchObject({ kind: 'tv', tmdbId: 136315, rating: 4.5 });
   expect(byTitle['Severance|watching']).toMatchObject({ kind: 'tv', tmdbId: 95396 });
   expect(byTitle['Dune: Part Two|watchlist']).toMatchObject({ kind: 'movie', tmdbId: 693134 });
-  expect(records.some((record) => record.title === 'Dune' && record.kind === 'book')).toBe(false);
 
   // Just the Letterboxd CSVs work on their own too (as from Letterboxd).
   const lbOnly = parseImport(files.filter(({ name }) => name.startsWith('letterboxd/')));
@@ -72,4 +69,18 @@ test('file names and CSV cells are safe', () => {
   expect(exportFilename('Zoë & Kids', NOW)).toBe('binge-export-zoe-kids-2026-11-05.zip');
   expect(exportFilename('', NOW)).toBe('binge-export-profile-2026-11-05.zip');
   expect(toCsv(['A'], [{ A: 'line\nbreak' }, { A: null }])).toBe('A\n"line\nbreak"\n\n');
+});
+
+// Exports made before books were removed (2026-11-18) can hold book rows.
+test('an older export with books still imports, without the books', () => {
+  const old = {
+    format: 'binge-export', version: 1, exported_at: '2026-11-01T00:00:00.000Z', profile: null,
+    ratings: [
+      { type: 'book', title: 'Dune', year: 1965, tmdb_id: null, binge_id: 33, stars: 4.3, categories: {}, rated_at: '2026-05-01T10:00:00Z' },
+      { type: 'movie', title: 'Arrival', year: 2016, tmdb_id: 329865, binge_id: 11, stars: 4.4, categories: {}, rated_at: '2026-03-02T10:00:00Z' },
+    ],
+    my_list: [], history: [], episodes: [],
+  };
+  const { records } = parseImport([{ name: 'binge-data.json', text: JSON.stringify(old) }]);
+  expect(records.map((record) => record.title)).toEqual(['Arrival']);
 });

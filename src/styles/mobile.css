@@ -208,10 +208,9 @@
      matching the existing .artifact-panel precedent below. */
   .rating-artifact { display: none; }
 
-  /* ── Catalog pages (Movies / TV / Books) ────────────────── */
+  /* ── Catalog pages (Movies / TV) ────────────────── */
 
   .catalog-search-row { padding: 0 1rem 0.7rem; }
-  .catalog-search-bar { max-width: none; }
 
   .genre-bar-outer {
     top: calc(56px + env(safe-area-inset-top, 0px));
@@ -240,11 +239,6 @@
   .rating-input-buttons { gap: 6px; }
 
   /* ── Info tab: hero shrinks on short devices (iPhone SE-class) ── */
-  @media (max-height: 700px) and (orientation: portrait) {
-    .mob-detail-hero { height: 32vh; max-height: 240px; }
-  }
-
-  /* ── Book download row: 3 independent actions, not a toggle ── */
 
   /* ── Account Settings: avatar row stacks instead of overflowing ──
      .avatar-upload-row is a plain flex row with no wrap; at narrow
@@ -261,44 +255,6 @@
     max-width: 100%;
   }
   .settings-card { padding: 1.25rem; }
-
-  /* ── Detail overlays → bottom sheets, glass-panel colored ──
-     .mob-detail-overlay is deliberately excluded: it's already a
-     full-screen fixed overlay (MobileMediaDetail/MobileBookDetail),
-     not a centered modal that needs bottom-sheet conversion. Including
-     it here set align-items:flex-end on its flex-column layout, which
-     made the hero image and header content shrink-wrap to their content
-     width and hug the right edge instead of stretching full-width. */
-  .manga-detail-overlay {
-    align-items: flex-end !important;
-    padding: 0 !important;
-  }
-
-  .manga-detail-modal {
-    background: #141821 !important;
-    border: 1px solid var(--exp-border, rgba(255, 255, 255, 0.09)) !important;
-    border-bottom: none !important;
-    border-radius: 20px 20px 0 0 !important;
-    max-height: 92dvh !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  /* Drag handle */
-  .manga-detail-modal::before {
-    content: '';
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.2);
-    margin: 10px auto 0;
-    flex-shrink: 0;
-  }
 
   /* ── Admin (usable, not optimized) ──────────────────────── */
   table {
@@ -612,8 +568,6 @@
     padding-bottom: 0;
   }
 
-  .manga-reader-overlay { flex-direction: row; }
-  .manga-reader-body { flex: 1; }
 }
 
 /* ═══════════════════════════════════════════════════════════════

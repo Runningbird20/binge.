@@ -1,5 +1,5 @@
 import { Link, Navigate } from 'react-router-dom';
-import { Books, Sparkle, Subtitles, Trophy } from '@phosphor-icons/react';
+import { FilmSlate, Sparkle, Subtitles, Trophy } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import { getDefaultRouteForUserType } from '../utils/userAccess';
 
@@ -20,9 +20,9 @@ const FEATURES = [
     body: 'NFL to the Premier League in league rows — every stream for a game in one place, with a simple server switch.',
   },
   {
-    Icon: Books,
-    title: 'Movies, series and books',
-    body: 'Track what you finish across everything you watch and read, with one taste profile behind all of it.',
+    Icon: FilmSlate,
+    title: 'Movies and series together',
+    body: 'Track what you finish across everything you watch, with one taste profile behind all of it.',
   },
 ];
 
@@ -46,9 +46,9 @@ export default function Landing() {
       >
         <div className="landing-hero-overlay lp-hero-overlay" aria-hidden="true" />
         <div className="landing-hero-content lp-hero-content">
-          <h1 className="landing-hero-title lp-title">Everything you watch and read, in one place.</h1>
+          <h1 className="landing-hero-title lp-title">Everything you watch, in one place.</h1>
           <p className="landing-hero-subtitle lp-subtitle">
-            Movies, series, books and live sports — with picks made for you, not for everyone.
+            Movies, series and live sports — with picks made for you, not for everyone.
           </p>
           <div className="lp-actions">
             <Link to="/signup" className="genre-chip st-pill-link lp-cta btn-text-action">Request an Account</Link>

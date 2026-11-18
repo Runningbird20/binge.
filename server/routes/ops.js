@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { serviceClient, userFromRequest, adminOnly } = require('../middleware/supabaseAdmin');
 const cron = require('./cron');
-const { databaseReport } = require('./databaseHealth');
+const { databaseReport } = require('../utils/databaseHealth');
 
 const router = express.Router();
 

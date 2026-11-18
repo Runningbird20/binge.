@@ -12,11 +12,11 @@ const catalogDb = require('../server/catalogDb');
 
 // Keep in sync with turso/schema.sql and MEDIA_TABLES in src/utils/mediaDatabase.js.
 const MEDIA = [
-  'movies', 'tv_shows', 'books',
-  'movie_genres', 'tv_show_genres', 'book_genres',
+  'movies', 'tv_shows',
+  'movie_genres', 'tv_show_genres',
   'title_ratings', 'episode_ratings_cache', 'subtitle_cache',
 ];
-const CATALOG_INTERNAL = /^(catalog_genres|catalog_stats|(movies|tv_shows|books)_(text_)?fts(_(data|idx|docsize|config))?)$/;
+const CATALOG_INTERNAL = /^(catalog_genres|catalog_stats|(movies|tv_shows)_(text_)?fts(_(data|idx|docsize|config))?)$/;
 const ENGINE_INTERNAL = /^(sqlite_|libsql_|_litestream)/;
 
 async function tursoExtras() {

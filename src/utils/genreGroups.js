@@ -35,21 +35,6 @@ export const TV_GENRE_GROUPS = [
   { label: 'Western', match: ['Western'] },
 ];
 
-export const BOOK_GENRE_GROUPS = [
-  { label: 'Fiction & Literature', match: ['Fiction', 'Literature', 'Literary Fiction', 'Classics'] },
-  { label: 'Fantasy & Sci-Fi', match: ['Fantasy', 'Science Fiction', 'Sci-Fi'] },
-  { label: 'Mystery & Thriller', match: ['Mystery', 'Thriller', 'Suspense', 'Crime'] },
-  { label: 'Romance', match: ['Romance'] },
-  { label: 'Horror', match: ['Horror'] },
-  { label: 'Biography & Memoir', match: ['Biography', 'Autobiography', 'Memoir'] },
-  { label: 'History & Politics', match: ['History', 'Politics'] },
-  { label: 'Business & Self-Help', match: ['Business', 'Self-Help', 'Self Help', 'Personal Development'] },
-  { label: 'Science & Nature', match: ['Science', 'Nature'] },
-  { label: 'Children & Young Adult', match: ['Children', "Children's", 'Young Adult', 'YA'] },
-  { label: 'Poetry & Drama', match: ['Poetry', 'Drama', 'Plays'] },
-  { label: 'Religion & Philosophy', match: ['Religion', 'Philosophy', 'Spirituality'] },
-];
-
 // Every catalog probe returns a fresh genre-facets array even when the
 // content hasn't changed. Callers store facets in state that feeds the chip
 // list, which the fetch effect depends on (indirectly) — replacing that

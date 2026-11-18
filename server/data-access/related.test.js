@@ -21,15 +21,10 @@ const shows = [
   { title: 'Breaking Bad', overview: 'A chemistry teacher turns to making meth.', year: 2008, popularity: 120, poster_url: 'p', source_key: 'tmdb:tv:1396' },
   { title: 'Better Call Saul', overview: 'A lawyer, years before Breaking Bad.', year: 2015, popularity: 90, poster_url: 'p', source_key: 'tmdb:tv:60059' },
 ];
-const books = [
-  { title: 'Old Heist', synopsis: 'A heist in 1920.', year: 1920, source_key: 'ol:a' },
-  { title: 'New Heist', synopsis: 'A heist in 2020.', year: 2020, source_key: 'ol:b' },
-  { title: 'Undated Heist', synopsis: 'A heist.', source_key: 'ol:c' },
-];
 
 test.before(async () => {
   await applySchema(catalogDb.getClient());
-  for (const [table, values] of [['movies', movies], ['tv_shows', shows], ['books', books]]) {
+  for (const [table, values] of [['movies', movies], ['tv_shows', shows]]) {
     const result = await executeQuery({ table, operation: 'insert', values }, { trusted: true });
     assert.equal(result.error, null);
   }
@@ -49,21 +44,20 @@ test('finds description matches, best rated first, only listed titles with poste
   assert.equal(found[0].overview, undefined); // the description isn't sent back
 });
 
-test('series newest first, books newest first and dated only', async () => {
+test('series newest first; an unknown type (books, removed 2026-11-18) is ignored', async () => {
   const result = await searchRelated('breaking bad', ['tv', 'books']);
   assert.deepEqual(result.tv.map((r) => r.title), ['Better Call Saul']);
   assert.deepEqual(result.movies, []);
-  const { books: found } = await searchRelated('heist', ['books']);
-  assert.deepEqual(found.map((r) => r.title), ['New Heist', 'Old Heist']);
+  assert.deepEqual(await searchRelated('heist', ['books']), { movies: [], tv: [] });
 });
 
 test('each table is read through an index, never scanned whole', async () => {
   for (const [kind, { sql }] of Object.entries(TABLES)) {
     const { rows } = await catalogDb.query(`EXPLAIN QUERY PLAN ${sql}`, ['"x"', 10000, 8]);
     const plan = rows.map((r) => r.detail).join('; ');
-    assert.match(plan, /USING (COVERING )?INDEX (movies_popularity|tv_shows_popularity|books_year)/, `${kind}: ${plan}`);
+    assert.match(plan, /USING (COVERING )?INDEX (movies_popularity|tv_shows_popularity)/, `${kind}: ${plan}`);
     assert.match(plan, /VIRTUAL TABLE INDEX/, `${kind}: ${plan}`); // the word index
-    assert.doesNotMatch(plan, /SCAN (movies|tv_shows|books)\b(?! USING)/, `${kind}: ${plan}`);
+    assert.doesNotMatch(plan, /SCAN (movies|tv_shows)\b(?! USING)/, `${kind}: ${plan}`);
     assert.doesNotMatch(plan, /SCAN m\b(?! USING)/, `${kind}: ${plan}`);
   }
 });

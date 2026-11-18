@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MagnifyingGlass, Plus, ShieldCheck, Trash, X } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ago } from './AdminServers';
+import { timeAgo } from '../../utils/timeAgo';
 
 const NEW_USER = { username: '', email: '', password: '', bio: '', isAdmin: false };
 const FILTERS = [
@@ -196,9 +196,9 @@ export default function AdminUsersPanel() {
                       </span>
                     </span>
                   </th>
-                  <td title={u.created_at ? new Date(u.created_at).toLocaleString() : ''}>{u.created_at ? ago(u.created_at) : '—'}</td>
+                  <td title={u.created_at ? new Date(u.created_at).toLocaleString() : ''}>{u.created_at ? timeAgo(u.created_at) : '—'}</td>
                   <td title={u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : ''}>
-                    {u.last_sign_in_at ? ago(u.last_sign_in_at) : <span className="adm-muted">never</span>}
+                    {u.last_sign_in_at ? timeAgo(u.last_sign_in_at) : <span className="adm-muted">never</span>}
                   </td>
                   <td><span className={`adm-pill${u.is_public ? ' on' : ''}`}>{u.is_public ? 'Public' : 'Private'}</span></td>
                   <td>

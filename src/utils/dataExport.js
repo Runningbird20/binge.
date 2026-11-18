@@ -1,6 +1,6 @@
 // "Download my data" (Profile page): the active profile's ratings, My List,
 // watch history and episode progress, zipped as
-//   binge-data.json           everything, including series, books and episodes
+//   binge-data.json           everything, including series and episodes
 //   letterboxd/ratings.csv    films only, in Letterboxd's export format (plus
 //   letterboxd/watched.csv    tmdbID), so they also import into Letterboxd
 //   letterboxd/watchlist.csv
@@ -16,7 +16,7 @@ export const EXPORT_FORMAT = 'binge-export';
 const EXPORT_VERSION = 1;
 const PAGE = 1000; // Supabase returns at most 1000 rows per request
 const ENRICH_BATCH = 400; // catalog lookups answer up to 1000 rows
-const TYPE = { movie: 'movie', tv_show: 'tv', book: 'book' };
+const TYPE = { movie: 'movie', tv_show: 'tv' };
 
 // ── Reading ────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ function title(record) {
     type: TYPE[record.media_type] || record.media_type,
     title: record.title || null,
     year: record.year ?? null,
-    tmdb_id: record.media_type === 'book' ? null : tmdbIdFromItem(record),
+    tmdb_id: tmdbIdFromItem(record),
     binge_id: Number(record.media_id),
   };
 }

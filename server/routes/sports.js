@@ -21,9 +21,6 @@ const CACHE_TTL = 60 * 1000;
 let cache = null;
 let cacheTime = 0;
 
-const RESOLVE_CACHE_TTL = 30 * 1000;
-const resolveCache = new Map();
-
 // Only fetching + normalizing happens here (sportsFeeds.js, the same code the
 // browser runs); the fuzzy one-entry-per-game merge runs client-side on this raw
 // list, so that matching logic exists in exactly one place. The server waits
@@ -69,38 +66,6 @@ router.get('/streams', async (req, res) => {
   } catch (err) {
     console.error('[sports]', err.message);
     res.status(502).json({ error: 'Sports streams unavailable', details: err.message });
-  }
-});
-
-router.get('/resolve/streamed/:source/:matchId', async (req, res) => {
-  const { source, matchId } = req.params;
-  // ?all=1: every stream of this source (numbered feeds, HD and SD,
-  // commentary languages), not just the best one.
-  const all = req.query.all === '1';
-  const cacheKey = `${source}/${matchId}`;
-  const cached = resolveCache.get(cacheKey);
-  if (cached && Date.now() - cached.time < RESOLVE_CACHE_TTL) {
-    return res.json(all ? { embedUrl: cached.embedUrl, streams: cached.streams } : { embedUrl: cached.embedUrl });
-  }
-
-  try {
-    const upstream = await fetch(
-      `https://streamed.pk/api/stream/${encodeURIComponent(source)}/${encodeURIComponent(matchId)}`,
-      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) },
-    );
-    if (!upstream.ok) throw new Error(`streamed.pk ${upstream.status}`);
-    const list = await upstream.json();
-    if (!Array.isArray(list) || list.length === 0) throw new Error('no streams for source');
-    const best = list.find((s) => s.hd) || list[0];
-    const embedUrl = best.embedUrl || null;
-    const streams = list
-      .filter((s) => typeof s.embedUrl === 'string')
-      .map((s) => ({ embedUrl: s.embedUrl, streamNo: s.streamNo, hd: Boolean(s.hd), language: s.language || '' }));
-    resolveCache.set(cacheKey, { embedUrl, streams, time: Date.now() });
-    res.json(all ? { embedUrl, streams } : { embedUrl });
-  } catch (err) {
-    console.error('[sports] resolve streamed', err.message);
-    res.status(502).json({ error: 'Could not resolve stream', details: err.message });
   }
 });
 

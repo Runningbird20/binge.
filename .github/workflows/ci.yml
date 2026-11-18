@@ -44,7 +44,7 @@ jobs:
         run: npx react-scripts test --watchAll=false
 
       - name: Server tests
-        run: node --test server/data-access/*.test.js server/routes/*.test.js
+        run: npm run test:server
 
       - name: Lint (warnings fail it)
         run: npm run lint

@@ -1,31 +1,26 @@
 import { useContext, useRef, useState } from 'react';
 import { Check, Play, SquaresFour } from '@phosphor-icons/react';
-import { expandStreamProviders } from '../../utils/sportsProviders';
 import { hostOf, reachabilityMap } from '../../utils/hostReachability';
 import { MULTIVIEW_MAX, teamsInNameOrder, timeUntil, getStatus, statusLabel, scoreWords } from './gameInfo';
 import { HideScores } from './HideScores';
 import { CatIcon } from './CatIcon';
 import { conferenceLogo, leagueLogo } from './leagueLogos';
 
-// Warms a game while the pointer rests on its card: expands its servers
-// (cached) and probes their hosts, so opening it starts the stream at once.
+// Warms a game while the pointer rests on its card: connects to its servers'
+// hosts and probes them, so opening it starts the stream at once.
 const warmed = new Set();
 
 function warmGame(stream) {
   if (warmed.has(stream.id)) return;
   warmed.add(stream.id);
-  expandStreamProviders(stream.providers)
-    .then((list) => {
-      const hosts = [...new Set(list.map((provider) => hostOf(provider.embedUrl)).filter(Boolean))];
-      hosts.slice(0, 3).forEach((host) => {
-        const link = document.createElement('link');
-        link.rel = 'preconnect';
-        link.href = `https://${host}`;
-        document.head.appendChild(link);
-      });
-      return reachabilityMap(hosts);
-    })
-    .catch(() => warmed.delete(stream.id));
+  const hosts = [...new Set(stream.providers.map((provider) => hostOf(provider.embedUrl)).filter(Boolean))];
+  hosts.slice(0, 3).forEach((host) => {
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = `https://${host}`;
+    document.head.appendChild(link);
+  });
+  reachabilityMap(hosts).catch(() => warmed.delete(stream.id));
 }
 
 // The colors a game's art falls back to when no feed or ESPN has the teams'.
