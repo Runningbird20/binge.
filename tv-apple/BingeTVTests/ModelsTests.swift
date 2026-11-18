@@ -322,6 +322,54 @@ private func title(_ kind: MediaKind = .movie, id: Int = 1, name: String = "T", 
     }
 }
 
+// The notification inbox (Data/Inbox.swift): the website's links, read on the TV.
+@Suite struct InboxTests {
+    @Test func newEpisodeAlertPlaysThatEpisode() throws {
+        let link = try #require(DeepLink(sitePath: "/tv-show/34?play=1&season=2&episode=5"))
+        #expect(link.play)
+        #expect(link.kind == .tvShow)
+        #expect(link.id == 34)
+        #expect(link.season == 2)
+        #expect(link.episode == 5)
+    }
+
+    @Test func reminderAndTitleLinks() throws {
+        let reminder = try #require(DeepLink(sitePath: "/movie/12?play=1&reminder=7"))
+        #expect(reminder.play && reminder.kind == .movie && reminder.id == 12 && reminder.season == nil)
+        let page = try #require(DeepLink(sitePath: "/movie/12"))
+        #expect(!page.play)
+        #expect(DeepLink(sitePath: "/movie/12?t=300")?.seconds == 300)
+    }
+
+    @Test(arguments: ["/sports", "/admin?tab=servers", "/", "/movie/abc", "/movie/1/extra", "/book/3", "https://example.com/movie/1"])
+    func notATitle(_ path: String) {
+        #expect(DeepLink(sitePath: path) == nil)
+    }
+
+    @Test func destinations() throws {
+        #expect(InboxDestination(sitePath: "/sports") == .sports)
+        #expect(InboxDestination(sitePath: "/admin?tab=servers") == nil)
+        let link = try #require(DeepLink(sitePath: "/movie/12"))
+        #expect(InboxDestination(sitePath: "/movie/12") == .title(link))
+    }
+
+    @Test func decodesARowAsSupabaseSendsIt() throws {
+        let json = """
+        [{"id": 9, "kind": "episode", "title": "New episode of Severance", "body": "S2 E5 is out", "url": "/tv-show/34?play=1&season=2&episode=5",
+          "created_at": "2026-11-18T12:34:56.123456+00:00", "read_at": null}]
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let alert = try #require(try decoder.decode([InboxAlert].self, from: Data(json.utf8)).first)
+        #expect(alert.unread)
+        #expect(alert.symbol == "tv")
+        #expect(alert.opens == .title(try #require(DeepLink(sitePath: "/tv-show/34?play=1&season=2&episode=5"))))
+        // Postgres's microseconds still parse.
+        let created = try #require(alert.created)
+        #expect(Int(created.timeIntervalSince1970) == 1_795_005_296)
+    }
+}
+
 @Suite struct TMDBImageTests {
     @Test func image() {
         #expect(TMDB.image("/abc.jpg")?.absoluteString == "https://image.tmdb.org/t/p/w500/abc.jpg")

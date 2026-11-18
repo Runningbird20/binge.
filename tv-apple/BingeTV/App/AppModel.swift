@@ -18,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published var lockCheckError: String?
     // From Top Shelf (binge:// links); Home opens it once a profile is set.
     @Published var deepLink: DeepLink?
+    // A tab to switch to (an alert about your team's game opens Sports).
+    @Published var openTab: String?
     // Debug-only: browse without an account (-BingeDemo launch argument).
     @Published private(set) var isDemo = false
 

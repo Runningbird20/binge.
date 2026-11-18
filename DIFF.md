@@ -119,7 +119,6 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
 | Push notifications (new episodes, reminders, admin broadcasts) | ✓ | ✓ | — | — | iPhones need the site installed to the Home Screen. |
-| Notification inbox (the bell) | ✓ | ✓ | — | — | `NotificationBell`: the last 30 days of alerts (`notifications`), with unread dots. Left of the profile on computers; on phones, the header's top right, opening a sheet. |
 | Announcements banner | ✓ | ✓ | ◐ | ◐ | TV apps: Home, Movies, Series and Sports; links are shown as text (a TV can't open them). |
 | Error reporting to the admin panel | ✓ | ✓ | ✓ | ✓ | TV apps: crashes (sent on the next launch) and "no server could play" (Apple TV `CrashReporter.swift`, Fire TV `data/Ops.kt`). |
 | Offline banner, app shortcuts, share to binge. | ✓ | ✓ | — | — | PWA features. Sharing links to binge. is mostly used on phones. |

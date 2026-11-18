@@ -272,7 +272,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 
 - **Continue Watching:**
   - **Season notes.** "2 episodes left in Season 3", "Season 4 starts Friday" (`utils/seasonStatus.js` / TV `Data/SeasonStatus.swift`, same rules).
-  - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. Apple TV applies the same rule (`finishedShows`); Fire TV doesn't yet.
+  - **Finished shows are hidden** (here and on the spotlight's resume slide), using the same TMDB details. A show is finished when its newest aired episode (`last_episode_to_air`) is marked watched in `episode_progress` (`fetchWatchedAmong`) and no position is saved where the row points (`hasSavedPosition`, `utils/continueWatching.js`). New Episodes and the calendar still get the full list, so a new episode brings the show back. The TV apps apply the same rule (Apple TV `finishedShows`, Fire TV `EpisodeStore.finished`).
   - **Links carry `&t=`.** Continue Watching links include the saved second (see the web player).
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
 - **Opens instantly on a return visit.** Home's stats and personal rows, its Top 10s and the Movies/Series rows are kept on the device for a week (`utils/keptCache.js`, `TitleRow keepKey`), painted at once and refreshed; signing out clears them.
@@ -484,6 +484,7 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
   - **Access.** RLS lets a user read their own rows and change only `read_at`; the service role writes them. The daily new-episodes cron deletes rows past 30 days.
   - **Empty or missing.** No alerts reads "All caught up". So does a Supabase without the table yet (`PGRST205`, before the migration runs), with a console hint naming the migration. Any other failed load shows "Couldn't load" with Try again.
   - **Freshness.** The list reloads on a profile switch, every 5 minutes while visible, and when the tab returns or the bell opens, unless the last load is under a minute old.
+  - **On the TV apps** (`Data/Inbox.swift`, `data/Inbox.kt`): Me → Notifications, first in the list, with a dot on the Me tab while anything is unread. Same query and read marks as the website, so an alert read on one is read on all. Opening one plays or opens what its link names (`/movie/…`, `/tv-show/…?play=1&season=&episode=`) or switches to Sports for `/sports`; other links (admin pages, announcements') only mark it read.
 - **Release calendar** (`/calendar`, `utils/releaseCalendar.js`): next episodes and premieres of My List + Continue Watching shows, upcoming list movies, and Coming Soon. The `.ics` export uses the share sheet on phones and downloads a file on computers.
 
 ### Wrapped & ticket book

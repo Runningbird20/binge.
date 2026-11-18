@@ -226,9 +226,10 @@ fun HomeScreen() {
             Pill("Remove from row", icon = Icons.Rounded.Close) {
                 menuFor = null
                 // Focus stays in the row, on the card next to the removed one
-                // (it used to jump up to the spotlight's Play button).
-                val index = continueItems.indexOfFirst { it.id == item.id }
-                refocusId = (continueItems.getOrNull(index + 1) ?: continueItems.getOrNull(index - 1))?.id
+                // (it used to jump up to the spotlight's Play button). Next to it
+                // in the row as shown: a finished show's card isn't there.
+                val index = visibleContinue.indexOfFirst { it.id == item.id }
+                refocusId = (visibleContinue.getOrNull(index + 1) ?: visibleContinue.getOrNull(index - 1))?.id
                 continueItems = continueItems.filter { it.id != item.id }; HomeCache.continueItems = continueItems
                 scope.launch { AppModel.removeFromContinue(item.title) }
             }

@@ -1,5 +1,6 @@
 package com.binge.tv.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,21 +20,30 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ClosedCaption
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,6 +73,9 @@ import com.binge.tv.data.Catalog
 import com.binge.tv.data.Config
 import com.binge.tv.data.ContinueItem
 import com.binge.tv.data.ContinueRow
+import com.binge.tv.data.Inbox
+import com.binge.tv.data.InboxAlert
+import com.binge.tv.data.InboxLink
 import com.binge.tv.data.IsoDate
 import com.binge.tv.data.MediaKind
 import com.binge.tv.data.PlaybackPrefs
@@ -72,6 +85,7 @@ import com.binge.tv.data.Supabase
 import com.binge.tv.data.Title
 import com.binge.tv.data.Tmdb
 import com.binge.tv.data.TmdbDetails
+import com.binge.tv.player.PlayRequest
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
@@ -84,7 +98,7 @@ import java.util.Locale
 fun MeScreen() {
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { TabChrome.atTop = true }
-    // Focus enters on the list (My List & Ratings), never on Sign out or Quit.
+    // Focus enters on the list (Notifications), never on Sign out or Quit.
     val listFirst = remember { FocusRequester() }
     var confirmQuit by remember { mutableStateOf(false) }
     // The shell's focus container enters at the top-left item (Sign out), so
@@ -115,7 +129,12 @@ fun MeScreen() {
         }
         // A plain list, like Android TV settings: no tile grid.
         LazyColumn(Modifier.weight(1f).focusRequester(listGroup).focusRestorer { listFirst }.onFocusChanged { if (it.hasFocus) entered = true }, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 30.dp)) {
-            item { MeRow("My List & Ratings", "What you saved and what you rated", Icons.Rounded.Bookmarks, Modifier.focusRequester(listFirst)) { Nav.push(Screen.Library) } }
+            item {
+                val unread = Inbox.unreadIds.size
+                MeRow("Notifications", if (unread > 0) "$unread unread" else "Alerts from the last ${InboxAlert.DAYS} days", Icons.Rounded.Notifications,
+                    Modifier.focusRequester(listFirst), dot = unread > 0) { Nav.push(Screen.Notifications) }
+            }
+            item { MeRow("My List & Ratings", "What you saved and what you rated", Icons.Rounded.Bookmarks) { Nav.push(Screen.Library) } }
             item { MeRow("History", "Everything you've started", Icons.Rounded.History) { Nav.push(Screen.History) } }
             item { MeRow("Calendar", "Upcoming episodes and releases", Icons.Rounded.CalendarMonth) { Nav.push(Screen.Calendar) } }
             item { MeRow("Wrapped", "Your year on binge.", Icons.Rounded.AutoAwesome) { Nav.push(Screen.Wrapped) } }
@@ -127,12 +146,14 @@ fun MeScreen() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun MeRow(title: String, detail: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+// dot: a gold dot before the detail (unread notifications: state).
+private fun MeRow(title: String, detail: String, icon: ImageVector, modifier: Modifier = Modifier, dot: Boolean = false, onClick: () -> Unit) {
     ListItem(
         selected = false, onClick = onClick, modifier = modifier.rememberFocus(),
         headlineContent = { Text(title, style = Type.headline) },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (dot) Box(Modifier.padding(end = 8.dp).size(7.dp).background(Palette.gold, CircleShape))
                 Text(detail, style = Type.callout, color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.62f))
                 Icon(Icons.Rounded.ChevronRight, null, modifier = Modifier.size(18.dp))
             }
@@ -151,6 +172,106 @@ private fun PageHeader(title: String, subtitle: String, inset: Boolean = true) {
         Text(title, style = Type.page)
         Text(subtitle, style = Type.callout, color = Palette.muted)
     }
+}
+
+// MARK: Notifications
+
+// The website's bell: the last 30 days of alerts, newest first, a gold dot on
+// the unread ones. Opening one marks it read (on the website too) and goes
+// where it points: the title, the new episode, Sports.
+@Composable
+fun NotificationsScreen() {
+    val scope = rememberCoroutineScope()
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { Inbox.refresh(force = true) }
+    val alerts = Inbox.alerts
+    // Focus goes to the newest alert once there is one.
+    LaunchedEffect(alerts.isNullOrEmpty()) {
+        if (!alerts.isNullOrEmpty()) { kotlinx.coroutines.delay(80); runCatching { first.requestFocus() } }
+    }
+
+    fun open(alert: InboxAlert) {
+        Inbox.markRead(listOf(alert.id))
+        when (val link = alert.opens) {
+            is InboxLink.Open -> scope.launch {
+                val title = runCatching { Catalog.titles(link.kind, listOf(link.id))[link.id] }.getOrNull() ?: return@launch
+                if (!AppModel.maturity.allows(title.ageRating)) return@launch
+                val tv = link.kind == MediaKind.TV
+                if (link.play) Nav.play(PlayRequest(title, if (tv) link.season ?: 1 else null, if (tv) link.episode ?: 1 else null, link.seconds))
+                else Nav.open(title)
+            }
+            InboxLink.Sports -> TabChrome.openTab = "sports"
+            null -> Unit
+        }
+    }
+
+    LazyColumn(Modifier.fillMaxSize().focusRestorer(), verticalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(start = Dimens.edge, end = Dimens.edge, bottom = 40.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.Bottom) {
+                PageHeader("Notifications", "The last ${InboxAlert.DAYS} days. Opening one marks it read on the website too.", inset = false)
+                Grow()
+                if (Inbox.unreadIds.isNotEmpty()) {
+                    Pill("Mark all read", Modifier.padding(bottom = 10.dp), icon = Icons.Rounded.DoneAll) {
+                        Inbox.markRead(Inbox.unreadIds)
+                        runCatching { first.requestFocus() }
+                    }
+                }
+            }
+        }
+        when {
+            alerts == null && Inbox.failed -> item {
+                ProblemView("Couldn't load your notifications.") { scope.launch { Inbox.refresh(force = true) } }
+            }
+            alerts == null -> items(4) {
+                Box(Modifier.fillMaxWidth().height(64.dp).background(Palette.surface, RoundedCornerShape(10.dp)))
+            }
+            alerts.orEmpty().isEmpty() -> item {
+                Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("All caught up", style = Type.headline)
+                    }
+                    Text("New episodes, reminders, your teams' games and announcements show up here.", style = Type.body, color = Palette.muted)
+                }
+            }
+            else -> {
+                val shown = alerts.orEmpty()
+                items(shown, key = { it.id }) { alert ->
+                    AlertRow(alert, if (alert.id == shown.first().id) Modifier.focusRequester(first) else Modifier) { open(alert) }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AlertRow(alert: InboxAlert, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val icon = when (alert.kind) {
+        "episode" -> Icons.Rounded.Tv
+        "reminder" -> Icons.Rounded.Alarm
+        "game" -> Icons.Rounded.EmojiEvents
+        "announcement" -> Icons.Rounded.Campaign
+        "server" -> Icons.Rounded.Dns
+        else -> Icons.Rounded.Notifications
+    }
+    ListItem(
+        selected = false, onClick = onClick, modifier = modifier.rememberFocus(),
+        headlineContent = { Text(alert.title, style = Type.headline, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        supportingContent = {
+            val faint = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.62f)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (alert.body.isNotEmpty()) Text(alert.body, style = Type.callout, color = faint, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                alert.createdMillis?.let { Text(relative(it), style = Type.caption, color = faint) }
+            }
+        },
+        leadingContent = { Icon(icon, null, modifier = Modifier.size(20.dp)) },
+        trailingContent = { if (alert.unread) Box(Modifier.size(8.dp).background(Palette.gold, CircleShape)) },
+        colors = ListItemDefaults.colors(containerColor = Color.White.copy(alpha = 0.05f), focusedContainerColor = Color.White, focusedContentColor = Color.Black),
+        shape = ListItemDefaults.shape(RoundedCornerShape(10.dp)),
+    )
 }
 
 // MARK: History
