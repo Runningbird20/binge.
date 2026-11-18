@@ -120,7 +120,12 @@ enum ISODate {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f
     }()
     private static let plain = ISO8601DateFormatter()
-    static func parse(_ text: String) -> Date? { withFraction.date(from: text) ?? plain.date(from: text) }
+    static func parse(_ text: String) -> Date? {
+        if let date = withFraction.date(from: text) ?? plain.date(from: text) { return date }
+        // Postgres sends microseconds (.123456); the formatter reliably reads milliseconds.
+        let trimmed = text.replacingOccurrences(of: #"(\.\d{3})\d+"#, with: "$1", options: .regularExpression)
+        return trimmed == text ? nil : withFraction.date(from: trimmed)
+    }
 }
 
 struct ContinueItem: Identifiable, Hashable, Codable {

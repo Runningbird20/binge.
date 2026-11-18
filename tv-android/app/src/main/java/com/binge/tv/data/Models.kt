@@ -111,8 +111,10 @@ object IsoDate {
         return null
     }
 
-    fun now(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(System.currentTimeMillis())
+    fun now(): String = of(System.currentTimeMillis())
+
+    fun of(ms: Long): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(ms)
 
     fun day(text: String?): Long? = text?.take(10)?.let {
         runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it)?.time }.getOrNull()

@@ -78,8 +78,10 @@ struct RootView: View {
 
 struct MainTabs: View {
     @EnvironmentObject private var app: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var tab = DebugLaunch.tab ?? "home"
     @ObservedObject private var ambient = AmbientStore.shared
+    @ObservedObject private var inbox = InboxStore.shared
     @State private var ambientPlay: PlayRequest?
 
     var body: some View {
@@ -103,12 +105,29 @@ struct MainTabs: View {
                 .tag("search")
             NavigationStack { MeView() }
                 .tabItem { Label(app.profile?.name ?? "Me", systemImage: "person.crop.circle") }
+                // Unread notifications, like the dot on the website's bell.
+                .badge(inbox.unreadIds.count)
                 .tag("me")
         }
         #if DEBUG
         .overlay { DebugLaunch.overlay() }
         #endif
         .onChange(of: app.deepLink) { _, link in if link != nil { tab = "home" } }
+        .onChange(of: app.openTab) { _, next in
+            guard let next else { return }
+            app.openTab = nil
+            if next != "sports" || !app.isKids { tab = next }
+        }
+        // The inbox: now, every 5 minutes, and when the app comes back.
+        .task {
+            while !Task.isCancelled {
+                await inbox.refresh(app)
+                try? await Task.sleep(for: .seconds(300))
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await inbox.refresh(app) } }
+        }
         // Ambient mode after a few idle minutes (AmbientStore).
         .fullScreenCover(isPresented: $ambient.showing) {
             AmbientView(titles: ambient.titles,

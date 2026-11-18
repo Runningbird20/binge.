@@ -173,6 +173,7 @@ struct SearchView: View {
 struct MeView: View {
     @EnvironmentObject private var app: AppModel
     @ObservedObject private var pip = PiPController.shared
+    @ObservedObject private var inbox = InboxStore.shared
     @State private var wrappedOpen = UserDefaults.standard.bool(forKey: "BingeOpenWrapped")
 
     var body: some View {
@@ -202,6 +203,7 @@ struct MeView: View {
             // A plain tvOS list, like Settings: no tile grid.
             List {
                 Section {
+                    notificationsRow
                     row("My List & Ratings", "bookmark", "What you saved and what you rated") { LibraryView() }
                     row("History", "clock.arrow.circlepath", "Everything you've started") { HistoryView() }
                     row("Calendar", "calendar", "Upcoming episodes and releases") { CalendarView() }
@@ -242,6 +244,30 @@ struct MeView: View {
         .padding(.vertical, 40)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fullScreenCover(isPresented: $wrappedOpen) { WrappedView() }
+        .task { await inbox.refresh(app) }
+    }
+
+    // Notifications, with how many are unread (a gold dot: unread is state).
+    private var notificationsRow: some View {
+        NavigationLink {
+            NotificationsView()
+        } label: {
+            HStack(spacing: 24) {
+                Label {
+                    Text("Notifications")
+                } icon: {
+                    Image(systemName: "bell").foregroundStyle(.white)
+                }
+                Spacer()
+                let unread = inbox.unreadIds.count
+                if unread > 0 {
+                    Circle().fill(Theme.gold).frame(width: 14, height: 14).accessibilityHidden(true)
+                    Text("\(unread) unread").foregroundStyle(.secondary)
+                } else {
+                    Text("Alerts from the last \(InboxAlert.days) days").foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private func row<Destination: View>(_ title: String, _ icon: String, _ detail: String,

@@ -83,6 +83,7 @@ sealed class Screen {
     object Settings : Screen()
     object Wrapped : Screen()
     object Library : Screen()
+    object Notifications : Screen()
     data class Person(val id: Int, val name: String) : Screen()
 }
 
@@ -128,6 +129,9 @@ object TabChrome {
     // A page whose layout the shell's focus restore can't handle (Me's two
     // columns) sets where ▼ from the tab bar goes. Returns true if it took focus.
     var pageEntry: (() -> Boolean)? = null
+    // A tab to switch to, closing the pages on top (an alert about your
+    // team's game opens Sports).
+    var openTab by mutableStateOf<String?>(null)
 }
 
 @Composable
@@ -162,6 +166,18 @@ private fun Shell() {
     }
     var selected by remember(AppModel.profile?.id) { mutableIntStateOf(tabs.indexOfFirst { it.id == com.binge.tv.DebugLaunch.tab }.coerceAtLeast(0)) }
     LaunchedEffect(Unit) { debugOpen() }
+    // The inbox: now and every 5 minutes, for the Me tab's dot and its Notifications row.
+    LaunchedEffect(AppModel.profile?.id) {
+        while (true) { com.binge.tv.data.Inbox.refresh(); kotlinx.coroutines.delay(300_000) }
+    }
+    LaunchedEffect(TabChrome.openTab) {
+        val id = TabChrome.openTab ?: return@LaunchedEffect
+        TabChrome.openTab = null
+        val index = tabs.indexOfFirst { it.id == id }
+        if (index < 0) return@LaunchedEffect
+        while (Nav.stack.isNotEmpty()) Nav.pop()
+        selected = index
+    }
     var tabsFocused by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
     val contentFocus = remember { FocusRequester() }
@@ -232,8 +248,13 @@ private fun Shell() {
                             focusedContentColor = Color.Black, focusedSelectedContentColor = Color.Black,
                         ),
                     ) {
-                        Text(tab.label, style = Type.callout.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tab.label, style = Type.callout.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp))
+                            // Unread notifications, like the dot on the website's bell.
+                            if (tab.id == "me" && com.binge.tv.data.Inbox.unreadIds.isNotEmpty()) {
+                                Box(Modifier.padding(start = 6.dp).size(6.dp).background(Palette.gold, CircleShape))
+                            }
+                        }
                     }
                 }
             }
@@ -312,6 +333,7 @@ private fun ScreenFor(screen: Screen, active: Boolean) {
         Screen.Settings -> SettingsScreen()
         Screen.Wrapped -> WrappedScreen()
         Screen.Library -> LibraryScreen()
+        Screen.Notifications -> NotificationsScreen()
         is Screen.Person -> PersonScreen(screen.id, screen.name)
     }
 }

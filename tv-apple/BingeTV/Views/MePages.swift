@@ -1,7 +1,7 @@
 import SwiftUI
 
-// The website's History, Calendar and Wrapped pages, plus playback
-// settings, under the Me tab.
+// The website's notifications, History, Calendar and Wrapped pages, plus
+// playback settings, under the Me tab.
 
 // MARK: - History
 
@@ -81,6 +81,121 @@ struct HistoryView: View {
                 ] + app.ownerQuery)
             }
         }
+    }
+}
+
+// MARK: - Notifications
+
+// The website's bell: the last 30 days of alerts, newest first, a gold dot on
+// the unread ones. Opening one marks it read (on the website too) and goes
+// where it points: the title, the new episode, Sports.
+struct NotificationsView: View {
+    @EnvironmentObject private var app: AppModel
+    @ObservedObject private var inbox = InboxStore.shared
+    @State private var detail: Title?
+    @State private var playing: PlayRequest?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 30) {
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Notifications").font(.system(size: 54, weight: .heavy))
+                    Text("The last \(InboxAlert.days) days. Opening one marks it read on the website too.")
+                        .font(.callout).foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                if !inbox.unreadIds.isEmpty {
+                    Button { Task { await inbox.markRead(inbox.unreadIds) } } label: {
+                        Label("Mark all read", systemImage: "checkmark")
+                    }
+                }
+            }
+            .focusSection()
+            content
+        }
+        .padding(.vertical, 40)
+        .navigationDestination(item: $detail) { TitleDetailView(title: $0) }
+        .fullScreenCover(item: $playing) { PlayerView(request: $0, app: app) }
+        .task { await inbox.refresh(app, force: true) }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let alerts = inbox.alerts, alerts.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("All caught up", systemImage: "checkmark.circle").font(.headline)
+                Text("New episodes, reminders, your teams' games and announcements show up here.")
+                    .foregroundStyle(Theme.muted)
+            }
+        } else if let alerts = inbox.alerts {
+            // A plain list, like the rest of Me.
+            List {
+                ForEach(alerts) { alert in
+                    Button { open(alert) } label: { AlertRow(alert: alert) }
+                }
+            }
+            .frame(maxWidth: 1400)
+            .focusSection()
+        } else if inbox.failed {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Couldn't load your notifications.").foregroundStyle(Theme.muted)
+                Button("Try again") { Task { await inbox.refresh(app, force: true) } }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(0..<4, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 12).fill(Theme.surface).frame(maxWidth: 1400).frame(height: 120)
+                }
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func open(_ alert: InboxAlert) {
+        Task { await inbox.markRead([alert.id]) }
+        switch alert.opens {
+        case .title(let link):
+            Task {
+                guard let title = try? await Catalog.titles(link.kind, ids: [link.id])[link.id],
+                      app.maturity.allows(title.ageRating) else { return }
+                if link.play {
+                    playing = PlayRequest(title: title, season: link.kind == .tvShow ? (link.season ?? 1) : nil,
+                                          episode: link.kind == .tvShow ? (link.episode ?? 1) : nil, startAt: link.seconds)
+                } else {
+                    detail = title
+                }
+            }
+        case .sports:
+            app.openTab = "sports"
+        case nil:
+            break
+        }
+    }
+}
+
+private struct AlertRow: View {
+    let alert: InboxAlert
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            Image(systemName: alert.symbol).font(.title3).frame(width: 48) // decoration, not state: no accent
+            VStack(alignment: .leading, spacing: 6) {
+                Text(alert.title).font(.headline).lineLimit(2)
+                if !alert.body.isEmpty {
+                    Text(alert.body).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                }
+                if let date = alert.created {
+                    Text(date.formatted(.relative(presentation: .named))).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 20)
+            if alert.unread {
+                Circle().fill(Theme.gold).frame(width: 14, height: 14).padding(.top, 12)
+            }
+        }
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([alert.unread ? "Unread" : nil, alert.title, alert.body.isEmpty ? nil : alert.body,
+                             alert.created?.formatted(.relative(presentation: .named))].compactMap { $0 }.joined(separator: ". "))
     }
 }
 

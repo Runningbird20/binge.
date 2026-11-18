@@ -66,11 +66,6 @@ Checked against the code on 2026-11-18.
 - [ ] **Unit tests for the untested utils.** 35 of 90 `src/utils` modules have no test file. Next, logic that changes what users see: `recommendations`, `catalogQueries`, `franchises`, `profileSettings`, `watchlistStatus`, `aiSearch`.
 - [ ] **Run the signed-in E2E specs.** Create a dedicated test account and set `E2E_EMAIL`/`E2E_PASSWORD` (`.env`). `e2e/catalog.spec.js` (Home and Movies rows have titles from the catalog) and `e2e/profile-pin.spec.js` (PIN set → wrong PIN refused → right PIN opens; removes the PIN after) have never run signed in, nor have the older signed-in specs here.
 
-## TV apps
-
-- [ ] **The notification inbox on Apple TV and Fire TV.** It's on the website only so far (`DIFF.md`). Read the same `notifications` rows and read marks; `src/utils/notificationsInbox.js` has the query.
-- [ ] **Fire TV: hide finished shows in Continue Watching**, as the website (`src/utils/continueWatching.js`) and Apple TV (`finishedShows`) do.
-
 ## Mobile
 
 The phone apps exist (`mobile-android/`, `mobile-ios/`; each builds with its own `scripts/build-apk.sh` / `scripts/build-ipa.sh`, and CI builds both in `mobile-apps.yml`). Next:
