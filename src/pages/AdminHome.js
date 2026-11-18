@@ -15,6 +15,7 @@ import AdminBroadcast from './admin/AdminBroadcast';
 import AdminUsersPanel from './admin/AdminUsersPanel';
 import AdminRequestsPanel from './admin/AdminRequestsPanel';
 import { fetchAdminAccountRequests } from '../utils/accountRequests';
+import { EMBED_SERVERS } from '../utils/embedServers';
 
 const TABS = [
   { id: 'overview', label: 'Overview', Icon: ChartLineUp },
@@ -39,7 +40,9 @@ export default function AdminHome() {
     supabase.rpc('admin_stats').then(({ data }) => {
       if (data) setBadges({ errors: data.errors_24h, devices: data.push_devices });
     });
+    // Servers the player still has: a removed server's last row stays in the table.
     supabase.from('server_status').select('provider', { count: 'exact', head: true }).eq('status', 'down')
+      .in('provider', EMBED_SERVERS.map((server) => server.id))
       .then(({ count }) => setBadges((current) => ({ ...current, servers: count || 0 })));
     fetchAdminAccountRequests()
       .then(({ pending }) => setBadges((current) => ({ ...current, requests: pending || 0 })))

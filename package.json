@@ -34,6 +34,7 @@
     "dev": "npm start",
     "import:backfill-catalog": "node scripts/backfill-catalog-fields.js",
     "supabase:sql": "node scripts/run-supabase-sql.js",
+    "check:sandbox": "node scripts/check-sandbox.js",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "test:server": "node --test \"server/**/*.test.js\"",

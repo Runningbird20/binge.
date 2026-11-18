@@ -16,13 +16,9 @@
 
 import { PROVIDERS } from './embedProviders';
 
-// No allow-popups, allow-popups-to-escape-sandbox, allow-top-navigation*,
-// allow-modals (alert/confirm traps) or allow-downloads. allow-same-origin
-// keeps the player's own storage and CORS requests working; it can't lift
-// the sandbox because the frame is cross-origin. WebKit (Safari, every iPhone
-// browser) doesn't know allow-presentation or allow-orientation-lock: it logs
-// an error and ignores just those two.
-export const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms allow-presentation allow-orientation-lock allow-pointer-lock';
+// The sandbox itself is defined next to the servers (embedServers.js), so
+// scripts/check-sandbox.js tests the same flags.
+export { SANDBOX_FLAGS } from './embedServers';
 
 const KEY = 'binge:popupSandbox:refused';
 export const RETRY_AFTER_MS = 14 * 24 * 60 * 60 * 1000;

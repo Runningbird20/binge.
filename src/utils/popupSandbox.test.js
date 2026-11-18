@@ -45,7 +45,7 @@ test('only servers tested to play sandboxed are sandboxed', () => {
   expect(shouldSandbox('vidrift', true, { storage })).toBe(true);
   // Untested: what it reports can't prove the sandbox works.
   expect(shouldSandbox('newserver', undefined, { storage })).toBe(false);
-  expect(shouldSandbox('2embed', false, { storage })).toBe(false);
+  expect(shouldSandbox('vidlink', false, { storage })).toBe(false);
   expect(shouldSandbox('', true, { storage })).toBe(false);
 });
 
