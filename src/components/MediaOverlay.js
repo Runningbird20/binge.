@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
 import MediaDetailsModal from './MediaDetailsModal';
 import { goBackTo, historyMark } from '../utils/historyBack';
 import { BookDetailsModal } from './books/BookDetailsModal';
@@ -19,9 +18,9 @@ import {
 } from '../utils/catalogQueries';
 
 const CONFIG = {
-  movie:    { fetchById: fetchMovieById, apiPath: 'movies',    homePath: '/movies' },
-  tv_show:  { fetchById: fetchTvShowById, apiPath: 'tv-shows', homePath: '/tv-shows' },
-  book:     { fetchById: fetchBookById,   apiPath: 'books',    homePath: '/books' },
+  movie:    { fetchById: fetchMovieById,  homePath: '/movies' },
+  tv_show:  { fetchById: fetchTvShowById, homePath: '/tv-shows' },
+  book:     { fetchById: fetchBookById,   homePath: '/books' },
 };
 
 // Renders a movie/TV/book details modal as an overlay on top of whatever
@@ -56,11 +55,6 @@ export default function MediaOverlay({ mediaType }) {
     async function load() {
       try {
         const result = await config.fetchById(numericId);
-        if (!cancelled && result?.id) { setItem(result); return; }
-      } catch { /* fall through */ }
-
-      try {
-        const result = await api.get(`/media/${config.apiPath}/${numericId}`);
         if (!cancelled && result?.id) setItem(result);
       } catch { /* nothing to open */ }
     }

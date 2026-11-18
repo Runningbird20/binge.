@@ -2,8 +2,6 @@ package com.binge.tv.data
 
 import com.binge.tv.player.StreamServer
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -12,8 +10,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
-import java.net.URLEncoder
 import java.util.UUID
 
 // ESPN's public scoreboard feed (same as the site's live score panel).
@@ -56,11 +52,10 @@ object Scoreboard {
     }
 }
 
-data class SportStream(val label: String, val embed: String? = null, val streamedSource: String? = null, val streamedId: String? = null) {
+data class SportStream(val label: String, val embed: String? = null) {
     // Admin switches (server_config, same keys as the website's sportsSwitchKeys).
     val switchKeys: List<String>
-        get() = if (streamedSource != null) listOf("sports:streamed", "sports:streamed:$streamedSource")
-        else listOf(if (label.startsWith("PPV")) "sports:ppv" else "sports:streamfree")
+        get() = listOf(if (label.startsWith("PPV")) "sports:ppv" else "sports:streamfree")
 }
 
 // Feed abbreviations shown as the site names leagues (its canonicalLeague).
@@ -141,7 +136,6 @@ object SportsFeed {
     suspend fun load(): List<SportGame> = loadFresh().also { latest = it; latestAt = System.currentTimeMillis() }
 
     private suspend fun loadFresh(): List<SportGame> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-        // Streamed closed in November 2026; its feed is no longer asked.
         val ppv = async { fetchPPV() }
         val streamfree = async { fetchStreamFree() }
         val disabled = ServerSwitches.disabledServers()
@@ -322,30 +316,11 @@ object SportsFeed {
         return fresh
     }
 
-    private suspend fun resolve(game: SportGame, limit: Int): List<StreamServer> = coroutineScope {
-        val perFeed = game.streams.map { async { streams(it) } }.awaitAll()
-        // Interleave (each feed's best, then each feed's second…) so the
-        // first few raced are from different feeds; the rest are backups.
-        val urls = ArrayList<Pair<String, String>>()
+    // Each feed's embed, in feed order, once each; feed families that played
+    // here go first.
+    private fun resolve(game: SportGame, limit: Int): List<StreamServer> {
         val seen = HashSet<String>()
-        for (round in 0 until (perFeed.maxOfOrNull { it.size } ?: 0)) {
-            for (list in perFeed) if (round < list.size && seen.add(list[round].second)) urls += list[round]
-        }
-        com.binge.tv.player.SportsMemory.rank(urls) { it.first }.take(limit).map { (label, url) -> StreamServer(url, label) { _, _, _, _ -> url } }
-    }
-
-    // Streamed sources resolve to every stream of that source, HD first, up to 4.
-    private suspend fun streams(stream: SportStream): List<Pair<String, String>> {
-        stream.embed?.let { return listOf(stream.label to it) }
-        val source = stream.streamedSource ?: return emptyList()
-        val id = URLEncoder.encode(stream.streamedId ?: return emptyList(), "UTF-8").replace("+", "%20")
-        val list = fetch("https://streamed.pk/api/stream/$source/$id").arr().mapNotNull { it.obj() }
-        val sorted = list.sortedWith(compareBy({ if (it["hd"].truthy()) 0 else 1 }, { (it["streamNo"] as? JsonPrimitive)?.intOrNull ?: 0 }))
-        return sorted.take(4).mapNotNull { item ->
-            val url = item["embedUrl"].str() ?: return@mapNotNull null
-            val number = if (list.size > 1) " ${(item["streamNo"] as? JsonPrimitive)?.intOrNull ?: 1}" else ""
-            val language = item["language"].str()?.takeIf { it.isNotEmpty() && it.lowercase() != "main" }?.let { " · $it" } ?: ""
-            "${stream.label}$number${if (item["hd"].truthy()) " HD" else ""}$language" to url
-        }
+        val urls = game.streams.mapNotNull { stream -> stream.embed?.takeIf { seen.add(it) }?.let { stream.label to it } }
+        return com.binge.tv.player.SportsMemory.rank(urls) { it.first }.take(limit).map { (label, url) -> StreamServer(url, label) { _, _, _, _ -> url } }
     }
 }

@@ -51,7 +51,3 @@ export async function markSharesSeen(ids) {
   if (!ids.length) return;
   await supabase.from('profile_shares').update({ seen_at: new Date().toISOString() }).in('id', ids).is('seen_at', null);
 }
-
-export async function removeShare(id) {
-  await supabase.from('profile_shares').delete().eq('id', id);
-}

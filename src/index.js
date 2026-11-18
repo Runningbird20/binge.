@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './styles/index.css';
 import App from './App';
-import reportWebVitals from './reportWebVitals';
 import { register as registerSW } from './serviceWorkerRegistration';
 import { applyTvMode } from './utils/tvMode';
 import { initMonitoring } from './utils/monitoring';
@@ -18,4 +17,3 @@ root.render(
 );
 
 registerSW();
-reportWebVitals();

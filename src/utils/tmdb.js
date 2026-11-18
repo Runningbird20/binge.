@@ -19,8 +19,6 @@ const STORAGE_PREFIX = 'binge:tmdb:';
 const memoryCache = new Map();
 const inflight = new Map();
 
-export const isTmdbConfigured = Boolean(TMDB_API_KEY);
-
 function readStored(key) {
   try {
     const raw = window.sessionStorage.getItem(STORAGE_PREFIX + key);
@@ -92,10 +90,6 @@ export function tmdbIdFromItem(item) {
   if (match) return Number(match[2]);
   const direct = Number(item?.tmdb_id ?? item?.tmdbId);
   return Number.isFinite(direct) && direct > 0 ? direct : null;
-}
-
-export function sourceKeyFor(mediaType, tmdbId) {
-  return `tmdb:${tmdbKind(mediaType)}:${tmdbId}`;
 }
 
 // TMDB genre ids -> the names our catalog's `genre` column uses. Movie and

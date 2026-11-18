@@ -841,6 +841,9 @@
   border-radius: 999px;
   background: #fff;
   pointer-events: none;
+  transition-property: transform, width, height;
+  transition-duration: 0.34s;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Page tabs above a spotlight: keep them in flow, hero starts below. */
@@ -1519,6 +1522,10 @@
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
+
+/* A Phosphor icon beside its text (in a button, a label, a table cell), centered
+   on the text instead of sitting on its baseline. */
+.icon-label { display: inline-flex; align-items: center; gap: 0.35em; }
 
 /* ── Book ↔ screen links ──────────────────────────────────────── */
 

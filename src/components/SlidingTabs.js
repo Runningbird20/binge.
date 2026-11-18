@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
 
+// The white pill slides to the selected tab with a CSS transition
+// (.sliding-tabs-pill in streaming.css). It appears in place on first render,
+// since a transition only runs when a value changes.
 export default function SlidingTabs({ as: Tag = 'div', children, className = '', ...props }) {
   const containerRef = useRef(null);
   const [pill, setPill] = useState(null);
-  const reduceMotion = useReducedMotion();
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -33,12 +34,14 @@ export default function SlidingTabs({ as: Tag = 'div', children, className = '',
 
   return (
     <Tag {...props} ref={containerRef} className={`${className} sliding-tabs`}>
-      {pill && <motion.span
+      {pill && <span
         className="sliding-tabs-pill"
         aria-hidden="true"
-        initial={false}
-        animate={pill}
-        transition={{ duration: reduceMotion ? 0 : 0.34, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          transform: `translate(${pill.x}px, ${pill.y}px)`,
+          width: pill.width,
+          height: pill.height,
+        }}
       />}
       {children}
     </Tag>

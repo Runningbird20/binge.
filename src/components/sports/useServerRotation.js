@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { expandStreamProviders, resolveProviderEmbedUrl } from '../../utils/sportsProviders';
 import { rankFeeds, recordFeedFailed, recordFeedWorked } from '../../utils/sportsServerMemory';
 import { hostOf, isHostReachable, reachabilityMap } from '../../utils/hostReachability';
 
@@ -12,12 +11,9 @@ const LOAD_TIMEOUT_MS = 8_000;
 // Staying this long on a server counts as "it worked" (see sportsServerMemory).
 const WORKED_AFTER_MS = 60_000;
 
-// Expanding Streamed sources waits at most this long before starting.
-const EXPAND_TIMEOUT_MS = 3_500;
-
-// Server rotation for one game: probes which provider hosts this network
-// can reach, resolves the embed URL, and auto-advances past servers that
-// fail to load. Shared by the single-game player and Multiview tiles.
+// Server rotation for one game: ranks its servers, probes which of their
+// hosts this network can reach, and auto-advances past servers that fail to
+// load. Shared by the single-game player and Multiview tiles.
 export function useServerRotation(stream, status) {
   const [serverIndex, setServerIndex] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -48,13 +44,7 @@ export function useServerRotation(stream, status) {
     setList(null);
     let cancelled = false;
     (async () => {
-      // Each Streamed source becomes all of its streams; don't wait on a
-      // slow lookup for long (unexpanded sources still resolve on demand).
-      const expanded = await Promise.race([
-        expandStreamProviders(stream.providers).catch(() => stream.providers),
-        new Promise((resolve) => { setTimeout(() => resolve(stream.providers), EXPAND_TIMEOUT_MS); }),
-      ]);
-      const ranked = rankFeeds(expanded, stream.id);
+      const ranked = rankFeeds(stream.providers, stream.id);
       // Probe the hosts we know and start on the first server this network
       // can actually reach.
       const reach = await reachabilityMap(ranked.map((provider) => hostOf(provider.embedUrl)));
@@ -95,8 +85,9 @@ export function useServerRotation(stream, status) {
     let cancelled = false;
     setResolving(true);
     setEmbedUrl(null);
-    resolveProviderEmbedUrl(provider).then(async (url) => {
-      if (cancelled) return;
+    // Every feed gives its server's embed address up front.
+    const url = provider.embedUrl || null;
+    (async () => {
       if (url && !(await isHostReachable(hostOf(url)))) {
         if (cancelled) return;
         setBlocked((current) => new Set(current).add(serverIndex));
@@ -104,10 +95,11 @@ export function useServerRotation(stream, status) {
         advance();
         return;
       }
+      if (cancelled) return;
       setResolving(false);
       if (url) setEmbedUrl(url);
       else advance();
-    });
+    })();
     return () => { cancelled = true; };
     // servers is derived from list; advance() is recreated every render and only moves serverIndex.
     // eslint-disable-next-line react-hooks/exhaustive-deps

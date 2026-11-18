@@ -461,10 +461,6 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export function clearPersonalizationCache() {
-  resultCache.clear();
-}
-
 /**
  * Personalized rows for one or both video types.
  *

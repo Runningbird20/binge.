@@ -266,23 +266,19 @@ async function sendGameAlerts(db) {
 // (push + optional ALERT_WEBHOOK_URL for Discord/Slack) when a server goes
 // down for two checks in a row or comes back. A 200 page doesn't prove a
 // video plays, which is why viewer reports are shown alongside.
-// Keep in sync with PROVIDERS in src/components/EmbedPlayer.js.
 const PROBE_TMDB = 550; // Fight Club — on every server
-const PROBES = [
-  ['vidrift', 'VidRift', `https://embed.vidrift.net/embed/movie/${PROBE_TMDB}`],
-  ['vidy', 'Vidy', `https://vidy.st/movie/${PROBE_TMDB}`],
-  ['vidlink', 'VidLink', `https://vidlink.pro/movie/${PROBE_TMDB}`],
-  ['cinesrc', 'CineSrc', `https://cinesrc.st/embed/movie/${PROBE_TMDB}`],
-  ['vidsrc-ru', 'VidSrc', `https://vidsrc.ru/movie/${PROBE_TMDB}`],
-  ['vidsrc-su', 'VidSrc SU', `https://vidsrc.su/embed/movie/${PROBE_TMDB}`],
-  ['videasy', 'Videasy', `https://player.videasy.net/movie/${PROBE_TMDB}`],
-  ['2embed', '2Embed', `https://www.2embed.stream/embed/movie/${PROBE_TMDB}`],
-  ['vidsrc-embed-ru', 'VidSrc Classic', `https://vsembed.ru/embed/movie?tmdb=${PROBE_TMDB}`],
-  ['vixsrc', 'VixSrc', `https://vixsrc.to/movie/${PROBE_TMDB}`],
-  ['vidspark', 'VidSpark', `https://vidspark.to/movie/${PROBE_TMDB}`],
-  ['vidcore', 'VidCore', `https://vidcore.org/embed/movie/${PROBE_TMDB}`],
-  ['embedwave', 'EmbedWave', `https://embedwave.cc/embed/movie/${PROBE_TMDB}`],
-];
+
+// The servers probed are the player's own list (src/utils/embedServers.js, an
+// ES module Vercel's build compiles to CommonJS), each at the URL the player
+// would load for the film. Loaded on first use, not at startup, so a problem
+// loading it can only break this check, never every /api route (see sports.js).
+let embedServers = null;
+function probeTargets() {
+  if (!embedServers) embedServers = require('../../src/utils/embedServers');
+  return embedServers.EMBED_SERVERS
+    .filter((server) => server.types.includes('movie') && server.idKinds.includes('tmdb'))
+    .map((server) => [server.id, server.label, server.buildUrl({ kind: 'tmdb', value: String(PROBE_TMDB) }, 'movie', 1, 1, null, {})]);
+}
 const HEALTH_EVERY_MS = 15 * 60 * 1000;
 const UNAVAILABLE = /media is unavailable|video not found|not available in your|404 not found|bad gateway|service unavailable/i;
 
@@ -339,7 +335,7 @@ async function checkServers(db, { force = false } = {}) {
   });
 
   const now = new Date().toISOString();
-  const results = await Promise.all(PROBES.map(async ([provider, label, url]) => ({ provider, label, ...(await probe(url)) })));
+  const results = await Promise.all(probeTargets().map(async ([provider, label, url]) => ({ provider, label, ...(await probe(url)) })));
   const changes = [];
   for (const result of results) {
     const before = previous.get(result.provider);
@@ -517,6 +513,7 @@ router.get('/new-episodes', async (req, res) => {
 module.exports = router;
 module.exports.gameAlerts = gameAlerts;
 module.exports.checkServers = checkServers;
+module.exports.probeTargets = probeTargets;
 module.exports.pushTo = pushTo;
 module.exports.setupPush = setupPush;
 module.exports.inboxRow = inboxRow;

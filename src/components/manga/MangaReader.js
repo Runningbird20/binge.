@@ -114,8 +114,8 @@ export function MangaReader({ comic, chapters, index, onClose, onPrev, onNext })
           )}
           {!loading && !error && pages.length === 0 && (
             <div className="manga-reader-loading">
-              <p style={{ fontSize: '2rem', margin: 0 }}>📭</p>
-              <p style={{ color: '#888' }}>No pages available for this chapter.</p>
+              <BookOpen size={36} weight="duotone" aria-hidden="true" />
+              <p style={{ color: '#888' }}>No pages available for this chapter. Try another chapter.</p>
             </div>
           )}
           {!loading && !error && pages.map((url, i) => (

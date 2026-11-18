@@ -180,3 +180,24 @@ test('with push set up, the devices of the profiles that follow it get the push 
   assert.equal(totals.sent, 2);
   assert.equal(totals.alerts, 3);
 });
+
+// The uptime probe reads the player's own server list (src/utils/embedServers.js,
+// shared with the browser), loaded on first use like the sports feeds, so a
+// problem loading it can only break the probe, never every /api route.
+test('starting the API doesn’t load the embed server list', () => {
+  require('../app');
+  const listFile = require('node:path').join('src', 'utils', 'embedServers.js');
+  const loaded = Object.keys(require.cache).some((file) => file.endsWith(listFile));
+  assert.equal(loaded, false);
+});
+
+test('every server the player has is probed, at the URL the player builds for Fight Club', () => {
+  const { probeTargets } = require('./cron');
+  const { EMBED_SERVERS } = require('../../src/utils/embedServers');
+  const targets = probeTargets();
+  assert.deepEqual(targets.map(([id]) => id), EMBED_SERVERS.map((server) => server.id));
+  for (const [id, label, url] of targets) {
+    assert.equal(label, EMBED_SERVERS.find((server) => server.id === id).label);
+    assert.match(url, /^https:\/\/[^/]+\/.*550/, `${id}: ${url}`);
+  }
+});

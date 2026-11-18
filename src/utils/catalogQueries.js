@@ -1,5 +1,4 @@
 import { isSupabaseConfigured, supabase } from './supabase';
-import { api } from '../api';
 import { ratingsFor } from './kidsMode';
 import { comingSoonCutoffIso } from './releaseWindow';
 
@@ -98,31 +97,6 @@ const BOOK_COLUMNS = [
 ].join(', ');
 
 const DESCRIPTION_FALLBACK = 'No description available yet.';
-const CURATED_MOVIE_GENRE_PREFERENCES = [
-  'Action',
-  'Drama',
-  'Comedy',
-  'Science Fiction',
-  'Thriller',
-  'Crime',
-  'Animation',
-  'Horror',
-  'Romance',
-  'Adventure',
-];
-
-const CURATED_TV_GENRE_PREFERENCES = [
-  'Drama',
-  'Crime',
-  'Action & Adventure',
-  'Comedy',
-  'Sci-Fi & Fantasy',
-  'Mystery',
-  'Animation',
-  'Reality',
-  'Family',
-  'Documentary',
-];
 
 const THIS_YEAR = new Date().getFullYear();
 
@@ -132,32 +106,9 @@ const THIS_YEAR = new Date().getFullYear();
 // score; TMDB-driven rows instead filter on vote counts.
 const QUALITY_GATE = 'age_rating.not.is.null,vote_average.gte.6';
 
-
-// Client-side cache for popular titles so we only call the API once per session
-const _popularCache = {};
-
-async function fetchPopularTitles(type) {
-  if (_popularCache[type]) return _popularCache[type];
-  try {
-    const data = await api.get(`/media/popular-titles?type=${type}`);
-    const titles = Array.isArray(data?.titles) ? data.titles : [];
-    _popularCache[type] = titles;
-    return titles;
-  } catch {
-    return [];
-  }
-}
-
-// Build a Supabase OR filter string from a list of titles using ILIKE
-function buildPopularOrFilter(titles) {
-  if (!titles.length) return null;
-  // Use word-boundary-style matching: wrap each title in %...% to handle slight variations
-  return titles
-    .slice(0, 40) // Supabase OR has a practical limit
-    .map(t => `title.ilike.%${t.replace(/%/g, '')}%`)
-    .join(',');
-}
-
+// The catalog is reached through the split client (/api/catalog on Turso);
+// there is no second path. Without Supabase configured, reads throw here,
+// and the callers show their "Couldn't load" state.
 function requireSupabaseCatalog() {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured.');
@@ -223,40 +174,6 @@ function normalizeSearchValue(value) {
     .replace(/[,%_"']/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function shuffleItems(items) {
-  const nextItems = [...items];
-
-  for (let index = nextItems.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [nextItems[index], nextItems[swapIndex]] = [nextItems[swapIndex], nextItems[index]];
-  }
-
-  return nextItems;
-}
-
-function buildTitleRankMap(titles = []) {
-  const ranks = new Map();
-  titles.forEach((title, index) => {
-    const key = normalizeSearchValue(title).toLowerCase();
-    if (key && !ranks.has(key)) {
-      ranks.set(key, index);
-    }
-  });
-  return ranks;
-}
-
-function sortItemsByTitleRank(items, titles = []) {
-  const ranks = buildTitleRankMap(titles);
-  if (!ranks.size) return shuffleItems(items);
-
-  return [...items].sort((left, right) => {
-    const leftRank = ranks.get(normalizeSearchValue(left?.title).toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
-    const rightRank = ranks.get(normalizeSearchValue(right?.title).toLowerCase()) ?? Number.MAX_SAFE_INTEGER;
-    if (leftRank !== rightRank) return leftRank - rightRank;
-    return String(left?.title || '').localeCompare(String(right?.title || ''));
-  });
 }
 
 function buildIlikePattern(value) {
@@ -336,32 +253,6 @@ function applyBrowseSort(query, sortOrder = 'title-asc') {
   return query.order('title', { ascending: true });
 }
 
-function pickCuratedGenres(allGenres, preferredGenres, max = 6) {
-  const selected = [];
-
-  for (const preferredGenre of preferredGenres) {
-    if (allGenres.includes(preferredGenre) && !selected.includes(preferredGenre)) {
-      selected.push(preferredGenre);
-    }
-
-    if (selected.length >= max) {
-      return selected;
-    }
-  }
-
-  for (const genre of allGenres) {
-    if (!selected.includes(genre)) {
-      selected.push(genre);
-    }
-
-    if (selected.length >= max) {
-      return selected;
-    }
-  }
-
-  return selected;
-}
-
 async function fetchGenreValues(viewName) {
   const client = requireSupabaseCatalog();
   const { data, error } = await client
@@ -378,39 +269,15 @@ async function fetchGenreValues(viewName) {
     .filter(Boolean);
 }
 
-export async function fetchMovieGenres() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const data = await api.get('/media/movies/genres');
-      return Array.isArray(data?.genres) ? data.genres : [];
-    } catch {
-      return [];
-    }
-  }
+function fetchMovieGenres() {
   return fetchGenreValues('movie_genres');
 }
 
-export async function fetchTvShowGenres() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const data = await api.get('/media/tv-shows/genres');
-      return Array.isArray(data?.genres) ? data.genres : [];
-    } catch {
-      return [];
-    }
-  }
+function fetchTvShowGenres() {
   return fetchGenreValues('tv_show_genres');
 }
 
-export async function fetchBookGenres() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const data = await api.get('/media/books/genres');
-      return Array.isArray(data?.genres) ? data.genres : [];
-    } catch {
-      return [];
-    }
-  }
+function fetchBookGenres() {
   return fetchGenreValues('book_genres');
 }
 
@@ -425,28 +292,6 @@ export async function fetchMovieCatalogSegment({
   includeUpcoming = false,
   kidsSafe = false,
 } = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    const pageNum = Math.floor(offset / limit) + 1;
-    const params = new URLSearchParams({
-      page: String(pageNum),
-      page_size: String(limit),
-      sort: sortOrder || 'title-asc',
-    });
-    if (search) params.set('search', search);
-    if (Array.isArray(genre) && genre[0]) params.set('genre', genre[0]);
-    else if (typeof genre === 'string' && genre) params.set('genre', genre);
-    try {
-      const data = await api.get(`/media/movies?${params.toString()}`);
-      return {
-        items: (data?.items || data || []).map((movie) => normalizeMovieBrowseEntry(movie)),
-        total: data?.total != null ? Number(data.total) : null,
-        facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
-      };
-    } catch {
-      return { items: [], total: 0, facets: { genres: [] } };
-    }
-  }
-
   const client = requireSupabaseCatalog();
 
   let moviesQuery = client
@@ -491,42 +336,7 @@ export async function fetchMovieCatalogSegment({
   };
 }
 
-export async function fetchMoviesPage({
-  page = 1,
-  pageSize = 48,
-  search = '',
-  genre = '',
-  sortOrder = 'title-asc',
-} = {}) {
-  const offset = Math.max(0, (page - 1) * pageSize);
-  const segment = await fetchMovieCatalogSegment({
-    offset,
-    limit: pageSize,
-    search,
-    genre,
-    sortOrder,
-    includeCount: true,
-    includeFacets: true,
-  });
-  const items = segment.items;
-  const total = segment.total ?? items.length;
-
-  return {
-    items,
-    total,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    facets: segment.facets,
-  };
-}
-
 export async function fetchMovieById(movieId) {
-  if (!isSupabaseConfigured || !supabase) {
-    const data = await api.get(`/media/movies/${movieId}`);
-    return normalizeMovie(data);
-  }
-
   const client = requireSupabaseCatalog();
   const { data, error } = await client
     .from('movies')
@@ -541,136 +351,6 @@ export async function fetchMovieById(movieId) {
   return normalizeMovie(data);
 }
 
-export async function fetchMovieCuratedRows() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const data = await api.get('/media/movies/curated');
-      if (Array.isArray(data?.rows) && data.rows.length > 0) {
-        return data.rows.map((row) => ({
-          ...row,
-          items: (row.items || []).map((m) => normalizeMovie(m)),
-        }));
-      }
-      const pageData = await api.get('/media/movies?page=1&page_size=24');
-      const items = (pageData?.items || pageData || []).map((m) => normalizeMovie(m));
-      return items.length > 0
-        ? [{ id: 'popular', title: 'Popular Movies', items }]
-        : [];
-    } catch {
-      return [];
-    }
-  }
-
-  const client = requireSupabaseCatalog();
-  const [genres, popularTitles] = await Promise.all([
-    fetchMovieGenres(),
-    fetchPopularTitles('movie'),
-  ]);
-  const curatedGenres = pickCuratedGenres(genres, CURATED_MOVIE_GENRE_PREFERENCES);
-  const popularFilter = buildPopularOrFilter(popularTitles);
-
-  // Featured row: popular known titles if available, otherwise recent
-  let featuredQuery = client
-    .from('movies')
-    .select(MOVIE_COLUMNS)
-    .not('poster_url', 'is', null)
-    .lte('year', THIS_YEAR);
-  if (popularFilter) {
-    featuredQuery = featuredQuery.or(popularFilter);
-  }
-  featuredQuery = featuredQuery.order('title', { ascending: true }).limit(24);
-
-  const [featuredResult, upcomingResult, ...genreResults] = await Promise.all([
-    featuredQuery,
-    client
-      .from('movies')
-      .select(MOVIE_COLUMNS)
-      .not('poster_url', 'is', null)
-      .gt('year', THIS_YEAR)
-      .order('year', { ascending: true, nullsFirst: false })
-      .order('title', { ascending: true })
-      .limit(12),
-    ...curatedGenres.map((genre) => client
-      .from('movies')
-      .select(MOVIE_COLUMNS)
-      .ilike('genre', `%${genre}%`)
-      .not('poster_url', 'is', null)
-      .lte('year', THIS_YEAR)
-      .order('title', { ascending: true })
-      .limit(30)),
-  ]);
-
-  if (featuredResult.error) throw featuredResult.error;
-
-  const rows = [
-    {
-      id: 'featured',
-      title: 'Featured Picks',
-      seeAll: '/movies?sort=relevance',
-      items: sortItemsByTitleRank((featuredResult.data || []).map((movie) => normalizeMovie(movie)), popularTitles),
-    },
-  ];
-
-  genreResults.forEach((result, index) => {
-    if (result.error) throw result.error;
-
-    const genre = curatedGenres[index];
-    const items = shuffleItems((result.data || []).map((movie) => normalizeMovie(movie)));
-
-    if (genre && items.length > 0) {
-      rows.push({
-        id: `genre-${genre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-        title: genre,
-        seeAll: `/movies?genre=${encodeURIComponent(genre)}`,
-        items,
-      });
-    }
-  });
-
-  // Upcoming releases — always last
-  const upcomingItems = (upcomingResult.data || []).map((movie) => normalizeMovie(movie));
-  if (upcomingItems.length > 0) {
-    rows.push({
-      id: 'upcoming',
-      title: 'Upcoming Releases',
-      seeAll: '/movies?sort=year-asc',
-      items: upcomingItems,
-    });
-  }
-
-  return rows.filter((row) => row.items.length > 0);
-}
-
-export async function fetchTvShowsPage({
-  page = 1,
-  pageSize = 48,
-  search = '',
-  genre = '',
-  sortOrder = 'title-asc',
-} = {}) {
-  const offset = Math.max(0, (page - 1) * pageSize);
-  const segment = await fetchTvShowCatalogSegment({
-    offset,
-    limit: pageSize,
-    search,
-    genre,
-    sortOrder,
-    includeCount: true,
-    includeFacets: true,
-  });
-  const items = segment.items;
-  const total = segment.total ?? items.length;
-
-  return {
-    items,
-    total,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    facets: segment.facets,
-  };
-}
-
 export async function fetchTvShowCatalogSegment({
   offset = 0,
   limit = 48,
@@ -682,31 +362,7 @@ export async function fetchTvShowCatalogSegment({
   includeUpcoming = false,
   kidsSafe = false,
 } = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    const pageNum = Math.floor(offset / limit) + 1;
-    const params = new URLSearchParams({
-      page: String(pageNum),
-      page_size: String(limit),
-      sort: sortOrder || 'title-asc',
-    });
-    if (search) params.set('search', search);
-    if (Array.isArray(genre) && genre[0]) params.set('genre', genre[0]);
-    else if (typeof genre === 'string' && genre) params.set('genre', genre);
-    try {
-      const data = await api.get(`/media/tv-shows?${params.toString()}`);
-      return {
-        items: (data?.items || data || []).map((show) => normalizeTvShowBrowseEntry(show)),
-        total: data?.total != null ? Number(data.total) : null,
-        facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
-      };
-    } catch {
-      return { items: [], total: 0, facets: { genres: [] } };
-    }
-  }
-
   const client = requireSupabaseCatalog();
-
-  const effectiveSort = sortOrder === 'relevance' ? 'popularity-desc' : sortOrder;
 
   let showsQuery = client
     .from('tv_shows')
@@ -719,10 +375,10 @@ export async function fetchTvShowCatalogSegment({
   if (kidsSafe) {
     showsQuery = showsQuery.in('age_rating', ratingsFor(kidsSafe));
   }
-  if (effectiveSort === 'popularity-desc') {
+  if (sortOrder === 'popularity-desc') {
     showsQuery = showsQuery.not('poster_url', 'is', null).or(QUALITY_GATE);
   }
-  showsQuery = applyBrowseSort(showsQuery, effectiveSort);
+  showsQuery = applyBrowseSort(showsQuery, sortOrder);
 
   const tasks = [
     showsQuery.range(offset, offset + limit - 1),
@@ -746,11 +402,6 @@ export async function fetchTvShowCatalogSegment({
 }
 
 export async function fetchTvShowById(showId) {
-  if (!isSupabaseConfigured || !supabase) {
-    const data = await api.get(`/media/tv-shows/${showId}`);
-    return normalizeTvShow(data);
-  }
-
   const client = requireSupabaseCatalog();
   const { data, error } = await client
     .from('tv_shows')
@@ -765,105 +416,6 @@ export async function fetchTvShowById(showId) {
   return normalizeTvShow(data);
 }
 
-export async function fetchTvShowCuratedRows() {
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const data = await api.get('/media/tv-shows/curated');
-      if (Array.isArray(data?.rows) && data.rows.length > 0) {
-        return data.rows.map((row) => ({
-          ...row,
-          items: (row.items || []).map((s) => normalizeTvShow(s)),
-        }));
-      }
-      const pageData = await api.get('/media/tv-shows?page=1&page_size=24');
-      const items = (pageData?.items || pageData || []).map((s) => normalizeTvShow(s));
-      return items.length > 0
-        ? [{ id: 'popular', title: 'Popular Series', items }]
-        : [];
-    } catch {
-      return [];
-    }
-  }
-
-  const client = requireSupabaseCatalog();
-  const [genres, popularTitles] = await Promise.all([
-    fetchTvShowGenres(),
-    fetchPopularTitles('tv'),
-  ]);
-  const curatedGenres = pickCuratedGenres(genres, CURATED_TV_GENRE_PREFERENCES);
-  const popularFilter = buildPopularOrFilter(popularTitles);
-
-  let featuredQuery = client
-    .from('tv_shows')
-    .select(TV_SHOW_COLUMNS)
-    .not('poster_url', 'is', null)
-    .lte('year', THIS_YEAR);
-  if (popularFilter) {
-    featuredQuery = featuredQuery.or(popularFilter);
-  }
-  featuredQuery = featuredQuery.order('title', { ascending: true }).limit(24);
-
-  const [featuredResult, upcomingResult, ...genreResults] = await Promise.all([
-    featuredQuery,
-    client
-      .from('tv_shows')
-      .select(TV_SHOW_COLUMNS)
-      .not('poster_url', 'is', null)
-      .gt('year', THIS_YEAR)
-      .order('year', { ascending: true, nullsFirst: false })
-      .order('title', { ascending: true })
-      .limit(12),
-    ...curatedGenres.map((genre) => client
-      .from('tv_shows')
-      .select(TV_SHOW_COLUMNS)
-      .ilike('genre', `%${normalizeSearchValue(genre)}%`)
-      .not('poster_url', 'is', null)
-      .lte('year', THIS_YEAR)
-      .order('title', { ascending: true })
-      .limit(30)),
-  ]);
-
-  if (featuredResult.error) throw featuredResult.error;
-
-  const rows = [
-    {
-      id: 'featured',
-      title: 'Featured Series',
-      seeAll: '/tv-shows?sort=relevance',
-      items: sortItemsByTitleRank((featuredResult.data || []).map((show) => normalizeTvShow(show)), popularTitles),
-    },
-  ];
-
-  genreResults.forEach((result, index) => {
-    if (result.error) throw result.error;
-
-    const genre = curatedGenres[index];
-    const items = shuffleItems((result.data || []).map((show) => normalizeTvShow(show)));
-
-    if (genre && items.length > 0) {
-      rows.push({
-        id: `genre-${genre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-        title: genre,
-        seeAll: `/tv-shows?genre=${encodeURIComponent(genre)}`,
-        items,
-      });
-    }
-  });
-
-  // Upcoming — always last
-  const upcomingItems = (upcomingResult.data || []).map((show) => normalizeTvShow(show));
-  if (upcomingItems.length > 0) {
-    rows.push({
-      id: 'upcoming',
-      title: 'Upcoming Releases',
-      seeAll: '/tv-shows?sort=year-asc',
-      items: upcomingItems,
-    });
-  }
-
-  return rows.filter((row) => row.items.length > 0);
-}
-
 export async function fetchBooksPage({
   page = 1,
   pageSize = 24,
@@ -871,29 +423,6 @@ export async function fetchBooksPage({
   genre = '',
   sortOrder = 'title-asc',
 } = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    const params = new URLSearchParams({
-      page: String(page),
-      page_size: String(pageSize),
-      sort: sortOrder || 'title-asc',
-    });
-    if (search) params.set('search', search);
-    if (genre) params.set('genre', genre);
-    try {
-      const data = await api.get(`/media/books?${params.toString()}`);
-      return {
-        items: (data?.items || data || []).map((book) => normalizeBook(book)),
-        total: Number(data?.total) || 0,
-        page,
-        pageSize,
-        totalPages: Math.max(1, Math.ceil((Number(data?.total) || 0) / pageSize)),
-        facets: { genres: Array.isArray(data?.facets?.genres) ? data.facets.genres : [] },
-      };
-    } catch {
-      return { items: [], total: 0, page, pageSize, totalPages: 1, facets: { genres: [] } };
-    }
-  }
-
   const client = requireSupabaseCatalog();
   const offset = Math.max(0, (page - 1) * pageSize);
 
@@ -946,10 +475,6 @@ export async function fetchRandomIdWindow(buildQuery, { idSpace, limit }) {
 
 // One window of the Books shelf's shuffled "featured" view.
 export async function fetchRandomBookWindow({ size = 60, search = '', genre = '' } = {}) {
-  if (!isSupabaseConfigured || !supabase) {
-    const result = await fetchBooksPage({ page: 1, pageSize: size, search, genre });
-    return result.items;
-  }
   const client = requireSupabaseCatalog();
   const rows = await fetchRandomIdWindow(
     () => applyBookFilters(client.from('books').select(BOOK_COLUMNS), { search, genre }),
@@ -959,11 +484,6 @@ export async function fetchRandomBookWindow({ size = 60, search = '', genre = ''
 }
 
 export async function fetchBookById(bookId) {
-  if (!isSupabaseConfigured || !supabase) {
-    const data = await api.get(`/media/books/${bookId}`);
-    return normalizeBook(data);
-  }
-
   const client = requireSupabaseCatalog();
   const { data, error } = await client
     .from('books')
@@ -1002,22 +522,9 @@ async function maxCatalogId(client, table) {
 // candidates.
 export async function sampleCatalogForRecommendations(mediaType, { genre = '', limit = 60, kidsSafe = false } = {}) {
   const source = RECOMMENDATION_SAMPLE_SOURCES[mediaType];
-  if (!source) return [];
+  if (!source || !isSupabaseConfigured || !supabase) return [];
 
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const endpoint = mediaType === 'tv_show' ? '/media/tv-shows' : mediaType === 'book' ? '/media/books' : '/media/movies';
-      const params = new URLSearchParams({ page: '1', page_size: String(limit) });
-      if (genre) params.set('genre', genre);
-      if (kidsSafe) params.set('kids_safe', '1');
-      const data = await api.get(`${endpoint}?${params.toString()}`);
-      return (data?.items || data || []).map((item) => source.normalize(item));
-    } catch {
-      return [];
-    }
-  }
-
-  const client = requireSupabaseCatalog();
+  const client = supabase;
 
   function applyFilters(query) {
     let nextQuery = applyGenreFilter(query, genre);
@@ -1057,23 +564,6 @@ export async function fetchCatalogByTmdbIds(mediaType, tmdbIds = []) {
   const ids = [...new Set(tmdbIds.filter((id) => Number.isFinite(Number(id))))];
   if (!source || ids.length === 0) return new Map();
 
-  if (!isSupabaseConfigured || !supabase) {
-    const out = new Map();
-    const chunks = [];
-    for (let index = 0; index < ids.length; index += 80) chunks.push(ids.slice(index, index + 80));
-
-    await Promise.all(chunks.map(async (chunk) => {
-      const data = await api.get(`/media/by-tmdb-ids?type=${mediaType}&ids=${chunk.join(',')}`);
-      const items = data?.items || [];
-      items.forEach((row) => {
-        const tmdbId = Number(String(row.source_key).split(':')[2]);
-        if (tmdbId) out.set(tmdbId, source.normalize(row));
-      });
-    }));
-
-    return out;
-  }
-
   const kind = mediaType === 'tv_show' ? 'tv' : 'movie';
   const client = requireSupabaseCatalog();
   const out = new Map();
@@ -1110,23 +600,9 @@ export async function fetchCatalogBrowseRow(mediaType, {
   kidsSafe = false,
 } = {}) {
   const source = BROWSE_SOURCES[mediaType];
-  if (!source) return [];
+  if (!source || !isSupabaseConfigured || !supabase) return [];
 
-  if (!isSupabaseConfigured || !supabase) {
-    try {
-      const endpoint = mediaType === 'tv_show' ? '/media/tv-shows' : '/media/movies';
-      const params = new URLSearchParams({ page: '1', page_size: String(limit) });
-      if (genre) params.set('genre', genre);
-      if (sort) params.set('sort', sort);
-      if (kidsSafe) params.set('kids_safe', '1');
-      const data = await api.get(`${endpoint}?${params.toString()}`);
-      return (data?.items || data || []).map((row) => source.normalize(row));
-    } catch {
-      return [];
-    }
-  }
-
-  const client = requireSupabaseCatalog();
+  const client = supabase;
   const today = new Date().toISOString().slice(0, 10);
 
   let query = client

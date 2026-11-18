@@ -104,8 +104,6 @@
 
 .adm-table tr.off { opacity: 0.5; }
 
-.adm-table tr.adm-subrow th { padding-left: 1.75rem; font-weight: 500; }
-
 .adm-detail { display: block; font-size: 0.78rem; }
 
 .adm-check { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }

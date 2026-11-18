@@ -405,12 +405,11 @@ object ExpectedRuntime {
 
 // Which sports feeds play on this TV (the website's sportsServerMemory idea):
 // a feed family that worked here goes first next time, one that keeps
-// failing goes last. Families: "PPV", "Streamed · admin", "StreamFree".
+// failing goes last. Families: "PPV", "StreamFree".
 object SportsMemory {
     fun family(label: String): String = when {
         label.startsWith("PPV") -> "PPV"
         label.startsWith("StreamFree") -> "StreamFree"
-        label.startsWith("Streamed") -> "Streamed · " + (label.split(" · ").getOrNull(1)?.substringBefore(' ') ?: "")
         else -> label.substringBefore(" ·")
     }
 

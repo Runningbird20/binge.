@@ -94,7 +94,6 @@ app.get('/api/health', async (_req, res) => {
 
 // The media catalog (Turso), read-only.
 app.use('/api/catalog', require('./routes/catalog'));
-app.use('/api/media', require('./routes/media'));
 app.use('/api/sports',      require('./routes/sports'));
 app.use('/api/admin/account-requests', require('./routes/invites').adminRouter);
 app.use('/api/admin', require('./routes/admin'));

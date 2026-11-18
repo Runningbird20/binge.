@@ -81,12 +81,12 @@ private func game(_ id: String, _ title: String, category: String = "Basketball"
     @Test func sameGameAcrossFeedsBecomesOne() {
         let merged = SportsFeed.merge([
             game("ppv:1", "Boston Celtics vs Cleveland Cavaliers", streams: ["PPV"]),
-            game("streamed:2", "Celtics @ Cavaliers", teams: ("Boston Celtics", "Cleveland Cavaliers"), streams: ["Streamed · admin"]),
+            game("streamfree:2", "Celtics @ Cavaliers", teams: ("Boston Celtics", "Cleveland Cavaliers"), streams: ["StreamFree 720p"]),
             game("streamfree:3", "Cavaliers vs Celtics", streams: ["StreamFree 1080p"]),
         ])
         #expect(merged.count == 1)
         #expect(merged[0].id == "ppv:1", "the first feed's id wins (stable ids across refreshes)")
-        #expect(merged[0].streams.map(\.label) == ["PPV", "Streamed · admin", "StreamFree 1080p"])
+        #expect(merged[0].streams.map(\.label) == ["PPV", "StreamFree 720p", "StreamFree 1080p"])
         #expect(merged[0].teams?.home == "Boston Celtics", "teams filled in from a later feed")
     }
 
@@ -211,12 +211,10 @@ private func game(_ id: String, _ title: String, category: String = "Basketball"
     @Test func switchKeys() {
         #expect(SportStream(label: "PPV · ESPN", source: .embed(URL(string: "https://a")!)).switchKeys == ["sports:ppv"])
         #expect(SportStream(label: "StreamFree 1080p", source: .embed(URL(string: "https://a")!)).switchKeys == ["sports:streamfree"])
-        #expect(SportStream(label: "Streamed · admin", source: .streamed(source: "admin", id: "1")).switchKeys == ["sports:streamed", "sports:streamed:admin"])
     }
 
     @Test(arguments: [
         ("PPV", "PPV"), ("PPV · ESPN", "PPV"), ("PPV mirror", "PPV"), ("StreamFree 1080p", "StreamFree"), ("StreamFree", "StreamFree"),
-        ("Streamed · admin 2 HD", "Streamed · admin"), ("Streamed · alpha", "Streamed · alpha"), ("Streamed · delta 1 HD · Spanish", "Streamed · delta"),
         ("Other · thing", "Other"),
     ] as [(String, String)])
     func families(_ label: String, _ family: String) {
@@ -224,7 +222,7 @@ private func game(_ id: String, _ title: String, category: String = "Basketball"
     }
 
     @Test func memoryScoreIsBounded() {
-        let label = "Streamed · test\(UUID().uuidString.prefix(6))"
+        let label = "Test\(UUID().uuidString.prefix(6)) · feed" // its own family, so runs don't share a score
         defer { UserDefaults.standard.removeObject(forKey: "binge.sportsFeed." + SportsMemory.family(label)) }
         #expect(SportsMemory.score(label) == 0)
         SportsMemory.record(label, worked: true)

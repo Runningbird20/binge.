@@ -338,16 +338,12 @@ export function mergeNormalized(rawItems) {
 // ── Admin switches ─────────────────────────────────────────────────────
 // Sports feeds share server_config with the movie servers, under a
 // "sports:" prefix: sports:ppv, sports:streamfree and sports:timstreams (its
-// events and the TV-channel college games). sports:streamed and
-// sports:streamed:<source> are from Streamed, closed since November 2026.
+// events and the TV-channel college games).
 
 export const SPORTS_PROVIDER_IDS = Object.keys(PROVIDER_NAMES);
 
 export function sportsSwitchKeys(provider) {
-  if (!provider?.id) return [];
-  const keys = [`sports:${provider.id}`];
-  if (provider.id === 'streamed' && provider.source) keys.push(`sports:streamed:${provider.source}`);
-  return keys;
+  return provider?.id ? [`sports:${provider.id}`] : [];
 }
 
 export function withoutDisabledFeeds(rawItems, disabled) {
@@ -355,8 +351,7 @@ export function withoutDisabledFeeds(rawItems, disabled) {
   return rawItems.filter((item) => !sportsSwitchKeys(item.provider).some((key) => disabled.has(key)));
 }
 
-// How many feeds each provider (and each Streamed source) has right now,
-// for the admin panel.
+// How many feeds each provider has right now, for the admin panel.
 export function countFeedsBySwitch(rawItems) {
   const counts = {};
   for (const item of rawItems) {
@@ -375,10 +370,6 @@ export async function fetchRawSportsStreams() {
     throw new Error(firstError?.reason?.message || 'All sports providers unavailable');
   }
   return lists;
-}
-
-export async function fetchAllSportsStreams() {
-  return mergeNormalized(await fetchRawSportsStreams());
 }
 
 // Unmerged feeds: straight from the browser first (the feeds refuse
@@ -421,9 +412,8 @@ export async function loadSportsStreams(onUpdate) {
   let settled = 0;
   let lastError = null;
   // A feed switched off as a whole in Admin › Servers isn't even requested
-  // (a provider that's down, like Streamed redirecting its API away in Oct
-  // 2026, otherwise errors on every page that loads sports). Waits at most
-  // 1.5s for the switches.
+  // (a provider that's down otherwise errors on every page that loads
+  // sports). Waits at most 1.5s for the switches.
   const switches = await Promise.race([disabledPromise, new Promise((resolve) => setTimeout(() => resolve(new Set()), 1500))]);
   const feeds = FEEDS.map((feed) => (switches.has(feed.key) ? async () => [] : feed.fetch));
   await Promise.all(feeds.map((fetchFeed, index) => fetchFeed()
@@ -460,114 +450,8 @@ export function sameGame(a, b) {
   return titleSlug(a.name) === titleSlug(b.name);
 }
 
-// Resolves one server entry into an embeddable iframe URL. PPV and
-// StreamFree give one up front; Streamed.pk needs a lookup per source.
-export async function resolveProviderEmbedUrl(provider) {
-  if (!provider) return null;
-  if (provider.embedUrl) return provider.embedUrl;
-  if (provider.id === 'streamed' && provider.source && provider.matchId) {
-    try {
-      const res = await fetch(
-        `/api/sports/resolve/streamed/${encodeURIComponent(provider.source)}/${encodeURIComponent(provider.matchId)}`,
-        { signal: AbortSignal.timeout(6000) },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.embedUrl) return data.embedUrl;
-      }
-    } catch { /* fall through */ }
-
-    try {
-      const res = await fetch(
-        `https://streamed.pk/api/stream/${encodeURIComponent(provider.source)}/${encodeURIComponent(provider.matchId)}`,
-        { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) },
-      );
-      if (!res.ok) return null;
-      const list = await res.json();
-      if (!Array.isArray(list) || list.length === 0) return null;
-      const best = list.find((s) => s.hd) || list[0];
-      return best.embedUrl || null;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-// "Server 2 · Streamed · admin" style label for the server dropdown.
-// ── Streamed: every stream of every source ─────────────────────────────
-// A Streamed source usually has several streams (numbered feeds, HD and SD,
-// different commentary). Feed lists only say which sources a game has, so
-// the player expands them when a game opens.
-
-const MAX_STREAMS_PER_SOURCE = 4;
-
-async function fetchStreamedStreams(source, matchId) {
-  const path = `${encodeURIComponent(source)}/${encodeURIComponent(matchId)}`;
-  try {
-    const res = await fetch(`/api/sports/resolve/streamed/${path}?all=1`, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.streams) && data.streams.length) return data.streams;
-    }
-  } catch { /* fall through */ }
-  try {
-    const res = await fetch(`https://streamed.pk/api/stream/${path}`, {
-      headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(6000),
-    });
-    if (!res.ok) return null;
-    const list = await res.json();
-    return Array.isArray(list) ? list.filter((s) => typeof s.embedUrl === 'string') : null;
-  } catch {
-    return null;
-  }
-}
-
-export function streamedStreamLabel(source, stream, count) {
-  const language = stream.language && !/^main$/i.test(stream.language) ? ` · ${stream.language}` : '';
-  const number = count > 1 ? ` ${stream.streamNo || ''}`.trimEnd() : '';
-  return `Streamed · ${source}${number}${stream.hd ? ' HD' : ''}${language}`;
-}
-
-// Replaces each Streamed source with its streams (HD first, capped per
-// source). A source that can't be looked up stays as it was and is resolved
-// on demand, so expanding never loses a server.
-// Expansions are cached briefly, so warming a game on hover makes the click
-// that follows start at once.
-const EXPAND_TTL_MS = 90_000;
-const expandCache = new Map(); // key -> { at, promise }
-
-export function expandStreamProviders(providers) {
-  const key = providers.map((provider) => `${provider.id}|${provider.source || ''}|${provider.matchId || provider.embedUrl || ''}`).join(',');
-  const hit = expandCache.get(key);
-  if (hit && Date.now() - hit.at < EXPAND_TTL_MS) return hit.promise;
-  const promise = expandStreamProvidersNow(providers);
-  expandCache.set(key, { at: Date.now(), promise });
-  promise.catch(() => expandCache.delete(key));
-  return promise;
-}
-
-async function expandStreamProvidersNow(providers) {
-  const expanded = await Promise.all(providers.map(async (provider) => {
-    if (provider.id !== 'streamed' || provider.embedUrl || !provider.source || !provider.matchId) return [provider];
-    const streams = await fetchStreamedStreams(provider.source, provider.matchId);
-    if (!streams || streams.length === 0) return [provider];
-    const sorted = [...streams].sort((a, b) => Number(Boolean(b.hd)) - Number(Boolean(a.hd)) || (a.streamNo || 0) - (b.streamNo || 0));
-    return sorted.slice(0, MAX_STREAMS_PER_SOURCE).map((stream) => ({
-      ...provider,
-      embedUrl: stream.embedUrl,
-      label: streamedStreamLabel(provider.source, stream, streams.length),
-    }));
-  }));
-  const seen = new Set();
-  return expanded.flat().filter((provider) => {
-    const key = provider.embedUrl || `${provider.source}|${provider.matchId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
+// A server's name in the player and the admin panel: its feed's own label
+// ("PPV · SkyCast", "StreamFree 1080p"), else the provider's name.
 export function providerLabel(provider) {
   if (!provider) return '';
   return provider.label || PROVIDER_NAMES[provider.id] || provider.id;

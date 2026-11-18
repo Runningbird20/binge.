@@ -1,4 +1,3 @@
-const { isReleasedPlexMovie, shouldKeepPlexRecord } = require('../scripts/scrapers/plex_importer');
 const {
   hasArchiveCoverArt,
   hasCoherentArchiveTitle,
@@ -7,49 +6,6 @@ const {
   normalizeArchiveTitle,
   shouldKeepArchiveBook,
 } = require('../scripts/scrapers/internet_archive_scraper');
-
-describe('Plex importer filters', () => {
-  const referenceDate = new Date('2026-04-08T12:00:00Z');
-
-  test('filters out movies releasing after the reference date', () => {
-    expect(
-      isReleasedPlexMovie(
-        {
-          mediaType: 'movie',
-          title: 'Future Movie',
-          releaseDate: '2026-04-09',
-        },
-        referenceDate
-      )
-    ).toBe(false);
-  });
-
-  test('keeps movies already released on or before the reference date', () => {
-    expect(
-      isReleasedPlexMovie(
-        {
-          mediaType: 'movie',
-          title: 'Released Movie',
-          releaseDate: '2026-04-08',
-        },
-        referenceDate
-      )
-    ).toBe(true);
-  });
-
-  test('does not apply the movie release filter to tv records', () => {
-    expect(
-      shouldKeepPlexRecord(
-        {
-          mediaType: 'tv',
-          title: 'Upcoming Show Season',
-          releaseDate: '2026-09-01',
-        },
-        referenceDate
-      )
-    ).toBe(true);
-  });
-});
 
 describe('Internet Archive book filters', () => {
   test('filters out books older than 2000', () => {

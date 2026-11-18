@@ -7,9 +7,8 @@
 // it to disk or worry about it going stale across browser sessions.
 //
 // Usage is stale-while-revalidate: callers hydrate from the cache
-// immediately (skipping the loading spinner) if an entry exists, then
-// always kick off a real fetch in the background to refresh it — see
-// useSessionCachedFetch below for the common case.
+// immediately (skipping the loading bar) if an entry exists, then always
+// kick off a real fetch in the background to refresh it.
 const store = new Map();
 
 export function getCached(key) {
@@ -21,14 +20,9 @@ export function setCached(key, value) {
   return value;
 }
 
-export function invalidateCached(key) {
-  store.delete(key);
-}
-
-// Removes every cached entry whose key starts with `prefix` — for
-// invalidating "all catalog views for this media type" after a mutation
-// that could change facets (e.g. an import), without needing to know the
-// exact filter/sort/search combination that produced each cached key.
+// Removes every cached entry whose key starts with `prefix`; '' clears it all.
+// The page tests clear it between tests (testUtils/pageTestSetup.js), so one
+// test's data never shows up in the next.
 export function invalidateCachedPrefix(prefix) {
   for (const key of store.keys()) {
     if (key.startsWith(prefix)) store.delete(key);

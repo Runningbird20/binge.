@@ -3,9 +3,8 @@
 // playing, so "worked" means the viewer stayed on it for a minute and
 // "failed" means it didn't load or they moved on within that minute.
 //
-// Kept per feed family (Streamed · admin, PPV · SkyCast, StreamFree 1080p),
-// which carries over between games, plus the server that last worked for
-// each game.
+// Kept per feed family (PPV · SkyCast, StreamFree 1080p), which carries over
+// between games, plus the server that last worked for each game.
 
 const KEY = 'binge.sportsFeeds.v1';
 const HALF_LIFE_DAYS = 10;
@@ -27,10 +26,10 @@ function write(data) {
   } catch { /* storage unavailable */ }
 }
 
-// "Streamed · admin 2 HD · English" and "Streamed · admin 1 HD" share a family.
+// A provider and its label: "PPV · SkyCast" is ppv:skycast, "StreamFree 1080p"
+// streamfree:streamfree 1080p.
 export function feedFamily(provider) {
   if (!provider) return '';
-  if (provider.id === 'streamed') return `streamed:${provider.source || ''}`;
   if (provider.id === 'ppv') return `ppv:${(provider.label || '').replace(/^PPV ·?\s*/, '').toLowerCase()}`;
   return `${provider.id}:${(provider.label || '').toLowerCase()}`;
 }
@@ -55,8 +54,7 @@ export function recordFeedWorked(provider, gameId) { record(provider, gameId, 1)
 export function recordFeedFailed(provider, gameId) { record(provider, gameId, -1); }
 
 // Stable order: the server that last worked for this game, then feed
-// families by how well they've worked lately, then the original order
-// (which is already HD-first within each Streamed source).
+// families by how well they've worked lately, then the original order.
 export function rankFeeds(providers, gameId, now = Date.now()) {
   const data = read();
   const last = gameId ? data.games[gameId]?.url : null;

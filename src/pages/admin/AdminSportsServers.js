@@ -4,10 +4,9 @@ import { ArrowClockwise } from '@phosphor-icons/react';
 import { supabase } from '../../utils/supabase';
 import { countFeedsBySwitch, fetchSportsFeeds, providerLabel, SPORTS_PROVIDER_IDS } from '../../utils/sportsProviders';
 
-// Sports feeds: how many games each provider (and each Streamed source)
-// carries right now, and a switch to take it out of rotation for everyone
-// (website, phones and the TV apps). Same server_config table as the movie
-// servers, keys prefixed "sports:".
+// Sports feeds: how many games each provider carries right now, and a switch
+// to take it out of rotation for everyone (website, phones and the TV apps).
+// Same server_config table as the movie servers, keys prefixed "sports:".
 export default function AdminSportsServers() {
   const [counts, setCounts] = useState(null);
   const [config, setConfig] = useState({});
@@ -37,17 +36,7 @@ export default function AdminSportsServers() {
     }
   }
 
-  // Streamed sources seen right now, plus any that were switched off (so a
-  // switched-off source that's quiet today can still be turned back on).
-  const sources = [...new Set([
-    ...Object.keys(counts || {}), ...Object.keys(config),
-  ].filter((key) => key.startsWith('sports:streamed:')))].sort();
-
-  const rows = SPORTS_PROVIDER_IDS.flatMap((id) => {
-    const parent = { key: `sports:${id}`, label: providerLabel({ id }) };
-    if (id !== 'streamed') return [parent];
-    return [parent, ...sources.map((key) => ({ key, label: key.slice('sports:streamed:'.length), parent: parent.key }))];
-  });
+  const rows = SPORTS_PROVIDER_IDS.map((id) => ({ key: `sports:${id}`, label: providerLabel({ id }) }));
 
   return (
     <section className="adm-panel" aria-labelledby="adm-sports-title">
@@ -70,19 +59,18 @@ export default function AdminSportsServers() {
           <tbody>
             {rows.map((row) => {
               const enabled = config[row.key]?.enabled !== false;
-              const parentOff = row.parent && config[row.parent]?.enabled === false;
               return (
-                <tr key={row.key} className={`${row.parent ? 'adm-subrow' : ''}${enabled && !parentOff ? '' : ' off'}`}>
-                  <th scope="row">{row.parent ? `Streamed · ${row.label}` : row.label}</th>
-                  <td>{counts[row.key] || 0}{parentOff && <span className="adm-muted adm-detail">off with Streamed</span>}</td>
+                <tr key={row.key} className={enabled ? '' : 'off'}>
+                  <th scope="row">{row.label}</th>
+                  <td>{counts[row.key] || 0}</td>
                   <td>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={enabled}
-                      aria-label={`${row.parent ? `Streamed ${row.label}` : row.label} in rotation`}
+                      aria-label={`${row.label} in rotation`}
                       className={`set-switch set-switch--sm${enabled ? ' on' : ''}`}
-                      onClick={() => toggle(row.key, row.parent ? `Streamed · ${row.label}` : row.label, !enabled)}
+                      onClick={() => toggle(row.key, row.label, !enabled)}
                     ><span /></button>
                   </td>
                 </tr>

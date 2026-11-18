@@ -1711,75 +1711,6 @@ select.filter-input {
    SKELETON LOADERS
    ══════════════════════════════════════════════════════════════ */
 
-/* ══════════════════════════════════════════════════════════════
-   TOAST NOTIFICATIONS
-   ══════════════════════════════════════════════════════════════ */
-
-@keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)   scale(1);    }
-}
-
-.toast-stack {
-  position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  pointer-events: none;
-  width: max-content;
-  max-width: min(360px, 90vw);
-}
-
-.toast {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(24, 24, 24, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 0.6rem 1rem;
-  font-size: 0.85rem;
-  color: #e8e8e8;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  pointer-events: auto;
-  cursor: pointer;
-  animation: toast-in 0.22s ease;
-  white-space: nowrap;
-}
-
-.toast-icon {
-  font-size: 0.78rem;
-  font-weight: 700;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.toast--success { border-color: rgba(80, 200, 120, 0.35); }
-.toast--success .toast-icon { background: rgba(80, 200, 120, 0.2); color: #50c878; }
-
-.toast--error { border-color: rgba(220, 80, 80, 0.35); }
-.toast--error .toast-icon { background: rgba(220, 80, 80, 0.2); color: #dc5050; }
-
-.toast--info { border-color: rgba(100, 160, 240, 0.35); }
-.toast--info .toast-icon { background: rgba(100, 160, 240, 0.2); color: #64a0f0; }
-
-/* On mobile the toast sits above the bottom nav */
-@media (max-width: 768px) {
-  .toast-stack { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
-}
-
 /* ── book-detail-modal: bottom-sheet on mobile ───────────── */
 
 /* ══════════════════════════════════════════════════════════════
@@ -2585,6 +2516,23 @@ body {
   position: sticky;
   top: calc(64px + env(safe-area-inset-top, 0px));
   z-index: 15;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  transition-property: grid-template-rows, opacity;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.genre-bar-outer.is-collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+}
+/* No padding here, so the row can shrink all the way to 0. The scroll
+   arrows inside still position against .genre-bar-outer. */
+.genre-bar-fold {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .genre-scroll-btn {

@@ -30,7 +30,7 @@ npm test                  # Jest/RTL in watch mode
 npm run lint              # ESLint on server/, api/, scripts/, src/ and e2e/, tests included (warnings fail it)
 CI=true npx react-scripts test --watchAll=false                    # run the full suite once, non-interactive
 CI=true npx react-scripts test --watchAll=false src/pages/Books.test.js    # run a single test file
-node --test server/data-access/*.test.js server/routes/*.test.js    # server tests (CI runs these too)
+npm run test:server       # server tests: every server/**/*.test.js, wherever it sits (CI runs these too)
 npm run test:e2e          # Playwright, local only (see Testing notes)
 ```
 
@@ -53,7 +53,9 @@ Branch from an up-to-date `main` (`git pull` on `main` first, or `git switch -c 
 ### Data import / seeding scripts
 
 The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/books, **in Turso**) from external sources. These are standalone Node scripts, not part of the app runtime, and you only touch them when the task is about catalog data, not app features.
-- **Older importers:** the `npm run` entries prefixed `import:*` and `supabase:*` in `package.json`. The Goodreads, TMDB, Plex, Internet Archive and Open Library scrapers/importers are in `scripts/scrapers/` and write to the root `data/` folder. `scripts/run-supabase-sql.js` applies `supabase/repeatable_schema.sql` + seed files.
+- **Movies and series** come only from the two syncs below. After each bulk sync, `scripts/backfill-catalog-fields.js` fills missing TMDB fields and `scripts/remove-adult-titles.js` deletes titles TMDB flags as adult. The old Plex and TMDB scrapers, which wrote JSON files into `data/` that nothing loaded, were deleted (2026-11-18).
+- **Book scrapers** (Goodreads, Internet Archive, Open Library, in `scripts/scrapers/`, `import:goodreads*` / `import:books*` / `import:openlibrary*`) write to the root `data/` folder. They go with the books removal (`TODO.md`).
+- `scripts/run-supabase-sql.js` (`npm run supabase:sql`) applies `supabase/repeatable_schema.sql` + seed files.
 - **Bulk sync:** `scripts/sync-tmdb-to-turso.js` (`sync-tmdb.yml`; shared TMDB helpers in `scripts/tmdb-records.js`). It works through TMDB's export by popularity, so it misses small new regional releases.
 - **Language sync:** `scripts/sync-language-to-turso.js` fills that gap.
   - `npm run import:language`, default `LANGUAGES=ml`. `:preview` is a TMDB-only dry run.
@@ -62,7 +64,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows/b
 
 ## Repo layout
 
-- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `books/` for the book popup, `sports/` for the Sports page, `manga/` for the Manga tab), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
+- `src/` — the website: `pages/`, `components/` (the pieces of the bigger screens in subfolders: `player/` for the movie/TV player's hooks, `title/` for the title popup, `home/` for Home's cards, stats, Surprise me and its spotlight and Continue Watching hooks, `catalog/` for the Movies/Series grid, `books/` for the book popup, `sports/` for the Sports page, `manga/` for the Manga tab), `hooks/`, `contexts/`, `utils/` (data access in `utils/data/`), stylesheets in `styles/` (imported once from `App.js`/`index.js`, see below).
 - `server/` + `api/` — the Express backend and its Vercel function entry points.
 - `scripts/` — catalog sync, checks and one-off migrations; `scripts/scrapers/` — the older import scrapers (output in `data/`).
 - `supabase/` — accounts/user-data schema (`migrations/`, `repeatable_schema.sql`, `manual/`); `turso/schema.sql` — the media catalog schema.
@@ -86,7 +88,7 @@ Nothing lives in both (see `docs/database-split.md`). The `supabase` client expo
 
 Server code uses the same split (`server/data-access/client.js`); the TV apps send media `GET`s to `{site}/api/catalog/rest/{table}`. Never join user tables to media in SQL (they're in different databases): fetch ids, then look titles up. `.github/workflows/database-split.yml` checks weekly that nothing has drifted back.
 
-**Turso (moved from Neon 2026-11-04).** libSQL/SQLite (`server/catalogDb.js`): `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`, or `file:data/turso/catalog.db` for a local copy made with `turso-catalog.js pull --db file:…`. Schema in `turso/schema.sql`; maintenance with `scripts/turso-catalog.js` (`schema`, `refresh`, `rebuild-search`, `pull`). Nothing reads or syncs with Neon any more.
+**Turso (moved from Neon 2026-11-04).** libSQL/SQLite (`server/catalogDb.js`): `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`, or `file:data/turso/catalog.db` for a local copy made with `turso-catalog.js pull --db file:…`. Schema in `turso/schema.sql`; maintenance with `scripts/turso-catalog.js` (`schema`, `refresh`, `rebuild-search`, `pull`). Nothing reads or syncs with Neon any more: the Neon database (the Vercel Marketplace resource `neon-binge`) and its `STORAGE_*` / `NEON_*` variables were deleted on 2026-11-18.
 - **SQL dialect.** `server/data-access/query.js` turns the PostgREST-shaped specs into SQLite SQL: `?N` params, `LIKE` for ilike, Postgres's NULL ordering spelled out, titles `COLLATE NOCASE`, no `DEFAULT` in VALUES. `catalogDb.query` also accepts the routes' Postgres-flavoured SQL (`$1`, `ILIKE`), but `ANY()`, `::casts` and `NOW()` don't exist. Turso also rejects named arguments a statement doesn't use (local SQLite ignores them).
 - **Turso bills rows scanned** (free plan: 500M reads / 10M writes a month), so every query needs an index.
   - Run the server with `CATALOG_DEBUG=plan` to log each query plan. `FULL SCAN` means one read per row.
@@ -101,7 +103,7 @@ Server code uses the same split (`server/data-access/client.js`); the TV apps se
 This is the one thing every route/feature decision hinges on. There are two ways data gets to the frontend:
 
 1. **Direct Supabase calls** (the default path). Most of the app calls functions in `src/utils/supabaseData.js` directly. It re-exports `src/utils/data/{account,library,progress,shared}.js`; tests `jest.spyOn` it, so keep its exports plain `export const`. These use the Supabase JS client (`src/utils/supabase.js`, anon/publishable key) straight from the browser, protected by Row Level Security policies (see `supabase/repeatable_schema.sql`).
-2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`), a client-side router that reimplements a handful of REST-shaped endpoints (search, media details, profile, admin) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
+2. **The `api` object** (`src/api.js`). A smaller set of routes go through `api.get/post/put/patch/delete(path, body)`. This first tries `executeSupabaseRoute()` (`src/utils/supabaseApi.js`, loaded on the first call and prefetched while idle, so it and the catalog code stay out of the main bundle), a client-side router that reimplements a handful of REST-shaped endpoints (search, book pages, TMDB/AniList lookups, profile) as direct Supabase queries. If that returns `null` for a path, it falls through to `requestLegacyApi()`, which hits the real Express backend at `/api/...`. `api.js` retries GETs, and the Ask binge. POST, once on a network failure.
 
 **The Express backend** (`server/app.js` + `server/routes/*.js`) is deployed unconditionally as a Vercel serverless function (`api/index.js` re-exports `server/app`; `vercel.json` routes `/api/(.*)` to `api/[...slug].js`). Its route files:
 - `catalog` — the catalog proxy (watched by `data-access/monitor.js`, see Catalog monitoring);
@@ -110,8 +112,9 @@ This is the one thing every route/feature decision hinges on. There are two ways
 - `books`, `manga` — reading proxies;
 - `cron`, `ops` — error reports, health checks, broadcasts;
 - `og` — link previews: `vercel.json` sends link-preview bots (by user agent) asking for `/movie/:id`, `/tv-show/:id` or `/book/:id` here, a small page whose og:/twitter: tags carry the title, description and TMDB backdrop (people get the normal site);
-- `admin`, `account` — service role;
-- `media` — the few catalog reads `supabaseApi.js` deliberately passes on (popular titles, curated lists, relevance sort).
+- `admin`, `account` — service role.
+
+There's no server route for catalog reads. Movies and series are read in the browser through `src/utils/catalogQueries.js` (the split client sends them to `/api/catalog`), with no fallback path. The old `/api/media` route was a second SQL copy of the same reads and was removed (2026-11-18).
 
 The data layer (`src/utils/data/*`) has no second backend. Without Supabase configured, reads return nothing and writes throw "Supabase is not configured". (Jest runs that way: `.env.local` isn't loaded in tests, so mock what a test needs.)
 
@@ -169,8 +172,8 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
 - **Admin panel** (`/admin`, `src/pages/AdminHome.js` + `src/pages/admin/*`). Its tabs:
   - **Overview** — the `admin_stats()` RPC (aggregates only; refuses non-admins).
   - **Servers** — status, Check now (`POST /api/ops/health-check`), and a per-server on/off switch in `server_config` that the player honors via `fetchDisabledServers`.
-  - **Sports feeds** (`AdminSportsServers.js`, under Servers) — keys `sports:ppv` / `sports:streamfree` / `sports:timstreams` (its events and the TV-channel college games). `sports:streamed` / `sports:streamed:<source>` belong to Streamed, which closed. Disabled feeds are dropped before merging by `withoutDisabledFeeds` in `fetchSportsStreams`, and by `switchKeys` on the TVs.
-  - **Databases** (`AdminDatabases.js`). Health and fullness of both databases, from `GET /api/ops/databases` (`server/routes/databaseHealth.js`, admin only), checked when the tab opens and on Check again.
+  - **Sports feeds** (`AdminSportsServers.js`, under Servers) — keys `sports:ppv` / `sports:streamfree` / `sports:timstreams` (its events and the TV-channel college games). Disabled feeds are dropped before merging by `withoutDisabledFeeds` in `fetchSportsStreams`, and by `switchKeys` on the TVs.
+  - **Databases** (`AdminDatabases.js`). Health and fullness of both databases, from `GET /api/ops/databases` (`server/routes/ops.js`, built by `server/utils/databaseHealth.js`, admin only), checked when the tab opens and on Check again.
     - **Health.** Each check shows up, slow (over 1.5s) or down, with its response time. Supabase: a query, Auth's `/auth/v1/health`, Storage. Turso: a catalog query.
     - **How full.** A meter list against the plan's limits; gold at 80%, red at 95%, and the row says so in words.
       - **Supabase:** database and file storage from `admin_database_stats()`, which only the service role can call (migration `20261116130000_admin_database_stats.sql`). Also its largest tables.
@@ -189,7 +192,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - A 401/403/429 counts as "unknown" (bot protection), not down.
   - Two consecutive failures send an admin push, plus `ALERT_WEBHOOK_URL` if set.
   - Shown on `/admin` and fed into the player's ranking ("Down right now").
-  - Keep `PROBES` in sync with `PROVIDERS` in `src/utils/embedProviders.js`.
+  - The probe list is the player's own server list, `src/utils/embedServers.js` (plain data with no imports, loaded by the server on first use like `sportsFeeds.js`), each probed at the URL the player builds for the film. Adding or removing a server there changes both.
 - **Server health for ranking.** The `stream_provider_health()` RPC (counts only, security definer) feeds `rankServers`'s `health`. A provider that's broadly down today (`summarizeHealth`) ranks last and is labelled; title-specific reports still win.
 
 ### Book ids must stay below 2^53
@@ -200,7 +203,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 ### Routing, loading & errors
 
-- `src/App.js` is the single route table. Pages are lazy-loaded with `lazyWithReload` (`utils/lazyWithReload.js`): `React.lazy`, plus one reload (at most once a minute) when a deploy has removed the old build's chunks. Page code is prefetched on idle after load (`PAGE_LOADERS`), so switching pages doesn't wait on a download. A new page needs both entries.
+- `src/App.js` is the single route table. Pages are lazy-loaded with `lazyWithReload` (`utils/lazyWithReload.js`): `React.lazy`, plus one reload (at most once a minute) when a deploy has removed the old build's chunks. Page code is prefetched on idle after load (`PAGE_LOADERS`), so switching pages doesn't wait on a download. A new page needs both entries. The sign-in pages (Login, Signup, PasswordReset) are the exception: they're in `SIGN_IN_PAGE_LOADERS`, fetched only once auth says nobody is signed in, so signed-in visits never download them. Only `Landing` is imported directly.
 - Routes needing auth are wrapped in `<ProtectedRoute>`. Admin-only routes also pass `allowedUserTypes={['admin']}`.
 - **Loading** shows `LoadingBar` (`components/LoadingBar.js`) in the box the content will fill: rows, grids and cards. It has a label and a bar that counts finished data requests (`trackedFetch` in `utils/loadingProgress.js`). Never use a page-centered spinner. The person page uses `.person-skel` placeholders.
 - **Errors/offline:** an `ErrorBoundary` per route (`AppShell`), per `TitleRow` (`RowProblem` + Retry) and around `BrowseHero`; plus `OfflineBanner`.
@@ -239,7 +242,7 @@ Book ids were SHA-1-derived 60-bit numbers, which JavaScript silently rounds, so
 
 ### Browse rows, recommendations & release window
 
-Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `BrowseHero` spotlight plus `TitleRow`s of `TitleCard`s). `?view=all` or `?genre=` switches those pages to the older filterable grid (`CatalogView`). Both pages are one component, `pages/CatalogPage.js`; what differs between them is its `CATALOGS` entry, and `Movies.js`/`TVShows.js` just pass `mediaType`. Home uses the same components.
+Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `BrowseHero` spotlight plus `TitleRow`s of `TitleCard`s). `?view=all` or `?genre=` switches those pages to the older filterable grid (`components/catalog/CatalogView.js`). Both pages are one component, `pages/CatalogPage.js`; what differs between them is their `CATALOGS` entry (`components/catalog/catalogs.js`), and `Movies.js`/`TVShows.js` just pass `mediaType`. Home uses the same components.
 
 - **Rows come from live TMDB lists, matched back to catalog rows.** The catalog's own `popularity`/`vote_average` are a stale import snapshot, null for many big titles.
   - `src/utils/browseRows.js` defines each row as a TMDB query (`src/utils/tmdb.js`: browser-side, public `REACT_APP_TMDB_API_KEY`, 30-min sessionStorage cache keyed by path + params) plus a catalog-table fallback (`fetchCatalogBrowseRow`).
@@ -280,7 +283,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Links carry `&t=`.** Continue Watching links include the saved second (see the web player).
 - **New Episodes** row (`src/utils/newEpisodes.js`, TMDB `last_episode_to_air`).
 - **Opens instantly on a return visit.** Home's stats and personal rows, its Top 10s and the Movies/Series rows are kept on the device for a week (`utils/keptCache.js`, `TitleRow keepKey`), painted at once and refreshed; signing out clears them.
-- **Surprise me** (above Continue Watching, `SurpriseButtons` in `Home.js`, logic in `utils/surprise.js`):
+- **Surprise me** (above Continue Watching, `components/home/SurpriseButtons.js`, logic in `utils/surprise.js`):
   - "Surprise me with a movie" and "… with a series" each open one title of that type.
   - The title comes from the profile's Top Picks / "Because you watched" rows, which `buildPersonalizedRows` has already filtered for maturity and the release window. Picks lean toward the top and skip Coming Soon titles, watched titles (`exclude`) and the last 6 surprises.
   - A profile with no history gets the spotlight's trending titles of that type. A type with nothing to offer loses its button.
@@ -440,7 +443,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 - **Before adding or removing a server, test it embedded in an iframe on a non-provider origin and watch for real HLS/MP4 requests.** A 200 page proves nothing: vsembed.ru serves its page but shows "This media is unavailable", and vidsrc.ru is a different, working service. Test it sandboxed too, and set its `sandbox` flag (below).
 - **Pop-ups are blocked by sandboxing the player** (`utils/popupSandbox.js`, `player/usePopupSandbox.js`).
   - **Why a sandbox.** The site can't see a pop-up's address or block anything inside a cross-origin player, so there's no block list. Instead, servers that tolerate it load in an iframe sandbox without `allow-popups` / `allow-top-navigation`, and the browser refuses every pop-up, pop-under and tab redirect from them and their nested ad frames.
-  - **Which servers.** Retested 2026-11-16 in Chrome and in WebKit (Safari's engine), every server sandboxed and not, on three titles. A server counted as playing once its full-length `<video>` had played 5 seconds. VidRift, CineSrc, VidSpark and EmbedWave play sandboxed, and VidCore does when it plays at all. Sandboxed, every other server shows a refusal or ad page instead (Videasy's domain no longer resolves), so each server carries a tested `sandbox` flag in `embedProviders.js`. Only `true` sandboxes a server; an untested one loads normally.
+  - **Which servers.** Retested 2026-11-16 in Chrome and in WebKit (Safari's engine), every server sandboxed and not, on three titles. A server counted as playing once its full-length `<video>` had played 5 seconds. VidRift, CineSrc, VidSpark and EmbedWave play sandboxed, and VidCore does when it plays at all. Sandboxed, every other server shows a refusal or ad page instead (Videasy's domain no longer resolves), so each server carries a tested `sandbox` flag in `embedServers.js`. Only `true` sandboxes a server; an untested one loads normally.
   - **Testing a flag.** Watch the `<video>` in every frame, not the server's messages. VidLink, VixSrc and both VidSrcs keep posting playback times behind their "disable the sandbox" page. Watch for a minute too: some players are replaced by ads or gates after the first seconds.
   - **The safety net** (event servers only). A sandboxed load counts as working only once the server reports 5 seconds of playback (`SANDBOX_PLAY_SECONDS`), not just a time. A resume position or a frozen first frame isn't playback; CineSrc once froze that way in WebKit.
     - **Reload.** A load that reports nothing within 12s, or doesn't play 5 seconds within 12s of its first time, reloads unsandboxed. If that load plays 5 seconds, the refusal is remembered on that device for 14 days.
@@ -508,7 +511,7 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
 - **Hide scores** (`binge.sports.hideScores`) masks the scores on cards, the hero and `LiveScorePanel`.
 - **League names** are unified by `canonicalLeague` (NCAAF → College Football).
 - **Stable game ids.** A game's id comes from the first listing's team names, so `loadSportsStreams` merges feeds in a fixed order (`FEEDS`: PPV, StreamFree, TimStreams, TV-channel games), never in arrival order. New feeds go last, so existing games keep their ids. Otherwise a game's id changed between refreshes and the player showed "not in the schedule" mid-game. The page also keeps the game being watched (and Multiview tiles) across refreshes, re-finding it with `sameGame` under its old id.
-- **Player and chips.** Servers in the player are a row of buttons. Hovering a live card warms it (`expandStreamProviders` is cached 90s). The chip bar fades an edge only when there's more to scroll that way.
+- **Player and chips.** Servers in the player are a row of buttons. Hovering a live card warms it: a preconnect to its servers' hosts and a reachability check. The chip bar fades an edge only when there's more to scroll that way.
 
 **Merging and servers.** `src/utils/sportsProviders.js` holds the single copy of the one-entry-per-game merge: fuzzy team matching across "vs"/"at"/"@"/"-", category normalization, a ±3h window and league inference. The feed fetchers + normalizers are one ES module, `src/utils/sportsFeeds.js`. The browser imports it, and `server/routes/sports.js` `require`s it with its own timeout and PPV User-Agent, returning `{ raw }` for the client to merge. It must stay a `.js` (Vercel's build compiles that to CommonJS) and be required inside the route, not at startup: on 2026-11-06, loaded at startup as an `.mjs`, it took every `/api` route down (`sports.test.js` checks this). Each game's provider feeds are its selectable servers:
 - **PPV:** `substreams` mirrors are extra servers.
@@ -518,7 +521,7 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
   - **Over-the-air networks** split the country on busy Saturdays and TimStreams carries one feed of each, so their games are only listed when nothing else of ours is on that network within 3 hours.
   - **Streaming-only services** (ESPN+, SECN+, ACCNX, B1G+, Peacock, FloSports) have no channel. On 2026-11-09 they were most of the gap: 25% of the next day's men's games were covered, 1% of women's.
   - **Women's games** (`isWomens`) never merge with the men's game between the same schools, and get their own id.
-- **Streamed** closed in November 2026 (its site says so). Its feed is gone; the per-source switches, `expandStreamProviders` and `/api/sports/resolve/streamed` are left over and unused.
+- **Streamed** closed in November 2026 (its site says so), and nothing of it is left on the website or the TV apps. Its old `sports:streamed*` switches may still be rows in `server_config`; nothing reads them.
 - **Ranking:** the player orders servers with `rankFeeds` (`utils/sportsServerMemory.js`). The server that last worked for this game goes first, then the feed families that worked lately. "Worked" means 60s on a server; leaving within the minute or a load failure counts against it.
 - PPV shows "Remove sandbox attributes" to headless/automated browsers even top-level. That isn't our iframe; verify PPV in a real browser.
 
@@ -686,7 +689,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
     - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles;
     - `GOOGLE_BOOKS_API_KEY` — book previews.
   - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
-  - **Optional:** `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` (popular titles for the `media` route's relevance sort), `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
+  - **Optional:** `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
   - **Admin → Databases (optional):**
     - `TURSO_PLATFORM_TOKEN` and `TURSO_ORG`: this month's rows read/written and the real plan. The token is a Turso Platform API token from `turso auth api-tokens mint`, not the database token.
     - `TURSO_DATABASE_NAME`: only if the hostname isn't `<database>-<org>.…`.
@@ -695,7 +698,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
 
 ## Testing notes
 
-**CI** (`.github/workflows/ci.yml`, "Tests and build", meant to be the required check on `main`) runs Jest, `node --test server/data-access/*.test.js server/routes/*.test.js`, `npm run lint` and `CI=true npm run build` on every PR. The full suite is expected to be green.
+**CI** (`.github/workflows/ci.yml`, "Tests and build", meant to be the required check on `main`) runs Jest, `npm run test:server` (`node --test` on every `server/**/*.test.js`), `npm run lint` and `CI=true npm run build` on every PR. The full suite is expected to be green.
 
 **Jest conventions.** Test files sit next to what they test (`*.test.js`), not in a separate directory.
 - **Page tests** sit next to their pages (`src/pages/Books.test.js`, `Movies.test.js`, …) and share `src/testUtils/pageTestSetup.js`: the router mock, `setMockSearchParams`, `renderWithAuth`, the catalog mocks and `installPageTestHooks()`.

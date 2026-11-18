@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import LoadingBar from '../../components/LoadingBar';
 import { api } from '../../api';
-import { ago } from './AdminServers';
+import { timeAgo } from '../../utils/timeAgo';
 
 const DOT = { up: 'green', slow: 'yellow', down: 'red' };
 const STATE = { up: 'Healthy', slow: 'Slow', down: 'Down' };
@@ -23,7 +23,7 @@ const formatPercent = (share) => `${(share * 100).toFixed(share < 0.1 ? 1 : 0)}%
 const formatMs = (ms) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
 // Admin → Databases: whether Supabase and Turso answer, how fast, and how
-// full each is against its plan (server/routes/databaseHealth.js). Checked
+// full each is against its plan (server/utils/databaseHealth.js). Checked
 // when the tab opens and on Check again.
 export default function AdminDatabases() {
   const [report, setReport] = useState(null);
@@ -52,7 +52,7 @@ export default function AdminDatabases() {
             <h3 id="adm-db-title">Databases</h3>
             <p className="adm-muted">
               Supabase holds accounts and everything people save; Turso holds the movie, series and book catalog.
-              {report && ` Checked ${ago(report.checkedAt)}.`}
+              {report && ` Checked ${timeAgo(report.checkedAt)}.`}
             </p>
           </div>
           <button type="button" className="st-btn st-btn--ghost" onClick={runCheck} disabled={checking}>
@@ -193,7 +193,7 @@ function CatalogRows({ rows }) {
           <div key={row.name}>
             <dt>{row.name}</dt>
             <dd>{row.rows.toLocaleString('en-US')}</dd>
-            <dd className="adm-facts-sub">{row.updatedAt ? `as of ${ago(row.updatedAt)}` : ''}</dd>
+            <dd className="adm-facts-sub">{row.updatedAt ? `as of ${timeAgo(row.updatedAt)}` : ''}</dd>
           </div>
         ))}
       </dl>

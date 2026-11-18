@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Play, Star, WarningCircle, X } from '@phosphor-icons/react';
+import { ArrowLeft, Check, Play, Plus, Star, WarningCircle, X } from '@phosphor-icons/react';
 import { providerFor } from '../../utils/mangaProviders';
 import RatingInput from '../RatingInput';
 import RatingArtifact, { RATING_CATEGORIES, computeNormalizedScore } from '../RatingArtifact';
@@ -14,6 +14,17 @@ import {
   MANGA_STATUSES,
 } from '../../utils/mangaLibrary';
 import { WhereToRead, ExternalRead } from './WhereToRead';
+
+// The library button's label: a check and the saved status, or a plus.
+function LibraryLabel({ saved, addText }) {
+  const status = MANGA_STATUSES.find((s) => s.value === saved?.status)?.label || 'In Library';
+  return (
+    <span className="icon-label">
+      {saved ? <Check size={16} weight="bold" aria-hidden="true" /> : <Plus size={16} weight="bold" aria-hidden="true" />}
+      {saved ? status : addText}
+    </span>
+  );
+}
 
 // ─── ChapterModal (full book-style detail view) ───────────────
 export function ChapterModal({ comic, onClose, onRead }) {
@@ -82,10 +93,6 @@ export function ChapterModal({ comic, onClose, onRead }) {
   }
 
   const displayed = showAll ? chapters : chapters.slice(0, 20);
-
-  const libraryLabel = saved
-    ? `✓ ${MANGA_STATUSES.find(s => s.value === saved.status)?.label || 'In Library'}`
-    : '+ Library';
 
   if (isMobile) {
     return (
@@ -186,7 +193,7 @@ export function ChapterModal({ comic, onClose, onRead }) {
 
         <div className="mob-detail-bar">
           <button type="button" className="mob-detail-bar-btn mob-detail-bar-btn--secondary" onClick={() => setListOpen(true)}>
-            {libraryLabel}
+            <LibraryLabel saved={saved} addText="Library" />
           </button>
           {chapters.length > 0 && (
             <button type="button" className="mob-detail-bar-btn mob-detail-bar-btn--watch" onClick={() => onRead(chapters[0], chapters)}>
@@ -206,10 +213,11 @@ export function ChapterModal({ comic, onClose, onRead }) {
               key={s.value}
               type="button"
               className={`bsheet-option${saved?.status === s.value ? ' active' : ''}`}
+              aria-pressed={saved?.status === s.value}
               onClick={() => selectStatus(s.value)}
             >
               <span>{s.label}</span>
-              {saved?.status === s.value && <span className="bsheet-option-check">✓</span>}
+              {saved?.status === s.value && <Check size={18} weight="bold" className="bsheet-option-check" aria-hidden="true" />}
             </button>
           ))}
           {saved && (
@@ -284,9 +292,7 @@ export function ChapterModal({ comic, onClose, onRead }) {
                   className={`btn-primary book-detail-library-btn${saved ? ' is-saved' : ''}`}
                   onClick={() => setListOpen(v => !v)}
                 >
-                  {saved
-                    ? `✓ ${MANGA_STATUSES.find(s => s.value === saved.status)?.label || 'In Library'}`
-                    : '+ Add to Library'}
+                  <LibraryLabel saved={saved} addText="Add to Library" />
                 </button>
                 {listOpen && (
                   <div className="manga-list-dropdown">

@@ -132,7 +132,7 @@ test('says so, with Retry, when the catalog can’t be reached', async () => {
   setMockSearchParams('?view=all');
   jest.spyOn(AuthContextModule, 'useAuth').mockReturnValue({ user: { id: 7, username: 'mediafan' }, authLoading: false });
   jest.spyOn(supabaseDataModule, 'fetchSupabaseRatingMap').mockResolvedValue({});
-  // The catalog and the legacy API (not configured in Jest) both fail.
+  // The catalog fails (there's no second path to try).
   jest.spyOn(catalogQueriesModule, 'fetchMovieCatalogSegment').mockRejectedValue(new Error('offline'));
 
   render(<Movies />);

@@ -5,11 +5,19 @@ import { Alarm, Bell, CheckCircle, HardDrives, Megaphone, Television, Trophy } f
 import { useAuth } from '../contexts/AuthContext';
 import useDeviceType from '../hooks/useDeviceType';
 import useNotifications from '../hooks/useNotifications';
-import { INBOX_DAYS, timeAgo } from '../utils/notificationsInbox';
+import { INBOX_DAYS } from '../utils/notificationsInbox';
+import { timeAgo } from '../utils/timeAgo';
 import BottomSheet from './BottomSheet';
 import LoadingBar from './LoadingBar';
 
 const KIND_ICONS = { episode: Television, reminder: Alarm, game: Trophy, announcement: Megaphone, server: HardDrives };
+
+// The time stands alone under each alert, so it starts with a capital:
+// "Just now", "5 min ago", "Yesterday".
+function alertTime(iso) {
+  const label = timeAgo(iso);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 // The bell in the header, left of the profile (on phones, the top right):
 // the last 30 days of alerts (utils/notificationsInbox.js), a dot on each
@@ -141,7 +149,7 @@ function InboxItem({ item, onOpen }) {
         <span className="nav-inbox-text">
           <span className="nav-inbox-item-title">{unread && <span className="sr-only">Unread: </span>}{item.title}</span>
           {item.body && <span className="nav-inbox-item-body">{item.body}</span>}
-          <time className="nav-inbox-time" dateTime={item.created_at}>{timeAgo(item.created_at)}</time>
+          <time className="nav-inbox-time" dateTime={item.created_at}>{alertTime(item.created_at)}</time>
         </span>
         {unread && <span className="nav-inbox-dot" aria-hidden="true" />}
       </button>

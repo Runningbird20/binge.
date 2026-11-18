@@ -9,12 +9,6 @@ import { generateSupabaseRecommendations } from './recommendations';
 import {
   fetchBookById,
   fetchBooksPage,
-  fetchMovieById,
-  fetchMovieCuratedRows,
-  fetchMoviesPage,
-  fetchTvShowById,
-  fetchTvShowCuratedRows,
-  fetchTvShowsPage,
   fetchCatalogByTmdbIds,
 } from './catalogQueries';
 import { searchTmdbMulti } from './tmdb';
@@ -215,60 +209,9 @@ async function fetchAniListId(title) {
   };
 }
 
+// Every /media/* path is answered here, in the browser; none reaches the
+// server. Movies and series are read with catalogQueries.js directly.
 async function handleMediaGet(pathname, searchParams) {
-  if (
-    pathname === '/media/popular-titles' ||
-    pathname === '/media/movies/curated' ||
-    pathname === '/media/tv-shows/curated' ||
-    ((pathname === '/media/movies' || pathname === '/media/tv-shows') && searchParams.get('sort') === 'relevance')
-  ) {
-    return null;
-  }
-
-  if (pathname === '/media/movies') {
-    const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
-    return fetchMoviesPage({
-      page: Number(searchParams.get('page') || 1),
-      pageSize,
-      search: searchParams.get('search') || '',
-      genre: searchParams.get('genre') || '',
-      sortOrder: searchParams.get('sort') || 'title-asc',
-    });
-  }
-
-  if (pathname === '/media/movies/curated') {
-    return { rows: await fetchMovieCuratedRows() };
-  }
-
-  const movieMatch = pathname.match(/^\/media\/movies\/([^/]+)$/);
-  if (movieMatch) {
-    const movie = await fetchMovieById(decodeURIComponent(movieMatch[1]));
-    if (!movie) throw new Error('Movie not found.');
-    return movie;
-  }
-
-  if (pathname === '/media/tv-shows') {
-    const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 48);
-    return fetchTvShowsPage({
-      page: Number(searchParams.get('page') || 1),
-      pageSize,
-      search: searchParams.get('search') || '',
-      genre: searchParams.get('genre') || '',
-      sortOrder: searchParams.get('sort') || 'title-asc',
-    });
-  }
-
-  if (pathname === '/media/tv-shows/curated') {
-    return { rows: await fetchTvShowCuratedRows() };
-  }
-
-  const tvMatch = pathname.match(/^\/media\/tv-shows\/([^/]+)$/);
-  if (tvMatch) {
-    const show = await fetchTvShowById(decodeURIComponent(tvMatch[1]));
-    if (!show) throw new Error('TV show not found.');
-    return show;
-  }
-
   if (pathname === '/media/books') {
     const pageSize = Number(searchParams.get('page_size') || searchParams.get('pageSize') || 24);
     return fetchBooksPage({
