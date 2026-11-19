@@ -130,6 +130,23 @@
 
 .td-round-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
+/* The bell (RemindButton) swings from its top when alerts or a reminder turn
+   on. Reduced motion ends it at once (the global rule in streaming.css). */
+.td-bell { display: inline-flex; transform-origin: 50% 10%; }
+
+.td-bell--ring { animation: td-bell-ring 0.9s ease-in-out; }
+
+@keyframes td-bell-ring {
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(18deg); }
+  22% { transform: rotate(-15deg); }
+  34% { transform: rotate(11deg); }
+  46% { transform: rotate(-8deg); }
+  58% { transform: rotate(5deg); }
+  70% { transform: rotate(-2deg); }
+  82% { transform: rotate(1deg); }
+}
+
 .td-round-btn:disabled { opacity: 0.5; cursor: default; }
 
 .td-status {
@@ -684,17 +701,6 @@
 .td-remind-menu button { display: block; width: 100%; min-height: 40px; padding: 0 0.7rem; border: 0; border-radius: 8px; background: none; color: #fff; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
 
 .td-remind-menu button:hover, .td-remind-menu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
-
-/* A series' "New episodes & seasons" switch, first in the bell's menu. */
-.td-remind-menu .td-remind-follow { display: flex; align-items: center; justify-content: space-between; gap: 0.9rem; padding: 0.45rem 0.7rem; margin-bottom: 0.25rem; }
-
-.td-remind-follow-text { display: flex; flex-direction: column; gap: 0.1rem; white-space: nowrap; }
-
-.td-remind-follow-text small { font-size: 0.74rem; font-weight: 500; color: var(--exp-text-dim); }
-
-.td-remind-follow .set-switch { display: inline-block; pointer-events: none; }
-
-.td-remind-menu .td-remind-follow:disabled { cursor: default; opacity: 0.6; }
 
 @media (max-width: 768px) { .td-remind-menu { left: auto; right: 0; transform: none; } }
 

@@ -98,53 +98,51 @@ test('a kids profile isn’t asked: it’s the account holder’s inbox', async 
 describe('on a series', () => {
   const SERIES = { id: 10, title: 'Severance' };
   const renderSeries = () => render(<RemindButton item={SERIES} mediaType="tv_show" />);
-  const openMenu = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: /^Alerts and reminders/ }));
-    return screen.getByRole('menuitemcheckbox', { name: /^New episodes & seasons/ });
-  };
+  const bell = () => screen.getByRole('button', { name: 'Alerts for new episodes and seasons' });
 
-  test('the bell first offers new episodes & seasons, on already for a show you follow', async () => {
+  test('the bell is the switch for new-episode and new-season alerts, on already for a show you follow', async () => {
     renderSeries();
-    expect(await screen.findByRole('button', { name: 'Alerts and reminders: new episodes and seasons on' })).toBeInTheDocument();
-    const alerts = await openMenu();
-    expect(alerts).toHaveAttribute('aria-checked', 'true');
-    expect(alerts).toHaveTextContent('You’ll get an alert');
+    await waitFor(() => expect(bell()).toHaveAttribute('aria-pressed', 'true'));
     expect(fetchShowAlerts).toHaveBeenCalledWith(10);
-    // The reminders are still there under it.
-    expect(screen.getByRole('menuitem', { name: 'Tonight at 8 PM' })).toBeInTheDocument();
+    expect(bell()).toHaveAttribute('title', 'Alerts on for new episodes and seasons');
+    // No menu, no reminder times.
+    expect(bell()).not.toHaveAttribute('aria-haspopup');
   });
 
-  test('turning it off mutes the show', async () => {
+  test('tapping it off mutes the show', async () => {
     renderSeries();
-    fireEvent.click(await openMenu());
+    await waitFor(() => expect(bell()).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(bell());
     await waitFor(() => expect(saveShowAlerts).toHaveBeenCalledWith(10, false));
-    expect(toast).toHaveBeenCalledWith('Alerts off for Severance', { description: 'Turn them back on here any time.' });
-    expect(await screen.findByRole('button', { name: 'Alerts and reminders' })).toBeInTheDocument();
+    expect(bell()).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Alerts off for Severance', { description: 'Tap the bell to turn them back on.' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  test('turning it on follows a show that isn’t on your list', async () => {
+  test('tapping it on follows a show that isn’t on your list, and asks about email the first time', async () => {
     fetchShowAlerts.mockResolvedValue(false);
     renderSeries();
-    await waitFor(() => expect(fetchShowAlerts).toHaveBeenCalled());
-    const alerts = await openMenu();
-    await waitFor(() => expect(alerts).toHaveAttribute('aria-checked', 'false'));
-    fireEvent.click(alerts);
+    await waitFor(() => expect(bell()).toBeEnabled()); // known, and off
+    expect(bell()).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(bell());
     await waitFor(() => expect(saveShowAlerts).toHaveBeenCalledWith(10, true));
     expect(toast).toHaveBeenCalledWith('Alerts on for Severance', { description: 'New episodes and new seasons will show up under the bell.' });
+    expect(await screen.findByRole('dialog', { name: 'Email you about new episodes too?' })).toHaveTextContent('sam@example.com');
   });
 
-  test('if it doesn’t save, the switch goes back and says why', async () => {
+  test('if it doesn’t save, the bell goes back and says why', async () => {
     saveShowAlerts.mockRejectedValue(new Error('Couldn’t save that. Try again.'));
     renderSeries();
-    fireEvent.click(await openMenu());
+    await waitFor(() => expect(bell()).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(bell());
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Couldn’t save that. Try again.'));
-    expect(await screen.findByRole('button', { name: 'Alerts and reminders: new episodes and seasons on' })).toBeInTheDocument();
+    expect(bell()).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('a movie’s bell is reminders only', () => {
+  test('a movie’s bell is still a reminder to watch', () => {
     render(<RemindButton item={{ id: 7, title: 'Dune' }} mediaType="movie" />);
     fireEvent.click(screen.getByRole('button', { name: 'Remind me to watch' }));
-    expect(screen.queryByRole('menuitemcheckbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Tonight at 8 PM' })).toBeInTheDocument();
     expect(fetchShowAlerts).not.toHaveBeenCalled();
   });
 });
