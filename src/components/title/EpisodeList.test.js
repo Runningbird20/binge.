@@ -40,8 +40,10 @@ test('spoiler-free: an episode past your progress hides its summary until its ey
   const eye = screen.getByRole('button', { name: 'Show the picture and summary of episode 3' });
   expect(eye).toHaveAttribute('aria-pressed', 'false');
   fireEvent.click(eye);
-  expect(screen.getByText('What happens in In Perpetuity.')).toBeInTheDocument();
+  expect(screen.getByText('What happens in In Perpetuity.')).toHaveClass('td-episode-overview--revealed');
   expect(eye).toHaveAttribute('aria-pressed', 'true');
+  // Only a revealed summary fades up; the ones that were never hidden don't.
+  expect(screen.getByText('What happens in Half Loop.')).not.toHaveClass('td-episode-overview--revealed');
 
   fireEvent.click(eye); // and hidden again
   expect(screen.getByText('Summary hidden')).toBeInTheDocument();

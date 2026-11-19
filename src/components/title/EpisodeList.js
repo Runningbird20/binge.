@@ -12,7 +12,8 @@ import { isSpoiler, progressPoint } from '../../utils/spoilers';
 // in); without them the list just plays episodes. With Spoiler-free episodes
 // on (utils/spoilers.js), an episode past the profile's progress (furthest
 // watched, or currentSeason/currentEpisode where it resumes) has a blurred
-// picture and "Summary hidden" until the eye button on its picture shows them.
+// picture and "Summary hidden" until the eye button on its picture shows them:
+// the picture comes into focus and the summary fades up (title.css).
 // The eye sits in a layer over the row laid out like it (td-episode-overlay):
 // a button can't hold another one.
 export function EpisodeList({ tmdbId, seasons, watched, currentSeason, currentEpisode, onPlay, onMark, onUnmark, busy, status }) {
@@ -115,7 +116,7 @@ export function EpisodeList({ tmdbId, seasons, watched, currentSeason, currentEp
                     </span>
                     {episode.overview && (hidden
                       ? <span className="td-episode-overview td-episode-overview--hidden">Summary hidden</span>
-                      : <span className="td-episode-overview">{episode.overview}</span>)}
+                      : <span className={`td-episode-overview${spoiler ? ' td-episode-overview--revealed' : ''}`}>{episode.overview}</span>)}
                   </span>
                 </button>
                 {spoiler && (
