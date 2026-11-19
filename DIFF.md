@@ -32,6 +32,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Mark season watched / Watched up to here | ✓ | ✓ | ✓ | ✓ | TV apps: a pill before the season picker, and "Watched up to here" / "Mark as not watched" when you hold an episode, with Undo. |
 | Detailed rating (per category) | ✓ | ✓ | ◐ | ◐ | TV apps: 1–5 stars, copied into every category. |
 | Remind me (release reminders) | ✓ | ✓ | ◐ | ◐ | `RemindButton`; delivered in the app and by push. Apple TV: only for what isn't out yet (a movie's release, a series' next episode, at 9 that morning); due reminders show on Home. |
+| A series' alerts on or off ("New episodes & seasons" on the bell) | ✓ | ✓ | — | — | `utils/showAlerts.js`. The alerts themselves, new episodes and new seasons, reach every app's inbox. |
 
 ## Home & browsing
 

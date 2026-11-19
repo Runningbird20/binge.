@@ -474,11 +474,13 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
 
 ### Reminders, alerts & calendar
 
-- **New-episode alerts** (`sendNewEpisodeAlerts`, a daily Vercel cron at `GET /api/cron/new-episodes` in `server/routes/cron.js`):
-  - **For every profile**, notifications on or not. Each show on a profile's list (unless finished) or in its Continue Watching with an episode aired in the last 2 days goes into that profile's notification inbox. A row saved without a profile counts as the default profile's.
+- **New-episode and new-season alerts** (`sendNewEpisodeAlerts`, a daily Vercel cron at `GET /api/cron/new-episodes` in `server/routes/cron.js`):
+  - **Who follows a show** (`showFollowers`): a profile with it on its list (unless finished) or in its Continue Watching, unless the profile turned the bell off for it; or any profile that turned the bell on for it (`show_alerts`, migration `20261118150000_show_alerts.sql`, NOT applied yet). A row saved without a profile counts as the default profile's.
+  - **For every follower**, notifications on or not, into its notification inbox: an episode aired in the last 2 days, and a newly announced season. A season is "announced" when the highest season TMDB lists (specials aside) goes up since the last run (`show_seasons_seen`, server only; a show seen for the first time is only recorded). It reads "New season: Severance" / "Season 4 starts March 4, 2027." (or "is confirmed. No date yet." / "is out now."), inbox kind `episode`. Each show's TMDB details are fetched once per run.
   - **Push.** Web Push (`push_subscriptions`) goes to the devices of those profiles; a device saved without a profile counts as the default profile's. The `push`/`notificationclick` handlers are in `public/sw.js`. iPhones need the site installed to the Home Screen.
-  - **Once per account.** `push_notified` claims each episode before anything is sent, so a re-run never repeats it.
+  - **Once per account.** `push_notified` claims each episode (`S2E5`) and each announced season (`announce:S3`) before anything is sent, so a re-run never repeats one.
   - **Needs** `CRON_SECRET`, the service-role key and `TMDB_API_KEY`. `VAPID_*` is needed only for the push part.
+- **The bell on a series** (`RemindButton` in the title popup, `utils/showAlerts.js`): first in its menu, a "New episodes & seasons" switch, on already for a show the profile follows (list or Continue Watching). Off saves a mute, on follows any show (`show_alerts`, one row per profile and show); the daily job above applies the same rule. The "Remind me to watch" times stay under it, and the bell rings while either is set. A movie's bell is reminders only.
 - **Reminders** (`watch_reminders`, `src/utils/reminders.js`, `RemindButton`, `ReminderWatcher`):
   - Delivered in the app when due, and by push and email (see Email alerts) via `GET /api/cron/reminders`. The route runs with push or SMTP set up; game alerts and the uptime probe need push.
   - Vercel Hobby crons are daily, so frequent delivery needs Supabase pg_cron: `supabase/manual/schedule_reminders.sql` (fill in the site URL + CRON_SECRET, run once).

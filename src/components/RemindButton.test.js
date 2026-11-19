@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import RemindButton from './RemindButton';
 import { createReminder } from '../utils/reminders';
 import { fetchEmailAlerts, saveEmailAlerts } from '../utils/emailAlerts';
+import { fetchShowAlerts, saveShowAlerts } from '../utils/showAlerts';
 
 jest.mock('sonner', () => ({ toast: jest.fn() }));
 jest.mock('../contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
@@ -16,6 +17,7 @@ jest.mock('../utils/pushNotifications', () => ({
 }));
 jest.mock('../utils/haptics', () => ({ haptic: () => {} }));
 jest.mock('../utils/emailAlerts', () => ({ fetchEmailAlerts: jest.fn(), saveEmailAlerts: jest.fn() }));
+jest.mock('../utils/showAlerts', () => ({ fetchShowAlerts: jest.fn(), saveShowAlerts: jest.fn() }));
 
 let mockAuth;
 
@@ -25,6 +27,8 @@ beforeEach(() => {
   fetchEmailAlerts.mockReset().mockResolvedValue(null);
   saveEmailAlerts.mockReset().mockImplementation(async (enabled) => enabled);
   toast.mockReset();
+  fetchShowAlerts.mockReset().mockResolvedValue(true);
+  saveShowAlerts.mockReset().mockImplementation(async (id, on) => on);
 });
 
 async function setReminder() {
@@ -89,4 +93,58 @@ test('a kids profile isn’t asked: it’s the account holder’s inbox', async 
   await setReminder();
   expect(fetchEmailAlerts).not.toHaveBeenCalled();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+describe('on a series', () => {
+  const SERIES = { id: 10, title: 'Severance' };
+  const renderSeries = () => render(<RemindButton item={SERIES} mediaType="tv_show" />);
+  const openMenu = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /^Alerts and reminders/ }));
+    return screen.getByRole('menuitemcheckbox', { name: /^New episodes & seasons/ });
+  };
+
+  test('the bell first offers new episodes & seasons, on already for a show you follow', async () => {
+    renderSeries();
+    expect(await screen.findByRole('button', { name: 'Alerts and reminders: new episodes and seasons on' })).toBeInTheDocument();
+    const alerts = await openMenu();
+    expect(alerts).toHaveAttribute('aria-checked', 'true');
+    expect(alerts).toHaveTextContent('You’ll get an alert');
+    expect(fetchShowAlerts).toHaveBeenCalledWith(10);
+    // The reminders are still there under it.
+    expect(screen.getByRole('menuitem', { name: 'Tonight at 8 PM' })).toBeInTheDocument();
+  });
+
+  test('turning it off mutes the show', async () => {
+    renderSeries();
+    fireEvent.click(await openMenu());
+    await waitFor(() => expect(saveShowAlerts).toHaveBeenCalledWith(10, false));
+    expect(toast).toHaveBeenCalledWith('Alerts off for Severance', { description: 'Turn them back on here any time.' });
+    expect(await screen.findByRole('button', { name: 'Alerts and reminders' })).toBeInTheDocument();
+  });
+
+  test('turning it on follows a show that isn’t on your list', async () => {
+    fetchShowAlerts.mockResolvedValue(false);
+    renderSeries();
+    await waitFor(() => expect(fetchShowAlerts).toHaveBeenCalled());
+    const alerts = await openMenu();
+    await waitFor(() => expect(alerts).toHaveAttribute('aria-checked', 'false'));
+    fireEvent.click(alerts);
+    await waitFor(() => expect(saveShowAlerts).toHaveBeenCalledWith(10, true));
+    expect(toast).toHaveBeenCalledWith('Alerts on for Severance', { description: 'New episodes and new seasons will show up under the bell.' });
+  });
+
+  test('if it doesn’t save, the switch goes back and says why', async () => {
+    saveShowAlerts.mockRejectedValue(new Error('Couldn’t save that. Try again.'));
+    renderSeries();
+    fireEvent.click(await openMenu());
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Couldn’t save that. Try again.'));
+    expect(await screen.findByRole('button', { name: 'Alerts and reminders: new episodes and seasons on' })).toBeInTheDocument();
+  });
+
+  test('a movie’s bell is reminders only', () => {
+    render(<RemindButton item={{ id: 7, title: 'Dune' }} mediaType="movie" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remind me to watch' }));
+    expect(screen.queryByRole('menuitemcheckbox')).not.toBeInTheDocument();
+    expect(fetchShowAlerts).not.toHaveBeenCalled();
+  });
 });

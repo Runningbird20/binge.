@@ -34,7 +34,15 @@ async function latestEpisode(tmdbId) {
   const res = await fetch(`https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${key}`, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) return null;
   const data = await res.json();
-  return { name: data.name, last: data.last_episode_to_air };
+  // The highest season TMDB lists (specials aside), announced ones included:
+  // when it goes up, a new season has been announced.
+  const newest = (data.seasons || []).filter((season) => season.season_number > 0)
+    .reduce((best, season) => (!best || season.season_number > best.season_number ? season : best), null);
+  return {
+    name: data.name,
+    last: data.last_episode_to_air,
+    newestSeason: newest ? { number: newest.season_number, airDate: newest.air_date || null } : null,
+  };
 }
 
 function setupPush() {
@@ -512,28 +520,76 @@ router.get('/reminders', async (req, res) => {
   }
 });
 
-// Which of an account's profiles follow each show (its list, unless finished,
-// and Continue Watching): Map of tv_shows.id → Set of profile ids. A row saved
-// without a profile is the default profile's, as everywhere else.
-function showFollowers(profiles, listRows, watchingRows) {
+// Which of an account's profiles follow each show: Map of tv_shows.id → Set
+// of profile ids. A show on a profile's list (unless finished) or in its
+// Continue Watching is followed; the bell on a series (show_alerts) overrides
+// that either way: following = true follows any show, false mutes one. A row
+// saved without a profile is the default profile's, as everywhere else.
+function showFollowers(profiles, listRows, watchingRows, alertRows = []) {
   const ids = new Set(profiles.map((profile) => profile.id));
   const fallback = (profiles.find((profile) => profile.is_default) || profiles[0])?.id || null;
   const follows = new Map();
+  const profileOf = (row) => (ids.has(row.profile_id) ? row.profile_id : fallback);
   const add = (row) => {
     const showId = Number(row.media_id);
     if (!Number.isFinite(showId)) return;
     if (!follows.has(showId)) follows.set(showId, new Set());
-    follows.get(showId).add(ids.has(row.profile_id) ? row.profile_id : fallback);
+    follows.get(showId).add(profileOf(row));
   };
   listRows.filter((row) => row.status !== 'watched').forEach(add);
   watchingRows.forEach(add);
+  alertRows.forEach((row) => {
+    if (row.following) { add(row); return; }
+    const showId = Number(row.media_id);
+    follows.get(showId)?.delete(profileOf(row));
+    if (follows.get(showId)?.size === 0) follows.delete(showId);
+  });
   return follows;
 }
 
-// Every profile following a show gets its new episode in the inbox; the
-// devices of those profiles get a push when canPush (a device saved without a
-// profile counts as the default profile's). push_notified claims each episode
-// once per account before anything is sent, so a re-run never repeats one.
+// "New season: Severance" / "Season 4 starts March 4, 2027."
+function seasonAnnouncement(show, season, now = Date.now()) {
+  const date = season.airDate ? new Date(`${season.airDate}T12:00:00Z`) : null;
+  const started = date && date.getTime() <= now;
+  let body = `Season ${season.number} is confirmed. No date yet.`;
+  if (date && !started) body = `Season ${season.number} starts ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}.`;
+  if (started) body = `Season ${season.number} is out now.`;
+  return {
+    title: `New season: ${show.title}`,
+    body,
+    url: started ? `/tv-show/${show.id}?play=1&season=${season.number}&episode=1` : `/tv-show/${show.id}`,
+  };
+}
+
+const IN_CHUNK = 200;
+async function rowsIn(db, table, columns, column, values) {
+  const rows = [];
+  for (let start = 0; start < values.length; start += IN_CHUNK) {
+    const { data, error } = await db.from(table).select(columns).in(column, values.slice(start, start + IN_CHUNK));
+    if (error) throw new Error(error.message);
+    rows.push(...(data || []));
+  }
+  return rows;
+}
+
+// The season count each show had at the last check (show_seasons_seen), or
+// null when that can't be read (before its migration): then nothing is
+// announced, and nothing recorded.
+async function seasonsSeen(db, showIds) {
+  try {
+    const rows = await rowsIn(db, 'show_seasons_seen', 'media_id, seasons', 'media_id', showIds);
+    return new Map(rows.map((row) => [Number(row.media_id), Number(row.seasons)]));
+  } catch (error) {
+    console.warn('[alerts] season counts not read:', error.message);
+    return null;
+  }
+}
+
+// Every profile following a show gets its new episodes, and its newly
+// announced seasons, in the inbox; the devices of those profiles get a push
+// when canPush (a device saved without a profile counts as the default
+// profile's). push_notified claims each alert once per account before
+// anything is sent, so a re-run never repeats one.
 async function sendNewEpisodeAlerts(db, { canPush = false, latest = latestEpisode, now = Date.now() } = {}) {
   const [{ data: profiles, error }, { data: subs }] = await Promise.all([
     db.from('account_profiles').select('id, account_id, is_default'),
@@ -544,49 +600,99 @@ async function sendNewEpisodeAlerts(db, { canPush = false, latest = latestEpisod
   (profiles || []).forEach((profile) => accounts.set(profile.account_id, [...(accounts.get(profile.account_id) || []), profile]));
 
   const cutoff = now - NEW_WITHIN_DAYS * 86400000;
-  const episodes = new Map(); // tv_shows.id → its latest aired episode, one TMDB call per run
-  const totals = { accounts: accounts.size, alerts: 0, sent: 0, removedSubscriptions: 0 };
+  const totals = { accounts: accounts.size, alerts: 0, seasons: 0, sent: 0, removedSubscriptions: 0 };
 
+  // Who follows what, per account (at most 100 shows each).
+  const followed = [];
   for (const [userId, accountProfiles] of accounts) {
-    const [{ data: list }, { data: watching }] = await Promise.all([
+    const [{ data: list }, { data: watching }, { data: choices }] = await Promise.all([
       db.from('watchlist').select('media_id, status, profile_id').eq('user_id', userId).eq('media_type', 'tv_show'),
       db.from('continue_watching').select('media_id, profile_id').eq('user_id', userId).eq('media_type', 'tv_show'),
+      db.from('show_alerts').select('media_id, profile_id, following').eq('user_id', userId),
     ]);
-    const follows = showFollowers(accountProfiles, list || [], watching || []);
+    const follows = showFollowers(accountProfiles, list || [], watching || [], choices || []);
     const showIds = [...follows.keys()].slice(0, 100);
     if (!showIds.length) continue;
     const defaultId = (accountProfiles.find((profile) => profile.is_default) || accountProfiles[0]).id;
+    followed.push({ userId, follows, showIds, defaultId });
+  }
+  const allShowIds = [...new Set(followed.flatMap((account) => account.showIds))];
+  if (!allShowIds.length) return totals;
 
-    const { data: shows } = await db.from('tv_shows').select('id, title, source_key').in('id', showIds);
-    for (const show of shows || []) {
-      const tmdbId = String(show.source_key || '').match(/^tmdb:tv:(\d+)$/)?.[1];
-      if (!tmdbId) continue;
-      if (!episodes.has(show.id)) episodes.set(show.id, (await latest(tmdbId).catch(() => null))?.last || null);
-      const last = episodes.get(show.id);
-      if (!last?.air_date || new Date(`${last.air_date}T23:59:59Z`).getTime() < cutoff) continue;
+  // Each show once per run: its row, its TMDB details, and whether a season
+  // has been announced since the last run.
+  const shows = new Map((await rowsIn(db, 'tv_shows', 'id, title, source_key', 'id', allShowIds)).map((show) => [Number(show.id), show]));
+  const details = new Map();
+  for (const show of shows.values()) {
+    const tmdbId = String(show.source_key || '').match(/^tmdb:tv:(\d+)$/)?.[1];
+    if (tmdbId) details.set(Number(show.id), await latest(tmdbId).catch(() => null));
+  }
+  const seen = await seasonsSeen(db, [...details.keys()]);
+  const announced = new Map(); // tv_shows.id → { number, airDate }
+  const counts = [];
+  details.forEach((info, showId) => {
+    const newest = info?.newestSeason;
+    if (!seen || !newest) return;
+    const before = seen.get(showId);
+    if (before != null && newest.number > before) announced.set(showId, newest);
+    if (before !== newest.number) counts.push({ media_id: showId, seasons: newest.number, checked_at: new Date(now).toISOString() });
+  });
 
-      const followers = [...(follows.get(Number(show.id)) || [])];
-      const episodeKey = `S${last.season_number}E${last.episode_number}`;
-      const { error: claimed } = await db.from('push_notified').insert({
-        user_id: userId, profile_id: followers.length === 1 ? followers[0] : null, media_id: show.id, episode_key: episodeKey,
-      });
-      if (claimed) continue; // already alerted (or can't be recorded: don't risk repeating it)
+  // One alert to the profiles of an account that follow a show, claimed first.
+  async function alertFollowers({ userId, followers, defaultId, showId, key, kind, message, tag }) {
+    const { error: claimed } = await db.from('push_notified').insert({
+      user_id: userId, profile_id: followers.length === 1 ? followers[0] : null, media_id: showId, episode_key: key,
+    });
+    if (claimed) return 0; // already alerted (or can't be recorded: don't risk repeating it)
+    const kept = await recordNotifications(db, followers.map((profileId) => inboxRow({ userId, profileId, kind, ...message })));
+    const wanted = new Set(followers);
+    const devices = (subs || []).filter((sub) => sub.user_id === userId && wanted.has(sub.profile_id || defaultId));
+    if (devices.length) {
+      const result = await pushTo(db, devices, pushPayload({ ...message, tag }, kept, defaultId));
+      totals.sent += result.sent;
+      totals.removedSubscriptions += result.removed;
+    }
+    return kept.length;
+  }
 
-      const message = {
-        title: `New episode: ${show.title}`,
-        body: `S${last.season_number} · E${last.episode_number}${last.name ? ` — ${last.name}` : ''} is out now.`,
-        url: `/tv-show/${show.id}?play=1&season=${last.season_number}&episode=${last.episode_number}`,
-      };
-      const kept = await recordNotifications(db, followers.map((profileId) => inboxRow({ userId, profileId, kind: 'episode', ...message })));
-      totals.alerts += kept.length;
-      const wanted = new Set(followers);
-      const devices = (subs || []).filter((sub) => sub.user_id === userId && wanted.has(sub.profile_id || defaultId));
-      if (devices.length) {
-        const result = await pushTo(db, devices, pushPayload({ ...message, tag: `new-episode-${show.id}` }, kept, defaultId));
-        totals.sent += result.sent;
-        totals.removedSubscriptions += result.removed;
+  for (const { userId, follows, showIds, defaultId } of followed) {
+    for (const showId of showIds) {
+      const show = shows.get(showId);
+      const info = details.get(showId);
+      if (!show || !info) continue;
+      const followers = [...follows.get(showId)];
+
+      const last = info.last;
+      if (last?.air_date && new Date(`${last.air_date}T23:59:59Z`).getTime() >= cutoff) {
+        totals.alerts += await alertFollowers({
+          userId, followers, defaultId, showId, kind: 'episode',
+          key: `S${last.season_number}E${last.episode_number}`,
+          tag: `new-episode-${show.id}`,
+          message: {
+            title: `New episode: ${show.title}`,
+            body: `S${last.season_number} · E${last.episode_number}${last.name ? ` — ${last.name}` : ''} is out now.`,
+            url: `/tv-show/${show.id}?play=1&season=${last.season_number}&episode=${last.episode_number}`,
+          },
+        });
+      }
+
+      const season = announced.get(showId);
+      if (season) {
+        totals.seasons += await alertFollowers({
+          userId, followers, defaultId, showId, kind: 'episode',
+          key: `announce:S${season.number}`,
+          tag: `new-season-${show.id}-${season.number}`,
+          message: seasonAnnouncement(show, season, now),
+        });
       }
     }
+  }
+
+  // Recorded last, so a run that stops halfway announces again next time
+  // (push_notified keeps any account from hearing it twice).
+  if (counts.length) {
+    const { error: countError } = await db.from('show_seasons_seen').upsert(counts, { onConflict: 'media_id' });
+    if (countError) console.warn('[alerts] season counts not saved:', countError.message);
   }
   return totals;
 }
@@ -621,6 +727,8 @@ module.exports.pushPayload = pushPayload;
 module.exports.PUSH_FIELDS = PUSH_FIELDS;
 module.exports.pruneNotifications = pruneNotifications;
 module.exports.sendNewEpisodeAlerts = sendNewEpisodeAlerts;
+module.exports.showFollowers = showFollowers;
+module.exports.seasonAnnouncement = seasonAnnouncement;
 module.exports.sendDueReminders = sendDueReminders;
 module.exports.sendEmailDigests = sendEmailDigests;
 module.exports.emailRecipients = emailRecipients;

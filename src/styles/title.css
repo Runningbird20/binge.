@@ -685,6 +685,17 @@
 
 .td-remind-menu button:hover, .td-remind-menu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
 
+/* A series' "New episodes & seasons" switch, first in the bell's menu. */
+.td-remind-menu .td-remind-follow { display: flex; align-items: center; justify-content: space-between; gap: 0.9rem; padding: 0.45rem 0.7rem; margin-bottom: 0.25rem; }
+
+.td-remind-follow-text { display: flex; flex-direction: column; gap: 0.1rem; white-space: nowrap; }
+
+.td-remind-follow-text small { font-size: 0.74rem; font-weight: 500; color: var(--exp-text-dim); }
+
+.td-remind-follow .set-switch { display: inline-block; pointer-events: none; }
+
+.td-remind-menu .td-remind-follow:disabled { cursor: default; opacity: 0.6; }
+
 @media (max-width: 768px) { .td-remind-menu { left: auto; right: 0; transform: none; } }
 
 /* ── Outside ratings ──────────────────────────────────────────── */

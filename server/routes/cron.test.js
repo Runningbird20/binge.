@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const webpush = require('web-push');
 const {
-  inboxRow, recordNotifications, pruneNotifications, pushPayload, sendNewEpisodeAlerts,
+  inboxRow, recordNotifications, pruneNotifications, pushPayload, seasonAnnouncement, sendNewEpisodeAlerts, showFollowers,
 } = require('./cron');
 
 // A stand-in for the service-role client: records inserts (which hand back
@@ -139,6 +139,13 @@ function memoryDb(tables, unique = { push_notified: ['user_id', 'media_id', 'epi
             select: async () => run(),
           };
         },
+        async upsert(input, { onConflict }) {
+          const rows = Array.isArray(input) ? input : [input];
+          const keys = onConflict.split(',');
+          const same = (old) => rows.some((row) => keys.every((column) => old[column] === row[column]));
+          tables[table] = [...(tables[table] || []).filter((old) => !same(old)), ...rows];
+          return { error: null };
+        },
       };
       return query;
     },
@@ -223,6 +230,77 @@ test('with push set up, the devices of the profiles that follow it get the push 
   const rowOf = (profileId) => db.tables.notifications.find((row) => row.profile_id === profileId).id;
   assert.deepEqual(pushed.map(([, payload]) => payload.inbox), [rowOf('pB'), rowOf('pA')]);
   assert.equal(pushed[0][1].url, '/tv-show/10?play=1&season=2&episode=5');
+});
+
+// ── The bell on a series, and new seasons ───────────────────────────
+
+test('the bell overrides the list: on follows any show, off mutes one that’s on the list', () => {
+  const profiles = [{ id: 'pA', is_default: true }, { id: 'pB' }];
+  const follows = showFollowers(
+    profiles,
+    [{ media_id: 10, status: 'watching', profile_id: 'pA' }, { media_id: 10, status: 'plan_to_watch', profile_id: 'pB' }, { media_id: 11, status: 'watched', profile_id: 'pB' }],
+    [],
+    [
+      { media_id: 10, profile_id: 'pB', following: false }, // muted
+      { media_id: 11, profile_id: 'pB', following: true }, // finished, but followed for a new season
+      { media_id: 12, profile_id: null, following: true }, // no profile: the default's
+      { media_id: 13, profile_id: 'pA', following: false }, // muting what isn't followed does nothing
+    ],
+  );
+  assert.deepEqual([...follows].map(([id, who]) => [id, [...who]]), [[10, ['pA']], [11, ['pB']], [12, ['pA']]]);
+  // Everyone muted: the show is gone.
+  assert.equal(showFollowers(profiles, [{ media_id: 10, status: 'watching', profile_id: 'pA' }], [], [{ media_id: 10, profile_id: 'pA', following: false }]).size, 0);
+});
+
+test('a new season says when it starts, when TMDB knows', () => {
+  const show = { id: 10, title: 'Severance' };
+  assert.deepEqual(seasonAnnouncement(show, { number: 3, airDate: '2027-03-04' }, TODAY), {
+    title: 'New season: Severance', body: 'Season 3 starts March 4, 2027.', url: '/tv-show/10',
+  });
+  assert.equal(seasonAnnouncement(show, { number: 3, airDate: null }, TODAY).body, 'Season 3 is confirmed. No date yet.');
+  assert.deepEqual(seasonAnnouncement(show, { number: 3, airDate: '2026-11-10' }, TODAY), {
+    title: 'New season: Severance', body: 'Season 3 is out now.', url: '/tv-show/10?play=1&season=3&episode=1',
+  });
+});
+
+test('a season announced since the last run alerts everyone following the show, once', async () => {
+  const db = memoryDb({ ...library(), show_alerts: [], show_seasons_seen: [] });
+  let seasons = 2;
+  const withSeasons = async (tmdbId) => ({ last: EPISODES[tmdbId], newestSeason: { number: seasons, airDate: seasons > 2 ? '2027-03-04' : '2025-01-17' } });
+  const announcements = () => db.tables.notifications.filter((row) => row.title.startsWith('New season'));
+
+  // The first time a show is seen it's only recorded.
+  await sendNewEpisodeAlerts(db, { latest: withSeasons, now: TODAY });
+  assert.equal(announcements().length, 0);
+  assert.equal(db.tables.show_seasons_seen.find((row) => row.media_id === 10).seasons, 2);
+
+  seasons = 3;
+  const totals = await sendNewEpisodeAlerts(db, { latest: withSeasons, now: TODAY });
+  assert.deepEqual(announcements().filter((row) => row.url === '/tv-show/10').map((row) => [row.user_id, row.profile_id, row.body]), [
+    ['u1', 'pA', 'Season 3 starts March 4, 2027.'],
+    ['u1', 'pB', 'Season 3 starts March 4, 2027.'],
+  ]);
+  assert.ok(totals.seasons >= 2);
+  assert.equal(db.tables.show_seasons_seen.find((row) => row.media_id === 10).seasons, 3);
+
+  const before = announcements().length;
+  await sendNewEpisodeAlerts(db, { latest: withSeasons, now: TODAY });
+  assert.equal(announcements().length, before);
+});
+
+test('a show followed with the bell gets its new episode; a muted profile doesn’t', async () => {
+  const db = memoryDb({
+    ...library(),
+    show_alerts: [
+      { user_id: 'u2', profile_id: 'pC', media_id: 11, following: true }, // The Pitt, not on u2's list
+      { user_id: 'u1', profile_id: 'pB', media_id: 10, following: false }, // pB muted Severance
+    ],
+  });
+  await sendNewEpisodeAlerts(db, { latest, now: TODAY });
+  const got = db.tables.notifications.map((row) => [row.user_id, row.profile_id, row.title]);
+  assert.ok(got.some(([user, profile, title]) => user === 'u2' && profile === 'pC' && title === 'New episode: The Pitt'));
+  assert.ok(got.some(([, profile, title]) => profile === 'pA' && title === 'New episode: Severance'));
+  assert.ok(!got.some(([, profile, title]) => profile === 'pB' && title === 'New episode: Severance'));
 });
 
 // The uptime probe reads the player's own server list (src/utils/embedServers.js,
