@@ -2148,6 +2148,15 @@ kbd {
 
 .st-search-input:focus-visible { outline: none; box-shadow: none; }
 
+/* The same for the header search and the catalog search (every search field
+   sits in a pill that shows focus). !important: it has to beat the ring above
+   and TV mode's. Removed in a clean-up on 2026-11-18, which put the white
+   rectangle back inside the header search. */
+input:is([type="search"], .global-search-bar-input, .catalog-search-input, .st-search-input):is(:focus, :focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .sr-box form:focus-within { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35); }
 
 /* "Skip to content": first thing a keyboard / screen-reader user reaches. */
