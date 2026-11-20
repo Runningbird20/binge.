@@ -49,10 +49,10 @@ test('only servers tested to play sandboxed are sandboxed', () => {
   expect(shouldSandbox('', true, { storage })).toBe(false);
 });
 
-test('the servers sandboxed are the ones that played 5 seconds sandboxed (2026-11-16)', () => {
+test('the servers sandboxed are the ones that played 5 seconds sandboxed (2026-11-16; Atlantic 2026-11-19)', () => {
   window.localStorage.clear();
   expect(PROVIDERS.filter((entry) => popupsBlocked(entry.id)).map((entry) => entry.id))
-    .toEqual(['vidrift', 'cinesrc', 'vidspark', 'vidcore', 'embedwave']);
+    .toEqual(['vidrift', 'cinesrc', 'vidspark', 'vidcore', 'embedwave', 'atlantic']);
 });
 
 test('a refusal learned on this device lasts 14 days, then the sandbox is tried again', () => {

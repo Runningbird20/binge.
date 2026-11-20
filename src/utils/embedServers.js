@@ -280,4 +280,24 @@ export const EMBED_SERVERS = [
       return url.toString();
     },
   },
+  {
+    // https://atlantic.bz/embed-api — TMDB ids, no key, no options and no
+    // playback messages (failover can only time it). Added 2026-11-19: it
+    // played Fight Club, Game of Thrones 1x1 (1080p) and 8 of 10 Malayalam
+    // films (up to 1080p; Bangalore Days in 816p where the others had ~360p),
+    // sandboxed and unsandboxed, no pop-ups. Also checked that day and left
+    // out: player.cinezo.live (arrowtv.net's player) answers 403 on any other
+    // origin; cinecat.eu and vivarium.su sit behind a Cloudflare challenge;
+    // popcornmovies.st and flystream.net refuse visitors; 7movies.ac is VidRift
+    // and shuttletv CineSrc; cinejoy.pk has its own player and no embed.
+    id: 'atlantic',
+    label: 'Atlantic',
+    sandbox: true, // plays sandboxed
+    idKinds: ['tmdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode) {
+      const path = mediaType === 'tv_show' ? `/embed/tv/${id.value}/${season}/${episode}` : `/embed/movie/${id.value}`;
+      return new URL(path, 'https://atlantic.st').toString();
+    },
+  },
 ];

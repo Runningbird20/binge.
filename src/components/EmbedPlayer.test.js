@@ -224,13 +224,25 @@ test('Skip intro shows inside the intro and jumps to its end', async () => {
   expect(frame().getAttribute('src')).toMatchSnapshot();
 });
 
-test('a server playing a different-length video is replaced', async () => {
-  expectedRuntimeSeconds.mockResolvedValue(2700);
+test('a server playing a different-length video is replaced, once its length holds', async () => {
+  expectedRuntimeSeconds.mockResolvedValue({ seconds: 2700, estimated: false });
   await setup();
-  post(vidrift(100, 900));
-  await flush();
+  // Playing on, as a server reports it: every 2s, the same 15-min length.
+  for (let t = 100; t <= 114; t += 2) {
+    post(vidrift(t, 900));
+    await flush(2000);
+  }
   expect(screen.getByRole('status').textContent).toMatchSnapshot();
   expect(submitStreamReport).toHaveBeenCalledWith(expect.objectContaining({ mediaId: 42, works: false }));
+});
+
+test('one early length reading (a pre-roll) is not enough to call it the wrong video', async () => {
+  expectedRuntimeSeconds.mockResolvedValue({ seconds: 2700, estimated: false });
+  await setup();
+  const before = frame().getAttribute('src');
+  post(vidrift(10, 95));
+  await flush(500);
+  expect(frame().getAttribute('src')).toBe(before);
 });
 
 // VidRift's own Next button, Episodes menu or Up Next: it switches episodes itself and says so.

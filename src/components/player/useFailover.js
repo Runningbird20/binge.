@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getServerMemory, rankServers, rememberServer, submitStreamReport } from '../../utils/streamPreferences';
-import { expectedRuntimeSeconds, isWrongLength } from '../../utils/runtimeCheck';
+import { createRuntimeWatch, expectedRuntimeSeconds, lengthsAgree } from '../../utils/runtimeCheck';
 import { EVENT_PROVIDERS, FAILOVER_SECONDS, PAUSE_AWARE, RESUMABLE, STALL_SECONDS, STALL_SWITCH_SECONDS } from '../../utils/embedProviders';
 
 // Moving off a server that isn't working: buffering (offered, then made
@@ -60,9 +60,15 @@ export default function useFailover({
 
   // The real runtime, for spotting a server that plays the wrong video.
   const expectedRuntimeRef = useRef(null);
+  const runtimeWatchRef = useRef(createRuntimeWatch());
+  // Lengths of the videos already judged wrong for this episode.
+  const rejectedLengthsRef = useRef([]);
   const [wrongVideo, setWrongVideo] = useState(null);
+  // A fresh verdict for every server and episode.
+  useEffect(() => { runtimeWatchRef.current = createRuntimeWatch(); }, [provider, tmdbId, season, episode]);
   useEffect(() => {
     expectedRuntimeRef.current = null;
+    rejectedLengthsRef.current = [];
     setWrongVideo(null);
     let cancelled = false;
     expectedRuntimeSeconds({ tmdbId, mediaType, season, episode })
@@ -71,7 +77,7 @@ export default function useFailover({
   }, [tmdbId, mediaType, season, episode]);
 
   useEffect(() => {
-    if (!wrongVideo || wrongVideo !== provider || manualPickRef.current || !item?.id) return;
+    if (!wrongVideo || wrongVideo.provider !== provider || manualPickRef.current || !item?.id) return;
     setWrongVideo(null);
     triedRef.current.add(provider);
     submitStreamReport({ mediaType: memoryType, mediaId: item.id, provider, works: false }).catch(() => {});
@@ -80,7 +86,7 @@ export default function useFailover({
     const next = ranking.find((server) => !triedRef.current.has(server.id) && server.id !== provider);
     if (!next) return;
     setServerMemory(memory);
-    setFailoverNotice({ from: provider, to: next.id, reason: 'wrong' });
+    setFailoverNotice({ from: provider, to: next.id, reason: 'wrong', length: wrongVideo.length, expected: wrongVideo.expected });
     setProvider(next.id);
     // Runs once per wrong-video report; the report re-renders first, so the ranking inputs read here are current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,11 +130,17 @@ export default function useFailover({
   }
 
   // What the playback messages show (see usePlaybackMessages).
-  function noteDuration(duration) {
-    // A different video under this title's id (see utils/runtimeCheck).
-    if (!manualPickRef.current && isWrongLength(duration, expectedRuntimeRef.current)) {
-      setWrongVideo(provider);
-    }
+  function noteDuration(duration, time = playbackRef.current.time) {
+    // A different video under this title's id (see utils/runtimeCheck): judged
+    // once, after 30s of playback and a steady length.
+    if (manualPickRef.current) return;
+    const expected = expectedRuntimeRef.current;
+    if (runtimeWatchRef.current.note({ duration, time, at: Date.now() }, expected) !== 'wrong') return;
+    // A second server with the same "wrong" length: they're right and TMDB
+    // isn't, so stay.
+    if (lengthsAgree(duration, rejectedLengthsRef.current)) return;
+    rejectedLengthsRef.current.push(duration);
+    setWrongVideo({ provider, length: duration, expected: expected.seconds });
   }
   function noteAdvance() { setStall(null); }
   function markPlaybackSeen() { playbackSeenRef.current = true; }

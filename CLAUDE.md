@@ -427,6 +427,11 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy/VixSrc `PLAYER_EVENT`, VidSpark's `source: 'vidspark-player'`) are confirmed working by real playback rather than a timer.
   - Server catalogs differ per title: a server can load fine but not have that episode, identical on the provider's own site. So if an automatically chosen `events` server reports no playback time within `FAILOVER_SECONDS`, it's marked dead for that title and the next ranked server loads, with a notice and a "try it anyway" undo.
   - **Wrong video.** `utils/runtimeCheck.js` compares the stream's length with TMDB's runtime. Off by more than max(4 min, 20%) counts as the wrong title, and the player fails over (event servers only).
+    - **Judged once, when settled** (`createRuntimeWatch`, 2026-11-19, after false alarms): after 30s of playback and the same length 10s apart, so a pre-roll's or a part-loaded stream's length doesn't count.
+    - **A guessed runtime** (an episode TMDB has no runtime for, so the season's typical one) only catches a video under half or over 1.8× its length, so a long finale passes.
+    - **Two servers with the same "wrong" length** (within 3% or a minute) are both right and TMDB is off: the player stays (`lengthsAgree`, as the Apple TV app's `ExpectedRuntime.agree`).
+    - The notice says what it measured ("15 min long; this episode runs 45 min").
+    - The TV apps read the real video's length (more reliable than messages) but still use the plain rule for guessed runtimes; Fire TV has no agreement check yet.
   - **Manually picked servers are never skipped.**
   - **VidSpark never starts by itself.** `handleFrameLoad` sends it `{ action: 'play' }` until that load reports play or pause. Some of its episodes still wait for a real click, so it ranks below the servers that autoplay: an automatically chosen one only gets `FAILOVER_SECONDS`.
 - **Buffering** can't be controlled inside a cross-origin player, so it's handled around it.

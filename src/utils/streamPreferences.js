@@ -240,7 +240,7 @@ export function setCaptionCapableServers(ids) {
 // Malayalam film at all, so for one they'd only cost a failover. Languages
 // not listed keep the plain order.
 export const LANGUAGE_COVERAGE = {
-  ml: { vidrift: 0.8, vidy: 0, vidlink: 0.7, cinesrc: 0.8, vixsrc: 0, vidspark: 0.9, vidcore: 0.8, embedwave: 0.8 },
+  ml: { vidrift: 0.8, vidy: 0, vidlink: 0.7, cinesrc: 0.8, vixsrc: 0, vidspark: 0.9, vidcore: 0.8, embedwave: 0.8, atlantic: 0.8 },
   hi: { vidrift: 1, vidy: 0.5, vidlink: 0.25, cinesrc: 0.75, vixsrc: 0.5, vidspark: 1, vidcore: 1, embedwave: 1 },
   ta: { vidrift: 1, vidy: 0.5, vidlink: 0.5, cinesrc: 1, vixsrc: 0, vidspark: 1, vidcore: 0.5, embedwave: 1 },
   te: { vidrift: 1, vidy: 1, vidlink: 0, cinesrc: 1, vixsrc: 0.5, vidspark: 0.5, vidcore: 0.5, embedwave: 1 },

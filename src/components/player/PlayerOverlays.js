@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MoonStars, SkipForward, X } from '@phosphor-icons/react';
 import LoadingBar from '../LoadingBar';
 import { formatClock } from '../../utils/playbackPositions';
+import { formatLength } from '../../utils/runtimeCheck';
 import { RESUMABLE, SERVER_LABELS } from '../../utils/embedProviders';
 import { readPlayback } from '../../utils/playbackMessages';
 import { preloadIsPlaying } from '../../utils/preloadNext';
@@ -133,7 +134,7 @@ export function FailoverBar({ stall, notice, isTV, onSwitch, onTryAgain, onDismi
     <div className="st-failover" role="status" {...hold}>
       <span>
         {notice.reason === 'wrong'
-          ? `${label(notice.from)} was playing a different video, so we switched to ${label(notice.to)}.`
+          ? `${label(notice.from)} was playing a different video${notice.length && notice.expected ? ` (${formatLength(notice.length)} long; this ${isTV ? 'episode' : 'title'} runs ${formatLength(notice.expected)})` : ''}, so we switched to ${label(notice.to)}.`
           : notice.reason === 'buffering'
           ? `${label(notice.from)} kept buffering, so we switched to ${label(notice.to)}${notice.at ? ` at ${formatClock(notice.at)}` : ''}.`
           : `${label(notice.from)} couldn't play this ${isTV ? 'episode' : 'title'}, so we switched to ${label(notice.to)}.`}
