@@ -60,6 +60,7 @@ The repo also owns the pipeline that fills the catalog tables (movies/tv_shows, 
   - `npm run import:language`, default `LANGUAGES=ml`. `:preview` is a TMDB-only dry run.
   - Runs monthly on the 1st (`sync-languages.yml`, `LANGUAGES=ml`).
   - Adds every title in the language from the last 3 years + 30 days ahead, plus the all-time popular ones, and re-fetches anything released in the last 120 days.
+  - **Malayalam is complete** (2026-11-19: `YEARS=120 POPULAR_PAGES=500` added 2,486 films and 7 series, every one TMDB has; 5,155 films). Run the same for another language to fill it.
 
 ## Repo layout
 
@@ -413,9 +414,15 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
   2. community reports in `stream_reports`, aggregated by the `stream_report_summary` RPC;
   3. the default order.
 
-  Server health (see Admin) and the admin's on/off switches also apply.
+  Server health (see Admin) and the admin's on/off switches also apply. So does **language coverage** (`LANGUAGE_COVERAGE` in `streamPreferences.js`, measured 2026-11-19): a server that misses most titles in the title's original language ranks lower (Vidy and VixSrc had none of 10 Malayalam films), one that has nearly all a little higher. Re-measure when servers change.
 - **Code layout.** `EmbedPlayer.js` is wiring only. The logic is hooks in `src/components/player/` (`useServerChoice`, `useFailover`, `usePlaybackMessages`, `useUpNext`, `useIntroMarkers`, `usePositionSync`…) and the layouts `MobilePlayer`/`DesktopPlayer`. Behaviour is pinned by `EmbedPlayer.test.js` snapshots.
 - **Reports and prefs.** It auto-reports "works" after 60s on a server and asks once "Hearing Korean audio?". The Servers panel (`PlaybackOptions.js`) switches server without leaving the video; audio and subtitle languages are set in Settings (the ranking follows them). It's called Servers, not "Audio & Subtitles", because most servers have their own menu by that name inside the video. The subtitle language is passed to servers that support it (`subtitles: true`, only where that's documented).
+- **Captions for titles in another language** (`utils/foreignCaptions.js`; a Malayalam film for an English viewer, 2026-11-19). When a title's original language isn't the profile's subtitle language:
+  - **VidLink** gets binge.'s own OpenSubtitles file through its documented `sub_file` + `sub_label` (`/api/extras/subtitles?…&format=vtt`, the file itself with `Access-Control-Allow-Origin: *`, cached once for everyone in `subtitle_cache`).
+  - **VidRift** starts with subtitles off; `player/useVidriftCaptions.js` reads its track list from `vidrift:state` and switches it on with `vidrift:set { subtitle }`, re-sent until it sticks (a set before the video is ready is dropped). It stops once captions are on and never turns them back on after the viewer turns them off.
+  - **CineSrc** takes the language in its URL, as before. VidSpark and VidCore find subtitles themselves (OpenSubtitles) and remember the viewer's choice.
+  - Same-language titles are left alone: OpenSubtitles allows a few downloads a day.
+  - Measured on 10 Malayalam films (1989–2025): every one has human-made English subtitles on OpenSubtitles (1–9 files each, none machine-translated).
 - **Failover.**
   - Servers that post playback messages to the parent (`events: true`: vidsrc.ru/.su `MEDIA_DATA`, VidLink/Videasy/VixSrc `PLAYER_EVENT`, VidSpark's `source: 'vidspark-player'`) are confirmed working by real playback rather than a timer.
   - Server catalogs differ per title: a server can load fine but not have that episode, identical on the provider's own site. So if an automatically chosen `events` server reports no playback time within `FAILOVER_SECONDS`, it's marked dead for that title and the next ranked server loads, with a notice and a "try it anyway" undo.

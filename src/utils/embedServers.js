@@ -117,14 +117,18 @@ export const EMBED_SERVERS = [
     idKinds: ['tmdb'],
     types: ['movie', 'tv_show'],
     silentPreload: true,
-    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, noAutoplay } = {}) {
+    buildUrl(id, mediaType, season, episode, subtitleLang, { startAt, noAutoplay, subtitleFile, subtitleLangName } = {}) {
       const isTV = mediaType === 'tv_show';
       const autoplay = noAutoplay ? 'false' : 'true';
-      const base = isTV
+      let url = isTV
         ? `https://vidlink.pro/tv/${id.value}/${season}/${episode}?autoplay=${autoplay}&nextbutton=true`
         : `https://vidlink.pro/movie/${id.value}?autoplay=${autoplay}`;
       // Documented startAt (seconds).
-      return startAt > 0 ? `${base}&startAt=${startAt}` : base;
+      if (startAt > 0) url += `&startAt=${startAt}`;
+      // Documented sub_file (a direct VTT link) + sub_label: binge.'s own
+      // OpenSubtitles file, for titles in another language (foreignCaptions.js).
+      if (subtitleFile) url += `&sub_file=${encodeURIComponent(subtitleFile)}&sub_label=${encodeURIComponent(subtitleLangName || subtitleLang || 'English')}`;
+      return url;
     },
   },
   {

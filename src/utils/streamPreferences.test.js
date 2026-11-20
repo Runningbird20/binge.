@@ -69,3 +69,23 @@ describe('captions first', () => {
     expect(off[0].id).toBe('vidlink');
   });
 });
+
+describe('language coverage', () => {
+  const order = ['vidrift', 'vidy', 'vidlink', 'cinesrc', 'vixsrc', 'vidspark', 'vidcore', 'embedwave'];
+  const rank = (lang) => rankServers(order, { prefs: { audio: 'original', subtitles: 'off' }, originalLanguage: lang, health: {} }).map((r) => r.id);
+
+  test('servers with no Malayalam films drop to the bottom for one', () => {
+    const ids = rank('ml');
+    expect(ids.slice(-2).sort()).toEqual(['vidy', 'vixsrc']);
+    expect(ids[0]).toBe('vidrift');
+  });
+
+  test('an unmeasured language keeps the plain order', () => {
+    expect(rank('fr')).toEqual(order);
+  });
+
+  test("a viewer's own working server still wins", () => {
+    const ids = rankServers(order, { prefs: { audio: 'original', subtitles: 'off' }, originalLanguage: 'ml', health: {}, memory: { provider: 'vidy' } }).map((r) => r.id);
+    expect(ids[0]).toBe('vidy');
+  });
+});

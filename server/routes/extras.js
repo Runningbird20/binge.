@@ -185,13 +185,24 @@ router.get('/subtitles', async (req, res) => {
   if (!validId(req.query.tmdb) || (type === 'tv' && !(season > 0 && episode > 0))) return res.status(400).json({ error: 'bad params' });
   // r3: ranking revision (bump when rankSubtitleFiles changes which file a version means).
   const key = `r3:${type}:${req.query.tmdb}:${season}:${episode}:${lang}:${version}`;
+  // format=vtt: the file itself, for another site's player to load (VidLink's
+  // sub_file on the website, src/utils/foreignCaptions.js). Public data, so
+  // any origin may read it.
+  const asFile = req.query.format === 'vtt';
+  const answer = (result, maxAge) => {
+    res.set('Cache-Control', `public, max-age=${maxAge}`);
+    if (!asFile) return res.json({ ...result, source: 'opensubtitles' });
+    res.set('Access-Control-Allow-Origin', '*');
+    if (!result?.vtt) return res.status(404).type('text/plain').send('No subtitles for this title');
+    return res.type('text/vtt').send(result.vtt);
+  };
   const db = adminDb();
   try {
     if (db) {
       const { data: cached } = await db.from('subtitle_cache').select('vtt, release, versions').eq('key', key).maybeSingle();
-      if (cached) return res.set('Cache-Control', 'public, max-age=86400').json({ ...cached, source: 'opensubtitles' });
+      if (cached) return answer(cached, 86400);
     }
-    if (!process.env.OPENSUBTITLES_API_KEY) return res.json({ unavailable: 'no-opensubtitles-key' });
+    if (!process.env.OPENSUBTITLES_API_KEY) return asFile ? answer(null, 3600) : res.json({ unavailable: 'no-opensubtitles-key' });
     const result = await remember(`subs:${key}`, 6 * 3600000, async () => {
       const headers = await osHeaders();
       const params = new URLSearchParams({ languages: lang, order_by: 'download_count', type: type === 'tv' ? 'episode' : 'movie' });
@@ -213,8 +224,9 @@ router.get('/subtitles', async (req, res) => {
       return { vtt: text.slice(0, 600000), release: pick.release, versions: files.length };
     });
     if (db && result.vtt) await db.from('subtitle_cache').upsert({ key, vtt: result.vtt, release: result.release, versions: result.versions, created_at: new Date().toISOString() });
-    res.set('Cache-Control', result.vtt ? 'public, max-age=86400' : 'public, max-age=3600').json({ ...result, source: 'opensubtitles' });
+    answer(result, result.vtt ? 86400 : 3600);
   } catch (error) {
+    if (asFile) res.set('Access-Control-Allow-Origin', '*');
     res.status(502).json({ error: error.message });
   }
 });

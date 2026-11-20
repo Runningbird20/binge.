@@ -23,6 +23,8 @@ import useControlsAutoHide from './player/useControlsAutoHide';
 import UpNextCard from './player/UpNextCard';
 import { AutoSkipOffer, FailoverBar, PreloadFrame, SkipIntroButton } from './player/PlayerOverlays';
 import useAppBridge from './player/useAppBridge';
+import useVidriftCaptions from './player/useVidriftCaptions';
+import { foreignCaptionLang, subtitleFileUrl, titleTmdbId } from '../utils/foreignCaptions';
 import MobilePlayer from './player/MobilePlayer';
 import DesktopPlayer from './player/DesktopPlayer';
 
@@ -189,7 +191,14 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   });
   const controls = useControlsAutoHide(item?.id, season, episode);
 
-  const embedUrl = buildUrl(provider, externalId, mediaType, frameSeason, frameEpisode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth() });
+  // A title in another language gets captions in the viewer's subtitle
+  // language where a server can be told to show them (utils/foreignCaptions.js).
+  const captionLang = foreignCaptionLang(subtitleLang, serverChoice.originalLanguage);
+  const captionFile = (s, e) => (captionLang && typeof window !== 'undefined'
+    ? subtitleFileUrl({ origin: window.location.origin, tmdbId: titleTmdbId(item), isTV, season: s, episode: e, lang: captionLang })
+    : null);
+  useVidriftCaptions({ iframeRef, active: provider === 'vidrift' && Boolean(captionLang), lang: captionLang, loadKey });
+  const embedUrl = buildUrl(provider, externalId, mediaType, frameSeason, frameEpisode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth(), subtitleFile: captionFile(frameSeason, frameEpisode) });
 
   // TV remote: hand the remote to the video once it loads, so OK plays and
   // pauses; Back steps out to the player's controls (KeyboardShortcuts).
@@ -246,7 +255,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
   const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
   const preloadUrl = upNext.preloadNext && upNext.nextEpisode
-    ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang, { noAutoplay: silentPreload })
+    ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang, { noAutoplay: silentPreload, subtitleFile: captionFile(upNext.nextEpisode.season, upNext.nextEpisode.episode) })
     : null;
   const overlays = asleep ? null : (
     <>

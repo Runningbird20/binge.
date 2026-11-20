@@ -234,6 +234,26 @@ export function setCaptionCapableServers(ids) {
 
 // ── Ranking ────────────────────────────────────────────────────────────
 
+// Which servers carry a language, as measured (2026-11-19, each server
+// embedded on another origin, playing or loading the stream): Malayalam on
+// 10 films 1989–2025, the others on 2–5 titles each. Vidy and VixSrc had no
+// Malayalam film at all, so for one they'd only cost a failover. Languages
+// not listed keep the plain order.
+export const LANGUAGE_COVERAGE = {
+  ml: { vidrift: 0.8, vidy: 0, vidlink: 0.7, cinesrc: 0.8, vixsrc: 0, vidspark: 0.9, vidcore: 0.8, embedwave: 0.8 },
+  hi: { vidrift: 1, vidy: 0.5, vidlink: 0.25, cinesrc: 0.75, vixsrc: 0.5, vidspark: 1, vidcore: 1, embedwave: 1 },
+  ta: { vidrift: 1, vidy: 0.5, vidlink: 0.5, cinesrc: 1, vixsrc: 0, vidspark: 1, vidcore: 0.5, embedwave: 1 },
+  te: { vidrift: 1, vidy: 1, vidlink: 0, cinesrc: 1, vixsrc: 0.5, vidspark: 0.5, vidcore: 0.5, embedwave: 1 },
+  ko: { vidrift: 1, vidy: 0.6, vidlink: 0.8, cinesrc: 0.8, vixsrc: 1, vidspark: 1, vidcore: 1, embedwave: 1 },
+};
+
+// A server that misses most titles in this language ranks lower (−3 at
+// none), one that has nearly all a little higher; unmeasured: no change.
+export function languageCoverageScore(id, originalLanguage) {
+  const rate = LANGUAGE_COVERAGE[String(originalLanguage || '').toLowerCase()]?.[id];
+  return rate === undefined ? 0 : (rate - 0.75) * 4;
+}
+
 /**
  * Orders servers best-first for this viewer and title.
  * @returns {{ id, score, audio: string|null, audioVotes: number, note: string }[]}
@@ -252,6 +272,7 @@ export function rankServers(providerIds, { prefs, originalLanguage, summary = []
       const audioVotes = Number(report?.audio_count) || 0;
 
       let score = -index * 0.4; // default order as a weak prior
+      score += languageCoverageScore(id, originalLanguage);
       score += Math.min(3, works * 0.6) - Math.min(4, broken * 0.9);
       if (memory?.provider === id) score += 4;
       const brokenAt = memory?.[`broken:${id}`];
