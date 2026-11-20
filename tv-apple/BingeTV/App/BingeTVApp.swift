@@ -104,9 +104,9 @@ struct MainTabs: View {
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag("search")
             NavigationStack { MeView() }
-                .tabItem { Label(app.profile?.name ?? "Me", systemImage: "person.crop.circle") }
-                // Unread notifications, like the dot on the website's bell.
-                .badge(inbox.unreadIds.count)
+                // Unread notifications, like the dot on the website's bell. tvOS
+                // has no tab badges and its tab bar shows text, so it's in the name.
+                .tabItem { Label(meTabTitle, systemImage: "person.crop.circle") }
                 .tag("me")
         }
         #if DEBUG
@@ -131,7 +131,7 @@ struct MainTabs: View {
         // Ambient mode after a few idle minutes (AmbientStore).
         .fullScreenCover(isPresented: $ambient.showing) {
             AmbientView(titles: ambient.titles,
-                        resumeLabel: ambient.resume.map { item in "Resume \(item.title.name)\(item.episodeLabel.map { " · \($0)" } ?? "")" },
+                        resumeLabel: ambientResumeLabel,
                         resume: {
                             let next = ambient.resume?.playRequest
                             ambient.showing = false
@@ -146,5 +146,19 @@ struct MainTabs: View {
         .onAppear { AmbientStore.shared.start() }
         // A different profile means different rows, list and history.
         .id(app.profile?.id ?? "none")
+    }
+
+    private var meTabTitle: String {
+        let name = app.profile?.name ?? "Me"
+        let unread = inbox.unreadIds.count
+        return unread > 0 ? "\(name) · \(unread) new" : name
+    }
+
+    // "Resume Title · S1 E2" for ambient mode (its own property: inline, it
+    // was too much for the type checker in the modifier chain above).
+    private var ambientResumeLabel: String? {
+        guard let item = ambient.resume else { return nil }
+        let episode = item.episodeLabel.map { " · \($0)" } ?? ""
+        return "Resume \(item.title.name)\(episode)"
     }
 }

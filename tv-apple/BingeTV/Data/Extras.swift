@@ -144,6 +144,7 @@ enum ServerPlan {
         // Best quality: the servers that have looked sharpest here go first.
         if QualityPreference.current == .best, !Device.isLowMemory { list = QualityMemory.sorted(list) }
         let original = await language
+        list = StreamServer.byLanguage(list, language: original)
         let wanted = PlaybackPrefs.audio == "original" ? original : PlaybackPrefs.audio
         guard let wanted, !wanted.isEmpty else { return list }
         let reports = await reported

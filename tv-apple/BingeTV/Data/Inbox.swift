@@ -59,6 +59,8 @@ extension DeepLink {
     // Read as the Top Shelf link to the same place.
     init?(sitePath: String) {
         guard let parts = URLComponents(string: sitePath) else { return nil }
+        // A path on binge., or a full link to binge.'s own site; another site's /movie/1 isn't ours.
+        if let host = parts.host, !host.hasSuffix("binge-26.vercel.app") { return nil }
         let segments = parts.path.split(separator: "/")
         guard segments.count == 2, let id = Int(segments[1]) else { return nil }
         let kind: MediaKind

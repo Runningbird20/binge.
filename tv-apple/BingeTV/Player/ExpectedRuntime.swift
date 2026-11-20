@@ -7,6 +7,10 @@ import Foundation
 @MainActor
 enum ExpectedRuntime {
     private static var cache: [String: Double] = [:]
+    // Requests whose runtime is a guess (the season's typical episode).
+    private static var estimates: Set<String> = []
+
+    static func isEstimate(_ request: PlayRequest) -> Bool { estimates.contains(StreamRace.key(for: request)) }
 
     static func seconds(for request: PlayRequest) async -> Double? {
         guard !request.isLive, let tmdbId = request.title.tmdbId else { return nil }
@@ -22,6 +26,7 @@ enum ExpectedRuntime {
             if (minutes ?? 0) <= 0 {
                 let known = (data?.episodes ?? []).compactMap(\.runtime).filter { $0 > 0 }.sorted()
                 minutes = known.isEmpty ? nil : known[known.count / 2]
+                estimates.insert(key)
             }
             if (minutes ?? 0) <= 0 {
                 let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
@@ -43,8 +48,12 @@ enum ExpectedRuntime {
     }
 
     // Different cuts and credits vary a little; a different video doesn't.
-    static func isWrong(_ duration: Double, expected: Double) -> Bool {
+    // A guessed runtime only catches a video of another size (under half or
+    // over 1.8×): a 70-min finale among 45-min episodes isn't "wrong" (the
+    // website's runtimeCheck.js, 2026-11-19).
+    static func isWrong(_ duration: Double, expected: Double, estimated: Bool = false) -> Bool {
         guard duration > 60, expected > 0 else { return false }
+        if estimated { return duration < expected * 0.5 || duration > expected * 1.8 }
         return abs(duration - expected) > max(240, expected * 0.2)
     }
 }

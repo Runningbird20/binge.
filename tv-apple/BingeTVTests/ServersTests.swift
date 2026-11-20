@@ -15,7 +15,7 @@ import Testing
     @Test func idsAreUniqueAndKnown() {
         let ids = StreamServer.all.map(\.id)
         #expect(Set(ids).count == ids.count)
-        #expect(ids == ["vidrift", "vidy", "cinesrc"])
+        #expect(ids == ["vidrift", "vidy", "cinesrc", "vidspark", "atlantic"])
     }
 
     @Test(arguments: StreamServer.all)
@@ -83,14 +83,21 @@ import Testing
         t.tmdbId = 1
         UserDefaults.standard.removeObject(forKey: "binge.server.\(t.id)") // a run cut short may have left one
         defer { UserDefaults.standard.removeObject(forKey: "binge.server.\(t.id)") }
-        #expect(StreamServer.ranked(for: t).map(\.id) == ["vidrift", "vidy", "cinesrc"])
+        #expect(StreamServer.ranked(for: t).map(\.id) == ["vidrift", "vidy", "cinesrc", "vidspark", "atlantic"])
         StreamServer.rememberWorking(server("cinesrc"), for: t)
-        #expect(StreamServer.ranked(for: t).map(\.id) == ["cinesrc", "vidrift", "vidy"])
+        #expect(StreamServer.ranked(for: t).map(\.id) == ["cinesrc", "vidrift", "vidy", "vidspark", "atlantic"])
         StreamServer.rememberWorking(server("vidy"), for: t)
-        #expect(StreamServer.ranked(for: t).map(\.id) == ["vidy", "vidrift", "cinesrc"])
+        #expect(StreamServer.ranked(for: t).map(\.id) == ["vidy", "vidrift", "cinesrc", "vidspark", "atlantic"])
         // A server that no longer exists is ignored.
         UserDefaults.standard.set("gone", forKey: "binge.server.\(t.id)")
-        #expect(StreamServer.ranked(for: t).map(\.id) == ["vidrift", "vidy", "cinesrc"])
+        #expect(StreamServer.ranked(for: t).map(\.id) == ["vidrift", "vidy", "cinesrc", "vidspark", "atlantic"])
+    }
+
+    @Test func malayalamPutsVidyLast() {
+        let list = StreamServer.byLanguage(StreamServer.all, language: "ml").map(\.id)
+        #expect(list.last == "vidy" && list.first == "vidrift")
+        #expect(StreamServer.byLanguage(StreamServer.all, language: "en").map(\.id) == StreamServer.all.map(\.id))
+        #expect(StreamServer.byLanguage(StreamServer.all, language: nil).map(\.id) == StreamServer.all.map(\.id))
     }
 
     @Test func memoryIsPerTitle() {
@@ -262,8 +269,9 @@ import Testing
         ServerSpeed.record(byId("vidrift"), seconds: 9)
         ServerSpeed.failed(byId("vidy"))
         ServerSpeed.record(byId("cinesrc"), seconds: 3)
-        #expect(ServerSpeed.sorted(StreamServer.all).map(\.id) == ["cinesrc", "vidrift", "vidy"])
-        #expect(ServerSpeed.sorted(StreamServer.all, keepingFirst: "vidy").map(\.id) == ["vidy", "cinesrc", "vidrift"])
+        let timed = StreamServer.all.filter { ["vidrift", "vidy", "cinesrc"].contains($0.id) }
+        #expect(ServerSpeed.sorted(timed).map(\.id) == ["cinesrc", "vidrift", "vidy"])
+        #expect(ServerSpeed.sorted(timed, keepingFirst: "vidy").map(\.id) == ["vidy", "cinesrc", "vidrift"])
         // Averaged: one fast start doesn't erase a history of slow ones.
         ServerSpeed.record(byId("vidy"), seconds: 1)
         #expect(ServerSpeed.of(byId("vidy")) == 27)

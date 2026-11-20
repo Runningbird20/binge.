@@ -597,7 +597,7 @@ Rules that apply every time:
   - **Subtitles** are drawn by the app (`SubtitleLine`), not by WebKit. OpenSubtitles allows only a few downloads a day, so files are cached in `subtitle_cache`.
   - **Verify Multiview and sports on hardware.** The tvOS simulator draws one web video at a time, and sports embeds flag the Android emulator as a bot.
 - **Apple TV** (`tv-apple/`, SwiftUI, no dependencies):
-  - **Playback** uses tvOS's private WKWebView: sideload-only, never App Store. tvOS has no MSE, so only VidRift, Vidy and CineSrc work.
+  - **Playback** uses tvOS's private WKWebView: sideload-only, never App Store. tvOS has no MSE, so only servers that fall back to native HLS work: VidRift, Vidy, CineSrc, and since 2026-11-19 VidSpark and Atlantic (checked with `-BingeProbe` in the simulator; VidCore and EmbedWave play too but lower, so they're left out). Films race four at once, the rest wait as backups; Vidy goes last for a Malayalam title (`StreamServer.byLanguage`).
   - **Project file.** `BingeTV.xcodeproj` is hand-written with a folder-synced `BingeTV/` group, so new files need no project edits. If Xcode has the project open while you edit `project.pbxproj` by hand, re-check the file afterwards.
   - **Images.** Every picture goes through `RemoteImage`/`ImageStore`, never `AsyncImage`.
   - **Keys:** `Config/Secrets.xcconfig`, built by `tv-apple/scripts/make-secrets.sh` (public keys only).

@@ -39,7 +39,29 @@ struct StreamServer: Identifiable, Hashable {
             c.queryItems = items
             return c.url!
         },
+        // Added 2026-11-19 after the tvOS simulator played them (-BingeProbe):
+        // VidSpark Game of Thrones 1x1 at 1080p in 4s and Aavesham; Atlantic
+        // 1x1 at 1080p in 4s and Fight Club. VidCore (540p) and EmbedWave
+        // (534p) played too, but lower; left out to keep the race small.
+        StreamServer(id: "vidspark", name: "VidSpark") { id, kind, s, e in
+            var c = URLComponents(string: kind == .tvShow ? "https://vidspark.to/tv/\(id)/\(s)/\(e)" : "https://vidspark.to/movie/\(id)")!
+            c.queryItems = [URLQueryItem(name: "theme", value: "F4F6F8")]
+            return c.url!
+        },
+        StreamServer(id: "atlantic", name: "Atlantic") { id, kind, s, e in
+            URL(string: kind == .tvShow ? "https://atlantic.st/embed/tv/\(id)/\(s)/\(e)" : "https://atlantic.st/embed/movie/\(id)")!
+        },
     ]
+
+    // Servers that had none of a language's titles when measured (the
+    // website's LANGUAGE_COVERAGE, 2026-11-19: Vidy had none of 10 Malayalam
+    // films). They go to the back for a title in that language.
+    static let weakFor: [String: Set<String>] = ["ml": ["vidy"]]
+
+    static func byLanguage(_ list: [StreamServer], language: String?) -> [StreamServer] {
+        guard let weak = language.flatMap({ weakFor[$0.lowercased()] }) else { return list }
+        return list.filter { !weak.contains($0.id) } + list.filter { weak.contains($0.id) }
+    }
 
     // The server that last worked for this title goes first (so episode 2
     // starts where episode 1 ended up), like the site's streamPreferences.

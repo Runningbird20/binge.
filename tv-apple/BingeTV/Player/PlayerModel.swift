@@ -957,7 +957,7 @@ final class PlayerModel: ObservableObject {
         watchBuffer(state)
         // Playing, but the video's length says it's a different title.
         // The race may have dropped TMDB's length (servers agreed on another cut).
-        if started, let expected, race?.expectedDuration != nil, ExpectedRuntime.isWrong(state.d, expected: expected) {
+        if started, let expected, race?.expectedDuration != nil, ExpectedRuntime.isWrong(state.d, expected: expected, estimated: ExpectedRuntime.isEstimate(request)) {
             self.expected = nil
             recover(reason: "had the wrong video")
             return

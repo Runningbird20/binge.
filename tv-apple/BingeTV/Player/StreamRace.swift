@@ -42,10 +42,13 @@ final class StreamRace {
     static let giveUpSeconds: TimeInterval = 45
     static let maxLiveContenders = 4
     // Pages raced at once. Each is a WebKit process (~100–300 MB); the Apple
-    // TV HD affords two, and the rest wait as backups for recovery.
+    // TV HD affords two, and the rest wait as backups for recovery. Films and
+    // episodes raced every server while there were three; with five
+    // (2026-11-19) they race four, like live games.
+    static let maxContenders = 4
     static func contenderLimit(live: Bool) -> Int {
         if Device.isLowMemory { return 2 }
-        return live ? maxLiveContenders : .max
+        return live ? maxLiveContenders : maxContenders
     }
 
     var key: String { Self.key(for: request) }
@@ -201,7 +204,7 @@ final class StreamRace {
                 }
                 #endif
                 if state.paused, state.ready >= 2 { candidate.web.send(.play) }
-                if let expected = self.expectedDuration, ExpectedRuntime.isWrong(state.d, expected: expected) {
+                if let expected = self.expectedDuration, ExpectedRuntime.isWrong(state.d, expected: expected, estimated: ExpectedRuntime.isEstimate(self.request)) {
                     // Two servers with the same "wrong" length: TMDB lists another
                     // cut (Money Heist's 90-min broadcast episodes vs Netflix's 47).
                     if ExpectedRuntime.agree(state.d, self.rejectedLengths) {
