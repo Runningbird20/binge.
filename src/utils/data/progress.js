@@ -216,9 +216,8 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
   if (!user) throw new Error('Not signed in');
   const profileId = getActiveProfileId();
 
-  // Only updates an existing entry — titles are added to the library
-  // exclusively through the explicit "Add to Watchlist"/"Add to Library"
-  // actions, never as a side effect of watching/reading progress.
+  // Only updates an existing entry. Starting playback puts a title on the
+  // list by itself (markStartedWatching in data/library.js).
   let existingQuery = client
     .from('watchlist')
     .select('id')
@@ -244,11 +243,10 @@ export async function updateWatchlistProgress({ mediaType, mediaId, currentSeaso
 }
 
 // ─── Continue Watching ──────────────────────────────────────────────────────
-// Deliberately its own table, not the watchlist: a title can be in progress
-// without ever being added to the library, and library titles aren't
-// automatically "in progress" just because they were saved. Starting
-// playback writes here only; adding to the library is a separate, explicit
-// action (addSupabaseWatchlistItem).
+// Deliberately its own table, not the watchlist: it holds the playback
+// position, and library titles aren't "in progress" just because they were
+// saved. Starting playback writes here and also puts the title on the list as
+// Watching (markStartedWatching, unless it's rated or already Watched).
 
 export async function fetchSupabaseContinueWatching({ profile = null } = {}) {
   if (!isSupabaseConfigured || !supabase) return [];

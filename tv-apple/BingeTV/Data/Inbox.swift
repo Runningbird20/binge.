@@ -45,7 +45,7 @@ enum InboxDestination: Equatable {
     init?(sitePath: String) {
         if let link = DeepLink(sitePath: sitePath) {
             self = .title(link)
-        } else if URLComponents(string: sitePath)?.path == "/sports" {
+        } else if let parts = URLComponents(string: sitePath), parts.host == nil, parts.path == "/sports" {
             self = .sports
         } else {
             return nil
@@ -58,7 +58,8 @@ extension DeepLink {
     // a reminder's /movie/12?play=1&reminder=7, with an optional &t= second.
     // Read as the Top Shelf link to the same place.
     init?(sitePath: String) {
-        guard let parts = URLComponents(string: sitePath) else { return nil }
+        // A path on the site only: a link to anywhere else isn't a title here.
+        guard let parts = URLComponents(string: sitePath), parts.scheme == nil, parts.host == nil else { return nil }
         let segments = parts.path.split(separator: "/")
         guard segments.count == 2, let id = Int(segments[1]) else { return nil }
         let kind: MediaKind

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { upsertSupabaseContinueWatching, updateWatchlistProgress, fetchSupabaseResumePoint } from '../../utils/supabaseData';
+import { useEffect, useRef } from 'react';
+import { markStartedWatching, upsertSupabaseContinueWatching, updateWatchlistProgress, fetchSupabaseResumePoint } from '../../utils/supabaseData';
 import { getResumePosition, mergeRemotePosition, positionKey } from '../../utils/playbackPositions';
 import { CONTINUE_WATCHING_DELAY_SECONDS, RESUMABLE, buildUrl } from '../../utils/embedProviders';
 
@@ -9,6 +9,7 @@ export default function usePositionSync({
   item, mediaType, isTV, season, episode, provider, externalId, subtitleLang,
   playbackRef, iframeRef, pendingStartRef, frozenStartRef, setResumeNonce,
 }) {
+  const startedRef = useRef(null); // the title already put on the list this session
   function syncPosition(seconds, duration) {
     upsertSupabaseContinueWatching({
       mediaType,
@@ -44,18 +45,23 @@ export default function usePositionSync({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, season, episode]);
 
-  // Recording/updating Continue Watching — independent of whether this title
-  // is in the library (adding to the library stays a separate, explicit
-  // action). Delayed by CONTINUE_WATCHING_DELAY_SECONDS so a title only lands
-  // there once the player has actually stayed open, not on every click that
-  // resolves a stream URL — a misclick or quick "let me check this out" close
-  // shouldn't create (or bump) a Continue Watching entry.
+  // Recording/updating Continue Watching, and putting the title on the list
+  // as Watching (markStartedWatching: once per title here; it leaves rated
+  // and Watched titles alone). Delayed by CONTINUE_WATCHING_DELAY_SECONDS so a
+  // title only lands there once the player has actually stayed open, not on
+  // every click that resolves a stream URL — a misclick or quick "let me
+  // check this out" close shouldn't create (or bump) either.
   useEffect(() => {
     if (!item?.id || !buildUrl(provider, externalId, mediaType, season, episode, subtitleLang)) return undefined;
 
     const timer = setTimeout(() => {
       const progress = isTV ? { currentSeason: season, currentEpisode: episode } : {};
       upsertSupabaseContinueWatching({ mediaType, mediaId: item.id, ...progress }).catch(() => {});
+      const titleKey = `${mediaType}:${item.id}`;
+      if (startedRef.current !== titleKey) {
+        startedRef.current = titleKey;
+        markStartedWatching({ mediaType, mediaId: item.id, ...progress }).catch(() => {});
+      }
       // Keeps the watchlist row's own progress columns in sync too, so a
       // title that's in BOTH the library and Continue Watching shows the
       // same up-to-date episode on both surfaces. No-ops if it's not in the

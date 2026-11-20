@@ -323,6 +323,47 @@ object AppModel {
             else Supabase.insert("continue_watching", row + mapOf("user_id" to session.userId, "profile_id" to profile?.id,
                 "media_type" to title.kind.raw, "media_id" to title.dbId))
         } catch (e: Exception) { handle(e) }
+        markStartedWatching(title, season, episode)
+    }
+
+    // Started playing: the title goes on this profile's list as Watching, or
+    // moves there from Plan to Watch, as on the website (markStartedWatching
+    // in src/utils/data/library.js). Left alone: already Watching or Watched
+    // (a rewatch doesn't undo Watched), or rated (a rated title lives in
+    // Ratings, not the list). Once per title per launch; a failed try is
+    // tried again on the next save.
+    private val startedTitles = java.util.Collections.synchronizedSet(HashSet<String>())
+    @Serializable private data class StatusRow(val id: Long, val status: String)
+
+    suspend fun markStartedWatching(title: Title, season: Int?, episode: Int?) {
+        val session = session ?: return
+        if (isDemo || !startedTitles.add(title.id)) return
+        val ratings = if (title.kind == MediaKind.TV) "tv_show_ratings" else "movie_ratings"
+        val match = listOf("media_id" to "eq.${title.dbId}", "limit" to "1") + ownerFilter
+        try {
+            val (rated, listed) = coroutineScope {
+                val r = async { Supabase.selectAs<List<IdRow>>(ratings, listOf("select" to "id") + match) }
+                val l = async { Supabase.selectAs<List<StatusRow>>("watchlist", listOf("select" to "id,status", "media_type" to "eq.${title.kind.raw}") + match) }
+                r.await() to l.await()
+            }
+            if (rated.isNotEmpty()) return
+            val row = mutableMapOf<String, Any?>("status" to "watching")
+            if (title.kind == MediaKind.TV) { row["current_season"] = season ?: 1; row["current_episode"] = episode ?: 1 }
+            val existing = listed.firstOrNull()
+            if (existing != null) {
+                if (existing.status != "plan_to_watch") return
+                row["updated_at"] = IsoDate.now()
+                Supabase.update("watchlist", listOf("id" to "eq.${existing.id}"), row)
+            } else {
+                Supabase.insert("watchlist", row + mapOf("user_id" to session.userId, "profile_id" to profile?.id,
+                    "media_type" to title.kind.raw, "media_id" to title.dbId))
+            }
+            WatchedTitles.invalidate()
+            refreshList()
+        } catch (e: Exception) {
+            startedTitles.remove(title.id)
+            handle(e)
+        }
     }
 
     suspend fun removeFromContinue(title: Title) {

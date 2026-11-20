@@ -383,6 +383,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
 ### Library, ratings & stats
 
 - **A rated title counts as watched** and belongs in "Ratings & Reviews", **not** the watchlist/library. `saveSupabaseRating` (`src/utils/data/library.js`) deletes the matching watchlist row after saving a rating. That delete is best-effort: if it fails, the save must still succeed.
+- **Starting a title puts it on the list as Watching** (`markStartedWatching` in `data/library.js`, called by the player's `usePositionSync` once per title, when Continue Watching is first written: after the player has stayed open `CONTINUE_WATCHING_DELAY_SECONDS`). Not on the list: added as Watching (a series with its episode). Plan to Watch: moved to Watching. Already Watching or Watched, or rated: left alone (a rewatch doesn't undo Watched; a rated title stays in Ratings & Reviews). It announces `binge:historyChanged` only when it changed something, which also reloads the title popup's own list entry (`MediaOverlay`). Movies have the Watching status too (`getStatusOptions`). The TV apps do the same (`AppModel.markStartedWatching`, see `docs/tv-apps.md`).
 - **The Profile page has three tabs:**
   - **My List** — still to watch, or in progress.
   - **Watched** — finished (`watched`) but not rated, newest first (`isFinished` / `splitFinished` in `libraryStats.js`). Rating a watched title moves it on to Ratings & Reviews.

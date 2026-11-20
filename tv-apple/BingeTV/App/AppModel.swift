@@ -424,6 +424,56 @@ final class AppModel: ObservableObject {
         } catch {
             handle(error)
         }
+        await markStartedWatching(title: title, season: season, episode: episode)
+    }
+
+    // Started playing: the title goes on this profile's list as Watching, or
+    // moves there from Plan to Watch, as on the website (markStartedWatching
+    // in src/utils/data/library.js). Left alone: already Watching or Watched
+    // (a rewatch doesn't undo Watched), or rated (a rated title lives in
+    // Ratings, not the list). Once per title per launch; a failed try is
+    // tried again on the next save.
+    private var startedTitles = Set<String>()
+
+    func markStartedWatching(title: Title, season: Int?, episode: Int?) async {
+        guard let session, !isDemo, startedTitles.insert(title.id).inserted else { return }
+        struct IdRow: Decodable { let id: Int }
+        struct StatusRow: Decodable { let id: Int; let status: String }
+        let ratings = title.kind == .tvShow ? "tv_show_ratings" : "movie_ratings"
+        let match = [
+            URLQueryItem(name: "media_id", value: "eq.\(title.dbId)"),
+            URLQueryItem(name: "limit", value: "1"),
+        ] + ownerFilter
+        do {
+            async let rated: [IdRow] = Supabase.shared.select(ratings, [URLQueryItem(name: "select", value: "id")] + match)
+            async let listed: [StatusRow] = Supabase.shared.select("watchlist", [
+                URLQueryItem(name: "select", value: "id,status"),
+                URLQueryItem(name: "media_type", value: "eq.\(title.kind.rawValue)"),
+            ] + match)
+            let (ratedRows, listRows) = try await (rated, listed)
+            guard ratedRows.isEmpty else { return }
+            var row: [String: Any] = ["status": "watching"]
+            if title.kind == .tvShow {
+                row["current_season"] = season ?? 1
+                row["current_episode"] = episode ?? 1
+            }
+            if let existing = listRows.first {
+                guard existing.status == "plan_to_watch" else { return }
+                row["updated_at"] = ISO8601DateFormatter().string(from: Date())
+                try await Supabase.shared.update("watchlist", [URLQueryItem(name: "id", value: "eq.\(existing.id)")], row)
+            } else {
+                row["user_id"] = session.userId
+                row["profile_id"] = profile?.id ?? NSNull()
+                row["media_type"] = title.kind.rawValue
+                row["media_id"] = title.dbId
+                try await Supabase.shared.insert("watchlist", row)
+            }
+            WatchedTitles.shared.invalidate()
+            await refreshList()
+        } catch {
+            startedTitles.remove(title.id)
+            handle(error)
+        }
     }
 
     func removeFromContinue(_ title: Title) async {

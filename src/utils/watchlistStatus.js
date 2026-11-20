@@ -4,7 +4,7 @@ export const STATUS_LABELS = {
   watched: 'Watched',
 };
 
-export function getStatusOptions(mediaType) {
-  if (mediaType === 'tv_show') return ['plan_to_watch', 'watching', 'watched'];
-  return ['plan_to_watch', 'watched'];
+// Movies and series alike: starting either puts it on the list as Watching.
+export function getStatusOptions() {
+  return ['plan_to_watch', 'watching', 'watched'];
 }

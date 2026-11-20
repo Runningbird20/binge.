@@ -17,6 +17,15 @@ function announcing(write) {
   };
 }
 
+// The same, only when the write says it changed something.
+function announcingChange(write) {
+  return async (...args) => {
+    const result = await write(...args);
+    if (result && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('binge:historyChanged'));
+    return result;
+  };
+}
+
 export const buildSupabaseUserProfile = account.buildSupabaseUserProfile;
 export const fetchAccountProfiles = account.fetchAccountProfiles;
 export const createAccountProfile = account.createAccountProfile;
@@ -35,6 +44,7 @@ export const calculateTasteMatch = account.calculateTasteMatch;
 export const averageRatingValue = library.averageRatingValue;
 export const fetchSupabaseWatchlist = library.fetchSupabaseWatchlist;
 export const addSupabaseWatchlistItem = announcing(library.addSupabaseWatchlistItem);
+export const markStartedWatching = announcingChange(library.markStartedWatching);
 export const fetchSupabaseWatchlistStatusMap = library.fetchSupabaseWatchlistStatusMap;
 export const updateSupabaseWatchlistStatus = announcing(library.updateSupabaseWatchlistStatus);
 export const removeSupabaseWatchlistItem = announcing(library.removeSupabaseWatchlistItem);

@@ -28,6 +28,7 @@ jest.mock('../utils/supabaseData', () => ({
   unmarkEpisodeWatched: jest.fn(),
   upsertSupabaseContinueWatching: jest.fn(),
   updateWatchlistProgress: jest.fn(),
+  markStartedWatching: jest.fn(),
   fetchSupabaseResumePoint: jest.fn(),
 }));
 jest.mock('../utils/streamPreferences', () => ({
@@ -95,7 +96,7 @@ beforeEach(() => {
     if (path.startsWith('/media/tmdb-season')) return Promise.resolve({ episodeCount: 10 });
     return Promise.resolve({});
   });
-  for (const name of ['markEpisodeWatched', 'unmarkEpisodeWatched', 'upsertSupabaseContinueWatching', 'updateWatchlistProgress']) {
+  for (const name of ['markEpisodeWatched', 'unmarkEpisodeWatched', 'upsertSupabaseContinueWatching', 'updateWatchlistProgress', 'markStartedWatching']) {
     supabaseData[name].mockResolvedValue();
   }
   supabaseData.fetchSupabaseResumePoint.mockResolvedValue(null);
@@ -311,6 +312,25 @@ test('phone: the sleep timer is a row of chips under the video', async () => {
   fireEvent.click(screen.getByRole('button', { name: '30 min' }));
   expect(screen.getByText('Sleep timer · stops in 30 min')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '30 min' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('a title the player stays open on goes on the list as Watching, once', async () => {
+  await setup();
+  expect(supabaseData.markStartedWatching).not.toHaveBeenCalled();
+  await flush(20000);
+  expect(supabaseData.markStartedWatching).toHaveBeenCalledWith({ mediaType: 'tv_show', mediaId: 42, currentSeason: 1, currentEpisode: 1 });
+  // The next episode doesn't ask again.
+  fireEvent.keyDown(window, { key: 'ArrowRight' });
+  await flush(20000);
+  expect(supabaseData.markStartedWatching).toHaveBeenCalledTimes(1);
+});
+
+test('a movie closed within moments isn’t put on the list', async () => {
+  const { unmount } = await setup({ item: MOVIE, mediaType: 'movie' });
+  await flush(5000);
+  unmount();
+  await flush(20000);
+  expect(supabaseData.markStartedWatching).not.toHaveBeenCalled();
 });
 
 test('VidSpark is told to play once loaded, until it reports playing', async () => {

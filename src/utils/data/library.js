@@ -118,6 +118,41 @@ export async function addSupabaseWatchlistItem({ mediaType, mediaId, status = 'p
   return enrichMediaRecord(data, data.media_type, metadata);
 }
 
+// Playback started (the player stayed open a moment: usePositionSync): the
+// title goes on this profile's list as Watching, or moves there from Plan to
+// Watch. Left as it is: a title already Watching or Watched (a rewatch
+// doesn't undo Watched), and a rated one (a rated title lives in Ratings &
+// Reviews, not the list: saveSupabaseRating takes it off). A series carries
+// the episode it's on.
+// → 'added' | 'moved' | null when nothing changed (or it couldn't be saved).
+export async function markStartedWatching({ mediaType, mediaId, currentSeason, currentEpisode }) {
+  if (!isSupabaseConfigured || !supabase || !RATING_TABLES[mediaType]) return null;
+  const client = requireSupabase();
+  const authUser = await getAuthenticatedUser();
+  const profileId = getActiveProfileId();
+  const id = Number(mediaId);
+  const scoped = (query) => (profileId ? scopeToProfile(query, profileId) : query);
+  const [{ data: rated, error: ratedError }, { data: rows, error: listError }] = await Promise.all([
+    scoped(client.from(RATING_TABLES[mediaType].table).select('id').eq('user_id', authUser.id).eq('media_id', id)).limit(1),
+    scoped(client.from('watchlist').select('id, status').eq('user_id', authUser.id).eq('media_type', mediaType).eq('media_id', id)).limit(1),
+  ]);
+  if (ratedError || listError || rated?.length) return null;
+
+  const progress = mediaType === 'tv_show' && currentSeason ? { current_season: currentSeason, current_episode: currentEpisode ?? 1 } : {};
+  const existing = rows?.[0];
+  if (existing) {
+    if (existing.status !== 'plan_to_watch') return null;
+    const { error } = await client.from('watchlist')
+      .update({ status: 'watching', ...progress, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    return error ? null : 'moved';
+  }
+  const { error } = await client.from('watchlist').insert({
+    user_id: authUser.id, profile_id: profileId, media_type: mediaType, media_id: id, status: 'watching', ...progress,
+  });
+  return error ? null : 'added';
+}
+
 // Bulk status lookup for an entire catalog grid — lets browse pages show/edit
 // each item's watchlist status inline (on the card itself) without a per-item
 // round trip or having to open the watchlist page.

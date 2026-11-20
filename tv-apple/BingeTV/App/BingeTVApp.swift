@@ -84,6 +84,23 @@ struct MainTabs: View {
     @ObservedObject private var inbox = InboxStore.shared
     @State private var ambientPlay: PlayRequest?
 
+    // The Me tab says how many notifications are unread, like the dot on the
+    // website's bell: "Sam (2)". tvOS tab bars have no badges (.badge isn't
+    // available there) and mostly show just the tab's name.
+    private var meTabTitle: String {
+        let name = app.profile?.name ?? "Me"
+        let unread = inbox.unreadIds.count
+        return unread > 0 ? "\(name) (\(unread))" : name
+    }
+
+    // "Resume Severance · S2:E5" on the ambient screen. Its own property: inline
+    // in the long modifier chain below, the compiler gave up type-checking body.
+    private var ambientResumeLabel: String? {
+        guard let item = ambient.resume else { return nil }
+        let episode = item.episodeLabel.map { " · \($0)" } ?? ""
+        return "Resume \(item.title.name)\(episode)"
+    }
+
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { HomeView().titleDestinations() }
@@ -104,9 +121,7 @@ struct MainTabs: View {
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag("search")
             NavigationStack { MeView() }
-                .tabItem { Label(app.profile?.name ?? "Me", systemImage: "person.crop.circle") }
-                // Unread notifications, like the dot on the website's bell.
-                .badge(inbox.unreadIds.count)
+                .tabItem { Label(meTabTitle, systemImage: "person.crop.circle") }
                 .tag("me")
         }
         #if DEBUG
@@ -131,7 +146,7 @@ struct MainTabs: View {
         // Ambient mode after a few idle minutes (AmbientStore).
         .fullScreenCover(isPresented: $ambient.showing) {
             AmbientView(titles: ambient.titles,
-                        resumeLabel: ambient.resume.map { item in "Resume \(item.title.name)\(item.episodeLabel.map { " · \($0)" } ?? "")" },
+                        resumeLabel: ambientResumeLabel,
                         resume: {
                             let next = ambient.resume?.playRequest
                             ambient.showing = false

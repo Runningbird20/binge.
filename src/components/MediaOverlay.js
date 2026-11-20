@@ -67,8 +67,14 @@ export default function MediaOverlay({ mediaType }) {
   }, [mediaType, numericId]);
 
   // libraryVersion: bumped when the popup changes library rows itself (a
-  // franchise's "Mark all watched" can include this title).
+  // franchise's "Mark all watched" can include this title), and when the list
+  // changes elsewhere (starting the player puts the title on it as Watching).
   const [libraryVersion, setLibraryVersion] = useState(0);
+  useEffect(() => {
+    const changed = () => setLibraryVersion((version) => version + 1);
+    window.addEventListener('binge:historyChanged', changed);
+    return () => window.removeEventListener('binge:historyChanged', changed);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     fetchSupabaseWatchlistStatusMap(mediaType)
