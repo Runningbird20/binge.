@@ -645,8 +645,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         syncKey?.let { if (syncPending && !state.paused && now() - offsetChangedAt > 20_000) { syncPending = false; SubtitleSync.report(it, subtitleOffset) } }
         watchClock(state)
         watchBuffer(state)
-        // The TV follows the video's frame rate (native player only).
-        if (started && !displayMatched && state.native && state.fps > 0f) { displayMatched = true; DisplayMatch.request(state.fps) }
+        // The TV follows a film's frame rate (native player, opt-in; see DisplayMatch).
+        if (started && !displayMatched && state.native && state.fps > 0f) { displayMatched = true; DisplayMatch.request(state.fps, request.isLive) }
         val exp = expected
         if (started && exp != null && ExpectedRuntime.isWrong(state.d, exp)) { expected = null; recover("had the wrong video"); return }
         if (state.audio != audioTracks) audioTracks = state.audio

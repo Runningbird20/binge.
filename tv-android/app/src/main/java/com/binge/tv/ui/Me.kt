@@ -436,6 +436,7 @@ fun SettingsScreen() {
             item { OnOff("Larger text", "Bigger text across the whole app.", PlaybackPrefs.largeText) { Prefs.set("largeText", it) } }
             item { OnOff("Ambient mode", "Artwork from your rows after a few idle minutes, or a long pause.", PlaybackPrefs.ambient) { Prefs.set("ambient", it) } }
             item { OnOff("Native player", "Plays the stream in Fire TV's own video player: starts faster, seeks instantly and is far lighter than the server's page. Turn it off only if a video won't play.", com.binge.tv.player.NativePlayback.enabled) { Prefs.set("nativePlayer", it) } }
+            item { OnOff("Match frame rate", "Switches the TV to a film's frame rate (24, 25 or 30 fps) so pans don't judder. Off by default: each switch blanks the screen for a moment, and some TVs and soundbars lose their sound after one. Never used for live games.", com.binge.tv.data.DisplayMatch.enabled) { Prefs.set("matchFrameRate", it) } }
             item { OnOff("Lighter effects", "Smaller focus zoom, no glow, ambient mode off by default. Smoother on Fire TV sticks (on for them automatically).", Performance.light) { Prefs.set("lightEffects", it) } }
         }
     }

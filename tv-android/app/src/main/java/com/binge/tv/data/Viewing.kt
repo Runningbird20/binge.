@@ -66,17 +66,24 @@ object SharedServerStats {
     }
 }
 
-// The TV's display mode follows the video's frame rate (a film at 24fps on
-// a TV left at 60Hz judders), when the TV offers a mode at the same
-// resolution whose refresh rate is a whole multiple of it. Cleared when the
-// player closes. Apple's Match Content, on Android: preferredDisplayModeId.
+// The TV's display mode follows a film's frame rate (24fps on a TV left at
+// 60Hz judders), when the TV offers a mode at the same resolution whose
+// refresh rate is a whole multiple of it. Cleared when the player closes.
+// Apple's Match Content, on Android: preferredDisplayModeId.
+//
+// Opt-in (Settings › Playback › Match frame rate), film rates only, never
+// live. On by default it switched the TV to 59.94Hz for every 59.94fps game
+// (a change no one can see), and the HDMI re-handshake left a viewer's TV with
+// picture and no sound (2026-11-15). Fire OS's own "Match Original Frame Rate"
+// still works without it: ExoPlayer tells the surface the video's rate.
 object DisplayMatch {
     var activity: WeakReference<Activity>? = null
     private var applied = false
+    val enabled get() = Prefs.bool("matchFrameRate", false)
 
-    fun request(fps: Float) {
+    fun request(fps: Float, live: Boolean) {
         val activity = activity?.get() ?: return
-        if (fps < 20f || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (!enabled || live || fps < 20f || fps > 31f || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         @Suppress("DEPRECATION") val display: Display = activity.windowManager.defaultDisplay
         val current = display.mode
         val best = display.supportedModes
