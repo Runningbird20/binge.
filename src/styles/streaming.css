@@ -2696,3 +2696,72 @@ body input:is([type='text'], [type='email'], [type='password'], [type='number'],
 .sr-person-head:hover .st-row-title, .sr-person-head:focus-visible .st-row-title { text-decoration: underline; text-underline-offset: 4px; }
 
 .sr-person-more { margin: 0.2rem 0 0; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.88rem; color: var(--exp-text-dim); }
+
+/* ═══════════════════════════════════════════════════════════════
+   COLLECTIONS (/collections, /collections/:id; pages/Collections.js)
+═══════════════════════════════════════════════════════════════ */
+
+.coll-page .genre-bar-outer { margin: 0.25rem 0 0.5rem; }
+.coll-group { margin-top: 2rem; }
+.coll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 1rem;
+  margin-top: 0.85rem;
+}
+.coll-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border-radius: var(--exp-radius-lg, 16px);
+  background: var(--exp-surface);
+  border: 1px solid var(--exp-border);
+  color: var(--exp-text);
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.coll-card:hover { border-color: var(--exp-border-strong); transform: translateY(-2px); }
+.coll-card:focus-visible { outline: none; box-shadow: var(--st-focus); }
+/* Three posters fanned out, the first in front. */
+.coll-art { position: relative; display: block; height: 150px; }
+.coll-poster {
+  position: absolute;
+  top: 0;
+  height: 150px;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.coll-poster--0 { left: 0; z-index: 3; }
+.coll-poster--1 { left: 64px; z-index: 2; transform: scale(0.92); transform-origin: left center; }
+.coll-poster--2 { left: 122px; z-index: 1; transform: scale(0.84); transform-origin: left center; }
+.coll-text { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.coll-title { font-weight: 700; font-size: 1.05rem; }
+.coll-sub { color: var(--exp-text-dim); font-size: 0.88rem; line-height: 1.35; }
+.coll-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  color: var(--exp-text-dim);
+  text-decoration: none;
+  font-weight: 600;
+}
+.coll-back:hover { color: var(--exp-text); }
+.coll-back:focus-visible { outline: none; box-shadow: var(--st-focus); border-radius: 6px; }
+.coll-empty { margin: 2rem 0; color: var(--exp-text-dim); display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+.coll-more { display: flex; justify-content: center; margin: 1.5rem 0 2rem; }
+
+@media (prefers-reduced-motion: reduce) { .coll-card { transition: none; } .coll-card:hover { transform: none; } }
+@media (max-width: 600px) {
+  .coll-grid { grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+  .coll-card { padding: 0.65rem; }
+  .coll-art, .coll-poster { height: 110px; }
+  .coll-poster--1 { left: 40px; }
+  .coll-poster--2 { left: 76px; }
+  .coll-title { font-size: 0.95rem; }
+  .coll-sub { font-size: 0.8rem; }
+}

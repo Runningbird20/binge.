@@ -36,6 +36,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
+| Collections (ready-made sets: Malayalam, franchises, holidays, top lists…) | ✓ | ✓ | ✓ | — | One list, `public/collections.json`, read by the site (`pages/Collections.js`, `utils/collections.js`) and Apple TV (`CollectionsView`, `Data/Collections.swift`). Fire TV to come. |
 | Spotlight with logo art | ✓ | ✓ | ✓ | — | Apple TV: `HeroLogo`, text after 0.9s without one. Fire TV shows the title as text. |
 | Spotlight trailers | ✓ | — | ✓ | — | The website plays them only with a mouse or trackpad (`canAutoplayPreviews`). |
 | Trailer previews when hovering a card | ✓ | — | — | — | `HoverPreview.js`, needs a mouse or trackpad. |

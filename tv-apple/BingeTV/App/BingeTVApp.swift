@@ -95,6 +95,9 @@ struct MainTabs: View {
             NavigationStack { BrowseView(kind: .tvShow).titleDestinations() }
                 .tabItem { Label("Series", systemImage: "tv") }
                 .tag("series")
+            NavigationStack { CollectionsView().titleDestinations() }
+                .tabItem { Label("Collections", systemImage: "square.stack") }
+                .tag("collections")
             if !app.isKids {
                 NavigationStack { SportsView() }
                     .tabItem { Label("Sports", systemImage: "sportscourt") }

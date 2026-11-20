@@ -10,6 +10,7 @@ import {
   MonitorPlay,
   SignOut,
   Sparkle,
+  Stack,
   SquaresFour,
   Trophy,
   UserCircle,
@@ -27,6 +28,7 @@ import { haptic } from '../utils/haptics';
 const BROWSE = [
   { to: '/movies',   label: 'Movies', Icon: FilmSlate },
   { to: '/tv-shows', label: 'Series', Icon: MonitorPlay },
+  { to: '/collections', label: 'Collections', Icon: Stack },
 ];
 const BROWSE_KEY = 'binge:last-browse';
 

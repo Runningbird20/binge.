@@ -1,0 +1,2430 @@
+{
+ "version": 1,
+ "groups": [
+  {
+   "id": "malayalam",
+   "title": "Malayalam"
+  },
+  {
+   "id": "franchises",
+   "title": "Franchises"
+  },
+  {
+   "id": "holidays",
+   "title": "Holidays"
+  },
+  {
+   "id": "languages",
+   "title": "Around the world"
+  },
+  {
+   "id": "top",
+   "title": "Top lists"
+  },
+  {
+   "id": "moods",
+   "title": "Moods & themes"
+  },
+  {
+   "id": "studios",
+   "title": "Studios"
+  },
+  {
+   "id": "directors",
+   "title": "Directors"
+  },
+  {
+   "id": "stars",
+   "title": "Stars"
+  },
+  {
+   "id": "decades",
+   "title": "Decades"
+  }
+ ],
+ "collections": [
+  {
+   "id": "malayalam-popular",
+   "group": "malayalam",
+   "title": "Malayalam movies",
+   "subtitle": "The most watched Malayalam films right now",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ml",
+      "sort_by": "popularity.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malayalam-new",
+   "group": "malayalam",
+   "title": "New Malayalam releases",
+   "subtitle": "In theatres and just out, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ml",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}",
+      "vote_count.gte": "1"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malayalam-top",
+   "group": "malayalam",
+   "title": "Malayalam all-time greats",
+   "subtitle": "The highest rated Malayalam films",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ml",
+      "sort_by": "vote_average.desc",
+      "vote_count.gte": "40"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malayalam-classics",
+   "group": "malayalam",
+   "title": "Malayalam classics",
+   "subtitle": "Before 2000: Kireedam, Manichitrathazhu, Sandhesam and more",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ml",
+      "sort_by": "vote_count.desc",
+      "primary_release_date.lte": "1999-12-31"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malayalam-thrillers",
+   "group": "malayalam",
+   "title": "Malayalam thrillers",
+   "subtitle": "Crime, mystery and suspense",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ml",
+      "with_genres": "53|80|9648",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malayalam-comedy",
+   "group": "malayalam",
+   "title": "Malayalam comedies",
+   "subtitle": "Feel-good and laugh-out-loud",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ml",
+      "with_genres": "35",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "malayalam-series",
+   "group": "malayalam",
+   "title": "Malayalam series",
+   "subtitle": "Shows made in Malayalam",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "ml",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-mohanlal",
+   "group": "malayalam",
+   "title": "Mohanlal",
+   "subtitle": "Mohanlal's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "82732",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-mammootty",
+   "group": "malayalam",
+   "title": "Mammootty",
+   "subtitle": "Mammootty's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "124111",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-fahadh",
+   "group": "malayalam",
+   "title": "Fahadh Faasil",
+   "subtitle": "Fahadh Faasil's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "1072750",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-dulquer",
+   "group": "malayalam",
+   "title": "Dulquer Salmaan",
+   "subtitle": "Dulquer Salmaan's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "1115225",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-prithviraj",
+   "group": "malayalam",
+   "title": "Prithviraj Sukumaran",
+   "subtitle": "Prithviraj Sukumaran's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "117690",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-nivin",
+   "group": "malayalam",
+   "title": "Nivin Pauly",
+   "subtitle": "Nivin Pauly's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "1071561",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-tovino",
+   "group": "malayalam",
+   "title": "Tovino Thomas",
+   "subtitle": "Tovino Thomas's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "1263974",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "marvel",
+   "group": "franchises",
+   "title": "Marvel Studios",
+   "subtitle": "Marvel Studios films and series from Iron Man on, in release order",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "420",
+      "without_genres": "16",
+      "with_runtime.gte": "80",
+      "sort_by": "primary_release_date.asc",
+      "primary_release_date.gte": "2008-01-01",
+      "primary_release_date.lte": "{today+30}"
+     }
+    },
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_companies": "420",
+      "sort_by": "first_air_date.asc",
+      "first_air_date.gte": "2021-01-01",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "dc",
+   "group": "franchises",
+   "title": "DC",
+   "subtitle": "Batman, Superman, Wonder Woman and the rest of DC",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "128064|9993",
+      "sort_by": "primary_release_date.asc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    },
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_companies": "128064|9993",
+      "sort_by": "first_air_date.asc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "star-wars",
+   "group": "franchises",
+   "title": "Star Wars",
+   "subtitle": "The saga and its stories, in release order",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      10
+     ]
+    },
+    {
+     "type": "titles",
+     "media": "movie",
+     "ids": [
+      330459,
+      348350
+     ]
+    },
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_companies": "1",
+      "with_genres": "10765",
+      "sort_by": "first_air_date.asc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "wizarding-world",
+   "group": "franchises",
+   "title": "Harry Potter & the Wizarding World",
+   "subtitle": "All the Harry Potter and Fantastic Beasts films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      1241,
+      435259
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "bond",
+   "group": "franchises",
+   "title": "James Bond",
+   "subtitle": "007 from Dr. No to today",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      645
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "fast",
+   "group": "franchises",
+   "title": "Fast & Furious",
+   "subtitle": "The whole family, in order",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      9485
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "mission-impossible",
+   "group": "franchises",
+   "title": "Mission: Impossible",
+   "subtitle": "Every Ethan Hunt mission",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      87359
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "middle-earth",
+   "group": "franchises",
+   "title": "Middle-earth",
+   "subtitle": "The Lord of the Rings and The Hobbit",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      119,
+      121938
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "jurassic",
+   "group": "franchises",
+   "title": "Jurassic Park & World",
+   "subtitle": "Every film with the dinosaurs",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      328
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "john-wick",
+   "group": "franchises",
+   "title": "John Wick",
+   "subtitle": "The John Wick films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      404609
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "x-men",
+   "group": "franchises",
+   "title": "X-Men",
+   "subtitle": "The X-Men films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      748
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "pirates",
+   "group": "franchises",
+   "title": "Pirates of the Caribbean",
+   "subtitle": "Captain Jack Sparrow's voyages",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      295
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "toy-story",
+   "group": "franchises",
+   "title": "Toy Story",
+   "subtitle": "Woody, Buzz and the gang",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      10194
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "shrek",
+   "group": "franchises",
+   "title": "Shrek",
+   "subtitle": "The Shrek films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      2150
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "indiana-jones",
+   "group": "franchises",
+   "title": "Indiana Jones",
+   "subtitle": "Every adventure",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      84
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "rocky-creed",
+   "group": "franchises",
+   "title": "Rocky & Creed",
+   "subtitle": "From Rocky to Adonis Creed",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      1575,
+      553717
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "monsterverse",
+   "group": "franchises",
+   "title": "Godzilla & Kong",
+   "subtitle": "The MonsterVerse",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      535313
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "apes",
+   "group": "franchises",
+   "title": "Planet of the Apes",
+   "subtitle": "The modern saga",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      173710
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "alien",
+   "group": "franchises",
+   "title": "Alien",
+   "subtitle": "The Alien films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      8091
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "terminator",
+   "group": "franchises",
+   "title": "The Terminator",
+   "subtitle": "Every Terminator film",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      528
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "matrix",
+   "group": "franchises",
+   "title": "The Matrix",
+   "subtitle": "Neo's story",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      2344
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "hunger-games",
+   "group": "franchises",
+   "title": "The Hunger Games",
+   "subtitle": "The Hunger Games films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      131635
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "twilight",
+   "group": "franchises",
+   "title": "Twilight",
+   "subtitle": "The Twilight Saga",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      33514
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "despicable-me",
+   "group": "franchises",
+   "title": "Despicable Me & Minions",
+   "subtitle": "Gru and the Minions",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      86066
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "kung-fu-panda",
+   "group": "franchises",
+   "title": "Kung Fu Panda",
+   "subtitle": "Po's adventures",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      77816
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "avatar",
+   "group": "franchises",
+   "title": "Avatar",
+   "subtitle": "The Avatar films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      87096
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "bourne",
+   "group": "franchises",
+   "title": "Jason Bourne",
+   "subtitle": "The Bourne films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      31562
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "mad-max",
+   "group": "franchises",
+   "title": "Mad Max",
+   "subtitle": "The Mad Max films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      8945
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "conjuring",
+   "group": "franchises",
+   "title": "The Conjuring Universe",
+   "subtitle": "The Conjuring films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      313086
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "scream",
+   "group": "franchises",
+   "title": "Scream",
+   "subtitle": "Every Scream",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      2602
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "saw",
+   "group": "franchises",
+   "title": "Saw",
+   "subtitle": "The Saw films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      656
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "godfather",
+   "group": "franchises",
+   "title": "The Godfather",
+   "subtitle": "The trilogy",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      230
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "back-to-the-future",
+   "group": "franchises",
+   "title": "Back to the Future",
+   "subtitle": "The trilogy",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      264
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "oceans",
+   "group": "franchises",
+   "title": "Ocean's",
+   "subtitle": "The heists",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      304
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "men-in-black",
+   "group": "franchises",
+   "title": "Men in Black",
+   "subtitle": "The MIB films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      86055
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "ghostbusters",
+   "group": "franchises",
+   "title": "Ghostbusters",
+   "subtitle": "Who you gonna call?",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      2980
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "die-hard",
+   "group": "franchises",
+   "title": "Die Hard",
+   "subtitle": "Every Die Hard",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      1570
+     ]
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "ice-age",
+   "group": "franchises",
+   "title": "Ice Age",
+   "subtitle": "The Ice Age films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      8354
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "how-to-train-your-dragon",
+   "group": "franchises",
+   "title": "How to Train Your Dragon",
+   "subtitle": "Hiccup and Toothless",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      89137
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "spider-verse",
+   "group": "franchises",
+   "title": "Spider-Verse",
+   "subtitle": "Miles Morales's films",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      573436
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "dark-knight",
+   "group": "franchises",
+   "title": "The Dark Knight Trilogy",
+   "subtitle": "Christopher Nolan's Batman",
+   "sources": [
+    {
+     "type": "collection",
+     "media": "movie",
+     "ids": [
+      263
+     ]
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "christmas",
+   "group": "holidays",
+   "title": "Christmas",
+   "subtitle": "Christmas movies and specials",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "207317|1991",
+      "sort_by": "vote_count.desc"
+     }
+    },
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_keywords": "207317|1991",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "halloween",
+   "group": "holidays",
+   "title": "Halloween",
+   "subtitle": "Spooky picks for October",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "3335|3358",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "thanksgiving",
+   "group": "holidays",
+   "title": "Thanksgiving",
+   "subtitle": "Family, food and too much of both",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "4543",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "valentines",
+   "group": "holidays",
+   "title": "Valentine's Day",
+   "subtitle": "Love stories for the 14th",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "160404|9840",
+      "with_genres": "10749",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "new-years",
+   "group": "holidays",
+   "title": "New Year's Eve",
+   "subtitle": "Count it down",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "613",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "easter",
+   "group": "holidays",
+   "title": "Easter",
+   "subtitle": "For the long weekend",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "9921",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "bollywood",
+   "group": "languages",
+   "title": "Bollywood",
+   "subtitle": "Hindi films, most watched now",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "hi",
+      "sort_by": "popularity.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "tamil",
+   "group": "languages",
+   "title": "Tamil cinema",
+   "subtitle": "Kollywood, most watched now",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ta",
+      "sort_by": "popularity.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "telugu",
+   "group": "languages",
+   "title": "Telugu cinema",
+   "subtitle": "Tollywood, most watched now",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "te",
+      "sort_by": "popularity.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "kannada",
+   "group": "languages",
+   "title": "Kannada cinema",
+   "subtitle": "Sandalwood, most watched now",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "kn",
+      "sort_by": "popularity.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "indian-series",
+   "group": "languages",
+   "title": "Indian series",
+   "subtitle": "Hindi, Tamil, Telugu and Malayalam shows",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "hi|ta|te|ml",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "k-dramas",
+   "group": "languages",
+   "title": "K-dramas",
+   "subtitle": "Korean drama series",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "ko",
+      "with_genres": "18",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "korean-films",
+   "group": "languages",
+   "title": "Korean films",
+   "subtitle": "From Parasite to the newest hits",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ko",
+      "sort_by": "vote_count.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "anime-series",
+   "group": "languages",
+   "title": "Anime series",
+   "subtitle": "Japanese animation",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "ja",
+      "with_genres": "16",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "anime-films",
+   "group": "languages",
+   "title": "Anime films",
+   "subtitle": "Japanese animated films",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ja",
+      "with_genres": "16",
+      "sort_by": "vote_count.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "spanish-series",
+   "group": "languages",
+   "title": "Spanish-language series",
+   "subtitle": "From Spain and Latin America",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "es",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "turkish-dramas",
+   "group": "languages",
+   "title": "Turkish dramas",
+   "subtitle": "Dizi: Turkish series",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "tr",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "c-dramas",
+   "group": "languages",
+   "title": "C-dramas",
+   "subtitle": "Chinese drama series",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_original_language": "zh",
+      "with_genres": "18",
+      "sort_by": "popularity.desc",
+      "first_air_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "french-films",
+   "group": "languages",
+   "title": "French films",
+   "subtitle": "Le cinéma français",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "fr",
+      "sort_by": "vote_count.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "japanese-films",
+   "group": "languages",
+   "title": "Japanese films",
+   "subtitle": "Live-action Japanese cinema",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_original_language": "ja",
+      "without_genres": "16",
+      "sort_by": "vote_count.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "top-100",
+   "group": "top",
+   "title": "All-time top 100",
+   "subtitle": "The highest rated films with over 5,000 ratings (TMDB)",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "sort_by": "vote_average.desc",
+      "vote_count.gte": "5000"
+     }
+    }
+   ],
+   "limit": 100
+  },
+  {
+   "id": "top-series",
+   "group": "top",
+   "title": "Top rated series",
+   "subtitle": "The highest rated shows with over 1,000 ratings (TMDB)",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "sort_by": "vote_average.desc",
+      "vote_count.gte": "1000"
+     }
+    }
+   ],
+   "limit": 100
+  },
+  {
+   "id": "trending",
+   "group": "top",
+   "title": "Trending this week",
+   "subtitle": "What everyone is watching now",
+   "sources": [
+    {
+     "type": "list",
+     "media": "movie",
+     "path": "/trending/movie/week"
+    },
+    {
+     "type": "list",
+     "media": "tv",
+     "path": "/trending/tv/week"
+    }
+   ]
+  },
+  {
+   "id": "blockbusters",
+   "group": "top",
+   "title": "Biggest box office hits",
+   "subtitle": "The highest grossing films ever",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "sort_by": "revenue.desc"
+     }
+    }
+   ],
+   "limit": 100
+  },
+  {
+   "id": "hidden-gems",
+   "group": "top",
+   "title": "Hidden gems",
+   "subtitle": "Loved by the few who found them",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "sort_by": "popularity.desc",
+      "vote_average.gte": "7.6",
+      "vote_count.gte": "300",
+      "vote_count.lte": "2000",
+      "with_runtime.gte": "70",
+      "without_genres": "99,10770",
+      "primary_release_date.lte": "{today-365}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "superheroes",
+   "group": "moods",
+   "title": "Superheroes",
+   "subtitle": "Capes, masks and powers",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "9715",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "heists",
+   "group": "moods",
+   "title": "Heists",
+   "subtitle": "The perfect plan",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "10051",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "time-travel",
+   "group": "moods",
+   "title": "Time travel",
+   "subtitle": "Loops, paradoxes and second chances",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "4379|10854",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "true-stories",
+   "group": "moods",
+   "title": "Based on a true story",
+   "subtitle": "It really happened",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "9672",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "coming-of-age",
+   "group": "moods",
+   "title": "Coming of age",
+   "subtitle": "Growing up",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "10683",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "survival",
+   "group": "moods",
+   "title": "Survival",
+   "subtitle": "Against the odds",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "10349",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "spies",
+   "group": "moods",
+   "title": "Spies",
+   "subtitle": "Secret agents and double crosses",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "470",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "martial-arts",
+   "group": "moods",
+   "title": "Martial arts",
+   "subtitle": "Kicks, fists and fight scenes",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "779",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "road-trips",
+   "group": "moods",
+   "title": "Road trips",
+   "subtitle": "Getting there is the point",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "7312",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "dinosaurs",
+   "group": "moods",
+   "title": "Dinosaurs",
+   "subtitle": "Roaring back to life",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "12616",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "disaster",
+   "group": "moods",
+   "title": "Disaster movies",
+   "subtitle": "Earthquakes, storms and the end of the world",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "10617",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "space",
+   "group": "moods",
+   "title": "Space",
+   "subtitle": "Beyond the stars",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "9882",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "courtroom",
+   "group": "moods",
+   "title": "Courtroom dramas",
+   "subtitle": "Order in the court",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "33519",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "sports-stories",
+   "group": "moods",
+   "title": "Sports stories",
+   "subtitle": "Underdogs and big games",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "6075",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "twist-endings",
+   "group": "moods",
+   "title": "Twist endings",
+   "subtitle": "You won't see it coming",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "326438",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "robots-ai",
+   "group": "moods",
+   "title": "Robots & AI",
+   "subtitle": "Machines that think",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "310",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "post-apocalyptic",
+   "group": "moods",
+   "title": "After the apocalypse",
+   "subtitle": "What's left of the world",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "4458|4565",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cyberpunk",
+   "group": "moods",
+   "title": "Cyberpunk",
+   "subtitle": "Neon, hackers and megacorps",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "12190|2157",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "cooking",
+   "group": "moods",
+   "title": "Food & cooking",
+   "subtitle": "Kitchens, chefs and feasts",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "1918",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "monsters",
+   "group": "moods",
+   "title": "Monsters & kaiju",
+   "subtitle": "Big things that stomp",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "1299|161791",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "zombies",
+   "group": "moods",
+   "title": "Zombies",
+   "subtitle": "The dead walk",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "12377",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "serial-killers",
+   "group": "moods",
+   "title": "Serial killers",
+   "subtitle": "Chilling crime thrillers",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "10714",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "revenge",
+   "group": "moods",
+   "title": "Revenge",
+   "subtitle": "Payback",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "9748",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "found-footage",
+   "group": "moods",
+   "title": "Found footage",
+   "subtitle": "The tape was never meant to be seen",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "163053",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "haunted",
+   "group": "moods",
+   "title": "Haunted houses",
+   "subtitle": "Something lives here",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "3358",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "true-crime",
+   "group": "moods",
+   "title": "True crime",
+   "subtitle": "Docuseries and dramas about real cases",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "tv",
+     "params": {
+      "with_keywords": "33722",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "musicals",
+   "group": "moods",
+   "title": "Musicals",
+   "subtitle": "Everybody sing",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_keywords": "4344",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "animated-family",
+   "group": "moods",
+   "title": "Animated family films",
+   "subtitle": "For everyone on the couch",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_genres": "16,10751",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "documentaries",
+   "group": "moods",
+   "title": "Documentaries",
+   "subtitle": "The best non-fiction films",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_genres": "99",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "westerns",
+   "group": "moods",
+   "title": "Westerns",
+   "subtitle": "Saddle up",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_genres": "37",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "war",
+   "group": "moods",
+   "title": "War films",
+   "subtitle": "On the front lines",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_genres": "10752",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "pixar",
+   "group": "studios",
+   "title": "Pixar",
+   "subtitle": "Every Pixar film",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "3",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "ghibli",
+   "group": "studios",
+   "title": "Studio Ghibli",
+   "subtitle": "Miyazaki, Takahata and friends",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "10342",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "disney-animation",
+   "group": "studios",
+   "title": "Disney Animation",
+   "subtitle": "Walt Disney Animation Studios",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "6125",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "dreamworks",
+   "group": "studios",
+   "title": "DreamWorks Animation",
+   "subtitle": "Shrek, Dragons and more",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "521",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "illumination",
+   "group": "studios",
+   "title": "Illumination",
+   "subtitle": "Minions, Sing and Mario",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "6704",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "a24",
+   "group": "studios",
+   "title": "A24",
+   "subtitle": "Bold, strange and acclaimed",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "41077",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "blumhouse",
+   "group": "studios",
+   "title": "Blumhouse",
+   "subtitle": "Modern horror",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "3172",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ],
+   "mature": true
+  },
+  {
+   "id": "aardman",
+   "group": "studios",
+   "title": "Aardman",
+   "subtitle": "Wallace & Gromit, Shaun the Sheep",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "297",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "laika",
+   "group": "studios",
+   "title": "LAIKA",
+   "subtitle": "Stop-motion wonders",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_companies": "11537",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "director-nolan",
+   "group": "directors",
+   "title": "Christopher Nolan",
+   "subtitle": "Every film directed by Christopher Nolan",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 525,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "director-tarantino",
+   "group": "directors",
+   "title": "Quentin Tarantino",
+   "subtitle": "Every film directed by Quentin Tarantino",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 138,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "director-spielberg",
+   "group": "directors",
+   "title": "Steven Spielberg",
+   "subtitle": "Every film directed by Steven Spielberg",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 488,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "director-scorsese",
+   "group": "directors",
+   "title": "Martin Scorsese",
+   "subtitle": "Every film directed by Martin Scorsese",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 1032,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "director-villeneuve",
+   "group": "directors",
+   "title": "Denis Villeneuve",
+   "subtitle": "Every film directed by Denis Villeneuve",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 137427,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "director-miyazaki",
+   "group": "directors",
+   "title": "Hayao Miyazaki",
+   "subtitle": "Every film directed by Hayao Miyazaki",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 608,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release"
+  },
+  {
+   "id": "director-bong",
+   "group": "directors",
+   "title": "Bong Joon Ho",
+   "subtitle": "Every film directed by Bong Joon Ho",
+   "sources": [
+    {
+     "type": "person",
+     "media": "movie",
+     "id": 21684,
+     "job": "Director",
+     "minVotes": 50
+    }
+   ],
+   "order": "release",
+   "mature": true
+  },
+  {
+   "id": "star-srk",
+   "group": "stars",
+   "title": "Shah Rukh Khan",
+   "subtitle": "Shah Rukh Khan's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "35742",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-rajinikanth",
+   "group": "stars",
+   "title": "Rajinikanth",
+   "subtitle": "Rajinikanth's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "91555",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-vijay",
+   "group": "stars",
+   "title": "Vijay",
+   "subtitle": "Vijay's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "91547",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-allu-arjun",
+   "group": "stars",
+   "title": "Allu Arjun",
+   "subtitle": "Allu Arjun's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "108215",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-tom-cruise",
+   "group": "stars",
+   "title": "Tom Cruise",
+   "subtitle": "Tom Cruise's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "500",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-dicaprio",
+   "group": "stars",
+   "title": "Leonardo DiCaprio",
+   "subtitle": "Leonardo DiCaprio's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "6193",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-denzel",
+   "group": "stars",
+   "title": "Denzel Washington",
+   "subtitle": "Denzel Washington's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "5292",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "star-keanu",
+   "group": "stars",
+   "title": "Keanu Reeves",
+   "subtitle": "Keanu Reeves's films, newest first",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "with_cast": "6384",
+      "sort_by": "primary_release_date.desc",
+      "primary_release_date.lte": "{today+30}"
+     }
+    }
+   ]
+  },
+  {
+   "id": "decade-70s",
+   "group": "decades",
+   "title": "The 70s",
+   "subtitle": "The most loved films of 1970–1979",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "primary_release_date.gte": "1970-01-01",
+      "primary_release_date.lte": "1979-12-31",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "decade-80s",
+   "group": "decades",
+   "title": "The 80s",
+   "subtitle": "The most loved films of 1980–1989",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "primary_release_date.gte": "1980-01-01",
+      "primary_release_date.lte": "1989-12-31",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "decade-90s",
+   "group": "decades",
+   "title": "The 90s",
+   "subtitle": "The most loved films of 1990–1999",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "primary_release_date.gte": "1990-01-01",
+      "primary_release_date.lte": "1999-12-31",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "decade-2000s",
+   "group": "decades",
+   "title": "The 2000s",
+   "subtitle": "The most loved films of 2000–2009",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "primary_release_date.gte": "2000-01-01",
+      "primary_release_date.lte": "2009-12-31",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  },
+  {
+   "id": "decade-2010s",
+   "group": "decades",
+   "title": "The 2010s",
+   "subtitle": "The most loved films of 2010–2019",
+   "sources": [
+    {
+     "type": "discover",
+     "media": "movie",
+     "params": {
+      "primary_release_date.gte": "2010-01-01",
+      "primary_release_date.lte": "2019-12-31",
+      "sort_by": "vote_count.desc"
+     }
+    }
+   ]
+  }
+ ]
+}

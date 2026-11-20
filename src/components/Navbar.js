@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { CalendarBlank, FilmSlate, Gear, House, MonitorPlay, ShieldCheck, SlidersHorizontal, Trophy, UsersFour } from '@phosphor-icons/react';
+import { CalendarBlank, FilmSlate, Gear, House, MonitorPlay, ShieldCheck, SlidersHorizontal, Stack, Trophy, UsersFour } from '@phosphor-icons/react';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from './UserAvatar';
 import ProfileAvatar from './ProfileAvatar';
@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { to: '/sports',    label: 'Sports',    Icon: Trophy },
   { to: '/movies',    label: 'Movies',    Icon: FilmSlate },
   { to: '/tv-shows',  label: 'Series',    Icon: MonitorPlay },
+  { to: '/collections', label: 'Collections', Icon: Stack },
 ];
 
 export default function Navbar() {

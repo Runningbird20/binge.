@@ -53,6 +53,8 @@ const PAGE_LOADERS = [
   () => import('./pages/ReleaseCalendar'),
   () => import('./pages/Wrapped'),
   () => import('./pages/Person'),
+  () => import('./pages/Collections'),
+  () => import('./pages/CollectionDetail'),
 ];
 
 // The sign-in pages stay out of the main bundle, since a signed-in visit never
@@ -101,6 +103,8 @@ const Settings       = lazyWithReload(() => import('./pages/Settings'));
 const ShareTarget    = lazyWithReload(() => import('./pages/ShareTarget'));
 const ReleaseCalendar = lazyWithReload(() => import('./pages/ReleaseCalendar'));
 const Person         = lazyWithReload(() => import('./pages/Person'));
+const Collections    = lazyWithReload(() => import('./pages/Collections'));
+const CollectionDetail = lazyWithReload(() => import('./pages/CollectionDetail'));
 const ImportHistory  = lazyWithReload(() => import('./pages/ImportHistory'));
 const MediaOverlay   = lazyWithReload(() => import('./components/MediaOverlay'));
 const Login          = lazyWithReload(() => import('./pages/Login'));
@@ -196,6 +200,8 @@ function AppRoutes() {
         <Route path="/share"     element={<ProtectedRoute><ShareTarget /></ProtectedRoute>} />
         <Route path="/calendar"  element={<ProtectedRoute><ReleaseCalendar /></ProtectedRoute>} />
         <Route path="/person/:id" element={<ProtectedRoute><Person /></ProtectedRoute>} />
+        <Route path="/collections" element={<ProtectedRoute><Collections /></ProtectedRoute>} />
+        <Route path="/collections/:id" element={<ProtectedRoute><CollectionDetail /></ProtectedRoute>} />
         <Route path="/import"    element={<ProtectedRoute><ImportHistory /></ProtectedRoute>} />
         <Route path="/account-settings" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
         {/* Old address for user management — now a tab in the admin panel. */}

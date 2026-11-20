@@ -269,6 +269,14 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - **Home's spotlight** mixes picks with trending titles on every visit.
 - **Trailers** (`src/utils/trailers.js`): hover previews (`HoverPreview.js`: 900ms hover, fine pointers only, no reduced-motion/saveData) and the spotlight billboard use muted YouTube embeds with `pointer-events: none`. They're revealed only after the YouTube JS API reports "playing" + ~2s (`whenTrailerPlaying`); otherwise YouTube's start-up chrome shows.
 
+### Collections
+
+`/collections` (and a Collections tab on Apple TV): ready-made sets to scroll through instead of searching, 140 in 10 groups (Malayalam, Franchises, Holidays, Around the world, Top lists, Moods & themes, Studios, Directors, Stars, Decades).
+- **One list for every app:** `public/collections.json`, written by `scripts/generate-collections.js` (edit the script, then `node scripts/generate-collections.js public/collections.json`). The website (`utils/collections.js`) and Apple TV (`Data/Collections.swift`, fetched from the site) read the same file, so a new set needs no app update.
+- **Always current:** every set is live TMDB queries, never a stored list. Sources are `discover` (params; `{today+30}`-style tokens are filled with the viewer's local date), `list`, `collection` (a franchise's TMDB collections, release order), `titles` and `person` (a director's credits, `minVotes` drops shorts). Titles go through `resolveTmdbItems` / `Catalog.match` like every row (release window, maturity level); `mature: true` sets are hidden on restricted profiles.
+- **Paging:** a set is a feed (`createCollectionFeed` / `CollectionFeed`) that loads the next pages as the grid's end comes near, reading on past pages with nothing on binge. Feeds are kept for the tab, so a card's first page is what the set opens with. `limit` caps a list (All-time top 100).
+- Ids were checked against TMDB when added (2026-11-19). Marvel is "Marvel Studios" (company 420, no animation, 80+ min, from 2008): TMDB has no MCU-only filter.
+
 ### Home
 
 - **Continue Watching:**
