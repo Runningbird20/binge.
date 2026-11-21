@@ -36,8 +36,6 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| Collections (ready-made sets: Malayalam, franchises, holidays, top lists…) | ✓ | ✓ | ✓ | — | One list, `public/collections.json`, read by the site (`pages/Collections.js`, `utils/collections.js`) and Apple TV (`CollectionsView`, `Data/Collections.swift`). Fire TV to come. |
-| Spotlight with logo art | ✓ | ✓ | ✓ | — | Apple TV: `HeroLogo`, text after 0.9s without one. Fire TV shows the title as text. |
 | Spotlight trailers | ✓ | — | ✓ | — | The website plays them only with a mouse or trackpad (`canAutoplayPreviews`). |
 | Trailer previews when hovering a card | ✓ | — | — | — | `HoverPreview.js`, needs a mouse or trackpad. |
 | Watched titles left out of every recommendation | ✓ | ✓ | ✓ | ✓ | `utils/watchedTitles.js`; Apple TV and Fire TV `WatchedTitles`. |
@@ -85,7 +83,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Fullscreen with landscape lock | ✓ | ◐ | n/a | n/a | Landscape lock works only on Android; iPhones get a "turn your phone" hint. |
 | Picture: fill the screen / server's layout | — | — | ✓ | ✓ | TV apps can stretch the server's video over the whole screen. |
 | Pop-ups from the video servers blocked | ◐ | ◐ | ✓ | ✓ | The TV apps and the phone apps refuse every pop-up. The website in a browser sandboxes the servers that allow it: VidRift, CineSrc, VidSpark, VidCore and EmbedWave, not Sports (`utils/popupSandbox.js`). |
-| Servers VixSrc, VidSpark, VidCore, EmbedWave | ✓ | ✓ | — | — | Added to the website 2026-11-09 (`embedServers.js`). Not tried in the TV apps yet; Apple TV can only use servers that play without MSE. |
+| Server VixSrc | ✓ | ✓ | — | — | The TV apps don't carry it (it had no Malayalam films and the admin has it switched off). Fire TV added VidSpark, VidCore, EmbedWave and Atlantic on 2026-11-20; Apple TV VidSpark and Atlantic. |
 | Streams play in the TV's own player (native HLS) | — | — | ✓ | ✓ | Once the server's page finds its stream (`HybridEngine`). Apple TV also saves a stream that played for 3 hours, so playing it again skips the page (`StreamCache`). |
 | TV switches to the video's frame rate (Match Content) | — | — | ✓ | ✓ | Apple TV: Match Content (`NativeEngine.displayCriteria`). Fire TV: `preferredDisplayModeId` to a mode at the video's rate, when the TV has one (`DisplayMatch`). Native player only. |
 | Now Playing in Control Center / the phone's TV remote | — | — | ✓ | — | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. |
@@ -105,7 +103,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
-| TimStreams feed, and college games on TV channels | ✓ | ✓ | — | — | Added 2026-11-09 (`sportsFeeds.js`): every college game on a TV network TimStreams carries gets that channel as a server. |
+| TimStreams feed, and college games on TV channels | ✓ | ✓ | — | ✓ | Added 2026-11-09 (`sportsFeeds.js`): every college game on a TV network TimStreams carries gets that channel as a server. Fire TV since 2026-11-20 (`fetchTimStreams`, `fetchTvChannelGames` in `data/Sports.kt`). |
 | Multiview | ✓ | — | ✓ | ✓ | *By decision* not on phones (too small). Apple TV: up to 4 games (2 on an Apple TV HD). Fire TV: up to 4, and it learns the device's limit. |
 | Multiview layout (one big + others) | — | — | ✓ | ✓ | The website uses an equal grid. |
 | Followed teams & game alerts | ✓ | ✓ | ◐ | — | Website: push alerts. Apple TV: in-app banners only, with a "Your teams" row. |
@@ -163,7 +161,7 @@ None right now.
 - **TV apps vs website**:
   - Where to watch, search filters, detailed ratings.
   - Creating and editing profiles, and account tools.
-  - Fire TV still lacks the spotlight's logo art, Now Playing, swipe to scrub, steady quality, picture in picture for movies and subtitles while skipping back.
+  - Fire TV still lacks Now Playing, swipe to scrub, steady quality, picture in picture for movies and subtitles while skipping back.
 - **Website vs TV apps**:
   - OpenSubtitles subtitles and subtitle styling; quality choice.
   - Ambient mode; Larger text and audio description.

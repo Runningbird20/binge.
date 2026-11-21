@@ -271,8 +271,8 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
 
 ### Collections
 
-`/collections` (and a Collections tab on Apple TV): ready-made sets to scroll through instead of searching, 140 in 10 groups (Malayalam, Franchises, Holidays, Around the world, Top lists, Moods & themes, Studios, Directors, Stars, Decades).
-- **One list for every app:** `public/collections.json`, written by `scripts/generate-collections.js` (edit the script, then `node scripts/generate-collections.js public/collections.json`). The website (`utils/collections.js`) and Apple TV (`Data/Collections.swift`, fetched from the site) read the same file, so a new set needs no app update.
+`/collections` (and a Collections tab on both TV apps): ready-made sets to scroll through instead of searching, 140 in 10 groups (Malayalam, Franchises, Holidays, Around the world, Top lists, Moods & themes, Studios, Directors, Stars, Decades).
+- **One list for every app:** `public/collections.json`, written by `scripts/generate-collections.js` (edit the script, then `node scripts/generate-collections.js public/collections.json`). The website (`utils/collections.js`), Apple TV (`Data/Collections.swift`) and Fire TV (`data/Collections.kt`), both fetching it from the site, read the same file, so a new set needs no app update.
 - **Always current:** every set is live TMDB queries, never a stored list. Sources are `discover` (params; `{today+30}`-style tokens are filled with the viewer's local date), `list`, `collection` (a franchise's TMDB collections, release order), `titles` and `person` (a director's credits, `minVotes` drops shorts). Titles go through `resolveTmdbItems` / `Catalog.match` like every row (release window, maturity level); `mature: true` sets are hidden on restricted profiles.
 - **Paging:** a set is a feed (`createCollectionFeed` / `CollectionFeed`) that loads the next pages as the grid's end comes near, reading on past pages with nothing on binge. Feeds are kept for the tab, so a card's first page is what the set opens with. `limit` caps a list (All-time top 100).
 - Ids were checked against TMDB when added (2026-11-19). Marvel is "Marvel Studios" (company 420, no animation, 80+ min, from 2008): TMDB has no MCU-only filter.
@@ -439,7 +439,7 @@ The logos are TMDB's app tiles with the tile removed in a canvas (`utils/provide
     - **A guessed runtime** (an episode TMDB has no runtime for, so the season's typical one) only catches a video under half or over 1.8× its length, so a long finale passes.
     - **Two servers with the same "wrong" length** (within 3% or a minute) are both right and TMDB is off: the player stays (`lengthsAgree`, as the Apple TV app's `ExpectedRuntime.agree`).
     - The notice says what it measured ("15 min long; this episode runs 45 min").
-    - The TV apps read the real video's length (more reliable than messages) but still use the plain rule for guessed runtimes; Fire TV has no agreement check yet.
+    - The TV apps read the real video's length (more reliable than messages) and use the same guessed-runtime ratio and agreement check (`ExpectedRuntime`).
   - **Manually picked servers are never skipped.**
   - **VidSpark never starts by itself.** `handleFrameLoad` sends it `{ action: 'play' }` until that load reports play or pause. Some of its episodes still wait for a real click, so it ranks below the servers that autoplay: an automatically chosen one only gets `FAILOVER_SECONDS`.
 - **Buffering** can't be controlled inside a cross-origin player, so it's handled around it.

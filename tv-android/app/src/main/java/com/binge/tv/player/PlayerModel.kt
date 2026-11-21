@@ -648,7 +648,7 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
         // The TV follows a film's frame rate (native player, opt-in; see DisplayMatch).
         if (started && !displayMatched && state.native && state.fps > 0f) { displayMatched = true; DisplayMatch.request(state.fps, request.isLive) }
         val exp = expected
-        if (started && exp != null && ExpectedRuntime.isWrong(state.d, exp)) { expected = null; recover("had the wrong video"); return }
+        if (started && exp != null && ExpectedRuntime.isWrong(state.d, exp, ExpectedRuntime.isEstimate(request))) { expected = null; recover("had the wrong video"); return }
         if (state.audio != audioTracks) audioTracks = state.audio
         // One entry per label (VidRift lists ~150 tracks, many repeats).
         val best = LinkedHashMap<String, MediaTrack>()

@@ -85,6 +85,7 @@ sealed class Screen {
     object Library : Screen()
     object Notifications : Screen()
     data class Person(val id: Int, val name: String) : Screen()
+    data class Collection(val set: com.binge.tv.data.CollectionSet) : Screen()
 }
 
 // A simple stack over the tabs: title pages, the player, Me's pages.
@@ -160,7 +161,7 @@ private data class TabSpec(val id: String, val label: String)
 @Composable
 private fun Shell() {
     val tabs = buildList {
-        add(TabSpec("home", "Home")); add(TabSpec("movies", "Movies")); add(TabSpec("series", "Series"))
+        add(TabSpec("home", "Home")); add(TabSpec("movies", "Movies")); add(TabSpec("series", "Series")); add(TabSpec("collections", "Collections"))
         if (!AppModel.isKids) add(TabSpec("sports", "Sports"))
         add(TabSpec("search", "Search")); add(TabSpec("me", AppModel.profile?.name ?: "Me"))
     }
@@ -206,6 +207,7 @@ private fun Shell() {
                 "home" -> HomeScreen()
                 "movies" -> BrowseScreen(com.binge.tv.data.MediaKind.MOVIE)
                 "series" -> BrowseScreen(com.binge.tv.data.MediaKind.TV)
+                "collections" -> CollectionsScreen()
                 "sports" -> SportsScreen()
                 "search" -> SearchScreen()
                 "me" -> MeScreen()
@@ -335,6 +337,7 @@ private fun ScreenFor(screen: Screen, active: Boolean) {
         Screen.Library -> LibraryScreen()
         Screen.Notifications -> NotificationsScreen()
         is Screen.Person -> PersonScreen(screen.id, screen.name)
+        is Screen.Collection -> CollectionScreen(screen.set)
     }
 }
 

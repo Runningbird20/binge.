@@ -62,6 +62,7 @@ import com.binge.tv.player.PlayRequest
 import com.binge.tv.player.Warmup
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -280,13 +281,37 @@ private object BrowseCache { val rows = HashMap<MediaKind, List<LoadedRow>>() }
 @Composable
 fun Hero(title: Title, listState: LazyListState? = null) {
     val scope = rememberCoroutineScope()
+    // The headline is the title's logo art (the title page's own TMDB request,
+    // so it's cached for opening it), like Apple TV's HeroLogo and the website's
+    // spotlight; the text title shows if there's none or it takes over 0.9s.
+    var logo by remember(title.id) { mutableStateOf<String?>(null) }
+    var headlineReady by remember(title.id) { mutableStateOf(false) }
+    LaunchedEffect(title.id) {
+        val id = title.tmdbId
+        val timer = launch { delay(900); headlineReady = true }
+        if (id != null) {
+            logo = runCatching {
+                Tmdb.image(Tmdb.get<com.binge.tv.data.TmdbDetails>("${title.kind.tmdbPath}/$id",
+                    mapOf("append_to_response" to "credits,images", "include_image_language" to "en,null")).logoPath, Tmdb.WIDE)
+            }.getOrNull()
+        }
+        timer.cancel()
+        headlineReady = true
+    }
     // Focus on the spotlight's buttons brings the whole spotlight back into view.
     Box(Modifier.fillMaxWidth().height(340.dp).onFocusChanged { if (it.hasFocus && listState != null) scope.launch { delay(60); listState.animateScrollToItem(0) } }) {
         Art(Tmdb.resized(title.backdrop, Tmdb.FULL_SCREEN), title.name, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Palette.background.copy(alpha = 0.95f), Palette.background.copy(alpha = 0.25f), Color.Transparent))))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Palette.background)))
         Column(Modifier.align(Alignment.BottomStart).padding(start = Dimens.edge, bottom = 12.dp).widthIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title.name, style = Type.hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val logoUrl = logo
+            when {
+                logoUrl != null -> coil.compose.AsyncImage(model = logoUrl, contentDescription = title.name, contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    alignment = Alignment.CenterStart, modifier = Modifier.widthIn(max = 340.dp).heightIn(max = 110.dp))
+                headlineReady -> Text(title.name, style = Type.hero, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Holding the headline's place while the logo loads, so the text doesn't flash first.
+                else -> Box(Modifier.height(56.dp))
+            }
             if (title.metaLine.isNotEmpty()) Text(title.metaLine, style = Type.callout, color = Palette.muted)
             title.overview?.takeIf { it.isNotEmpty() }?.let { Text(it, style = Type.callout, color = Color.White.copy(alpha = 0.85f), maxLines = 3, overflow = TextOverflow.Ellipsis) }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {

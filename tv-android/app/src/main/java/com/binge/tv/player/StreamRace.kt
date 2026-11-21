@@ -48,6 +48,8 @@ class StreamRace(
     // The real runtime (TMDB): a stream whose length is clearly different is the wrong video.
     var expectedDuration: Double? = null
     var rejected = emptySet<String>()
+    // Lengths of the videos rejected as the wrong one (for ExpectedRuntime.agree).
+    private var rejectedLengths = emptyList<Double>()
         private set
     // Set by the player when the viewer pauses, so a sharper stream never "un-pauses" them.
     var userPaused = false
@@ -174,7 +176,11 @@ class StreamRace(
             // through its player's own Play button (the bridge presses it).
             if (state.paused) candidate.web.send(MediaCommand.Play)
             val expected = expectedDuration
-            if (expected != null && ExpectedRuntime.isWrong(state.d, expected)) { reject(candidate); continue }
+            if (expected != null && ExpectedRuntime.isWrong(state.d, expected, ExpectedRuntime.isEstimate(request))) {
+                // Two servers with the same "wrong" length: TMDB is off, not them.
+                if (ExpectedRuntime.agree(state.d, rejectedLengths)) expectedDuration = null
+                else { rejectedLengths = rejectedLengths + state.d; reject(candidate); continue }
+            }
             if (!state.isPlaying) continue
             Perf.mark("playing ${candidate.server.name}")
             // Native: the player adapts its quality by itself, nothing to shop for.
@@ -377,6 +383,9 @@ object Warmup {
 // video for the 156-minute Demon Slayer: Infinity Castle).
 object ExpectedRuntime {
     private val cache = HashMap<String, Double>()
+    // Requests whose runtime is a guess (the season's typical episode).
+    private val estimates = HashSet<String>()
+    fun isEstimate(request: PlayRequest) = request.key in estimates
 
     suspend fun seconds(request: PlayRequest): Double? {
         if (request.isLive) return null
@@ -390,7 +399,9 @@ object ExpectedRuntime {
             val episodes = runCatching { Tmdb.get<TmdbSeason>("tv/$tmdbId/season/${request.season}") }
                 .onFailure { if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.d("binge", "season lookup failed: $it") }.getOrNull()?.episodes.orEmpty()
             episodes.firstOrNull { it.episodeNumber == request.episode }?.runtime?.takeIf { it > 0 }
-                ?: episodes.mapNotNull { it.runtime?.takeIf { r -> r > 0 } }.sorted().let { if (it.isEmpty()) null else it[it.size / 2] }
+                ?: (episodes.mapNotNull { it.runtime?.takeIf { r -> r > 0 } }.sorted().let { if (it.isEmpty()) null else it[it.size / 2] }
+                    ?: runCatching { Tmdb.get<TmdbDetails>("tv/$tmdbId") }.getOrNull()?.episodeRunTime?.firstOrNull { it > 0 })
+                    ?.also { estimates.add(request.key) }
                 ?: runCatching { Tmdb.get<TmdbDetails>("tv/$tmdbId") }.getOrNull()?.episodeRunTime?.firstOrNull { it > 0 }
         } else if (request.title.kind == MediaKind.MOVIE) {
             runCatching { Tmdb.get<TmdbDetails>("movie/$tmdbId") }.getOrNull()?.runtime
@@ -400,7 +411,18 @@ object ExpectedRuntime {
     }
 
     // Different cuts and credits vary a little; a different video doesn't.
-    fun isWrong(duration: Double, expected: Double) = duration > 60 && expected > 0 && Math.abs(duration - expected) > maxOf(240.0, expected * 0.2)
+    // A guessed runtime only catches a video of another size (under half or
+    // over 1.8×): a 70-min finale among 45-min episodes isn't "wrong" (the
+    // website's runtimeCheck.js, 2026-11-19).
+    fun isWrong(duration: Double, expected: Double, estimated: Boolean = false): Boolean {
+        if (duration <= 60 || expected <= 0) return false
+        if (estimated) return duration < expected * 0.5 || duration > expected * 1.8
+        return Math.abs(duration - expected) > maxOf(240.0, expected * 0.2)
+    }
+
+    // Another server already played this same length (within 3%, or a
+    // minute): both are right and TMDB lists another cut (Apple TV's agree).
+    fun agree(duration: Double, others: List<Double>) = others.any { Math.abs(it - duration) <= maxOf(60.0, duration * 0.03) }
 }
 
 // Which sports feeds play on this TV (the website's sportsServerMemory idea):

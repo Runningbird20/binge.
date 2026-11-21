@@ -80,6 +80,15 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Player:** Playback info (Options; ExoPlayer's buffer, bitrate, `DefaultBandwidthMeter` speed, stalls, audio format, fps), the backup stream (one page, only with fewer than 3 engines live), instant resume (`Warmup.park`; native streams only on a stick), binge mode at the credits, known intros skipped automatically.
 - **Not checked on hardware or with a network:** the emulator here has no DNS, so only "installs and starts without a crash" was checked.
 
+## Collections, servers, sports and the spotlight (2026-11-20, checked on the stick)
+
+- **Collections tab** (`ui/Collections.kt`, `data/Collections.kt`): the website's `collections.json`, read from the site, a row of set cards per group; a set opens as a 7-wide poster grid that loads more as its last rows come into view, with focus on the first poster. Debug extras: `--es collections <url>` (an undeployed list), `--es collection <id>` (open one set).
+- **Servers** (`player/Servers.kt`): VidSpark, Atlantic, VidCore and EmbedWave added. Each alone on the stick, Fight Club / Aavesham: VidSpark played both in the native player (800p / 720p); VidCore Fight Club natively (800p), not Aavesham within 40s; EmbedWave both in its page (the native player gets an HTTP error); Atlantic Fight Club in its page, not Aavesham within 40s. Still three race at once; the rest are backups.
+- **By language** (`StreamServer.byLanguage`): for a Malayalam title VidSpark goes first and Vidy last (the website's measurements); the title's last working server still leads.
+- **Wrong video** (`ExpectedRuntime`): a guessed episode runtime only rejects a video under half or over 1.8× its length, and a second server with the same "wrong" length means TMDB is off (`agree`), as on the website and Apple TV.
+- **Sports feeds:** TimStreams and the college games on national TV channels (`fetchTimStreams`, `fetchTvChannelGames`, ports of the website's `sportsFeeds.js`), merged after PPV and StreamFree. On 2026-11-20 they added 17 + 58 listings; Iowa State–UCF on FS1 (a TimStreams channel) had a picture in 12.5s, in its page (the native player can't parse that stream). The admin's `sports:timstreams` switch applies.
+- **Spotlight logo art** (`Hero` in `ui/Home.kt`): the title's TMDB logo (the title page's own request), the text title after 0.9s without one.
+
 ## Testing
 
 - **Testing.** There's an Android TV emulator in the scratchpad (`$S/android`, AVD `firetv`).

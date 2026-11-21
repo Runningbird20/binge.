@@ -16,6 +16,9 @@ object DebugLaunch {
     var embed: String? = null
     var profile: String? = null
     var logAll = false
+    // --es collections <url>: a collections list not yet deployed; --es collection <id>: open that set.
+    var collectionsUrl: String? = null
+    var collection: String? = null
 
     fun read(intent: Intent?) {
         if (!BuildConfig.DEBUG || intent == null) return
@@ -29,5 +32,7 @@ object DebugLaunch {
         embed = intent.getStringExtra("embed")
         profile = intent.getStringExtra("profile")
         logAll = intent.getBooleanExtra("logall", false)
+        collectionsUrl = intent.getStringExtra("collections")
+        collection = intent.getStringExtra("collection")
     }
 }

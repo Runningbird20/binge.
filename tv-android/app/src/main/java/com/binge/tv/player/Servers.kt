@@ -63,6 +63,21 @@ class StreamServer(val id: String, val name: String, val build: (tmdbId: Int, ki
             StreamServer("vidlink", "VidLink") { id, kind, s, e ->
                 if (kind == MediaKind.TV) "https://vidlink.pro/tv/$id/$s/$e?autoplay=true" else "https://vidlink.pro/movie/$id?autoplay=true"
             },
+            // Added 2026-11-20, as on the website (embedServers.js): each plays in
+            // Chromium's MSE. VidSpark waits for a click; the race's Play nudge
+            // presses its button.
+            StreamServer("vidspark", "VidSpark") { id, kind, s, e ->
+                url(if (kind == MediaKind.TV) "https://vidspark.to/tv/$id/$s/$e" else "https://vidspark.to/movie/$id", listOf("theme" to "F4F6F8"))
+            },
+            StreamServer("atlantic", "Atlantic") { id, kind, s, e ->
+                if (kind == MediaKind.TV) "https://atlantic.st/embed/tv/$id/$s/$e" else "https://atlantic.st/embed/movie/$id"
+            },
+            StreamServer("vidcore", "VidCore") { id, kind, s, e ->
+                url(if (kind == MediaKind.TV) "https://vidcore.org/embed/tv/$id/$s/$e" else "https://vidcore.org/embed/movie/$id", listOf("autoplay" to "true"))
+            },
+            StreamServer("embedwave", "EmbedWave") { id, kind, s, e ->
+                url(if (kind == MediaKind.TV) "https://embedwave.cc/embed/tv/$id/$s/$e" else "https://embedwave.cc/embed/movie/$id", listOf("autoplay" to "1"))
+            },
             StreamServer("vidsrc-ru", "VidSrc") { id, kind, s, e ->
                 url(if (kind == MediaKind.TV) "https://vidsrc.ru/tv/$id/$s/$e" else "https://vidsrc.ru/movie/$id",
                     listOfNotNull("autoplay" to "true", "colour" to "f4f6f8", if (kind == MediaKind.TV) "autonextepisode" to "false" else null))
@@ -83,7 +98,25 @@ class StreamServer(val id: String, val name: String, val build: (tmdbId: Int, ki
         private const val UNTIMED_MS = 9_000L
         // Before anything is timed: the servers whose stream the native player
         // takes over first (they start ~3x faster on a stick than page-only ones).
-        private val DEFAULT_ORDER = listOf("vidy", "cinesrc", "vidlink", "vidrift", "vidsrc-ru")
+        private val DEFAULT_ORDER = listOf("vidy", "cinesrc", "vidlink", "vidrift", "vidspark", "atlantic", "vidcore", "embedwave", "vidsrc-ru")
+
+        // Servers that had none of a language's titles when measured (the
+        // website's LANGUAGE_COVERAGE, 2026-11-19: Vidy had none of 10
+        // Malayalam films, VidLink missed 3). They go to the back for a title
+        // in that language, so they don't take a race slot.
+        // And the one with nearly all of them goes first: VidSpark had 9 of 10
+        // on the website and played Aavesham here in Fire TV's own player at
+        // 720p (2026-11-20). The title's last working server still leads.
+        val weakFor = mapOf("ml" to setOf("vidy"))
+        val strongFor = mapOf("ml" to listOf("vidspark"))
+        fun byLanguage(list: List<StreamServer>, language: String?, lastWorking: String? = null): List<StreamServer> {
+            val lang = language?.lowercase() ?: return list
+            val weak = weakFor[lang].orEmpty()
+            val strong = strongFor[lang].orEmpty()
+            val first = list.filter { it.id == lastWorking }
+            val rest = list.filter { it.id != lastWorking }
+            return first + rest.filter { it.id in strong } + rest.filter { it.id !in strong && it.id !in weak } + rest.filter { it.id in weak && it.id !in strong }
+        }
 
         fun rememberWorking(server: StreamServer, title: Title) = Prefs.set("server.${title.id}", server.id)
     }
@@ -101,6 +134,7 @@ object ServerPlan {
         var list = StreamServer.ranked(title).filter { it.id !in disabled }
         com.binge.tv.DebugLaunch.server?.let { only -> list = list.filter { it.id == only } }
         val original = originalLanguage ?: kotlinx.coroutines.withTimeoutOrNull(800) { OriginalLanguage.of(title) }
+        list = StreamServer.byLanguage(list, original, Prefs.string("server.${title.id}"))
         val wanted = if (PlaybackPrefs.audio == "original") original else PlaybackPrefs.audio
         if (wanted.isNullOrEmpty()) return list
         val reports = kotlinx.coroutines.withTimeoutOrNull(800) {

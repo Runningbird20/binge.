@@ -55,7 +55,11 @@ object Scoreboard {
 data class SportStream(val label: String, val embed: String? = null) {
     // Admin switches (server_config, same keys as the website's sportsSwitchKeys).
     val switchKeys: List<String>
-        get() = listOf(if (label.startsWith("PPV")) "sports:ppv" else "sports:streamfree")
+        get() = listOf(when {
+            label.startsWith("PPV") -> "sports:ppv"
+            label.contains("TimStreams") -> "sports:timstreams"
+            else -> "sports:streamfree"
+        })
 }
 
 // Feed abbreviations shown as the site names leagues (its canonicalLeague).
@@ -138,8 +142,14 @@ object SportsFeed {
     private suspend fun loadFresh(): List<SportGame> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         val ppv = async { fetchPPV() }
         val streamfree = async { fetchStreamFree() }
+        val tim = async { runCatching { fetchTimStreams() }.getOrDefault(emptyList()) }
+        val college = async { runCatching { fetchTvChannelGames() }.getOrDefault(emptyList()) }
         val disabled = ServerSwitches.disabledServers()
-        val all = (ppv.await() + streamfree.await()).mapNotNull { game ->
+        // A fixed order, never arrival order (a game's id comes from its first
+        // listing): PPV, StreamFree, TimStreams, then TV-channel college games,
+        // as the website's FEEDS.
+        if (com.binge.tv.BuildConfig.DEBUG) android.util.Log.i("binge-sports", "feeds: ppv=${ppv.await().size} streamfree=${streamfree.await().size} timstreams=${tim.await().size} tv-channels=${college.await().size}")
+        val all = (ppv.await() + streamfree.await() + tim.await() + college.await()).mapNotNull { game ->
             if (disabled.isEmpty()) game else game.copy(streams = game.streams.filter { s -> s.switchKeys.none { it in disabled } })
                 .takeIf { it.streams.isNotEmpty() }
         }
@@ -193,6 +203,139 @@ object SportsFeed {
             }
         }
         return out
+    }
+
+    // ── TimStreams (tim-streams.com, the website's sportsFeeds.js) ─────────
+    // /api/live-upcoming lists events with their embeds, times in US Eastern
+    // without an offset; VIP streams need a TimStreams login and are skipped.
+    private val timGenres = mapOf(1 to "Soccer", 2 to "Racing", 3 to "Combat Sports", 6 to "Combat Sports", 7 to "Basketball", 8 to "American Football",
+        9 to "Baseball", 10 to "Tennis", 11 to "Hockey", 12 to "Darts", 13 to "Cricket", 15 to "Rugby", 16 to "Rugby")
+    private val timLeagues = mapOf("National Basketball Association" to "NBA", "National Football League" to "NFL", "NCAA Football" to "College Football",
+        "National Hockey League" to "NHL", "Major League Baseball" to "MLB", "Major League Soccer" to "MLS",
+        "UEFA Champions League" to "Champions League", "La Liga" to "LaLiga", "Ligue One" to "Ligue 1")
+    private val eastern = java.time.ZoneId.of("America/New_York")
+    private fun easternMillis(local: String?): Long? = runCatching {
+        java.time.LocalDateTime.parse(local!!.take(16)).atZone(eastern).toInstant().toEpochMilli()
+    }.getOrNull()
+    private fun timStreams(streams: JsonElement?, label: (JsonObject, Int, Int) -> String): List<SportStream> {
+        val free = streams.arr().mapNotNull { it.obj() }.filter { it["url"].str() != null && !it["vip"].truthy() }
+        return free.mapIndexed { index, s -> SportStream(label(s, index, free.size), embed = s["url"].str()) }
+    }
+
+    private suspend fun fetchTimStreams(): List<SportGame> {
+        val data = fetch("https://tim-streams.com/api/live-upcoming").obj() ?: return emptyList()
+        val leagueNames = HashMap<String, String>()
+        for (genre in data["genres"].arr()) {
+            val g = genre.obj() ?: continue
+            for (sub in g["sub_categories"].arr()) { val o = sub.obj() ?: continue; leagueNames["${g["id"].str()}:${o["id"].str()}"] = o["name"].str() ?: continue }
+        }
+        val now = System.currentTimeMillis()
+        val out = ArrayList<SportGame>()
+        for (event in data["events"].arr()) {
+            val e = event.obj() ?: continue
+            val category = timGenres[e["genre"].num()?.toInt()] ?: "Other"
+            val starts = easternMillis(e["time"].str())
+            val ends = starts?.plus(((durations[category] ?: 3.0) * 3_600_000).toLong())
+            if (ends != null && now > ends) continue
+            val streams = timStreams(e["streams"]) { s, _, _ -> "TimStreams · ${s["name"].str() ?: "Live"}" }
+            if (streams.isEmpty()) continue
+            val name = e["name"].str() ?: "Live"
+            // "Away @ Home"
+            val parts = name.split(Regex("""\s+@\s+"""))
+            val league = leagueNames["${e["genre"].str()}:${e["sub_genre"].str()}"]
+            out += SportGame(
+                id = "timstreams:${e["url"].str() ?: name}", title = name, category = category, startsAt = starts, endsAt = ends,
+                alwaysLive = starts == null, teams = if (parts.size == 2) parts[1].trim() to parts[0].trim() else null,
+                poster = e["logo"].str()?.let { if (it.startsWith("http")) it else "https://tim-streams.com/${it.trimStart('/')}" },
+                streams = streams, tag = league?.let { timLeagues[it] ?: it },
+            )
+        }
+        return out
+    }
+
+    // ── College games on TV channels (the website's fetchTvChannelGames) ──
+    // Most college games are on no feed's schedule, but many air on a national
+    // network TimStreams carries live: ESPN's scoreboards are joined with its
+    // channel list, and a game on a carried network gets that channel's
+    // stream as a server. Football is listed a week ahead (ESPN's undated
+    // scoreboard is the current week), basketball today and tomorrow.
+    private data class CollegeSchedule(val league: String, val category: String, val path: String, val groups: Int, val byWeek: Boolean, val aheadHours: Int)
+    private val collegeSchedules = listOf(
+        CollegeSchedule("College Football", "American Football", "football/college-football", 80, true, 7 * 24),
+        CollegeSchedule("College Basketball", "Basketball", "basketball/mens-college-basketball", 50, false, 30),
+        CollegeSchedule("Women's College Basketball", "Basketball", "basketball/womens-college-basketball", 50, false, 30),
+    )
+    private val channelForNetwork = mapOf("ESPN" to "ESPN", "ESPN2" to "ESPN2", "ESPNU" to "ESPNU", "ESPNEWS" to "ESPNEWS",
+        "SEC Network" to "SEC Network", "ACC Network" to "ACC Network", "BTN" to "Big Ten Network", "CBSSN" to "CBS Sports Network",
+        "FS1" to "Fox Sports 1", "FS2" to "Fox Sports 2", "truTV" to "TruTV", "TNT" to "TNT", "TBS" to "TBS", "USA Net" to "USA Network",
+        "CW" to "CW", "ABC" to "ABC", "CBS" to "CBS", "Fox" to "Fox", "FOX" to "Fox", "NBC" to "NBC")
+    // Over-the-air networks split the country on busy Saturdays and TimStreams
+    // carries one feed of each: listed only with nothing else of ours on that
+    // network within 3 hours.
+    private val regionalNetworks = setOf("ABC", "CBS", "Fox", "NBC", "CW")
+
+    private data class ChannelGame(val schedule: CollegeSchedule, val startsAt: Long, val home: JsonObject, val away: JsonObject, val networks: List<String>)
+
+    private suspend fun fetchTvChannelGames(): List<SportGame> = kotlinx.coroutines.coroutineScope {
+        val now = System.currentTimeMillis()
+        val dayFormat = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")
+        val days = listOf(now, now + 86_400_000).map { java.time.Instant.ofEpochMilli(it).atZone(eastern).format(dayFormat) }.distinct()
+        val channelsJob = async { fetch("https://tim-streams.com/api/channels").obj()?.get("channels").arr() }
+        val boardJobs = collegeSchedules.flatMap { schedule ->
+            (if (schedule.byWeek) listOf<String?>(null) else days).map { day ->
+                async {
+                    val query = "${day?.let { "dates=$it&" } ?: ""}groups=${schedule.groups}&limit=500"
+                    schedule to fetch("https://site.api.espn.com/apis/site/v2/sports/${schedule.path}/scoreboard?$query").obj()?.get("events").arr()
+                }
+            }
+        }
+        val channels = channelsJob.await().mapNotNull { it.obj() }.associateBy { it["name"].str() ?: "" }
+        if (channels.isEmpty()) return@coroutineScope emptyList<SportGame>()
+        val games = ArrayList<ChannelGame>()
+        val seen = HashSet<String>()
+        for ((schedule, events) in boardJobs.map { it.await() }) {
+            for (event in events) {
+                val e = event.obj() ?: continue
+                val id = e["id"].str() ?: continue
+                val competition = e["competitions"].arr().firstOrNull()?.obj() ?: continue
+                val state = e["status"].obj()?.get("type")?.obj()?.get("state").str()
+                if (state == "post" || !seen.add(id)) continue
+                val starts = runCatching { java.time.OffsetDateTime.parse(e["date"].str()!!.let { if (it.length == 17) it.replace("Z", ":00Z") else it }).toInstant().toEpochMilli() }.getOrNull() ?: continue
+                if (starts > now + schedule.aheadHours * 3_600_000L) continue
+                val networks = competition["broadcasts"].arr().mapNotNull { it.obj() }.filter { it["market"].str() == "national" }
+                    .flatMap { b -> b["names"].arr().mapNotNull { it.str() } }.mapNotNull { channelForNetwork[it] }.filter { it in channels }.distinct()
+                if (networks.isEmpty()) continue
+                fun team(side: String) = competition["competitors"].arr().mapNotNull { it.obj() }.firstOrNull { it["homeAway"].str() == side }?.get("team")?.obj()
+                val home = team("home") ?: continue
+                val away = team("away") ?: continue
+                games += ChannelGame(schedule, starts, home, away, networks)
+            }
+        }
+        fun sharesRegionalWindow(game: ChannelGame, network: String) = games.any { other ->
+            other !== game && network in other.networks && Math.abs(other.startsAt - game.startsAt) < 3 * 3_600_000L
+        }
+        val out = ArrayList<SportGame>()
+        for (game in games) {
+            fun name(team: JsonObject) = team["location"].str() ?: team["shortDisplayName"].str() ?: team["displayName"].str() ?: "TBD"
+            fun color(team: JsonObject) = team["color"].str()?.takeIf { Regex("^[0-9a-fA-F]{6}$").matches(it) }?.let { "#$it" }
+            val homeName = name(game.home)
+            val awayName = name(game.away)
+            val streams = game.networks.filterNot { it in regionalNetworks && sharesRegionalWindow(game, it) }.flatMap { network ->
+                timStreams(channels[network]?.get("streams")) { _, index, count -> "$network${if (count > 1) " ${index + 1}" else ""} · TimStreams" }
+            }
+            if (streams.isEmpty()) continue
+            val homeColor = color(game.home)
+            val awayColor = color(game.away)
+            out += SportGame(
+                id = "tvchannel:${game.schedule.league}:$awayName-$homeName:${game.startsAt / 60_000}",
+                title = "$awayName at $homeName", category = game.schedule.category, startsAt = game.startsAt,
+                endsAt = game.startsAt + ((durations[game.schedule.category] ?: 3.0) * 3_600_000).toLong(),
+                teams = homeName to awayName, logos = game.home["logo"].str() to game.away["logo"].str(),
+                streams = streams, tag = game.schedule.league,
+                colors = if (homeColor != null && awayColor != null) listOf(homeColor, awayColor) else null,
+            )
+        }
+        out
     }
 
     private suspend fun fetchStreamFree(): List<SportGame> {
