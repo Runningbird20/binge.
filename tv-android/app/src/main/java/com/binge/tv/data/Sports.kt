@@ -34,7 +34,7 @@ object Scoreboard {
         val isFinal get() = status.type.state == "post"
         val sortRank get() = if (isLive) 0 else if (isFinal) 2 else 1
     }
-    @Serializable data class Status(val type: Kind, val period: Int? = null, val displayClock: String? = null) {
+    @Serializable data class Status(val type: Kind, val period: Int? = null, val displayClock: String? = null, val clock: Double? = null) {
         @Serializable data class Kind(val state: String, val shortDetail: String? = null)
     }
     @Serializable data class Competition(val competitors: List<Competitor> = emptyList())

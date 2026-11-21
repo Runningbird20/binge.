@@ -36,7 +36,7 @@ enum class SleepOption(val label: String, val minutes: Int?) {
 // Drives the server's own player page from the remote. Which server plays
 // is decided by a StreamRace (several servers at once, first to play wins).
 // A port of the Apple TV app's PlayerModel; same rules throughout.
-class PlayerModel(private val context: Context, initial: PlayRequest) {
+class PlayerModel(val context: Context, initial: PlayRequest) {
     var request by mutableStateOf(initial); private set
     var server by mutableStateOf<StreamServer?>(null); private set
     var playback by mutableStateOf(MediaState()); private set
@@ -258,6 +258,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
 
     fun close() {
         if (closed) return
+        NowPlaying.release(this)
+        endScrub()
         saveProgress(force = true)
         syncKey?.let { if (syncPending) SubtitleSync.report(it, subtitleOffset) }
         closed = true
@@ -467,18 +469,75 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
     fun seek(by: Double) {
         autoAdvances = 0
         val w = web
-        if (w == null || request.isLive) {
-            notice = if (request.isLive) "This is live — skipping isn't available." else null
-            showHUD(); return
-        }
+        // Live: ◀ ▶ go to the previous / next live game (Apple TV's flip).
+        if (request.isLive) { flipLive(if (by > 0) 1 else -1); return }
+        if (w == null) { notice = null; showHUD(); return }
         if (by > 0 && isEpisode && !ownIntroSkip && introSeekFrom == null && playback.t < 600) introSeekFrom = playback.t
         introSeekAt = now()
+        // Skipping back to catch a line: with subtitles off, the server's own
+        // track comes on until the video passes where you were (Apple TV's
+        // "subtitles while skipping back").
+        if (by < 0 && !subtitlesShowing) {
+            val track = textTracks.firstOrNull { it.language.startsWith(PlaybackPrefs.subtitle.takeIf { it != "off" } ?: "en") } ?: textTracks.firstOrNull()
+            if (track != null) {
+                rewindCaptionsUntil = maxOf(rewindCaptionsUntil ?: 0.0, playback.t)
+                w.send(MediaCommand.TextTrack(track.index))
+            }
+        }
         w.send(MediaCommand.SeekBy(by))
         playback = playback.copy(t = maxOf(0.0, playback.t + by)) // instant HUD feedback
         showHUD()
     }
 
     fun showHUD() { hudVisible = true; hudHideAt = now() + 4000 }
+
+    // MARK: Scrubbing (holding ◀ ▶, the Fire TV's swipe to scrub)
+    // Each repeat of a held key moves the target, faster the longer it's held
+    // (about a tenth of a film over 5 seconds of holding); letting go jumps
+    // there, Back cancels. No picture preview: a second player on the stream
+    // took the stick's only hardware decoder and froze the main picture while
+    // its sound played on (tried 2026-11-20 on a Fire TV Stick 4K Max).
+    var scrubTarget by mutableStateOf<Double?>(null); private set
+
+    fun scrub(direction: Int, repeat: Int) {
+        val d = playback.d
+        if (request.isLive || d <= 0 || web == null) return
+        val base = scrubTarget ?: playback.t
+        val step = maxOf(10.0, d / 300) * (1 + minOf(repeat, 40) / 8.0)
+        val next = (base + direction * step).coerceIn(0.0, maxOf(0.0, d - 1))
+        scrubTarget = next
+        hudVisible = true
+        hudHideAt = now() + 4000
+    }
+
+    fun commitScrub() {
+        val target = scrubTarget ?: return
+        endScrub()
+        seek(target - playback.t)
+    }
+
+    fun endScrub() { scrubTarget = null }
+
+    // Captions turned on by skipping back, until the video passes this second.
+    private var rewindCaptionsUntil: Double? = null
+    private fun checkRewindCaptions(state: MediaState, w: Engine) {
+        val until = rewindCaptionsUntil ?: return
+        if (state.t >= until) { rewindCaptionsUntil = null; w.send(MediaCommand.TextTrack(-1)) }
+    }
+
+    // The previous / next game that's live now, in the Sports page's order.
+    private fun flipLive(step: Int) {
+        val current = request.game ?: return
+        AppModel.scope.launch {
+            val live = runCatching { SportsFeed.recent() }.getOrDefault(emptyList()).filter { it.isLive && !it.is247 }
+            if (live.size < 2) { notice = "No other game is live right now."; showHUD(); return@launch }
+            val index = live.indexOfFirst { it.id == current.id }
+            val next = live[Math.floorMod((if (index < 0) 0 else index) + step, live.size)]
+            notice = "Switching to ${next.title}…"
+            showHUD()
+            switchToLive(next)
+        }
+    }
 
     // Switch this player to a live game.
     suspend fun switchToLive(game: SportGame) {
@@ -641,6 +700,8 @@ class PlayerModel(private val context: Context, initial: PlayRequest) {
 
     private fun apply(state: MediaState, w: Engine) {
         playback = state
+        checkRewindCaptions(state, w)
+        NowPlaying.update(this, state)
         // A shift left alone for 20s of playing is the viewer's answer: shared.
         syncKey?.let { if (syncPending && !state.paused && now() - offsetChangedAt > 20_000) { syncPending = false; SubtitleSync.report(it, subtitleOffset) } }
         watchClock(state)

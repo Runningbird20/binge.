@@ -133,7 +133,17 @@ fun PlayerScreen(request: PlayRequest) {
                     // ever becoming Android's back action (Back did nothing in the
                     // player; only the double-Back escape hatch got out).
                     if (!panelOpen && event.key.nativeKeyCode == AndroidKeyEvent.KEYCODE_BACK) {
-                        if (event.type == KeyEventType.KeyUp) back()
+                        // Back while scrubbing cancels the scrub, not the video.
+                        if (event.type == KeyEventType.KeyUp) { if (model.scrubTarget != null) model.endScrub() else back() }
+                        return@onPreviewKeyEvent true
+                    }
+                    val code = event.key.nativeKeyCode
+                    val arrow = code == AndroidKeyEvent.KEYCODE_DPAD_LEFT || code == AndroidKeyEvent.KEYCODE_DPAD_RIGHT
+                    // Letting go of a held ◀ ▶ jumps to where the scrub got to.
+                    if (!panelOpen && arrow && event.type == KeyEventType.KeyUp && model.scrubTarget != null) { model.commitScrub(); return@onPreviewKeyEvent true }
+                    // Holding ◀ ▶ scrubs (a single press still skips 10 seconds).
+                    if (!panelOpen && arrow && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount > 0 && !model.request.isLive) {
+                        model.scrub(if (code == AndroidKeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1, event.nativeKeyEvent.repeatCount)
                         return@onPreviewKeyEvent true
                     }
                     if (panelOpen || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -162,6 +172,7 @@ fun PlayerScreen(request: PlayRequest) {
         else if (model.buffering) Box(Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = 0.45f), CircleShape).padding(20.dp)) { Spinner(30.dp) }
 
         AnimatedVisibility(model.hudVisible || !model.started, enter = fadeIn(), exit = fadeOut()) { Hud(model) }
+        model.scrubTarget?.let { target -> ScrubOverlay(model, target) }
 
         // Bottom-right corner, out of the picture's way; ▲ skips, ▼ hides it.
         AnimatedVisibility(model.showSkipIntro, enter = fadeIn(), exit = fadeOut(),
@@ -237,6 +248,26 @@ private fun SubtitleLine(text: String, modifier: Modifier) {
     )
 }
 
+// While holding ◀ ▶: the target on the timeline and its time.
+@Composable
+private fun ScrubOverlay(model: PlayerModel, target: Double) {
+    val d = model.playback.d
+    if (d <= 0) return
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.85f)))) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = Dimens.edge, end = Dimens.edge, bottom = 30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(clock(target), style = Type.section.copy(fontWeight = FontWeight.Bold))
+            Box(Modifier.fillMaxWidth().height(6.dp).background(Color.White.copy(alpha = 0.25f), CircleShape)) {
+                Box(Modifier.fillMaxWidth((model.playback.t / d).toFloat().coerceIn(0f, 1f)).height(6.dp).background(Color.White.copy(alpha = 0.6f), CircleShape))
+                Box(Modifier.fillMaxWidth((target / d).toFloat().coerceIn(0f, 1f)).height(6.dp)) {
+                    Box(Modifier.align(Alignment.CenterEnd).size(16.dp).background(Palette.gold, CircleShape))
+                }
+            }
+            Text("Let go to jump  ·  Back to cancel", style = Type.caption, color = Palette.muted)
+        }
+    }
+}
+
 @Composable
 private fun Hud(model: PlayerModel) {
     val playback = model.playback
@@ -263,7 +294,7 @@ private fun Hud(model: PlayerModel) {
                     Text("LIVE", style = Type.callout.copy(fontWeight = FontWeight.ExtraBold), color = Palette.live)
                     Icon(if (playback.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause, null, modifier = Modifier.size(18.dp))
                 }
-                Text("OK  Pause / play     ▼  Other streams     Back  Exit", style = Type.caption, color = Palette.muted)
+                Text("OK  Pause / play     ◀ ▶  Other live games     ▼  Other streams     Back  Exit", style = Type.caption, color = Palette.muted)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(if (playback.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause, null, modifier = Modifier.size(20.dp))
@@ -276,7 +307,7 @@ private fun Hud(model: PlayerModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.FastRewind, null, tint = Palette.muted, modifier = Modifier.size(13.dp))
                     Icon(Icons.Rounded.FastForward, null, tint = Palette.muted, modifier = Modifier.size(13.dp))
-                    Text("  10 seconds      ▼  Servers, audio, subtitles & episodes      Back  Exit", style = Type.caption, color = Palette.muted)
+                    Text("  10 seconds, hold to scrub      ▼  Servers, audio, subtitles & episodes      Back  Exit", style = Type.caption, color = Palette.muted)
                 }
             }
         }
@@ -448,6 +479,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                             add("Buffered ahead" to if (p.ahead > 0) "%.0f seconds".format(p.ahead) else if (model.request.isLive) "Live" else "—")
                             if (p.dropped >= 0) add("Dropped frames" to "${p.dropped}")
                             if (p.native) add("Stalls" to "${p.stalls}")
+                            if (p.native && p.held > 0) add("Quality held" to "Under ${rate(p.held.toLong())} to keep it steady")
                             if (p.audioFormat.isNotEmpty()) add("Audio" to p.audioFormat)
                         }
                         items(rows, key = { it.first }) { (label, value) -> SideItem(label, value) {} }

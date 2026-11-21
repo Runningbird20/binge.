@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 fun TitleScreen(title: Title, active: Boolean) {
     var details by remember { mutableStateOf<TmdbDetails?>(null) }
     var resume by remember { mutableStateOf<ContinueRow?>(null) }
+    var heatmap by remember { mutableStateOf<List<Pair<Int, List<com.binge.tv.data.TmdbSeason.Episode>>>>(emptyList()) }
     var season by remember { mutableStateOf<Int?>(null) }
     var episodes by remember { mutableStateOf<List<TmdbSeason.Episode>>(emptyList()) }
     var more by remember { mutableStateOf<List<Title>>(emptyList()) }
@@ -121,6 +122,12 @@ fun TitleScreen(title: Title, active: Boolean) {
             details = runCatching { Tmdb.get<TmdbDetails>("${title.kind.tmdbPath}/$id", mapOf("append_to_response" to "credits,images", "include_image_language" to "en,null")) }.getOrNull()
         }
         resume = resumeTask.await()
+        // Every season's episode ratings, for the heatmap (in the background).
+        val heatmapId = title.tmdbId
+        if (title.kind == MediaKind.TV && heatmapId != null) launch {
+            val numbers = details?.seasons.orEmpty().filter { it.seasonNumber > 0 && (it.episodeCount ?: 0) > 0 }.map { it.seasonNumber }
+            if (numbers.isNotEmpty()) heatmap = Heatmap.load(heatmapId, numbers)
+        }
         // The season list comes with the details just loaded (not the first composition's empty one).
         val loadedSeasons = details?.seasons.orEmpty().filter { (it.episodeCount ?: 0) > 0 }.let { all -> all.filter { it.seasonNumber > 0 }.ifEmpty { all } }
         if (title.kind == MediaKind.TV && season == null) season = resume?.currentSeason ?: loadedSeasons.firstOrNull()?.seasonNumber
@@ -288,6 +295,9 @@ fun TitleScreen(title: Title, active: Boolean) {
                             watched = watchedEpisodes, onLongClick = if (AppModel.isSignedIn) { ep -> episodeMenu = ep } else null) { start(it.seasonNumber, it.episodeNumber) }
                         Text("Hold OK on an episode to mark it watched", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(start = Dimens.edge))
                     }
+                }
+                if (heatmap.any { (_, eps) -> eps.any { (it.voteAverage ?: 0.0) > 0 } }) item(key = "heatmap") {
+                    EpisodeHeatmap(heatmap, resume?.let { r -> r.currentSeason?.let { s -> r.currentEpisode?.let { s to it } } })
                 }
                 if (people.isNotEmpty()) {
                     item(key = "cast") { CastRow(people) }

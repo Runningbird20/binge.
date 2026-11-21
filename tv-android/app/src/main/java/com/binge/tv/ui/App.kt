@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -146,6 +147,25 @@ fun BingeApp() {
             Phase.READY -> Shell()
         }
         AmbientHost()
+        // Followed teams: checked every minute while a profile is open; the
+        // alert shows over everything, the player included (TeamCenter).
+        LaunchedEffect(AppModel.phase, AppModel.profile?.id) {
+            if (AppModel.phase == Phase.READY && AppModel.isSignedIn) com.binge.tv.data.TeamCenter.start() else com.binge.tv.data.TeamCenter.stop()
+        }
+        com.binge.tv.data.TeamCenter.banner?.let { alert -> GameAlertBanner(alert, Modifier.align(Alignment.TopEnd)) }
+    }
+}
+
+// A game alert for a followed team (Apple TV's banner): top right, 15 seconds.
+@Composable
+private fun GameAlertBanner(alert: com.binge.tv.data.GameAlert, modifier: Modifier) {
+    Column(modifier.padding(top = 24.dp, end = 30.dp).then(Modifier.width(360.dp))
+        .background(Palette.surface.copy(alpha = 0.96f), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+        .then(Modifier.border(1.dp, Palette.gold, androidx.compose.foundation.shape.RoundedCornerShape(12.dp)))
+        .padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(alert.headline, style = Type.callout.copy(fontWeight = FontWeight.Bold), maxLines = 2)
+        if (alert.detail.isNotEmpty()) Text(alert.detail, style = Type.caption, color = Palette.muted, maxLines = 2)
+        Text("Your team · in Sports", style = Type.caption, color = Palette.gold)
     }
 }
 

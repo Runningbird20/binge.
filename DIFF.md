@@ -26,7 +26,6 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Where to watch (legal streaming services row) | ✓ | ✓ | — | — | `WhereToWatch.js`, TMDB `watch/providers`. |
 | Cast & crew photo row | ✓ | ✓ | ✓ | ✓ | Both TV apps: the Cast row (`CastRow`), each photo opening the person's page. |
 | Actor / director pages (`/person/:id`) | ✓ | ✓ | ✓ | ✓ | `pages/Person.js`, `utils/people.js`; Apple TV `PersonView`, Fire TV `PersonScreen` (`data/People.kt`), same rules. |
-| Episode heatmap | ✓ | ✓ | ✓ | — | Fire TV has no `EpisodeHeatmap`. |
 | Franchise "Mark all watched" | ✓ | ✓ | — | — | `FranchiseOrder.js`. Story / release order itself is on every app. |
 | Mark season watched / Watched up to here | ✓ | ✓ | ✓ | ✓ | TV apps: a pill before the season picker, and "Watched up to here" / "Mark as not watched" when you hold an episode, with Undo. |
 | Detailed rating (per category) | ✓ | ✓ | ◐ | ◐ | TV apps: 1–5 stars, copied into every category. |
@@ -86,15 +85,15 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Server VixSrc | ✓ | ✓ | — | — | The TV apps don't carry it (it had no Malayalam films and the admin has it switched off). Fire TV added VidSpark, VidCore, EmbedWave and Atlantic on 2026-11-20; Apple TV VidSpark and Atlantic. |
 | Streams play in the TV's own player (native HLS) | — | — | ✓ | ✓ | Once the server's page finds its stream (`HybridEngine`). Apple TV also saves a stream that played for 3 hours, so playing it again skips the page (`StreamCache`). |
 | TV switches to the video's frame rate (Match Content) | — | — | ✓ | ✓ | Apple TV: Match Content (`NativeEngine.displayCriteria`). Fire TV: `preferredDisplayModeId` to a mode at the video's rate, when the TV has one (`DisplayMatch`). Native player only. |
-| Now Playing in Control Center / the phone's TV remote | — | — | ✓ | — | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. |
-| Subtitles while skipping back | — | — | ✓ | — | Apple TV: with subtitles off, ◀ turns the server's track on until the video passes where you were. |
+| Now Playing in Control Center / the phone's TV remote | — | — | ✓ | ✓ | `NowPlaying.swift`: title, episode, poster, progress, play/pause/skip. Fire TV: a media session (`player/NowPlaying.kt`), so the remote's media keys and Alexa control the player. |
+| Subtitles while skipping back | — | — | ✓ | ✓ | Apple TV: with subtitles off, ◀ turns the server's track on until the video passes where you were. |
 | Backup stream for movies and episodes, started only when needed | — | — | ✓ | ✓ | Both TV apps: when the buffer drains (or the picture froze) the next-best server loads silently at that second and takes over if the picture stops. Fire TV loads one page at most, and only with room. |
-| Steady quality on a shaky connection | — | — | ✓ | — | Apple TV, Apple's player only: a stall, or a low buffer that downloads don't refill, caps the bitrate a step down until the connection recovers (`NativeEngine.guardQuality`). |
+| Steady quality on a shaky connection | — | — | ✓ | ✓ | Apple TV, Apple's player only: a stall, or a low buffer that downloads don't refill, caps the bitrate a step down until the connection recovers (`NativeEngine.guardQuality`). Fire TV: the same, in its native player (`NativeEngine.guardQuality`, not in the first 20s while the buffer fills). |
 | Playback info (server, resolution, bitrate, download speed, buffer, dropped frames, stalls, audio) | — | — | ✓ | ✓ | TV apps: Options › Playback info, with a one-line diagnosis. |
 | Instant resume after leaving the player | — | — | ✓ | ✓ | TV apps: the stream stays loaded and paused for 5 minutes (2 for live). Fire TV keeps only a native stream on a stick. |
 | Preload what you rest on (your rows, spotlight) | — | — | ✓ | ✓ | Your own rows after 1s (Apple TV also the spotlight). Both TVs preload Continue Watching cards. |
 | Server speed and quality shared between devices | — | — | ✓ | ✓ | `server_stats` per kind of device: a new TV starts from other TVs' measurements (Fire TV shares start times). |
-| Swipe to scrub with picture previews | — | — | ✓ | — | Apple TV: swipe on the Siri Remote's touch surface; previews from a second low-bitrate player when Apple's player is on (`Scrub.swift`). |
+| Swipe to scrub with picture previews | — | — | ✓ | ◐ | Apple TV: swipe on the Siri Remote's touch surface; previews from a second low-bitrate player when Apple's player is on (`Scrub.swift`). Fire TV: hold ◀ ▶ to scrub (no touch surface), without the picture: a second player froze the stick's video (2026-11-20). |
 | Skip intros automatically (per show), binge mode | ◐ | ◐ | ✓ | ✓ | Apple TV: Options › Skip intros automatically (offered after you skip two episodes' intros); Settings › Binge mode starts the next episode at the credits. The website does the same, but can only skip on servers that can jump (VidRift and the resumable ones). Only intros with a known timing are skipped. |
 | Movies and episodes in a corner while you browse | — | — | ✓ | — | Apple TV: Options › Keep watching in the corner; Home's bar goes back to full screen without a reload. Live games could already. |
 | Surround sound and Spatial Audio | — | — | ✓ | — | Apple TV: multichannel passes to the receiver, Spatial Audio for AirPods (`allowedAudioSpatializationFormats`). |
@@ -106,11 +105,11 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | TimStreams feed, and college games on TV channels | ✓ | ✓ | — | ✓ | Added 2026-11-09 (`sportsFeeds.js`): every college game on a TV network TimStreams carries gets that channel as a server. Fire TV since 2026-11-20 (`fetchTimStreams`, `fetchTvChannelGames` in `data/Sports.kt`). |
 | Multiview | ✓ | — | ✓ | ✓ | *By decision* not on phones (too small). Apple TV: up to 4 games (2 on an Apple TV HD). Fire TV: up to 4, and it learns the device's limit. |
 | Multiview layout (one big + others) | — | — | ✓ | ✓ | The website uses an equal grid. |
-| Followed teams & game alerts | ✓ | ✓ | ◐ | — | Website: push alerts. Apple TV: in-app banners only, with a "Your teams" row. |
+| Followed teams & game alerts | ✓ | ✓ | ◐ | ◐ | Website: push alerts. Apple TV: in-app banners only, with a "Your teams" row. Fire TV: the same (`data/Teams.kt`); follow by holding OK on a score card. |
 | Live score panel (second screen, line score) | ✓ | ✓ | ◐ | ◐ | TV apps show score chips and a Scores row. |
 | Fantasy roster | ✓ | ✓ | — | — | `FantasyRoster`, ESPN Fantasy. |
 | Hide scores | ✓ | ✓ | ✓ | ✓ | TV apps: the pill before the sport chips; Apple TV's game alerts leave the score out too. |
-| Previous / next live game from the player (◀ ▶) | n/a | n/a | ✓ | — | |
+| Previous / next live game from the player (◀ ▶) | n/a | n/a | ✓ | ✓ | |
 | A live game in a corner window over other video | — | — | ✓ | — | `Player/Overlay.swift`. |
 
 ## Notifications & the rest
@@ -161,9 +160,9 @@ None right now.
 - **TV apps vs website**:
   - Where to watch, search filters, detailed ratings.
   - Creating and editing profiles, and account tools.
-  - Fire TV still lacks Now Playing, swipe to scrub, steady quality, picture in picture for movies and subtitles while skipping back.
+  - Fire TV still lacks picture in picture for movies.
 - **Website vs TV apps**:
   - OpenSubtitles subtitles and subtitle styling; quality choice.
   - Ambient mode; Larger text and audio description.
-- **Fire TV vs Apple TV**: episode heatmap, spotlight trailers, followed teams and alerts, ◀ ▶ live game flip, Top Shelf-style launcher rows.
+- **Fire TV vs Apple TV**: spotlight trailers, scrub picture previews, a movie in a corner while browsing, Top Shelf-style launcher rows.
 - **Phone vs computer**: Multiview (*by decision*), spotlight and hover trailers.

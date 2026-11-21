@@ -58,6 +58,8 @@ data class MediaState(
     val bitrate: Int = 0,
     val bandwidth: Long = 0,
     val stalls: Int = 0,
+    // Steady quality: the bitrate the native player is holding under (0: none).
+    val held: Int = 0,
     val audioFormat: String = "",
     val fps: Float = 0f,
 ) {

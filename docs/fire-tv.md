@@ -89,6 +89,16 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Sports feeds:** TimStreams and the college games on national TV channels (`fetchTimStreams`, `fetchTvChannelGames`, ports of the website's `sportsFeeds.js`), merged after PPV and StreamFree. On 2026-11-20 they added 17 + 58 listings; Iowa State–UCF on FS1 (a TimStreams channel) had a picture in 12.5s, in its page (the native player can't parse that stream). The admin's `sports:timstreams` switch applies.
 - **Spotlight logo art** (`Hero` in `ui/Home.kt`): the title's TMDB logo (the title page's own request), the text title after 0.9s without one.
 
+## Player and sports catch-up (2026-11-20/21)
+
+- **Now Playing** (`player/NowPlaying.kt`): an Android `MediaSession` per player with title, episode or LIVE, artwork and position; play/pause/seek/next from the remote's media keys and Alexa. Checked on the stick: `dumpsys media_session` lists it active, `cmd media_session dispatch pause` paused the video.
+- **Steady quality** (`NativeEngine.guardQuality`): a stall, or a low buffer while downloads don't keep up, caps the bitrate at 70% of what's playing; full again with room to spare for a minute lifts it. Not in the first 20 seconds (a 2s buffer at the start capped a fresh 800p stream). Shown in Playback info as "Quality held".
+- **Hold ◀ ▶ to scrub** (the Fire TV's swipe to scrub): a single press still skips 10s; held, the target moves faster the longer it's held, letting go jumps, Back cancels. **No picture preview**: a second ExoPlayer on the stream froze the main picture while its sound played on and made the stick unresponsive to adb (2026-11-20); one hardware decoder is all the stick gives the app.
+- **Subtitles while skipping back**: with subtitles off, ◀ turns the server's own text track on until the video passes where you were.
+- **Live ◀ ▶** switch to the previous / next live game (`flipLive`).
+- **Episode heatmap** (`ui/Heatmap.kt`) on series pages, all seasons, one focusable card.
+- **Followed teams** (`data/Teams.kt`, Apple TV's TeamCenter): hold OK on a score card to follow; a "Your teams" row on Sports; every minute while a profile is open, ESPN is checked and a banner shows for starting soon / close late / overtime (same rules, `alertsSent` dedup).
+
 ## Testing
 
 - **Testing.** There's an Android TV emulator in the scratchpad (`$S/android`, AVD `firetv`).

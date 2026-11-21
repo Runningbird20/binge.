@@ -31,6 +31,8 @@ import androidx.compose.material.icons.rounded.SportsFootball
 import androidx.compose.material.icons.rounded.SportsGolf
 import androidx.compose.material.icons.rounded.SportsHockey
 import androidx.compose.material.icons.rounded.SportsMma
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.SportsMotorsports
 import androidx.compose.material.icons.rounded.SportsRugby
 import androidx.compose.material.icons.rounded.SportsSoccer
@@ -58,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.binge.tv.data.AppModel
 import com.binge.tv.data.League
 import com.binge.tv.data.MediaKind
 import com.binge.tv.data.Scoreboard
@@ -121,6 +124,8 @@ fun SportsScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var multi by remember { mutableStateOf<List<SportGame>>(emptyList()) }
     var menuFor by remember { mutableStateOf<SportGame?>(null) }
+    // Holding OK on a score: follow or unfollow its teams (TeamCenter).
+    var followFor by remember { mutableStateOf<Pair<String, Scoreboard.Event>?>(null) }
     val scope = rememberCoroutineScope()
     var warm by remember { mutableStateOf<Job?>(null) }
     val listState = rememberLazyListState()
@@ -232,6 +237,27 @@ fun SportsScreen() {
                     }
                 }
             }
+            // Games of the teams this profile follows (ESPN ids are per league).
+            if (com.binge.tv.data.TeamCenter.teams.isNotEmpty() && category == "All") item(key = "your-teams") {
+                val teams = com.binge.tv.data.TeamCenter.teams
+                val events = boards.flatMap { (league, events) -> events.filter { e -> e.competitors.any { com.binge.tv.data.TeamCenter.followed(it.team.id, league.path) != null } }.map { league.path to it } }
+                    .sortedBy { it.second.sortRank }
+                Column {
+                    SectionTitle("Your teams", teams.joinToString("  ·  ") { it.teamAbbr ?: it.teamName })
+                    if (events.isEmpty()) Text("No games today for your teams. You'll get a banner when one starts or gets close.", style = Type.callout, color = Palette.muted,
+                        modifier = Modifier.padding(horizontal = Dimens.edge, vertical = 10.dp))
+                    else PivotScroll(offset = Dimens.edge) {
+                        LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap)) {
+                            items(events, key = { "yt:" + it.second.id }) { (path, event) ->
+                                val game = gameFor(event)
+                                ScoreCard(event, game != null, onLongClick = { followFor = path to event }) {
+                                    if (game != null) play(game) else message = if (event.isFinal) "That game has ended." else "No streams for ${event.shortName ?: "this game"} yet."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             if (liveGames.isNotEmpty()) item(key = "live") { GameRow("Live Now · ${liveGames.size}", null, liveGames, starting, multi, ::activate, ::prewarm, { menuFor = it }, ::eventFor) }
             items(leagueRows, key = { "league:${it.first}" }) { (league, items) ->
                 val liveCount = items.count { it.isLive }
@@ -246,7 +272,8 @@ fun SportsScreen() {
                         LazyRow(contentPadding = PaddingValues(horizontal = Dimens.edge, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(Dimens.rowGap)) {
                             items(scores, key = { it.id }) { event ->
                                 val game = gameFor(event)
-                                ScoreCard(event, game != null) {
+                                val path = boards.firstOrNull { (_, events) -> event in events }?.first?.path
+                                ScoreCard(event, game != null, onLongClick = if (AppModel.isSignedIn && path != null) ({ followFor = path to event }) else null) {
                                     if (game != null) play(game) else message = if (event.isFinal) "That game has ended." else "No streams for ${event.shortName ?: "this game"} yet. They usually appear shortly before start."
                                 }
                             }
@@ -262,6 +289,17 @@ fun SportsScreen() {
         }
     }
 
+    followFor?.let { (path, event) ->
+        ActionSheet(event.shortName ?: "Follow a team", onDismiss = { followFor = null }) {
+            event.competitors.forEach { competitor ->
+                val following = com.binge.tv.data.TeamCenter.isFollowing(competitor.team, path)
+                Pill(if (following) "Unfollow ${competitor.name}" else "Follow ${competitor.name}", icon = if (following) Icons.Rounded.StarBorder else Icons.Rounded.Star) {
+                    followFor = null
+                    scope.launch { com.binge.tv.data.TeamCenter.toggle(competitor.team, path) }
+                }
+            }
+        }
+    }
     menuFor?.let { game ->
         ActionSheet(game.title, onDismiss = { menuFor = null }) {
             if (game.isLive) Pill("Watch", icon = Icons.Rounded.PlayArrow) { menuFor = null; play(game) }
@@ -376,8 +414,8 @@ private fun Spotlight(game: SportGame, event: Scoreboard.Event?, busy: Boolean, 
 }
 
 @Composable
-private fun ScoreCard(event: Scoreboard.Event, watchable: Boolean, onClick: () -> Unit) {
-    FocusCard(onClick = onClick, modifier = Modifier.width(220.dp).height(124.dp)) {
+private fun ScoreCard(event: Scoreboard.Event, watchable: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    FocusCard(onClick = onClick, onLongClick = onLongClick, modifier = Modifier.width(220.dp).height(124.dp)) {
         Column(Modifier.fillMaxSize().background(Palette.surface).padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (event.isLive) Box(Modifier.size(7.dp).background(Palette.live, CircleShape))

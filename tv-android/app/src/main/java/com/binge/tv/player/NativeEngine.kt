@@ -141,8 +141,57 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
     private fun flatten(tracks: Tracks, type: Int) = tracks.groups.filter { it.type == type }
         .flatMap { group -> (0 until group.length).filter { group.isTrackSupported(it) }.map { group to it } }
 
+    // Steady quality (Apple TV's guardQuality): when the video stalls, or the
+    // buffer runs low while downloads don't keep up, the bitrate is capped a
+    // step under what's playing, so the picture stays steady instead of
+    // stopping to buffer. The cap lifts once the buffer is full again with
+    // room to spare for a minute.
+    private var hold = 0
+    private var lastStalls = 0
+    private var roomySince = 0L
+    private var lastGuard = 0L
+    private var firstFrameAt = 0L
+    val heldBitrate get() = hold
+
+    private fun guardQuality() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastGuard < 2000 || !firstFrame) return
+        lastGuard = now
+        val playing = player.videoFormat?.bitrate?.takeIf { it > 0 } ?: return
+        val observed = meter.bitrateEstimate
+        val ahead = player.totalBufferedDuration / 1000.0
+        val stalled = stalls > lastStalls
+        lastStalls = stalls
+        // Not in the first 20 seconds: the buffer is still filling then (a 2s
+        // buffer at the start held a fresh 800p stream to 720p for no reason).
+        if (firstFrameAt == 0L) firstFrameAt = now
+        val settling = now - firstFrameAt < 20_000
+        val starving = !settling && ahead < (if (isLive) 8.0 else 15.0) && observed > 0 && observed < playing * 1.25
+        if (stalled || starving) {
+            val next = maxOf(400_000, (playing * 0.7).toInt())
+            if (hold == 0 || next < hold) {
+                hold = next
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setMaxVideoBitrate(next).build()
+                Perf.mark("native holding quality under ${next / 1000} kbps (${if (stalled) "stalled" else "buffer ${ahead.toInt()}s"})")
+            }
+            roomySince = 0
+            return
+        }
+        if (hold == 0) return
+        val full = ahead > (if (isLive) 15.0 else 40.0) && observed > playing * 2.5
+        if (!full) { roomySince = 0; return }
+        if (roomySince == 0L) { roomySince = now; return }
+        if (now - roomySince > 60_000) {
+            hold = 0
+            roomySince = 0
+            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setMaxVideoBitrate(Int.MAX_VALUE).build()
+            Perf.mark("native quality hold lifted")
+        }
+    }
+
     override fun poll(): MediaState? {
         if (destroyed || failed != null) return null
+        guardQuality()
         val state = player.playbackState
         val counters = player.videoDecoderCounters
         val duration = player.duration
@@ -173,6 +222,7 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             bitrate = player.videoFormat?.bitrate?.takeIf { it > 0 } ?: 0,
             bandwidth = meter.bitrateEstimate,
             stalls = stalls,
+            held = hold,
             audioFormat = player.audioFormat?.let { f ->
                 val codec = when (f.sampleMimeType) { MimeTypes.AUDIO_E_AC3, MimeTypes.AUDIO_E_AC3_JOC -> "Dolby Digital Plus"; MimeTypes.AUDIO_AC3 -> "Dolby Digital"; MimeTypes.AUDIO_AAC -> "AAC"; else -> "Audio" }
                 val ch = f.channelCount
