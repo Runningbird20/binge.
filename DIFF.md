@@ -95,7 +95,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 | Server speed and quality shared between devices | — | — | ✓ | ✓ | `server_stats` per kind of device: a new TV starts from other TVs' measurements (Fire TV shares start times). |
 | Swipe to scrub with picture previews | — | — | ✓ | ◐ | Apple TV: swipe on the Siri Remote's touch surface; previews from a second low-bitrate player when Apple's player is on (`Scrub.swift`). Fire TV: hold ◀ ▶ to scrub (no touch surface), without the picture: a second player froze the stick's video (2026-11-20). |
 | Skip intros automatically (per show), binge mode | ◐ | ◐ | ✓ | ✓ | Apple TV: Options › Skip intros automatically (offered after you skip two episodes' intros); Settings › Binge mode starts the next episode at the credits. The website does the same, but can only skip on servers that can jump (VidRift and the resumable ones). Only intros with a known timing are skipped. |
-| Movies and episodes in a corner while you browse | — | — | ✓ | — | Apple TV: Options › Keep watching in the corner; Home's bar goes back to full screen without a reload. Live games could already. |
+| Movies and episodes in a corner while you browse | — | — | ✓ | — | Apple TV: Options › Keep watching in the corner; Home's bar goes back to full screen without a reload. Live games could already. Not on Fire TV, *by decision* (2026-11-22). |
 | Surround sound and Spatial Audio | — | — | ✓ | — | Apple TV: multichannel passes to the receiver, Spatial Audio for AirPods (`allowedAudioSpatializationFormats`). |
 
 ## Sports
@@ -160,9 +160,8 @@ None right now.
 - **TV apps vs website**:
   - Where to watch, search filters, detailed ratings.
   - Creating and editing profiles, and account tools.
-  - Fire TV still lacks picture in picture for movies.
 - **Website vs TV apps**:
   - OpenSubtitles subtitles and subtitle styling; quality choice.
   - Ambient mode; Larger text and audio description.
-- **Fire TV vs Apple TV**: spotlight trailers, scrub picture previews, a movie in a corner while browsing, Top Shelf-style launcher rows.
+- **Fire TV vs Apple TV**: spotlight trailers, scrub picture previews (the stick can't run a second video player), Top Shelf-style launcher rows; a movie in a corner while browsing is Apple TV only by decision.
 - **Phone vs computer**: Multiview (*by decision*), spotlight and hover trailers.
