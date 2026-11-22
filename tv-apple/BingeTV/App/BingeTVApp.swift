@@ -87,29 +87,34 @@ struct MainTabs: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack { HomeView().titleDestinations() }
-                .tabItem { Label("Home", systemImage: "house.fill") }
+                .tabItem { Text("Home") }
                 .tag("home")
             NavigationStack { BrowseView(kind: .movie).titleDestinations() }
-                .tabItem { Label("Movies", systemImage: "film") }
+                .tabItem { Text("Movies") }
                 .tag("movies")
             NavigationStack { BrowseView(kind: .tvShow).titleDestinations() }
-                .tabItem { Label("Series", systemImage: "tv") }
+                .tabItem { Text("Series") }
                 .tag("series")
             NavigationStack { CollectionsView().titleDestinations() }
-                .tabItem { Label("Collections", systemImage: "square.stack") }
+                .tabItem { Text("Collections") }
                 .tag("collections")
             if !app.isKids {
                 NavigationStack { SportsView() }
-                    .tabItem { Label("Sports", systemImage: "sportscourt") }
+                    .tabItem { Text("Sports") }
                     .tag("sports")
             }
             NavigationStack { SearchView().titleDestinations() }
-                .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                .tabItem { Image(systemName: "magnifyingglass").accessibilityLabel("Search") }
                 .tag("search")
             NavigationStack { MeView() }
-                // Unread notifications, like the dot on the website's bell. tvOS
-                // has no tab badges and its tab bar shows text, so it's in the name.
-                .tabItem { Label(meTabTitle, systemImage: "person.crop.circle") }
+                // The places you browse are words; Search and your profile are
+                // icons, so the bar reads as five tabs plus two tools. Unread
+                // notifications put a dot on the profile icon (tvOS has no tab
+                // badges), like the dot on the website's bell.
+                .tabItem {
+                    Image(systemName: inbox.unreadIds.isEmpty ? "person.crop.circle" : "person.crop.circle.badge")
+                        .accessibilityLabel(meTabTitle)
+                }
                 .tag("me")
         }
         #if DEBUG
@@ -154,7 +159,7 @@ struct MainTabs: View {
     private var meTabTitle: String {
         let name = app.profile?.name ?? "Me"
         let unread = inbox.unreadIds.count
-        return unread > 0 ? "\(name) · \(unread) new" : name
+        return unread > 0 ? "\(name), \(unread) new notifications" : name
     }
 
     // "Resume Title · S1 E2" for ambient mode (its own property: inline, it

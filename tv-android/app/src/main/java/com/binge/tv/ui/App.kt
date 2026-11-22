@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.border
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -169,6 +172,17 @@ private fun GameAlertBanner(alert: com.binge.tv.data.GameAlert, modifier: Modifi
     }
 }
 
+// The profile in the tab bar: a small round avatar (photo, else its colour
+// and initial), like the profile picker's.
+@Composable
+private fun TabAvatar(profile: AccountProfile?) {
+    val color = profile?.avatarColor?.removePrefix("#")?.toLongOrNull(16)?.let { Color(0xFF000000 or it) } ?: Color(0xFF3B4A7A)
+    Box(Modifier.size(26.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+        Text((profile?.name ?: "Me").take(1).uppercase(), style = Type.caption.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp), color = Color.White)
+        profile?.avatarImageUrl?.let { coil.compose.AsyncImage(model = it, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+    }
+}
+
 @Composable
 fun Wordmark(size: androidx.compose.ui.unit.TextUnit = 24.sp) {
     Text("binge.", style = Type.hero.copy(fontSize = size, fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic,
@@ -261,7 +275,7 @@ private fun Shell() {
             ) {
                 tabs.forEachIndexed { index, tab ->
                     Tab(
-                        modifier = Modifier.focusRequester(tabRequesters[index]),
+                        modifier = (if (tab.id == "search") Modifier.padding(start = 28.dp) else Modifier).focusRequester(tabRequesters[index]),
                         selected = index == selected,
                         onFocus = { selected = index },
                         onClick = { runCatching { contentFocus.requestFocus() } },
@@ -270,12 +284,23 @@ private fun Shell() {
                             focusedContentColor = Color.Black, focusedSelectedContentColor = Color.Black,
                         ),
                     ) {
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tab.label, style = Type.callout.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp))
-                            // Unread notifications, like the dot on the website's bell.
-                            if (tab.id == "me" && com.binge.tv.data.Inbox.unreadIds.isNotEmpty()) {
-                                Box(Modifier.padding(start = 6.dp).size(6.dp).background(Palette.gold, CircleShape))
+                        // The places you browse are words; Search and your profile are
+                        // icons, so the bar reads as five tabs plus two tools.
+                        when (tab.id) {
+                            "search" -> Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).semantics { contentDescription = "Search" }) {
+                                androidx.tv.material3.Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(20.dp))
                             }
+                            "me" -> Box(Modifier.padding(horizontal = 8.dp, vertical = 3.dp).semantics {
+                                contentDescription = (AppModel.profile?.name ?: "Me") + if (com.binge.tv.data.Inbox.unreadIds.isNotEmpty()) ", new notifications" else ""
+                            }) {
+                                TabAvatar(AppModel.profile)
+                                // Unread notifications, like the dot on the website's bell.
+                                if (com.binge.tv.data.Inbox.unreadIds.isNotEmpty()) {
+                                    Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(Palette.gold, CircleShape).border(1.dp, Palette.background, CircleShape))
+                                }
+                            }
+                            else -> Text(tab.label, style = Type.callout.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
                         }
                     }
                 }
