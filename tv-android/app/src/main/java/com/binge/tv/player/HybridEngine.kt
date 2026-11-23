@@ -39,11 +39,19 @@ class HybridEngine(
         set(value) { field = value; page?.onProcessGone = value }
     override val muted get() = wantMuted
     private var shown = false
+    // The native player failed on this page once: it plays in the page from now on.
+    private var nativeGaveUp = false
+    // The page's video is playing on screen (a later stream it asks for, an
+    // ad's or a quality switch's, doesn't swap players under the viewer).
+    private var pagePlaying = false
 
+    // A native player only shows once it's really playing. Until then it's off
+    // screen: shown while starting, its empty black picture covered the video
+    // for up to NATIVE_START_MS (a "black box" mid-episode, 2026-11-23).
     override fun setShown(shown: Boolean) {
         this.shown = shown
         frame.alpha = if (shown) 1f else 0f
-        native?.setShown(shown)
+        native?.setShown(shown && isNative)
     }
 
     init {
@@ -54,7 +62,7 @@ class HybridEngine(
     }
 
     private fun startNative(source: StreamSource) {
-        if (destroyed || native != null) return
+        if (destroyed || native != null || nativeGaveUp || pagePlaying) return
         Perf.mark("stream found (${WebEngine.hostOf(source.url)})")
         this.source = source
         val engine = NativeEngine(context, source, live)
@@ -62,7 +70,7 @@ class HybridEngine(
         native = engine
         nativeStartedAt = SystemClock.uptimeMillis()
         frame.addView(engine.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        engine.setShown(shown)
+        engine.setShown(false)
         if (!wantMuted) engine.send(MediaCommand.Unmute)
         if (!wantPlay) engine.send(MediaCommand.Pause)
         // The page goes quiet and stops fetching video while the native player starts.
@@ -98,6 +106,7 @@ class HybridEngine(
             if (!wantPlay) engine.send(MediaCommand.Pause)
             return
         }
+        nativeGaveUp = true
         web.blockMedia = false
         if (!wantMuted) web.send(MediaCommand.Unmute)
         if (wantPlay) web.send(MediaCommand.Play)
@@ -105,7 +114,7 @@ class HybridEngine(
 
     override fun poll(): MediaState? {
         if (destroyed) return null
-        val engine = native ?: return page?.poll()
+        val engine = native ?: return page?.poll()?.also { if (shown && it.isPlaying && it.t > 2) pagePlaying = true }
         val state = engine.poll()
         if (state != null && state.t > 0) lastT = state.t
         if (isNative && state == null && native == null) return null
@@ -118,6 +127,7 @@ class HybridEngine(
             }
             if (state.isPlaying || (state.ready >= 3 && !wantPlay)) {
                 isNative = true
+                engine.setShown(shown)
                 Perf.mark("native playing ${state.height}p")
                 val web = page
                 page = null
