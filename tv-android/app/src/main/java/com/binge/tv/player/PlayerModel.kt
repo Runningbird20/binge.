@@ -148,6 +148,17 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     val subtitlesShowing get() = usingExternalSubtitles || textTracks.any { it.on }
     val usingExternalSubtitles get() = useExternal && external != null
 
+    // Declared before init: Kotlin sets properties in file order, so anything
+    // the start-up code (or its first tick) touches must come first.
+    private var tickerStarted = false
+    private var rewindCaptionsUntil: Double? = null
+    private var switching: StreamRace? = null
+    private var lastCountdownTick = 0L
+    private var backup: StreamRace? = null
+    private val aheadSamples = ArrayDeque<Pair<Long, Double>>()
+    private var backupStartedAt = 0L
+    private var smoothSince: Long? = null
+    private var displayMatched = false
     init {
         Perf.start("player ${initial.key}")
         Warmup.playingKey = initial.key
@@ -156,7 +167,10 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
         // A preload for something else would compete with this video for the CPU.
         if (warm == null) Warmup.cancel()
         if (warm != null) adopt(warm) else if (initial.isLive) startRace(initial.liveStreams) else startPlannedRace()
-        loop()
+        // The first tick waits for the main thread's next turn: run here, it came
+        // before the properties declared below this block were set up, and a
+        // warm stream that was already playing crashed it (aheadSamples was null).
+        handler.post(::loop)
         AppModel.scope.launch { originalLanguage = OriginalLanguage.of(request.title) }
         loadMarkers()
         loadExternalSubtitles()
@@ -169,7 +183,6 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
         }
     }
 
-    private var tickerStarted = false
     private fun loop() {
         if (closed) return
         if (!tickerStarted) { tickerStarted = true; handler.post(subtitleTicker) }
@@ -519,7 +532,6 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     fun endScrub() { scrubTarget = null }
 
     // Captions turned on by skipping back, until the video passes this second.
-    private var rewindCaptionsUntil: Double? = null
     private fun checkRewindCaptions(state: MediaState, w: Engine) {
         val until = rewindCaptionsUntil ?: return
         if (state.t >= until) { rewindCaptionsUntil = null; w.send(MediaCommand.TextTrack(-1)) }
@@ -553,7 +565,6 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     // is playing it keeps playing: the new server loads hidden (a warm race)
     // and takes over at the current second once it plays; if it can't, you
     // stay where you were.
-    private var switching: StreamRace? = null
 
     fun choose(next: StreamServer) {
         saveProgress(force = true)
@@ -794,7 +805,6 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
             return null
         }
 
-    private var lastCountdownTick = 0L
 
     private fun handleUpNext(state: MediaState) {
         val next = nextEpisode ?: return
@@ -844,11 +854,6 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     // the next-best server loads silently at this second and takes over the
     // moment the picture stops. Closed again after a minute of full buffer.
     // One page at most, and only with room (a stick's memory is short).
-    private var backup: StreamRace? = null
-    private val aheadSamples = ArrayDeque<Pair<Long, Double>>()
-    private var backupStartedAt = 0L
-    private var smoothSince: Long? = null
-    private var displayMatched = false
 
     val backupStatus: String? get() {
         val b = backup ?: return null
