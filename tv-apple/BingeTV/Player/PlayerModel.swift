@@ -1403,6 +1403,31 @@ enum EpisodeOrder {
         real(await numbers(tmdbId: tmdbId, season: season), episode)
     }
 
+    // "Watched up to here" with the real numbers: in a season numbered from the
+    // series' start, every earlier season's own list and this season's episodes
+    // up to this one (counting 1…N marked episodes that don't exist, and in the
+    // season you're on, 1…1128). A normal show keeps the counts (no requests).
+    static func upTo(tmdbId: Int, target: EpisodeKey, seasons: [TMDBDetails.Season], lastAired: EpisodeKey?) async -> [EpisodeKey] {
+        let current = await numbers(tmdbId: tmdbId, season: target.season)
+        guard let first = current.first, first > current.count else {
+            return EpisodeMarking.upTo(target, seasons: seasons, lastAired: lastAired)
+        }
+        let earlier = seasons.filter { $0.seasonNumber > 0 && $0.seasonNumber < target.season }.sorted { $0.seasonNumber < $1.seasonNumber }
+        var lists: [Int: [Int]] = [:]
+        await withTaskGroup(of: (Int, [Int]).self) { group in
+            for season in earlier { group.addTask { (season.seasonNumber, await numbers(tmdbId: tmdbId, season: season.seasonNumber)) } }
+            for await (number, list) in group { lists[number] = list }
+        }
+        var out: [EpisodeKey] = []
+        for season in earlier {
+            let list = lists[season.seasonNumber].flatMap { $0.isEmpty ? nil : $0 } ?? Array(0..<max(0, season.episodeCount ?? 0)).map { $0 + 1 }
+            out += list.map { EpisodeKey(season: season.seasonNumber, episode: $0) }
+        }
+        out += current.filter { $0 <= target.episode }.map { EpisodeKey(season: target.season, episode: $0) }
+        guard let lastAired else { return out }
+        return out.filter { ($0.season, $0.episode) <= (lastAired.season, lastAired.episode) || $0 == target }
+    }
+
     // Without the season's list (TMDB unreachable): by the episode counts.
     static func next(season: Int, episode: Int, seasons: [TMDBDetails.Season]) -> (season: Int, episode: Int)? {
         if let count = seasons.first(where: { $0.seasonNumber == season })?.episodeCount, episode < count { return (season, episode + 1) }

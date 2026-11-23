@@ -1,4 +1,4 @@
-import { episodeKey, episodesUpTo, followingInSeason, isAfter, lastOf, nextEpisode, realEpisodeNumber, seasonEpisodes, unwatchedOnly } from './episodeMarking';
+import { episodeKey, episodesUpTo, episodesUpToNumbered, followingInSeason, isAfter, lastOf, nextEpisode, realEpisodeNumber, seasonEpisodes, unwatchedOnly } from './episodeMarking';
 
 const NOW = new Date('2026-11-04T12:00:00Z');
 const seasons = [
@@ -64,5 +64,30 @@ describe('shows numbered from the series start (One Piece)', () => {
     expect(followingInSeason(season22, 1091)).toBe(1128);
     expect(followingInSeason(season22, 4)).toBe(1129);
     expect(followingInSeason(season22, 1129)).toBeNull();
+  });
+});
+
+describe('watched up to here, numbered from the series start', () => {
+  const seasons = [{ season_number: 1, episode_count: 5 }, { season_number: 2, episode_count: 3 }];
+  const season1 = [1, 2, 3, 4, 5].map((number) => ({ number }));
+  const season2 = [6, 7, 8].map((number) => ({ number }));
+
+  test('marks the real numbers of earlier seasons and this one', async () => {
+    const loadSeason = jest.fn((n) => Promise.resolve(n === 1 ? season1 : season2));
+    const list = await episodesUpToNumbered(seasons, 2, 7, season2, loadSeason);
+    expect(list.map((entry) => `${entry.season}:${entry.episode}`)).toEqual(['1:1', '1:2', '1:3', '1:4', '1:5', '2:6', '2:7']);
+  });
+
+  test('a normal show keeps the counts, with no requests', async () => {
+    const loadSeason = jest.fn();
+    const list = await episodesUpToNumbered(seasons, 2, 2, [1, 2, 3].map((number) => ({ number })), loadSeason);
+    expect(list).toEqual(episodesUpTo(seasons, 2, 2));
+    expect(loadSeason).not.toHaveBeenCalled();
+  });
+
+  test('a season that fails to load falls back to its count', async () => {
+    const loadSeason = jest.fn(() => Promise.reject(new Error('offline')));
+    const list = await episodesUpToNumbered(seasons, 2, 6, season2, loadSeason);
+    expect(list.map((entry) => `${entry.season}:${entry.episode}`)).toEqual(['1:1', '1:2', '1:3', '1:4', '1:5', '2:6']);
   });
 });

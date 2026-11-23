@@ -335,8 +335,10 @@ struct TitleDetailView: View {
                                     }
                                 } else {
                                     Button {
-                                        mark(EpisodeMarking.upTo(key, seasons: seasons, lastAired: lastAired),
-                                             note: "Watched up to S\(key.season):E\(key.episode)")
+                                        Task {
+                                            let keys = await markUpTo(key)
+                                            mark(keys, note: "Watched up to S\(key.season):E\(key.episode)")
+                                        }
                                     } label: {
                                         Label("Watched up to here", systemImage: "checkmark.circle")
                                     }
@@ -384,6 +386,12 @@ struct TitleDetailView: View {
 
     // The episode after the furthest one marked, from the season's own list
     // (EpisodeOrder: some shows number from the series' start), if it has aired.
+    // "Watched up to here" with the real numbers (EpisodeOrder.upTo).
+    private func markUpTo(_ key: EpisodeKey) async -> [EpisodeKey] {
+        guard let tmdbId = title.tmdbId else { return EpisodeMarking.upTo(key, seasons: seasons, lastAired: lastAired) }
+        return await EpisodeOrder.upTo(tmdbId: tmdbId, target: key, seasons: seasons, lastAired: lastAired)
+    }
+
     private func nextAfterMarking(_ furthest: EpisodeKey) async -> EpisodeKey? {
         guard let tmdbId = title.tmdbId else { return EpisodeMarking.next(after: [furthest], seasons: seasons, lastAired: lastAired) }
         guard let next = await EpisodeOrder.next(tmdbId: tmdbId, season: furthest.season, episode: furthest.episode, seasons: seasons) else { return nil }

@@ -1,6 +1,7 @@
 package com.binge.tv.data
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
@@ -85,6 +86,24 @@ object EpisodeNumbers {
         if (numbers.isEmpty() || episode in numbers || numbers.first() <= numbers.size) episode else numbers.getOrNull(episode - 1) ?: episode
 
     suspend fun real(tmdbId: Int, season: Int, episode: Int): Int = real(of(tmdbId, season), episode)
+
+    // "Watched up to here" with the real numbers: in a season numbered from the
+    // series' start, every earlier season's own list and this season's episodes
+    // up to this one (counting 1…N marked episodes that don't exist, and in the
+    // season you're on, 1…1128). A normal show keeps the counts (no requests).
+    suspend fun upTo(tmdbId: Int, target: EpisodeKey, seasons: List<TmdbDetails.Season>, lastAired: EpisodeKey?): List<EpisodeKey> = coroutineScope {
+        val current = of(tmdbId, target.season)
+        if (current.isEmpty() || current.first() <= current.size) return@coroutineScope EpisodeMarking.upTo(target, seasons, lastAired)
+        val earlier = seasons.filter { it.seasonNumber in 1 until target.season }.sortedBy { it.seasonNumber }
+        val lists = earlier.map { season -> async { season to of(tmdbId, season.seasonNumber) } }.awaitAll()
+        buildList {
+            for ((season, numbers) in lists) {
+                val list = numbers.ifEmpty { (1..(season.episodeCount ?: 0)).toList() }
+                list.forEach { add(EpisodeKey(season.seasonNumber, it)) }
+            }
+            current.filter { it <= target.episode }.forEach { add(EpisodeKey(target.season, it)) }
+        }.filter { key -> lastAired == null || key <= lastAired || key == target }
+    }
 
     suspend fun next(tmdbId: Int, season: Int, episode: Int, seasons: List<TmdbDetails.Season>): EpisodeKey? {
         val numbers = of(tmdbId, season)

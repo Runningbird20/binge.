@@ -2,7 +2,8 @@ import LoadingBar from '../LoadingBar';
 import { useEffect, useState } from 'react';
 import { Check, CheckCircle, Play } from '@phosphor-icons/react';
 import ThemedSelect from '../ThemedSelect';
-import { episodeKey, episodesUpTo, lastOf, seasonEpisodes, unwatchedOnly } from '../../utils/episodeMarking';
+import { episodeKey, episodesUpToNumbered, lastOf, seasonEpisodes, unwatchedOnly } from '../../utils/episodeMarking';
+import { tmdbGet } from '../../utils/tmdb';
 import { useSeasonEpisodes } from '../../hooks/useTitleDetails';
 import { formatRuntime } from './format';
 
@@ -11,6 +12,13 @@ import { formatRuntime } from './format';
 export function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay, onMark, onUnmark, busy, status }) {
   const [season, setSeason] = useState(currentSeason || seasons[0]?.season_number || 1);
   const episodes = useSeasonEpisodes(tmdbId, season);
+  // "Watched up to here", with the real episode numbers (episodesUpToNumbered).
+  const loadSeason = (number) => tmdbGet(`/tv/${tmdbId}/season/${number}`)
+    .then((data) => (data?.episodes || []).map((item) => ({ number: item.episode_number })));
+  const markUpTo = async (number) => {
+    const list = await episodesUpToNumbered(seasons, season, number, episodes, loadSeason);
+    onMark(unwatchedOnly(list, watched), { last: { season, episode: number }, episodes });
+  };
 
   useEffect(() => {
     if (currentSeason) setSeason(currentSeason);
@@ -97,7 +105,7 @@ export function EpisodeList({ tmdbId, seasons, watched, currentSeason, onPlay, o
                   className={`td-episode-mark${isWatched ? ' on' : ''}`}
                   onClick={() => (isWatched
                     ? onUnmark([{ season, episode: episode.number }], `Episode ${episode.number} marked unwatched.`)
-                    : onMark(unwatchedOnly(episodesUpTo(seasons, season, episode.number), watched), { last: { season, episode: episode.number }, episodes }))}
+                    : markUpTo(episode.number))}
                   disabled={busy}
                   aria-label={isWatched ? `Mark episode ${episode.number} unwatched` : `Watched up to episode ${episode.number}`}
                   title={isWatched ? 'Mark unwatched' : 'Watched up to here'}

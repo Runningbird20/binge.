@@ -28,6 +28,29 @@ export function episodesUpTo(seasons, season, episode) {
   return list;
 }
 
+// episodesUpTo with the real numbers. In a season numbered from the series'
+// start (see realEpisodeNumber), every earlier season's own list and this
+// season's episodes up to this one: counting would mark 1…N episodes that
+// don't exist (1…1128 in the season you're on). `episodes` is this season's
+// list; `loadSeason(n)` resolves to season n's list ({ number }). A normal
+// show keeps the counts, with no requests.
+export async function episodesUpToNumbered(seasons, season, episode, episodes, loadSeason) {
+  if (!episodes?.length || episodes[0].number <= episodes.length) return episodesUpTo(seasons, season, episode);
+  const earlier = (seasons || [])
+    .filter((entry) => entry.season_number > 0 && entry.season_number < season)
+    .sort((a, b) => a.season_number - b.season_number);
+  const lists = await Promise.all(earlier.map((entry) => Promise.resolve(loadSeason(entry.season_number)).catch(() => null)));
+  const list = [];
+  earlier.forEach((entry, index) => {
+    const numbers = lists[index]?.length
+      ? lists[index].map((item) => item.number)
+      : Array.from({ length: entry.episode_count || 0 }, (_, i) => i + 1);
+    numbers.forEach((number) => list.push({ season: entry.season_number, episode: number }));
+  });
+  episodes.filter((item) => item.number <= episode).forEach((item) => list.push({ season, episode: item.number }));
+  return list;
+}
+
 // The ones not already marked.
 export function unwatchedOnly(list, watched) {
   return list.filter((entry) => !watched.has(episodeKey(entry.season, entry.episode)));

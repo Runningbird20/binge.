@@ -332,7 +332,11 @@ fun TitleScreen(title: Title, active: Boolean) {
             if (key in watchedEpisodes) Pill("Mark as not watched") { episodeMenu = null; unmark(listOf(key), "S${key.season}:E${key.episode} marked as not watched") }
             else Pill("Watched up to here", icon = Icons.Rounded.Check) {
                 episodeMenu = null
-                mark(EpisodeMarking.upTo(key, seasons, lastAired), "Watched up to S${key.season}:E${key.episode}")
+                val tmdb = title.tmdbId
+                scope.launch {
+                    val keys = if (tmdb != null) com.binge.tv.data.EpisodeNumbers.upTo(tmdb, key, seasons, lastAired) else EpisodeMarking.upTo(key, seasons, lastAired)
+                    mark(keys, "Watched up to S${key.season}:E${key.episode}")
+                }
             }
         }
     }
