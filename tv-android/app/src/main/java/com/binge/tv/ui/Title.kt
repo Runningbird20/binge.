@@ -174,7 +174,12 @@ fun TitleScreen(title: Title, active: Boolean) {
             val furthest = keys.maxOrNull()
             val s = before?.currentSeason; val e = before?.currentEpisode
             if (before != null && s != null && e != null && furthest != null && EpisodeKey(s, e) <= furthest) {
-                EpisodeMarking.next(keys, seasons, lastAired)?.let { next ->
+                // From the season's own list (EpisodeNumbers): not "+1", which a
+                // show numbered from the series' start doesn't follow.
+                val tmdb = title.tmdbId
+                val following = if (tmdb != null) com.binge.tv.data.EpisodeNumbers.next(tmdb, furthest.season, furthest.episode, seasons)?.takeIf { lastAired == null || it <= lastAired }
+                    else EpisodeMarking.next(keys, seasons, lastAired)
+                following?.let { next ->
                     EpisodeStore.setResume(title, next.season, next.episode); moved = true; resume = AppModel.resumePoint(title)
                 }
             }

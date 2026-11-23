@@ -381,6 +381,15 @@ struct TitleDetailView: View {
 
     // MARK: Marking episodes (the website's utils/episodeMarking.js)
 
+
+    // The episode after the furthest one marked, from the season's own list
+    // (EpisodeOrder: some shows number from the series' start), if it has aired.
+    private func nextAfterMarking(_ furthest: EpisodeKey) async -> EpisodeKey? {
+        guard let tmdbId = title.tmdbId else { return EpisodeMarking.next(after: [furthest], seasons: seasons, lastAired: lastAired) }
+        guard let next = await EpisodeOrder.next(tmdbId: tmdbId, season: furthest.season, episode: furthest.episode, seasons: seasons) else { return nil }
+        if let lastAired, (next.season, next.episode) > (lastAired.season, lastAired.episode) { return nil }
+        return EpisodeKey(season: next.season, episode: next.episode)
+    }
     private func mark(_ episodes: [EpisodeKey], note: String) {
         let added = episodes.filter { !watchedEpisodes.contains($0) }
         guard !added.isEmpty else { return }
@@ -402,7 +411,7 @@ struct TitleDetailView: View {
             if let before, let s = before.currentSeason, let e = before.currentEpisode,
                let furthest = episodes.max(by: { ($0.season, $0.episode) < ($1.season, $1.episode) }),
                (s, e) <= (furthest.season, furthest.episode),
-               let next = EpisodeMarking.next(after: episodes, seasons: seasons, lastAired: lastAired) {
+               let next = await nextAfterMarking(furthest) {
                 await app.setResumeEpisode(title, to: next)
                 moved = true
                 resume = await app.resumePoint(for: title)

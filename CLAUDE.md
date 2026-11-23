@@ -308,6 +308,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - When a title lists only a variant, the plain service's logo is fetched from TMDB's movie + TV provider lists. Paramount+ has no plain TMDB entry in the US, so its mark comes from `utils/brandMarks.js`.
   - See *Where-to-watch logos* below for how the logos are drawn.
 - **Cast row** (`CastRow`, heading "Cast"): director/creators first, then the cast, with ‹ › to scroll. Each photo links to `/person/:id` (see People). It replaced the Cast/Director lines in the facts list.
+- **Episode numbers.** TMDB numbers some shows' episodes from the start of the series (One Piece's season 22 is 1089–1155), and the servers take those numbers. So the next episode comes from the season's own list, never "+1", and a number that isn't in its season but fits its place (the 40th, a row saved by position) is played as that place (`realEpisodeNumber`/`followingInSeason` in `utils/episodeMarking.js`, `EpisodeOrder` on Apple TV, `EpisodeNumbers` on Fire TV). "Season 22, episode 40" used to play an episode from 1999.
 - **Episodes** (`EpisodeList`):
   - **Marking by hand** (logic in `utils/episodeMarking.js`).
     - **Controls.** "Mark season watched" sits left of the season picker and toggles off when the season is done. A check per episode means "Watched up to here" (earlier seasons too); on a watched episode it unmarks just that one.

@@ -191,4 +191,15 @@ private func watching(_ title: Title, newEpisode: String? = nil) -> ContinueItem
     @Test func unknownSeasonsMeansNoNext() {
         #expect(EpisodeOrder.next(season: 1, episode: 1, seasons: []) == nil)
     }
+
+    // Shows numbered from the series' start (One Piece's season 22 is 1089–1155).
+    @Test func episodeByPlaceInSeriesNumberedSeason() {
+        let season22 = Array(1089...1155)
+        #expect(EpisodeOrder.real(season22, 1128) == 1128)
+        #expect(EpisodeOrder.real(season22, 1) == 1089)
+        #expect(EpisodeOrder.real(season22, 40) == 1128)
+        // A normal season keeps its numbers.
+        #expect(EpisodeOrder.real(Array(1...10), 4) == 4)
+        #expect(EpisodeOrder.real([], 4) == 4)
+    }
 }

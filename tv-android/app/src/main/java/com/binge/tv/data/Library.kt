@@ -69,6 +69,37 @@ data class EpisodeKey(val season: Int, val episode: Int) : Comparable<EpisodeKey
     override fun compareTo(other: EpisodeKey) = compareValuesBy(this, other, { it.season }, { it.episode })
 }
 
+// TMDB numbers some shows' episodes from the start of the series, not the
+// season: One Piece's season 22 is episodes 1089–1155. The servers take those
+// numbers, so "season 22, episode 40" played an episode from 1999. The next
+// episode and a season's first one come from the season's own list, never
+// "+1" / "1"; a number that isn't in its season but fits its place (40th of
+// the season) is read as that place.
+object EpisodeNumbers {
+    suspend fun of(tmdbId: Int, season: Int): List<Int> =
+        runCatching { Tmdb.get<TmdbSeason>("tv/$tmdbId/season/$season") }.getOrNull()?.episodes.orEmpty().map { it.episodeNumber }
+
+    // Only a season numbered from the series' start (its first number past its
+    // own length) is read by place: the website's realEpisodeNumber.
+    fun real(numbers: List<Int>, episode: Int): Int =
+        if (numbers.isEmpty() || episode in numbers || numbers.first() <= numbers.size) episode else numbers.getOrNull(episode - 1) ?: episode
+
+    suspend fun real(tmdbId: Int, season: Int, episode: Int): Int = real(of(tmdbId, season), episode)
+
+    suspend fun next(tmdbId: Int, season: Int, episode: Int, seasons: List<TmdbDetails.Season>): EpisodeKey? {
+        val numbers = of(tmdbId, season)
+        if (numbers.isNotEmpty()) {
+            val current = real(numbers, episode)
+            numbers.firstOrNull { it > current }?.let { return EpisodeKey(season, it) }
+        } else {
+            val count = seasons.firstOrNull { it.seasonNumber == season }?.episodeCount
+            if (count != null && episode < count) return EpisodeKey(season, episode + 1)
+        }
+        val following = seasons.filter { it.seasonNumber > season && (it.episodeCount ?: 0) > 0 }.minByOrNull { it.seasonNumber } ?: return null
+        return EpisodeKey(following.seasonNumber, of(tmdbId, following.seasonNumber).firstOrNull() ?: 1)
+    }
+}
+
 object EpisodeMarking {
     // "Watched up to here": every aired episode before this one (earlier
     // seasons too) and this one. Specials (season 0) aren't included.

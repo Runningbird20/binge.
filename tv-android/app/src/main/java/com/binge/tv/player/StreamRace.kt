@@ -340,6 +340,12 @@ object Warmup {
         cancel()
         pendingKey = key
         AppModel.scope.launch {
+            // Preloads use the same real episode number the player will (see EpisodeNumbers).
+            val season = request.season; val episode = request.episode; val tmdbId = request.title.tmdbId
+            if (season != null && episode != null && tmdbId != null) {
+                val real = com.binge.tv.data.EpisodeNumbers.real(tmdbId, season, episode)
+                if (real != episode) { if (pendingKey == key) pendingKey = null; prepare(request.copy(episode = real), fromPlayer); return@launch }
+            }
             val servers = if (request.isLive) request.liveStreams else ServerPlan.servers(request.title, request.title.originalLanguage)
             if (pendingKey != key) return@launch
             pendingKey = null

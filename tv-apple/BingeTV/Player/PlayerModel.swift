@@ -128,7 +128,7 @@ final class PlayerModel: ObservableObject {
         // Not during this init: SwiftUI builds the model mid view update, and
         // publishing then is undefined behaviour. (The main queue keeps the
         // open/close order.)
-        DispatchQueue.main.async { PiPController.shared.playerOpened() }
+        DispatchQueue.main.async { PiPController.shared.playerOpened(); self.refreshNext() }
         if let warm = Warmup.shared.take(request) {
             adopt(warm)
             Task { self.switchedOff = await ServerSwitches.shared.disabledServers() }
@@ -150,6 +150,7 @@ final class PlayerModel: ObservableObject {
             Task {
                 let details: TMDBDetails? = try? await TMDB.shared.get("tv/\(tmdbId)")
                 self.request.seasons = (details?.seasons ?? []).filter { $0.seasonNumber > 0 }
+                self.refreshNext()
             }
         }
     }
@@ -186,9 +187,20 @@ final class PlayerModel: ObservableObject {
         racingNames = ""
         Task {
             async let off = ServerSwitches.shared.disabledServers()
+            // An episode saved by its place in the season (40) where TMDB numbers
+            // from the series' start (1128): the real number, before any server loads.
+            var expectedKey = StreamRace.key(for: planned)
+            if let season = planned.season, let episode = planned.episode, let tmdbId = planned.title.tmdbId {
+                let real = await EpisodeOrder.real(tmdbId: tmdbId, season: season, episode: episode)
+                if real != episode, StreamRace.key(for: planned) == StreamRace.key(for: self.request) {
+                    self.request.episode = real
+                    expectedKey = StreamRace.key(for: self.request)
+                    self.refreshNext()
+                }
+            }
             let servers = await ServerPlan.servers(for: planned.title, originalLanguage: planned.title.originalLanguage)
             self.switchedOff = await off
-            guard StreamRace.key(for: planned) == StreamRace.key(for: self.request) else { return }
+            guard expectedKey == StreamRace.key(for: self.request) else { return }
             self.startRace(servers.isEmpty ? StreamServer.all : servers)
         }
     }
@@ -783,6 +795,7 @@ final class PlayerModel: ObservableObject {
         request.season = season
         request.episode = episode
         request.startAt = nil
+        refreshNext()
         upNextCountdown = nil
         upNextClock.reset()
         openedAt = Date()
@@ -1129,9 +1142,19 @@ final class PlayerModel: ObservableObject {
 
     // MARK: Up Next
 
-    var nextEpisode: (season: Int, episode: Int)? {
-        guard isEpisode, let s = request.season, let e = request.episode else { return nil }
-        return EpisodeOrder.next(season: s, episode: e, seasons: request.seasons)
+    // The episode after this one, from the season's own list (EpisodeOrder):
+    // worked out when the episode or the season list changes.
+    @Published private(set) var nextEpisode: (season: Int, episode: Int)?
+
+    private func refreshNext() {
+        nextEpisode = nil
+        let req = request
+        guard isEpisode, let s = req.season, let e = req.episode, let tmdbId = req.title.tmdbId else { return }
+        Task {
+            let next = await EpisodeOrder.next(tmdbId: tmdbId, season: s, episode: e, seasons: req.seasons)
+            guard StreamRace.key(for: req) == StreamRace.key(for: self.request), req.seasons.count == self.request.seasons.count else { return }
+            self.nextEpisode = next
+        }
     }
 
     private var upNextClock = UpNextCountdown()
@@ -1355,13 +1378,47 @@ struct UpNextCountdown {
     }
 }
 
+// TMDB numbers some shows' episodes from the start of the series, not the
+// season: One Piece's season 22 is episodes 1089–1155, and the servers take
+// those numbers ("season 22, episode 40" played an episode from 1999). The next
+// episode and a season's first come from the season's own list, never "+1" /
+// "1"; a number that isn't in its season but fits its place (the 40th) is read
+// as that place. Same rule as the website's realEpisodeNumber and Fire TV's
+// EpisodeNumbers.
 enum EpisodeOrder {
-    // The episode after this one: the next in the season, else the next
-    // season's first (if it has episodes).
+    static func numbers(tmdbId: Int, season: Int) async -> [Int] {
+        let result: TMDBSeason? = try? await TMDB.shared.get("tv/\(tmdbId)/season/\(season)")
+        return result?.episodes.map(\.episodeNumber) ?? []
+    }
+
+    // Only a season numbered from the series' start (its first number past its
+    // own length) is read by place.
+    static func real(_ numbers: [Int], _ episode: Int) -> Int {
+        guard let first = numbers.first, !numbers.contains(episode), first > numbers.count,
+              episode >= 1, episode <= numbers.count else { return episode }
+        return numbers[episode - 1]
+    }
+
+    static func real(tmdbId: Int, season: Int, episode: Int) async -> Int {
+        real(await numbers(tmdbId: tmdbId, season: season), episode)
+    }
+
+    // Without the season's list (TMDB unreachable): by the episode counts.
     static func next(season: Int, episode: Int, seasons: [TMDBDetails.Season]) -> (season: Int, episode: Int)? {
         if let count = seasons.first(where: { $0.seasonNumber == season })?.episodeCount, episode < count { return (season, episode + 1) }
         if seasons.contains(where: { $0.seasonNumber == season + 1 && ($0.episodeCount ?? 0) > 0 }) { return (season + 1, 1) }
         return nil
+    }
+
+    // The episode after this one: the next in the season's list, else the next
+    // season's first (if it has episodes).
+    static func next(tmdbId: Int, season: Int, episode: Int, seasons: [TMDBDetails.Season]) async -> (season: Int, episode: Int)? {
+        let list = await numbers(tmdbId: tmdbId, season: season)
+        guard !list.isEmpty else { return next(season: season, episode: episode, seasons: seasons) }
+        let current = real(list, episode)
+        if let following = list.first(where: { $0 > current }) { return (season, following) }
+        guard let following = seasons.filter({ $0.seasonNumber > season && ($0.episodeCount ?? 0) > 0 }).min(by: { $0.seasonNumber < $1.seasonNumber }) else { return nil }
+        return (following.seasonNumber, await numbers(tmdbId: tmdbId, season: following.seasonNumber).first ?? 1)
     }
 }
 

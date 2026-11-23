@@ -4,6 +4,7 @@ import { useSeasonEpisodes } from '../../hooks/useTitleDetails';
 import { haptic } from '../../utils/haptics';
 import { markEpisodeWatched } from '../../utils/supabaseData';
 import { reportCredits } from '../../utils/episodeMarkers';
+import { followingInSeason, realEpisodeNumber } from '../../utils/episodeMarking';
 import { UP_NEXT_COUNTDOWN, UP_NEXT_SECONDS, prefersLowBandwidth } from '../../utils/embedProviders';
 
 // Up Next / binge mode. Near the end of an episode (last UP_NEXT_SECONDS,
@@ -19,12 +20,30 @@ export default function useUpNext({
   // "Still watching?" and waits (as on the TVs).
   const autoAdvancesRef = useRef(0);
   const currentSeasonEpisodes = isTV ? seasonEpisodeCounts[season] : null;
+  // The next episode comes from the season's own list (see realEpisodeNumber:
+  // some shows number from the series' start); the counts are only a fallback
+  // when the list can't be had.
+  const seasonList = useSeasonEpisodes(isTV ? tmdbId : null, season);
+  const inSeason = seasonList?.length ? followingInSeason(seasonList, episode) : null;
+  const nextSeasonNumber = isTV && season < totalSeasons ? season + 1 : null;
+  const firstOfNext = useSeasonEpisodes(isTV && seasonList && !inSeason && nextSeasonNumber ? tmdbId : null, nextSeasonNumber);
   const nextEpisode = useMemo(() => {
     if (!isTV) return null;
-    if (currentSeasonEpisodes && episode < currentSeasonEpisodes) return { season, episode: episode + 1 };
-    if (season < totalSeasons) return { season: season + 1, episode: 1 };
+    if (seasonList?.length) {
+      if (inSeason) return { season, episode: inSeason };
+    } else if (currentSeasonEpisodes && episode < currentSeasonEpisodes) {
+      return { season, episode: episode + 1 };
+    }
+    if (nextSeasonNumber) return { season: nextSeasonNumber, episode: firstOfNext?.[0]?.number ?? 1 };
     return null;
-  }, [isTV, currentSeasonEpisodes, episode, season, totalSeasons]);
+  }, [isTV, seasonList, inSeason, currentSeasonEpisodes, episode, season, nextSeasonNumber, firstOfNext]);
+  // An episode saved by its place in the season (40) where the season is
+  // numbered from the series' start (1128): switch to the real number.
+  useEffect(() => {
+    if (!seasonList?.length) return;
+    const real = realEpisodeNumber(seasonList, episode);
+    if (real !== episode) setEpisode(real);
+  }, [seasonList, episode, setEpisode]);
   const nextSeasonEpisodes = useSeasonEpisodes(isTV && nextEpisode ? tmdbId : null, nextEpisode?.season);
   const nextInfo = nextEpisode && nextSeasonEpisodes?.find((ep) => ep.number === nextEpisode.episode);
   const [upNext, setUpNext] = useState(null); // { secondsLeft }

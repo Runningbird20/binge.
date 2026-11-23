@@ -105,7 +105,8 @@ beforeEach(() => {
   streamPreferences.submitStreamReport.mockResolvedValue();
   reachabilityMap.mockResolvedValue({});
   fetchTmdbLanguageInfo.mockResolvedValue(null);
-  useSeasonEpisodes.mockReturnValue([{ number: 2, title: 'The Next One', still: null }]);
+  // A season as TMDB lists it: episodes 1–10 (the second is the one Up Next names).
+  useSeasonEpisodes.mockReturnValue(Array.from({ length: 10 }, (_, i) => ({ number: i + 1, title: i === 1 ? 'The Next One' : `Episode ${i + 1}`, still: null })));
   episodeMarkers.fetchEpisodeMarkers.mockResolvedValue({});
   expectedRuntimeSeconds.mockResolvedValue(null);
 });

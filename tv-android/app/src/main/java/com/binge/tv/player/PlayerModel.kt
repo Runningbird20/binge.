@@ -148,6 +148,8 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     val subtitlesShowing get() = usingExternalSubtitles || textTracks.any { it.on }
     val usingExternalSubtitles get() = useExternal && external != null
 
+    // The episode after this one (refreshNext, below).
+    var nextEpisode by mutableStateOf<Pair<Int, Int>?>(null); private set
     // Declared before init: Kotlin sets properties in file order, so anything
     // the start-up code (or its first tick) touches must come first.
     private var tickerStarted = false
@@ -171,6 +173,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
         // before the properties declared below this block were set up, and a
         // warm stream that was already playing crashed it (aheadSamples was null).
         handler.post(::loop)
+        refreshNext()
         AppModel.scope.launch { originalLanguage = OriginalLanguage.of(request.title) }
         loadMarkers()
         loadExternalSubtitles()
@@ -179,6 +182,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
             AppModel.scope.launch {
                 val details = runCatching { Tmdb.get<TmdbDetails>("tv/$tmdbId") }.getOrNull()
                 request = request.copy(seasons = details?.seasons.orEmpty().filter { it.seasonNumber > 0 })
+                refreshNext()
             }
         }
     }
@@ -196,9 +200,20 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
         val planned = request
         racingNames = ""
         AppModel.scope.launch {
+            // An episode saved by its place in the season (40) where TMDB numbers
+            // from the series' start (1128): the real number, before any server loads.
+            val season = planned.season; val episode = planned.episode; val tmdbId = planned.title.tmdbId
+            if (season != null && episode != null && tmdbId != null) {
+                val real = com.binge.tv.data.EpisodeNumbers.real(tmdbId, season, episode)
+                if (real != episode && planned.key == request.key) {
+                    Perf.mark("episode $episode of season $season is numbered $real")
+                    request = request.copy(episode = real)
+                    refreshNext()
+                }
+            }
             val list = ServerPlan.servers(planned.title, planned.title.originalLanguage)
             Perf.mark("server plan ${list.joinToString { it.name }}")
-            if (planned.key != request.key || closed) return@launch
+            if (closed || (planned.copy(episode = request.episode).key != request.key)) return@launch
             startRace(list.ifEmpty { StreamServer.all })
         }
     }
@@ -614,6 +629,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
         autoAdvances = if (automatic) autoAdvances + 1 else 0
         skippedIntro = false; markedWatched = false; showSkipIntro = false; subsNoticeShown = false
         request = request.copy(season = season, episode = episode, startAt = null)
+        refreshNext()
         dropSwitch()
         upNextCountdown = null
         openedAt = now(); recoveries = 0; handPicked = false; raced.clear()
@@ -794,16 +810,20 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
 
     // MARK: Up Next
 
-    val nextEpisode: Pair<Int, Int>?
-        get() {
-            if (!isEpisode) return null
-            val s = request.season ?: return null
-            val e = request.episode ?: return null
-            val count = request.seasons.firstOrNull { it.seasonNumber == s }?.episodeCount
-            if (count != null && e < count) return s to e + 1
-            if (request.seasons.any { it.seasonNumber == s + 1 && (it.episodeCount ?: 0) > 0 }) return s + 1 to 1
-            return null
+    // The episode after this one, from the season's own list (EpisodeNumbers):
+    // worked out when the episode or the season list changes.
+    private fun refreshNext() {
+        val req = request
+        nextEpisode = null
+        val s = req.season ?: return
+        val e = req.episode ?: return
+        val tmdbId = req.title.tmdbId ?: return
+        if (!isEpisode) return
+        AppModel.scope.launch {
+            val next = com.binge.tv.data.EpisodeNumbers.next(tmdbId, s, e, req.seasons)
+            if (req.key == request.key && req.seasons == request.seasons) nextEpisode = next?.let { it.season to it.episode }
         }
+    }
 
 
     private fun handleUpNext(state: MediaState) {

@@ -1,4 +1,4 @@
-import { episodeKey, episodesUpTo, isAfter, lastOf, nextEpisode, seasonEpisodes, unwatchedOnly } from './episodeMarking';
+import { episodeKey, episodesUpTo, followingInSeason, isAfter, lastOf, nextEpisode, realEpisodeNumber, seasonEpisodes, unwatchedOnly } from './episodeMarking';
 
 const NOW = new Date('2026-11-04T12:00:00Z');
 const seasons = [
@@ -42,4 +42,27 @@ test('ordering: later episodes, and the latest of a list', () => {
   expect(isAfter({ season: 1, episode: 2 }, { season: 1, episode: 2 })).toBe(false);
   expect(isAfter({ season: 1, episode: 1 }, null)).toBe(true);
   expect(lastOf([{ season: 1, episode: 3 }, { season: 2, episode: 1 }, { season: 1, episode: 9 }])).toEqual({ season: 2, episode: 1 });
+});
+
+describe('shows numbered from the series start (One Piece)', () => {
+  const season22 = [1089, 1090, 1091, 1128, 1129].map((number) => ({ number }));
+
+  test('a real number stays as it is', () => {
+    expect(realEpisodeNumber(season22, 1128)).toBe(1128);
+  });
+
+  test('a place in the season becomes its real number', () => {
+    expect(realEpisodeNumber(season22, 1)).toBe(1089);
+    expect(realEpisodeNumber(season22, 4)).toBe(1128);
+  });
+
+  test('a normal season keeps its numbers', () => {
+    expect(realEpisodeNumber([1, 2, 3].map((number) => ({ number })), 2)).toBe(2);
+  });
+
+  test('the next episode comes from the list, not +1', () => {
+    expect(followingInSeason(season22, 1091)).toBe(1128);
+    expect(followingInSeason(season22, 4)).toBe(1129);
+    expect(followingInSeason(season22, 1129)).toBeNull();
+  });
 });
