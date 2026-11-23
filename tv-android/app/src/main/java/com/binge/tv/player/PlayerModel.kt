@@ -889,7 +889,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     private fun startBackup() {
         val current = server
         val others = servers.filter { it != current && it.id !in (race?.rejected ?: emptySet()) }
-        if (others.isEmpty() || WebEngine.live + NativeEngine.live >= 3) return
+        if (others.isEmpty() || WebEngine.live + NativeEngine.live >= 3 || MemoryGuard.tight()) return
         val held = request.copy(startAt = playback.t + 2)
         val next = StreamRace(context, held, others.take(1), StreamRace.Mode.WARM)
         next.expectedDuration = expected

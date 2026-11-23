@@ -309,6 +309,8 @@ object Warmup {
     fun park(next: StreamRace) {
         dropParked()
         val host = host ?: run { next.stop(); return }
+        // Its buffered video stays in memory for minutes: not on a TV that's short.
+        if (MemoryGuard.tight()) { next.stop(); return }
         next.park()
         (next.container.parent as? ViewGroup)?.removeView(next.container)
         host.addView(next.container, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -330,6 +332,9 @@ object Warmup {
         if (request.title.tmdbId == null && !request.isLive) return
         // Optional work: skip when several video pages are already open.
         if (race == null && WebEngine.live + NativeEngine.live >= 3) return
+        // The next episode, preloaded while a video plays, is a whole extra page
+        // on top of the one playing: not when the TV is short of memory.
+        if (fromPlayer && MemoryGuard.tight()) return
         val key = request.key
         if (race?.key == key || pendingKey == key || parked?.key == key) return
         cancel()

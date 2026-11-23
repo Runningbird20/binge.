@@ -59,6 +59,8 @@ Native Kotlin + Compose for TV (`androidx.tv:tv-material`), a port of the Apple 
 - **Sports feeds:** PPV and StreamFree. Streamed closed (November 2026) and isn't fetched. StreamFree's segments come from a TikTok image CDN as MPEG-TS behind a 64-byte PNG header; ExoPlayer's TS extractor finds the packets past it (checked on the stick, 1080p).
 - **Low memory.**
   - **Images.** The Coil memory cache is 8%, cleared on `onTrimMemory`.
+  - **Extras stand down when memory is short** (`MemoryGuard.tight()`: under ~300 MB available, or the system's low-memory flag). That covers what adds a page or a held stream while a video plays: the backup stream, the next-episode preload and instant resume (`Warmup.park`). On 2026-11-22 the stick ran out mid-film (binge. ~235 MB with its web view), Amazon's media services were killed, and the TV's HDMI sound stayed off on every input until the TV itself restarted. Browsing preloads are left alone: skipping them measured worse (the film then played in the server's page, ~150 MB, not natively, ~80 MB).
+  - **Measured (2026-11-23).** Releasing the pictures of the pages under the player made no measurable difference: graphics memory at playback is the server pages and video surfaces (65–260 MB, by which server and engine won), not artwork.
   - **Lighter effects.** `Performance.light` ("Lighter effects" in Settings; on by default when the device is low-RAM/<2.5 GB) turns off focus zoom and makes ambient mode default off.
   - **Home snapshot.** Home opens on its last snapshot (`HomeSnapshot`, per profile and maturity level, ≤ 7 days, deleted on sign-out).
 

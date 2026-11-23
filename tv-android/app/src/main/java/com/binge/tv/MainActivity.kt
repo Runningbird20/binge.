@@ -36,6 +36,7 @@ class BingeApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         Prefs.init(this)
         Performance.init(this)
+        com.binge.tv.player.MemoryGuard.init(this)
         HomeSnapshot.init(this)
         Supabase.init(this)
         com.binge.tv.data.CrashReporter.install(this)
