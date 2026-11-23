@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.binge.tv.data.Surprise
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Movie
@@ -386,8 +388,16 @@ private fun Int.sp() = androidx.compose.ui.unit.TextUnit(this.toFloat(), android
 fun ActionSheet(heading: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         val focus = androidx.compose.ui.platform.LocalFocusManager.current
+        // Opened by holding OK: that OK is still down (and repeating) when the
+        // sheet appears, and letting go pressed its first action (Resume).
+        // OK only counts once it's pressed again here.
+        var armed by remember { mutableStateOf(false) }
         Column(
-            Modifier.background(Palette.raised, androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).padding(22.dp).widthIn(min = 260.dp),
+            Modifier.onPreviewKeyEvent { event ->
+                val ok = event.nativeKeyEvent.keyCode.let { it == android.view.KeyEvent.KEYCODE_DPAD_CENTER || it == android.view.KeyEvent.KEYCODE_ENTER || it == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER }
+                if (ok && event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) armed = true
+                ok && !armed
+            }.background(Palette.raised, androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).padding(22.dp).widthIn(min = 260.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(heading, style = Type.section, maxLines = 2, overflow = TextOverflow.Ellipsis)

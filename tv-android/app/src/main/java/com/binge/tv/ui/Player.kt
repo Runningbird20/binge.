@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -348,6 +349,13 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
     var from by remember { mutableStateOf(Pane.MENU) }
     var episodes by remember { mutableStateOf<List<TmdbSeason.Episode>>(emptyList()) }
     val firstFocus = remember { FocusRequester() }
+    val firstEpisode = remember { FocusRequester() }
+    // The episode playing, by number, else by its place in the season: some
+    // shows number episodes from the start of the series (One Piece's season 22
+    // starts at 1089) while the request counts within the season.
+    val playingIndex = model.request.episode?.let { ep ->
+        episodes.indexOfFirst { it.episodeNumber == ep }.takeIf { it >= 0 } ?: (ep - 1).takeIf { it in episodes.indices }
+    } ?: -1
     LaunchedEffect(model.request.season) {
         val id = model.request.title.tmdbId
         if (model.isEpisode && id != null) episodes = runCatching { Tmdb.get<TmdbSeason>("tv/$id/season/${model.request.season ?: 1}") }.getOrNull()?.episodes.orEmpty()
@@ -356,9 +364,32 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
     // If the pane has no selected item to land on, its first item: focus must
     // never leave the sidebar (OK then opened whatever was behind the player).
     val paneFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // Each list starts at its own top (a long one scrolled the next).
+    val listState = remember(pane) { androidx.compose.foundation.lazy.LazyListState() }
     LaunchedEffect(pane) {
+        // The episode playing can be far down a long season: a lazy list hasn't
+        // built it yet, so focusing it failed and focus went nowhere (the list
+        // looked stuck). Scroll it into the list first.
+        if (pane == Pane.EPISODES && playingIndex > 0) runCatching { listState.scrollToItem(playingIndex) }
         kotlinx.coroutines.delay(40)
-        if (runCatching { firstFocus.requestFocus() }.isFailure) runCatching { paneFocus.requestFocus() }
+        // The item to land on may be further down than the list has built (the
+        // menu's Playback info row, coming back from it, sits below the fold):
+        // its focus request fails and focus went nowhere, so the remote did
+        // nothing. Page down until it's built, then fall back to the first item.
+        for (attempt in 0 until 12) {
+            if (runCatching { firstFocus.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
+            val info = listState.layoutInfo
+            val next = (listState.firstVisibleItemIndex + maxOf(1, info.visibleItemsInfo.size - 1)).coerceAtMost(info.totalItemsCount - 1)
+            if (next <= listState.firstVisibleItemIndex) break
+            runCatching { listState.scrollToItem(next) }
+            kotlinx.coroutines.delay(30)
+        }
+        if (pane == Pane.EPISODES) { runCatching { listState.scrollToItem(0) }; kotlinx.coroutines.delay(30); if (runCatching { firstEpisode.requestFocus() }.getOrDefault(false)) return@LaunchedEffect }
+        runCatching { listState.scrollToItem(0) }
+        kotlinx.coroutines.delay(30)
+        runCatching { paneFocus.requestFocus() }
+        focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Enter)
     }
     androidx.activity.compose.BackHandler { if (pane == Pane.MENU) close() else { from = pane; pane = Pane.MENU } }
     fun open(next: Pane) { from = Pane.MENU; pane = next }
@@ -382,7 +413,7 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 22.dp))
             if (pane != Pane.MENU) Text("Back to return", style = Type.caption, color = Palette.muted, modifier = Modifier.padding(horizontal = 22.dp))
             Spacer(Modifier.height(12.dp))
-            LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().weight(1f), state = listState, contentPadding = PaddingValues(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 when (pane) {
                     Pane.MENU -> {
                         val rows = buildList {
@@ -487,9 +518,10 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                         item { Note(model.playbackDiagnosis) }
                         item { SideItem("Done", modifier = Modifier.focusRequester(firstFocus)) { open(Pane.MENU) } }
                     }
-                    Pane.EPISODES -> items(episodes, key = { it.id }) { episode ->
-                        val current = episode.episodeNumber == model.request.episode
-                        EpisodeItem(episode, current, if (current) Modifier.focusRequester(firstFocus) else Modifier) { model.play(episode.seasonNumber, episode.episodeNumber); close() }
+                    Pane.EPISODES -> itemsIndexed(episodes, key = { _, it -> it.id }) { index, episode ->
+                        val current = index == playingIndex
+                        val focus = when { current -> Modifier.focusRequester(firstFocus); index == 0 -> Modifier.focusRequester(firstEpisode); else -> Modifier }
+                        EpisodeItem(episode, current, focus) { model.play(episode.seasonNumber, episode.episodeNumber); close() }
                     }
                 }
             }
