@@ -1,6 +1,7 @@
 // Sends binge.'s own emails (account requests and approvals,
-// routes/invites.js; email alerts, routes/cron.js) over SMTP. Supabase Auth only sends its auth emails
-// (confirm, reset), so anything else needs a sender of our own.
+// routes/invites.js; password resets, routes/passwordReset.js; email alerts,
+// routes/cron.js) over SMTP. Supabase's built-in sender only reaches the
+// Supabase team's addresses, so anything for everyone needs a sender of our own.
 //
 // Configure with SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM, for
 // example a Gmail account with an app password (docs/invite-only.md). Without

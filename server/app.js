@@ -80,6 +80,7 @@ app.use('/api/admin/account-requests', require('./routes/invites').adminRouter);
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/account', require('./routes/account'));
 app.use('/api/account', require('./routes/invites').publicRouter);
+app.use('/api/account', require('./routes/passwordReset'));
 app.use('/api/cron', require('./routes/cron'));
 app.use('/api/extras', require('./routes/extras'));
 app.use('/api/og', require('./routes/og'));

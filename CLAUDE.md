@@ -140,7 +140,7 @@ Whether the **frontend** may fall through to Express is gated by `REACT_APP_ENAB
   - Approving emails a 14-day invite, `/signup?invite=…`, which opens the regular sign-up form for that address. The **server creates the account** (`POST /api/account/signup`, service role, email confirmed) and the page signs in; an uploaded avatar is saved after that, as before.
   - **Public sign-ups are off in Supabase** (Authentication → "Allow new users to sign up"), so `supabase.auth.signUp` from the browser no longer works. That also closes the hole where a raw sign-up could set `is_admin` metadata, which `handle_auth_user_changed` trusts. Admin → Users → New user goes through `POST /api/admin/users`.
   - **Email** is SMTP (`server/mailer.js`, `SMTP_*`). Without it nothing is sent: requests still list in Admin → Requests, and approving returns the invite link to pass on. Links use `SITE_URL` / Vercel's production domain, never the request's Origin.
-- **Password reset.** `/forgot-password` → email → `/reset-password` (`docs/password-reset.md`; the redirect URLs must be listed in Supabase).
+- **Password reset** (`docs/password-reset.md`). `/forgot-password` → `POST /api/account/password-reset` (`server/routes/passwordReset.js`): the service role makes the recovery token (`auth.admin.generateLink`, nothing sent) and `server/mailer.js` emails `/reset-password?token_hash=…&type=recovery`, which signs in with `verifyOtp`. Supabase's own sender only reaches the Supabase team's addresses. Same answer whether or not the account exists; one email a minute per account (`recovery_sent_at`). Without SMTP or the service role the route says `{ fallback: true }` and the page uses Supabase's `resetPasswordForEmail`, whose redirect URL must be listed in Supabase.
 - `src/contexts/AuthContext.js` wraps Supabase auth-state changes. It exposes `user` (with `isAdmin`/`isDev` resolved via `src/utils/userAccess.js`), `signIn`, `signUp`, `logout`, etc.
 - `src/components/ProtectedRoute.js` gates routes, and `allowedUserTypes` restricts them by role (see `/admin` in `src/App.js`).
 
@@ -681,7 +681,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
     - `OMDB_API_KEY` — outside ratings;
     - `GROQ_API_KEY` — Ask binge.;
     - `OPENSUBTITLES_API_KEY` (+ optional `OPENSUBTITLES_USERNAME` / `PASSWORD`) — TV subtitles.
-  - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails, and email alerts), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
+  - **Invite-only accounts:** `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` (the request and approval emails, password resets and email alerts), `ACCOUNT_REQUESTS_TO` (who gets requests; else every admin), `SITE_URL` (links in them; on Vercel the production domain by default).
   - **Optional:** `FANTASY_CREDENTIALS_KEY` (else derived from the service-role key), `ALERT_WEBHOOK_URL`, `CLIENT_URL` (extra CORS origins), `CATALOG_DEBUG=plan`.
   - **Admin → Databases (optional):**
     - `TURSO_PLATFORM_TOKEN` and `TURSO_ORG`: this month's rows read/written and the real plan. The token is a Turso Platform API token from `turso auth api-tokens mint`, not the database token.

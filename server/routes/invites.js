@@ -321,4 +321,4 @@ const adminRouter = express.Router();
 adminRouter.get('/', adminOnly((req, res) => handlers.adminList(req, res)));
 adminRouter.post('/:id/decide', adminOnly((req, res) => handlers.adminDecide(req, res)));
 
-module.exports = { publicRouter, adminRouter, createInviteHandlers, supabaseStore, hash };
+module.exports = { publicRouter, adminRouter, createInviteHandlers, supabaseStore, hash, createLimiter, clientIp };

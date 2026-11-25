@@ -13,7 +13,6 @@ Ideas for binge., roughly in priority order within each section. Each item names
 ## Accounts, email and operations
 
 - [ ] **Invites that stay out of spam.** If invites from the live site still land in spam, give the site its own domain and send from it through an email service instead of Gmail: `server/mailer.js`, `SITE_URL`, `docs/invite-only.md`.
-- [ ] **Password-reset emails for everyone.** Supabase's built-in sender only reaches the Supabase team's addresses. Set the same SMTP under Authentication → Emails → SMTP Settings (`docs/password-reset.md`).
 - [ ] **Alerts before a database fills up.**
   - Run `databaseReport` (`server/utils/databaseHealth.js`) from the daily cron, and push the admins (`notifyAdmins` in `server/routes/cron.js`) when Supabase or Turso passes 80% of its plan.
   - Set `TURSO_PLATFORM_TOKEN` and `TURSO_ORG` to add Turso's monthly reads and writes.

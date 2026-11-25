@@ -1,6 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../api';
 import { requireSupabaseClient } from '../utils/supabase';
+
+const INVALID_LINK = 'This reset link is invalid or expired. Request a new one.';
+
+// binge. emails the link itself, over its own SMTP (server/routes/passwordReset.js):
+// Supabase's built-in sender only reaches the Supabase team's addresses. A server
+// without SMTP answers { fallback: true }, and Supabase sends its own email.
+async function sendResetLink(client, email) {
+  const result = await api.post('/account/password-reset', { email });
+  if (!result?.fallback) return;
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) throw error;
+}
+
+// binge.'s emails link to /reset-password?token_hash=…&type=recovery. The token
+// works once, and React runs the effect twice in development, so each link is
+// verified once and the answer shared.
+let recoveryCheck = null;
+function verifyRecoveryLink(client, tokenHash) {
+  if (recoveryCheck?.tokenHash !== tokenHash) {
+    recoveryCheck = { tokenHash, result: client.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }) };
+  }
+  return recoveryCheck.result;
+}
 
 export default function PasswordReset({ recovery = false }) {
   const [email, setEmail] = useState('');
@@ -16,17 +42,21 @@ export default function PasswordReset({ recovery = false }) {
     let active = true;
     async function checkSession() {
       try {
-        // getSession waits for the SDK to process the email link's tokens.
         const client = requireSupabaseClient();
         const params = new URLSearchParams(window.location.hash.slice(1));
         const query = new URLSearchParams(window.location.search);
-        if (params.has('error') || query.has('error')) {
-          throw new Error('This reset link is invalid or expired. Request a new one.');
+        if (params.has('error') || query.has('error')) throw new Error(INVALID_LINK);
+        const tokenHash = query.get('type') === 'recovery' ? query.get('token_hash') : null;
+        if (tokenHash) {
+          const { error: verifyError } = await verifyRecoveryLink(client, tokenHash);
+          if (verifyError) throw new Error(INVALID_LINK);
+          // Spent now; a reload keeps the session, so the address needn't carry it.
+          window.history.replaceState(window.history.state, '', window.location.pathname);
         }
+        // Supabase's own emails sign in through the address instead; getSession
+        // waits for the SDK to process those tokens.
         const { data, error: sessionError } = await client.auth.getSession();
-        if (sessionError || !data?.session) {
-          throw new Error('This reset link is invalid or expired. Request a new one.');
-        }
+        if (sessionError || !data?.session) throw new Error(INVALID_LINK);
         if (active) setReady(true);
       } catch (err) {
         if (active) setError(err.message);
@@ -50,10 +80,7 @@ export default function PasswordReset({ recovery = false }) {
         const { error: updateError } = await client.auth.updateUser({ password });
         if (updateError) throw updateError;
       } else {
-        const { error: resetError } = await client.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password`,
-        });
-        if (resetError) throw resetError;
+        await sendResetLink(client, email.trim());
       }
       setPassword('');
       setConfirmation('');

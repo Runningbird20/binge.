@@ -36,7 +36,7 @@ Code: `server/routes/invites.js` (+ `invites.test.js`), `server/mailer.js`, `src
    - Have recipients mark the first one "Not spam".
    - If invites still land in spam, the lasting fix is a domain of your own for the site and for sending email.
 3. **Deploy**, then **turn off public sign-ups** in Supabase: Authentication → Sign In / Providers → turn off **Allow new users to sign up**. The server's service role can still create accounts. Until this is off, someone could still call Supabase's sign-up directly.
-4. **Optional:** use the same SMTP for Supabase's own emails (Authentication → Emails → SMTP Settings). Supabase's built-in sender only delivers to your Supabase team's addresses, so password-reset emails need it to reach everyone else.
+4. **Password resets** go out over this same SMTP too (`docs/password-reset.md`), so nothing needs setting in Supabase for them. Supabase's built-in sender, which only delivers to your Supabase team's addresses, is still what sends its other emails, such as the confirmation when someone changes their email in Account Settings. To reach everyone with those, set the same SMTP in Supabase (Authentication → Emails → SMTP Settings).
 
 ## Admin-made accounts
 
