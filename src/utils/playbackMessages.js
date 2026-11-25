@@ -17,6 +17,14 @@ export function readPlayback(raw) {
     if (data.event === 'ended') reading.state = 'ended';
     return reading;
   }
+  // AniXo (JW Player): { source: 'jwplayer', event, currentTime, duration }.
+  if (data.source === 'jwplayer') {
+    if (data.event === 'timeupdate') return { time: Number(data.currentTime), duration: Number(data.duration) };
+    if (data.event === 'play') return { state: 'play' };
+    if (data.event === 'pause') return { state: 'pause' };
+    if (data.event === 'ended') return { state: 'ended' };
+    return null;
+  }
   const type = data.type || '';
   if (type.startsWith('vidrift:')) {
     if (type === 'vidrift:progress') return { time: Number(data.currentTime), duration: Number(data.duration) };

@@ -18,6 +18,7 @@ object DebugLaunch {
     var logAll = false
     // --es collections <url>: a collections list not yet deployed; --es collection <id>: open that set.
     var collectionsUrl: String? = null
+    var animeMapUrl: String? = null
     var collection: String? = null
 
     fun read(intent: Intent?) {
@@ -33,6 +34,7 @@ object DebugLaunch {
         profile = intent.getStringExtra("profile")
         logAll = intent.getBooleanExtra("logall", false)
         collectionsUrl = intent.getStringExtra("collections")
+        animeMapUrl = intent.getStringExtra("animeMap")
         collection = intent.getStringExtra("collection")
     }
 }

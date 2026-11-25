@@ -66,6 +66,36 @@ export const SANDBOX_FLAGS = 'allow-scripts allow-same-origin allow-forms allow-
 
 export const EMBED_SERVERS = [
   {
+    // Anime only (`anime: true`): https://anixo.live's player, embedded as
+    // anixo.buzz/embed/ani/{anilistId}/{episode}/{sub|dub} (its embed-sdk.js).
+    // Offered only for titles in public/anime-map.json, which turns the TMDB
+    // episode into the AniList one (utils/animeMap.js); buildUrl gets it as
+    // `anime`, and `animeTrack` picks sub or dub. Tested 2026-11-25 in Chrome
+    // on a non-provider origin: Frieren 1 sub and dub played (720p-1080p),
+    // no pop-ups. It refuses the sandbox ("sandbox_blocked"). Posts
+    // { source: 'jwplayer', event: 'timeupdate', currentTime, duration } once
+    // a second, and play/pause/ended; takes t= (seconds) to start at. It
+    // relays megaplay.buzz / anikototv and has no hard-sub version ("hsub"
+    // plays the soft-sub stream). ani.pm (sub, dub and hard sub) was left out
+    // by decision: it opens an ad tab on a click, at most every 5 minutes,
+    // and can't be sandboxed either.
+    id: 'anixo',
+    label: 'AniXo',
+    anime: true,
+    sandbox: false, // "sandbox_blocked"
+    events: true,
+    idKinds: ['tmdb', 'imdb'],
+    types: ['movie', 'tv_show'],
+    buildUrl(id, mediaType, season, episode, subtitleLang, { anime, animeTrack, startAt } = {}) {
+      if (!anime?.id) return null;
+      const url = new URL(`/embed/ani/${anime.id}/${anime.episode || 1}/${animeTrack === 'dub' ? 'dub' : 'sub'}`, 'https://anixo.buzz');
+      const host = typeof window !== 'undefined' && window.location ? window.location.hostname : 'binge-26.vercel.app';
+      url.searchParams.set('parentHost', host);
+      if (startAt > 0) url.searchParams.set('t', String(Math.floor(startAt)));
+      return url.toString();
+    },
+  },
+  {
     // https://vidrift.net/docs — TMDB ids only; posts vidrift:progress
     // (currentTime) every 5s while playing. Played every title tested,
     // including new K-drama episodes other servers lacked. 2026-11-16, in a

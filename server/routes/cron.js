@@ -277,7 +277,8 @@ function probeTargets() {
   if (!embedServers) embedServers = require('../../src/utils/embedServers');
   return embedServers.EMBED_SERVERS
     .filter((server) => server.types.includes('movie') && server.idKinds.includes('tmdb'))
-    .map((server) => [server.id, server.label, server.buildUrl({ kind: 'tmdb', value: String(PROBE_TMDB) }, 'movie', 1, 1, null, {})]);
+    // The anime server is probed with Frieren's first episode (AniList 154587).
+    .map((server) => [server.id, server.label, server.buildUrl({ kind: 'tmdb', value: String(PROBE_TMDB) }, 'movie', 1, 1, null, server.anime ? { anime: { id: 154587, episode: 1 } } : {})]);
 }
 const HEALTH_EVERY_MS = 15 * 60 * 1000;
 const UNAVAILABLE = /media is unavailable|video not found|not available in your|404 not found|bad gateway|service unavailable/i;

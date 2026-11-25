@@ -23,6 +23,7 @@ import useControlsAutoHide from './player/useControlsAutoHide';
 import UpNextCard from './player/UpNextCard';
 import { AutoSkipOffer, FailoverBar, PreloadFrame, SkipIntroButton } from './player/PlayerOverlays';
 import useAppBridge from './player/useAppBridge';
+import useAnimeMatch from './player/useAnimeMatch';
 import useVidriftCaptions from './player/useVidriftCaptions';
 import { foreignCaptionLang, subtitleFileUrl, titleTmdbId } from '../utils/foreignCaptions';
 import MobilePlayer from './player/MobilePlayer';
@@ -92,7 +93,9 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
   const currentEpisodeKey = `${season}:${episode}`;
   const canTrackEpisodes = Boolean(item?.id);
 
-  const serverChoice = useServerChoice({ item, mediaType, externalId, resetKey });
+  // Anime the anime server has: its AniList episode, and sub or dub.
+  const anime = useAnimeMatch({ item, mediaType, tmdbId, season });
+  const serverChoice = useServerChoice({ item, mediaType, externalId, resetKey, anime: anime.isAnime });
   const { provider, prefs } = serverChoice;
 
   // An episode change made inside the server's own player (VidRift's Next
@@ -126,7 +129,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
 
   const { seasonEpisodeCounts, totalSeasons, metadataWarning } = useEpisodeGuide({ item, isTV, tmdbId, season, resetKey });
   const { watched, setWatched, markingWatched, markWatched } = useWatchedEpisodes({ item, isTV, season, episode, resetKey });
-  const loadKey = `${provider}|${item?.id}|${frameSeason}|${frameEpisode}|${resumeNonce}`;
+  const loadKey = `${provider}|${item?.id}|${frameSeason}|${frameEpisode}|${resumeNonce}|${provider === 'anixo' ? anime.track : ''}`;
   if (frozenStartRef.current.key !== loadKey) {
     const pending = pendingStartRef.current;
     pendingStartRef.current = null;
@@ -198,7 +201,10 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
     ? subtitleFileUrl({ origin: window.location.origin, tmdbId: titleTmdbId(item), isTV, season: s, episode: e, lang: captionLang })
     : null);
   useVidriftCaptions({ iframeRef, active: provider === 'vidrift' && Boolean(captionLang), lang: captionLang, loadKey });
-  const embedUrl = buildUrl(provider, externalId, mediaType, frameSeason, frameEpisode, subtitleLang, { startAt, lowBandwidth: prefersLowBandwidth(), subtitleFile: captionFile(frameSeason, frameEpisode) });
+  const embedUrl = buildUrl(provider, externalId, mediaType, frameSeason, frameEpisode, subtitleLang, {
+    startAt, lowBandwidth: prefersLowBandwidth(), subtitleFile: captionFile(frameSeason, frameEpisode),
+    anime: anime.lookup(frameSeason, frameEpisode), animeTrack: anime.track,
+  });
 
   // TV remote: hand the remote to the video once it loads, so OK plays and
   // pauses; Back steps out to the player's controls (KeyboardShortcuts).
@@ -251,11 +257,20 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
     health: serverChoice.providerHealth,
     popupsBlockedNow: popups.sandboxed,
     appCaptions: bridge.captions,
+    // Sub or dub, on the anime server: switching saves the position first, so
+    // the other version starts where this one was.
+    animeTrack: provider === 'anixo' ? {
+      value: anime.track,
+      onChange: (next) => { if (next !== anime.track) { playback.saveNow(); anime.setTrack(next); } },
+    } : null,
   };
   // Silent preloads only where the server's autoplay can be switched off (see PreloadFrame).
   const silentPreload = Boolean(PROVIDERS.find((entry) => entry.id === provider)?.silentPreload);
   const preloadUrl = upNext.preloadNext && upNext.nextEpisode
-    ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang, { noAutoplay: silentPreload, subtitleFile: captionFile(upNext.nextEpisode.season, upNext.nextEpisode.episode) })
+    ? buildUrl(provider, externalId, mediaType, upNext.nextEpisode.season, upNext.nextEpisode.episode, subtitleLang, {
+      noAutoplay: silentPreload, subtitleFile: captionFile(upNext.nextEpisode.season, upNext.nextEpisode.episode),
+      anime: anime.lookup(upNext.nextEpisode.season, upNext.nextEpisode.episode), animeTrack: anime.track,
+    })
     : null;
   const overlays = asleep ? null : (
     <>
@@ -293,7 +308,7 @@ export default function EmbedPlayer({ item, mediaType, onClose, onBack = onClose
       sandbox: popups.sandbox, asleep: asleep && { ...asleep, onResume: wakeUp },
     },
     sleep: sleepTimer,
-    frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${frameSeason}-${frameEpisode}-${resumeNonce}-${popups.sandboxed ? 'sb' : 'open'}`,
+    frameKey: `${provider}-${externalId?.kind}-${externalId?.value}-${frameSeason}-${frameEpisode}-${resumeNonce}-${popups.sandboxed ? 'sb' : 'open'}-${provider === 'anixo' ? anime.track : ''}`,
     overlays, failoverBar, lookupState, lookupError, episodes,
     watchedNow: watched.has(currentEpisodeKey),
     canTrackEpisodes,

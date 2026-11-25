@@ -8,7 +8,7 @@ import { EVENT_PROVIDERS, PROVIDER_HOSTS, SERVER_CONFIRM_SECONDS, bestServerFor,
 // profile's audio/subtitle prefs, the title's original language, community
 // reports, server health and what worked here before. The player follows the
 // ranking until the viewer picks a server or one is confirmed working.
-export default function useServerChoice({ item, mediaType, externalId, resetKey }) {
+export default function useServerChoice({ item, mediaType, externalId, resetKey, anime = false }) {
   const [prefs] = useState(() => getPlaybackPrefs());
   const [provider, setProvider] = useState(() => bestServerFor(item, mediaType, getPlaybackPrefs()));
   const memoryType = mediaType === 'tv_show' ? 'tv_show' : 'movie';
@@ -47,15 +47,19 @@ export default function useServerChoice({ item, mediaType, externalId, resetKey 
     return () => { cancelled = true; };
   }, []);
   const availableIds = useMemo(() => {
-    const ids = providerIdsFor(mediaType, externalId);
+    const ids = providerIdsFor(mediaType, externalId, { anime });
     // Off-limits: blocked on this network, or switched off by an admin.
     const reachable = ids.filter((id) => !blockedIds.has(id) && !disabledIds.has(id));
     return reachable.length ? reachable : ids;
-  }, [mediaType, externalId, blockedIds, disabledIds]);
-  const rankedServers = useMemo(
-    () => rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory, health: providerHealth }),
-    [availableIds, prefs, originalLanguage, reportSummary, serverMemory, providerHealth]
-  );
+  }, [mediaType, externalId, blockedIds, disabledIds, anime]);
+  const rankedServers = useMemo(() => {
+    const ranking = rankServers(availableIds, { prefs, originalLanguage, summary: reportSummary, memory: serverMemory, health: providerHealth });
+    // Anime: the anime server (sub or dub by choice) leads, unless another
+    // server is the one that last worked for this title.
+    if (!anime || (serverMemory?.provider && serverMemory.provider !== 'anixo')) return ranking;
+    const animeServer = ranking.find((server) => server.id === 'anixo');
+    return animeServer ? [animeServer, ...ranking.filter((server) => server !== animeServer)] : ranking;
+  }, [availableIds, prefs, originalLanguage, reportSummary, serverMemory, providerHealth, anime]);
 
   // Original language: from the catalog row, else TMDB.
   useEffect(() => {

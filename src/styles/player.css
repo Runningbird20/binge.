@@ -594,6 +594,9 @@
 }
 
 .st-pb-outage svg { flex: none; margin-top: 2px; }
+/* Sub or dub on the anime server (AnimeVersion in PlaybackOptions.js). */
+.st-pb-version { margin: 0 0 0.9rem; }
+.st-pb-version-note { margin: 0.4rem 0 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.65); }
 
 /* ── Mobile: one-handed reach ─────────────────────────────────── */
 

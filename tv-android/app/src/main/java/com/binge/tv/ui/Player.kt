@@ -340,7 +340,7 @@ private fun LoadingCard(model: PlayerModel, modifier: Modifier) {
 // a level, then closes; focus can't wander out of the sidebar.
 private enum class Pane(val title: String) {
     MENU("Options"), AUDIO("Audio"), SUBTITLES("Subtitles"), TIMING("Subtitle timing"), SERVER("Server"),
-    PICTURE("Picture"), QUALITY("Quality"), SLEEP("Sleep timer"), EPISODES("Episodes"), INFO("Playback info"),
+    PICTURE("Picture"), QUALITY("Quality"), SLEEP("Sleep timer"), EPISODES("Episodes"), INFO("Playback info"), VERSION("Sub or dub"),
 }
 
 @Composable
@@ -421,6 +421,8 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                             add(Triple(Pane.SUBTITLES, "Subtitles", subtitleLabel))
                             if (model.subtitlesShowing) add(Triple(Pane.TIMING, "Subtitle timing", if (model.subtitleOffset == 0.0) "As the file has them" else "%.1fs %s".format(kotlin.math.abs(model.subtitleOffset), if (model.subtitleOffset > 0) "later" else "earlier")))
                             add(Triple(Pane.SERVER, if (model.request.isLive) "Stream" else "Server", model.server?.name ?: "Choosing…"))
+                            // Anime the anime server has (AniXo): Japanese audio with subtitles, or the English dub.
+                            if (model.animeServer != null) add(Triple(Pane.VERSION, "Sub or dub", if (model.animeTrack == "dub") "Dub · English audio" else "Sub · Japanese audio"))
                             if (!model.isNative) add(Triple(Pane.PICTURE, "Picture", if (model.fillScreen) "Fill screen" else "Server's layout"))
                             if (!model.request.isLive) add(Triple(Pane.QUALITY, "Quality", QualityPreference.current.label))
                             add(Triple(Pane.SLEEP, "Sleep timer", model.sleep.label))
@@ -482,6 +484,14 @@ private fun PlayerPanel(model: PlayerModel, exit: () -> Unit, close: () -> Unit)
                     Pane.SERVER -> items(model.servers, key = { it.id }) { server ->
                         val current = server == (model.server ?: model.servers.firstOrNull())
                         SideItem(server.name, selected = server == model.server, modifier = if (current) Modifier.focusRequester(firstFocus) else Modifier) { model.choose(server); close() }
+                    }
+                    Pane.VERSION -> {
+                        listOf("sub" to ("Sub" to "Japanese audio with subtitles"), "dub" to ("Dub" to "English audio")).forEach { (value, text) ->
+                            item(key = value) {
+                                SideItem(text.first, "${text.second} · on AniXo, remembered for this show", selected = model.animeTrack == value,
+                                    modifier = if (model.animeTrack == value) Modifier.focusRequester(firstFocus) else Modifier) { model.chooseAnimeTrack(value); close() }
+                            }
+                        }
                     }
                     Pane.PICTURE -> {
                         item { SideItem("Fill screen", "The picture edge to edge", selected = model.fillScreen, modifier = if (model.fillScreen) Modifier.focusRequester(firstFocus) else Modifier) { model.setFill(true); close() } }

@@ -109,7 +109,19 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
 
     private fun now() = System.currentTimeMillis()
 
-    val servers: List<StreamServer> get() = if (request.isLive) request.liveStreams else StreamServer.all
+    // The anime server, when this title is anime it has (set by the race plan).
+    var animeServer by mutableStateOf<StreamServer?>(null); private set
+    val servers: List<StreamServer> get() = if (request.isLive) request.liveStreams else listOfNotNull(animeServer) + StreamServer.all
+    val animeTrack: String get() = com.binge.tv.data.AnimeTrack.get(request.title)
+
+    // Sub or dub, from the player: remembered for this show, and the episode
+    // reloads in the other version from where it was.
+    fun chooseAnimeTrack(track: String) {
+        val anime = animeServer ?: return
+        if (track == animeTrack) return
+        com.binge.tv.data.AnimeTrack.set(request.title, track)
+        choose(anime, force = true)
+    }
     val isEpisode get() = request.title.kind == MediaKind.TV
     val episodeLabel: String?
         get() = request.subtitle ?: if (isEpisode && request.season != null && request.episode != null) "S${request.season}:E${request.episode}" else null
@@ -214,6 +226,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
                 }
             }
             val list = ServerPlan.servers(planned.title, planned.title.originalLanguage)
+            animeServer = list.firstOrNull { it.id == "anixo" }
             Perf.mark("server plan ${list.joinToString { it.name }}")
             if (closed || (planned.copy(episode = request.episode).key != request.key)) return@launch
             startRace(list.ifEmpty { StreamServer.all })
@@ -590,13 +603,13 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     // and takes over at the current second once it plays; if it can't, you
     // stay where you were.
 
-    fun choose(next: StreamServer) {
+    fun choose(next: StreamServer, force: Boolean = false) {
         saveProgress(force = true)
         notice = null
         handPicked = true
         dropSwitch()
         // Already playing on it: nothing to do.
-        if (started && next == server && race?.winner != null) { notice = null; return }
+        if (!force && started && next == server && race?.winner != null) { notice = null; return }
         if (!started || race?.winner == null) {
             if (playback.t > 5 && !request.isLive) request = request.copy(startAt = playback.t)
             startRace(listOf(next))

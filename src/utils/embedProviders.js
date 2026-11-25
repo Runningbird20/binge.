@@ -30,13 +30,15 @@ export function buildUrl(providerId, externalId, mediaType, season, episode, sub
   }
 }
 
-// Servers that can play this title at all (media type + id kind).
-export function providerIdsFor(mediaType, externalId) {
+// Servers that can play this title at all (media type + id kind). Anime-only
+// servers (`anime: true`) only for a title in the anime map.
+export function providerIdsFor(mediaType, externalId, { anime = false } = {}) {
   const type = mediaType === 'tv_show' ? 'tv_show' : 'movie';
   const ids = PROVIDERS
     .filter((entry) => entry.types.includes(type) && (!externalId || entry.idKinds.includes(externalId.kind)))
+    .filter((entry) => anime || !entry.anime)
     .map((entry) => entry.id);
-  return ids.length ? ids : PROVIDERS.map((entry) => entry.id);
+  return ids.length ? ids : PROVIDERS.filter((entry) => !entry.anime).map((entry) => entry.id);
 }
 
 // Host each server's player lives on, for the network reachability probe.
@@ -63,11 +65,11 @@ export const FAILOVER_SECONDS = 25;
 // Servers that report pause/play as well as time, so "time stopped moving"
 // can be told apart from "viewer paused" — buffering detection only runs
 // for these.
-export const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'vixsrc', 'vidspark']);
+export const PAUSE_AWARE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'vixsrc', 'vidspark', 'anixo']);
 
 // Servers that can start at a given second (URL param or message), so a
 // mid-play switch keeps the viewer's place.
-export const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'vixsrc', 'vidspark']);
+export const RESUMABLE = new Set(['vidrift', 'vidy', 'cinesrc', 'vidlink', 'vixsrc', 'vidspark', 'anixo']);
 
 export const UP_NEXT_SECONDS = 30;   // show the Up Next card in the last 30s
 export const UP_NEXT_COUNTDOWN = 10; // seconds before the next episode starts

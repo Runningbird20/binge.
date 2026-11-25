@@ -227,6 +227,13 @@ export default function Settings() {
             options={SUBTITLE_CHOICES}
             onChange={(subtitles) => updatePrefs({ subtitles })}
           />
+          <SelectRow
+            label="Anime"
+            description="Sub or dub on the anime server. Picking the other in the player changes it for that show."
+            value={settings.animeTrack === 'dub' ? 'dub' : 'sub'}
+            options={[{ value: 'sub', label: 'Sub (Japanese audio, subtitles)' }, { value: 'dub', label: 'Dub (English audio)' }]}
+            onChange={(animeTrack) => updateSettings({ animeTrack })}
+          />
           <Switch
             label="Captions first"
             description="With subtitles on, start on servers that show them automatically (marked CC)."

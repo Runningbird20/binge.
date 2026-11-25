@@ -88,6 +88,16 @@ class StreamServer(val id: String, val name: String, val build: (tmdbId: Int, ki
         // starts where episode 1 ended up), like the site's streamPreferences.
         // The rest: fastest to start on this TV first (ServerSpeed); servers
         // not timed yet keep the default order, between fast and slow ones.
+        // The anime server (the website's 'anixo', utils/embedServers.js): AniXo's
+        // player by AniList id, anixo.buzz/embed/ani/{id}/{episode}/{sub|dub}, for
+        // titles in the anime map. Sub or dub is read when each link is built, so
+        // a change in the player applies to the next load.
+        fun anixo(title: Title, rows: List<List<Int>>) = StreamServer("anixo", "AniXo") { _, kind, s, e ->
+            val ref = com.binge.tv.data.AnimeMap.episode(rows, kind, s, e)
+            if (ref == null) "about:blank"
+            else url("https://anixo.buzz/embed/ani/${ref.id}/${ref.episode}/${com.binge.tv.data.AnimeTrack.get(title)}", listOf("parentHost" to Uri.parse(com.binge.tv.data.Config.siteUrl).host.orEmpty()))
+        }
+
         fun ranked(title: Title): List<StreamServer> {
             val bySpeed = all.sortedBy { server -> ServerSpeed.of(server.id) ?: (UNTIMED_MS + DEFAULT_ORDER.indexOf(server.id).coerceAtLeast(0) * 100) }
             val last = Prefs.string("server.${title.id}") ?: return bySpeed
@@ -132,6 +142,13 @@ object ServerPlan {
     suspend fun servers(title: Title, originalLanguage: String?): List<StreamServer> {
         val disabled = kotlinx.coroutines.withTimeoutOrNull(800) { ServerSwitches.disabledServers() } ?: ServerSwitches.lastKnown
         var list = StreamServer.ranked(title).filter { it.id !in disabled }
+        // Anime the anime server has: it leads (sub or dub by choice), unless
+        // another server is the one that last worked for this title.
+        com.binge.tv.data.AnimeMap.rows(title)?.takeIf { "anixo" !in disabled }?.let { rows ->
+            val anime = StreamServer.anixo(title, rows)
+            val last = Prefs.string("server.${title.id}")
+            list = if (last != null && last != "anixo") list.take(1) + anime + list.drop(1) else listOf(anime) + list
+        }
         com.binge.tv.DebugLaunch.server?.let { only -> list = list.filter { it.id == only } }
         val original = originalLanguage ?: kotlinx.coroutines.withTimeoutOrNull(800) { OriginalLanguage.of(title) }
         list = StreamServer.byLanguage(list, original, Prefs.string("server.${title.id}"))

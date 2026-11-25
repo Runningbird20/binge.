@@ -39,3 +39,10 @@ test('VidSpark: { source, event, currentTime, duration }', () => {
   expect(readPlayback({ source: 'vidspark-player', event: 'ended', currentTime: 8348.4, duration: 8348.4 }).state).toBe('ended');
   expect(readPlayback({ source: 'someone-else', event: 'play', currentTime: 1 })).toBeNull();
 });
+
+test('AniXo (JW Player): time once a second, and play, pause and ended', () => {
+  expect(readPlayback({ event: 'timeupdate', type: 'timeupdate', currentTime: 12.5, duration: 1560, source: 'jwplayer' })).toEqual({ time: 12.5, duration: 1560 });
+  expect(readPlayback({ event: 'pause', type: 'pause', source: 'jwplayer' })).toEqual({ state: 'pause' });
+  expect(readPlayback({ event: 'ended', type: 'ended', source: 'jwplayer' })).toEqual({ state: 'ended' });
+  expect(readPlayback({ event: 'serverchange', type: 'serverchange', source: 'jwplayer' })).toBeNull();
+});

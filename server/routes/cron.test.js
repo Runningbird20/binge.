@@ -198,6 +198,8 @@ test('every server the player has is probed, at the URL the player builds for Fi
   assert.deepEqual(targets.map(([id]) => id), EMBED_SERVERS.map((server) => server.id));
   for (const [id, label, url] of targets) {
     assert.equal(label, EMBED_SERVERS.find((server) => server.id === id).label);
-    assert.match(url, /^https:\/\/[^/]+\/.*550/, `${id}: ${url}`);
+    // Films by TMDB id 550; the anime-only server by Frieren's AniList id.
+    const anime = EMBED_SERVERS.find((server) => server.id === id).anime;
+    assert.match(url, anime ? /^https:\/\/[^/]+\/.*154587/ : /^https:\/\/[^/]+\/.*550/, `${id}: ${url}`);
   }
 });

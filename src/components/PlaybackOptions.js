@@ -1,6 +1,7 @@
 import ThemedSelect from './ThemedSelect';
 import { useEffect, useRef, useState } from 'react';
 import BottomSheet from './BottomSheet';
+import SlidingTabs from './SlidingTabs';
 import { haptic } from '../utils/haptics';
 import { CaretDown, Check, CheckCircle, HardDrives, ShieldCheck, Warning, WarningCircle } from '@phosphor-icons/react';
 import { languageName } from '../utils/tmdb';
@@ -26,6 +27,25 @@ const NO_POPUPS_HINT = 'Servers marked No pop-ups play with their pop-ups and re
 // The player's "Servers" panel: every server ranked for this title (with why
 // it's recommended), switchable without leaving the video. Audio and subtitle
 // languages are set in Settings; the ranking still follows them.
+// Sub or dub, on the anime server (AniXo): Japanese audio with subtitles, or
+// the English dub. Remembered per show (utils/animeMap.js).
+function AnimeVersion({ animeTrack }) {
+  if (!animeTrack) return null;
+  return (
+    <div className="st-pb-version">
+      <SlidingTabs className="st-tabs st-tabs--sm" role="radiogroup" aria-label="Sub or dub">
+        {[['sub', 'Sub'], ['dub', 'Dub']].map(([value, label]) => (
+          <button key={value} type="button" role="radio" aria-checked={animeTrack.value === value}
+            className={`st-tab${animeTrack.value === value ? ' active' : ''}`} onClick={() => animeTrack.onChange(value)}>{label}</button>
+        ))}
+      </SlidingTabs>
+      <p className="st-pb-version-note">
+        {animeTrack.value === 'dub' ? 'English audio.' : 'Japanese audio with subtitles.'} Remembered for this show.
+      </p>
+    </div>
+  );
+}
+
 export function PlaybackOptionsPanel({
   servers,
   currentServer,
@@ -37,6 +57,7 @@ export function PlaybackOptionsPanel({
   health = {},
   popupsBlockedNow,
   appCaptions,
+  animeTrack,
   onClose,
 }) {
   const current = servers.find((server) => server.id === currentServer);
@@ -46,6 +67,7 @@ export function PlaybackOptionsPanel({
   return (
     <div className="st-pb-panel" role="dialog" aria-label="Servers">
       <div className="st-pb-col">
+        <AnimeVersion animeTrack={animeTrack} />
         <h3>Server</h3>
         {downNames.length > 0 && (
           <p className="st-pb-outage" role="status">
@@ -181,7 +203,7 @@ export default function PlaybackOptions(props) {
 // at thumb height, instead of an inline panel.
 export function MobilePlaybackPickers({
   servers, currentServer, serverLabels, onSelectServer, onReportBroken,
-  blockedCount = 0, health = {}, popupsBlockedNow,
+  blockedCount = 0, health = {}, popupsBlockedNow, animeTrack,
 }) {
   const [open, setOpen] = useState(false);
   const current = servers.find((server) => server.id === currentServer);
@@ -201,6 +223,7 @@ export function MobilePlaybackPickers({
       </div>
 
       <BottomSheet open={open} onClose={close} title="Server">
+        <AnimeVersion animeTrack={animeTrack} />
         {downNames.length > 0 && (
           <p className="st-pb-outage"><Warning size={14} weight="fill" aria-hidden="true" /> {downNames.join(', ')} {downNames.length === 1 ? 'seems' : 'seem'} to be down for many viewers today.</p>
         )}
