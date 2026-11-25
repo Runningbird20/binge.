@@ -40,6 +40,7 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
     }
     override val view: View get() = surface
     override var muted = true
+    private var reportedSilent = false
         private set
     override var onProcessGone: (() -> Unit)? = null
     // Set when the stream can't be played here; the page takes over again.
@@ -99,6 +100,16 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             override fun onPlaybackStateChanged(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, state: Int) { Perf.mark("native state $state") }
             override fun onRenderedFirstFrame(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, output: Any, renderTimeMs: Long) { Perf.mark("native first frame") }
             override fun onVideoDecoderInitialized(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, name: String, initializedTimestampMs: Long, initializationDurationMs: Long) { Perf.mark("native decoder $name ${initializationDurationMs}ms") }
+            // Sound: which audio the stream has, what was picked, and why none plays.
+            override fun onTracksChanged(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, tracks: Tracks) {
+                val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.flatMap { g -> (0 until g.length).map { i -> "${g.getTrackFormat(i).sampleMimeType}/${g.getTrackFormat(i).codecs}${if (g.isTrackSelected(i)) "*" else ""}${if (g.isTrackSupported(i)) "" else "(unsupported)"}" } }
+                Perf.mark("native audio tracks: ${audio.ifEmpty { listOf("none") }.joinToString()}")
+            }
+            override fun onAudioDecoderInitialized(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, name: String, initializedTimestampMs: Long, initializationDurationMs: Long) { Perf.mark("native audio decoder $name") }
+            override fun onAudioTrackInitialized(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, config: androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig) { Perf.mark("native audio output encoding=${config.encoding} rate=${config.sampleRate} offload=${config.offload} tunneling=${config.tunneling}") }
+            override fun onAudioSinkError(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, error: Exception) { Perf.mark("native audio sink error ${error.message}") }
+            override fun onAudioCodecError(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, error: Exception) { Perf.mark("native audio codec error ${error.message}") }
+            override fun onVolumeChanged(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, volume: Float) { Perf.mark("native volume $volume") }
         })
         player.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() { firstFrame = true }
@@ -111,6 +122,18 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             override fun onTracksChanged(tracks: Tracks) {
                 audioList = flatten(tracks, C.TRACK_TYPE_AUDIO)
                 textList = flatten(tracks, C.TRACK_TYPE_TEXT)
+                // Video with no sound: some pages ask for the picture's own
+                // playlist and fetch the audio separately (VidRift's
+                // hakunaymatata streams, 2026-11-25), so the app's player got a
+                // silent stream that played perfectly. The page has the sound:
+                // give the stream back to it (HybridEngine falls back).
+                val hasVideo = tracks.groups.any { it.type == C.TRACK_TYPE_VIDEO }
+                val hasAudio = tracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }
+                if (hasVideo && !hasAudio && !destroyed && !reportedSilent) {
+                    reportedSilent = true
+                    Perf.mark("native stream has no audio")
+                    onFailed?.invoke(PlaybackException("The stream has no audio", null, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED))
+                }
             }
             override fun onPlayerError(error: PlaybackException) {
                 if (destroyed) return

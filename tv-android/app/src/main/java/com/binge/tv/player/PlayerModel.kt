@@ -59,8 +59,10 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     // binge.'s own subtitles (OpenSubtitles), the same on every server.
     var external by mutableStateOf<ExternalSubtitleFile?>(null); private set
     var externalLoading by mutableStateOf(false); private set
-    var useExternal by mutableStateOf(true); private set
-    var subtitleLanguage by mutableStateOf(PlaybackPrefs.subtitle); private set
+    // This series' remembered captions (TitleCaptions), else the profile's default.
+    private val rememberedCaptions = if (initial.isLive) null else com.binge.tv.data.TitleCaptions.get(initial.title)
+    var useExternal by mutableStateOf(rememberedCaptions?.startsWith("server:") != true); private set
+    var subtitleLanguage by mutableStateOf(rememberedCaptions?.removePrefix("server:") ?: PlaybackPrefs.subtitle); private set
     var subtitleOffset by mutableStateOf(0.0); private set
     // Remembered / shared timing (SubtitleSync) for the file and server on now.
     private var syncKey: SubtitleSync.Key? = null
@@ -325,6 +327,8 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     fun selectSubtitles(track: MediaTrack?) {
         useExternal = false
         if (track == null) subtitleLanguage = "off"
+        else if (track.language.isNotEmpty()) subtitleLanguage = track.language.take(2)
+        rememberCaptions(if (track == null) "off" else "server:${track.language.take(2).ifEmpty { subtitleLanguage }}")
         web?.send(MediaCommand.TextTrack(track?.index ?: -1))
         showHUD()
     }
@@ -332,9 +336,14 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     fun chooseSubtitleLanguage(code: String) {
         subtitleLanguage = code
         useExternal = code != "off"
+        rememberCaptions(code)
         if (code == "off") web?.send(MediaCommand.TextTrack(-1))
         loadExternalSubtitles(force = true)
         showHUD()
+    }
+
+    private fun rememberCaptions(choice: String) {
+        if (!request.isLive) com.binge.tv.data.TitleCaptions.set(request.title, choice)
     }
 
     fun nudgeSubtitles(by: Double) {
@@ -434,7 +443,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
             val match = audioTracks.firstOrNull { matches(it, audio) && !describes(it) } ?: audioTracks.firstOrNull { matches(it, audio) }
             if (match != null && !match.on) web.send(MediaCommand.AudioTrack(match.index))
         }
-        val subtitles = PlaybackPrefs.subtitle
+        val subtitles = subtitleLanguage
         if (usingExternalSubtitles || subtitles == "off") {
             if (textTracks.any { it.on }) web.send(MediaCommand.TextTrack(-1))
         } else {
@@ -661,7 +670,7 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
     }
 
     private fun checkSubtitlesAvailable(state: MediaState) {
-        val wanted = PlaybackPrefs.subtitle
+        val wanted = subtitleLanguage
         val original = originalLanguage
         if (!started || request.isLive || wanted == "off" || state.text.isNotEmpty() || usingExternalSubtitles || externalLoading ||
             original == null || original.startsWith(wanted)) { noSubsSince = null; return }

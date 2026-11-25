@@ -72,3 +72,14 @@ enum class QualityPreference(val raw: String, val label: String) {
     // stream costs seconds there, and the native player adapts quality anyway.
     companion object { val current get() = entries.firstOrNull { it.raw == Prefs.string("quality") } ?: if (Performance.lowMemory) FASTEST else BEST }
 }
+
+// Captions remembered per profile for each series (or film): turned on or off
+// (or another language picked) in the player, the next episode and the next
+// time you continue start the same way, instead of the profile's default.
+// "off", a language code (binge.'s own captions), or "server:<code>" (the
+// server's own track in that language).
+object TitleCaptions {
+    private fun key(title: Title) = "captions.${AppModel.profile?.id ?: "none"}.${title.kind.raw}:${title.dbId}"
+    fun get(title: Title): String? = Prefs.string(key(title))
+    fun set(title: Title, choice: String) { if (title.dbId > 0) Prefs.set(key(title), choice) }
+}
