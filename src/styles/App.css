@@ -1206,7 +1206,7 @@ body {
   opacity: 0;
   pointer-events: none;
   transform: translateY(-8px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity var(--exp-dropdown-time) var(--exp-dropdown-ease), transform var(--exp-dropdown-time) var(--exp-dropdown-ease);
 }
 .profile-hover-card {
   padding: 0.85rem;
@@ -1646,6 +1646,9 @@ select.filter-input {
   --exp-radius-lg: 16px;
   --exp-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   --exp-ring: 0 0 0 2.5px rgba(249, 249, 249, 0.75);
+  /* Every dropdown opens with the same short drop (dropdown-in, streaming.css). */
+  --exp-dropdown-time: 0.16s;
+  --exp-dropdown-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ── Canvas ─────────────────────────────────────────────────── */

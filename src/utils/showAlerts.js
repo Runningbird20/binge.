@@ -1,4 +1,4 @@
-// The bell on a series (RemindButton): alerts for its new episodes and newly
+// The bell on a series (AlertsBell): alerts for its new episodes and newly
 // announced seasons, for the active profile. A show on the profile's list
 // (not finished) or in its Continue Watching is followed already; a choice
 // saved here overrides that either way: on follows any show, off mutes one

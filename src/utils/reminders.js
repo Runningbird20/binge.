@@ -1,29 +1,11 @@
-// "Remind me to watch this" — stored in watch_reminders, delivered as Web
-// Push by /api/cron/reminders and, whenever the app is open, in-app.
+// Reminders to watch something, stored in watch_reminders. The TV apps set
+// them (the website's bell is a series' alerts switch, AlertsBell). They're
+// delivered by /api/cron/reminders (push, and email with email alerts on),
+// in-app while the website is open (ReminderWatcher), and listed in Settings.
 import { supabase, isSupabaseConfigured } from './supabase';
 import { getActiveProfileId } from './activeProfile';
 
 export const REMINDERS_EVENT = 'binge:reminders';
-
-function at(date, hours, minutes = 0) {
-  const next = new Date(date);
-  next.setHours(hours, minutes, 0, 0);
-  return next;
-}
-
-// Preset times, computed from "now" in the viewer's own timezone.
-export function reminderPresets(now = new Date()) {
-  const presets = [];
-  const tonight = at(now, 20);
-  if (tonight - now > 30 * 60 * 1000) presets.push({ id: 'tonight', label: 'Tonight at 8', when: tonight });
-  else presets.push({ id: 'later', label: 'In 2 hours', when: new Date(now.getTime() + 2 * 3600 * 1000) });
-  const tomorrow = at(new Date(now.getTime() + 86400000), 20);
-  presets.push({ id: 'tomorrow', label: 'Tomorrow at 8', when: tomorrow });
-  const saturday = new Date(now);
-  saturday.setDate(now.getDate() + ((6 - now.getDay() + 7) % 7 || 7));
-  presets.push({ id: 'weekend', label: 'Saturday at 11', when: at(saturday, 11) });
-  return presets;
-}
 
 export function formatReminderTime(date) {
   const d = new Date(date);
@@ -44,24 +26,6 @@ async function currentUserId() {
   if (!isSupabaseConfigured || !supabase) return null;
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id || null;
-}
-
-export async function createReminder({ item, mediaType, when }) {
-  const userId = await currentUserId();
-  if (!userId) throw new Error('Sign in to set reminders.');
-  const path = mediaType === 'tv_show' ? `/tv-show/${item.id}` : `/movie/${item.id}`;
-  const { data, error } = await supabase.from('watch_reminders').insert({
-    user_id: userId,
-    profile_id: getActiveProfileId(),
-    media_type: mediaType,
-    media_id: Number(item.id),
-    title: item.title,
-    url: path,
-    remind_at: new Date(when).toISOString(),
-  }).select().single();
-  if (error) throw new Error('Couldn’t save that reminder.');
-  notify();
-  return data;
 }
 
 export async function listReminders({ dueOnly = false } = {}) {

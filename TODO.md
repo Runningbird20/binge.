@@ -5,14 +5,10 @@ Ideas for binge., roughly in priority order within each section. Each item names
 ## Features
 
 - [ ] **Watch party / shared queue.** `profile_shares` already sends titles between profiles in an account; a "watch together" link that syncs play/pause through Supabase Realtime would build on it.
-- [ ] **Catch me up.** A "Story so far" for a series you're coming back to. Groq (already behind Ask binge.) summarizes TMDB's episode overviews up to the last episode this profile watched, and never past it. It grows "Previously on…" (`src/components/title/PreviouslyOn.js`, today the last 3 episode summaries) into a recap of whole seasons. A new route next to Ask binge.'s in `server/routes/extras.js`, cached per show and episode.
 - [ ] **"I've got 90 minutes."** A time limit on Surprise me: a movie that fits, or a series whose episodes do. The catalog has no runtimes, so ask TMDB discover with `with_runtime.lte`, or check each candidate with the popup's TMDB details (`src/hooks/useTitleDetails.js`): `src/utils/surprise.js`, `SurpriseButtons` in `src/pages/Home.js`.
-- [ ] **Binge planner.** "Finish by Friday": pick a date on a series, and the popup says how many episodes a night that takes, from the episodes left (`src/utils/seasonStatus.js`) and their TMDB runtimes. It can offer a nightly reminder (`watch_reminders`, `src/utils/reminders.js`).
-- [ ] **Lists you can share.** Named lists ("Halloween marathon", "Comfort shows") with a link that opens a page of posters, and a preview card when the link is pasted into a chat (`server/routes/og.js` and the bot rule in `vercel.json` already do this for titles).
-  - A new Supabase table with a share code and a public read policy. The page has to work signed out, since accounts are invite-only.
-  - An older `media_lists` table was dropped (`supabase/migrations/20261029120000_record_removed_tables.sql`). Start fresh rather than bringing it back.
-- [ ] **"Worth watching?" for finished games.** A spoiler-free 1–5 rating, worked out from how much the win probability swung and how often the lead changed, so a replay can be picked without seeing the score. It shows on the card and in `LiveScorePanel`, and stays while Hide scores is on, since it gives nothing away. ESPN's game summary (fetched in `src/utils/liveScores.js`) has win probability for some leagues; check which first.
 - [ ] **Smarter "Because you watched"** (on hold until binge. has enough users with overlapping ratings). Mix in the existing `collaborative_*_candidates` RPCs ("people who liked X also liked") as a lightly weighted extra source next to TMDB `/recommendations` (which already covers this from TMDB's audience) in `src/utils/personalization.js`.
+
+## UI/UX
 
 ## Accounts, email and operations
 

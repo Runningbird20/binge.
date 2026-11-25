@@ -130,7 +130,7 @@
 
 .td-round-btn:focus-visible { outline: none; box-shadow: var(--st-focus); }
 
-/* The bell (RemindButton) swings from its top when alerts or a reminder turn
+/* The bell (AlertsBell) swings from its top when alerts turn
    on. Reduced motion ends it at once (the global rule in streaming.css). */
 .td-bell { display: inline-flex; transform-origin: 50% 10%; }
 
@@ -694,16 +694,21 @@
   .td-split--tv > :not(.td-body):not(.td-episodes-section):not(.td-rate):not(.td-cast) { grid-column: 1 / -1; margin-right: calc(-1 * clamp(20px, 4vw, 48px)); }
 }
 
-/* ── Remind me ────────────────────────────────────────────────── */
-
-.td-remind { position: relative; }
+/* ── Round action buttons ───────────────────────────────────────
+   The alerts bell (AlertsBell) is white while on. Send to profile
+   (SendToProfileButton) opens a small menu above its button. */
 
 .td-round-btn.active { background: #fff; color: #0b0d12; }
+
+.td-remind { position: relative; }
 
 .td-remind-menu {
   /* Opens upward: the hero clips anything below it (it crops the art). */
   position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 10; min-width: 200px;
   padding: 0.4rem; border-radius: 12px; background: #1b1e27; border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  /* Rises out of the button (dropdown-in in streaming.css moves with `translate`, so the centering transform stays).
+     The origin is the box's own left edge because translateX(-50%) puts that edge at the menu's visible center. */
+  animation: dropdown-in var(--exp-dropdown-time) var(--exp-dropdown-ease); --dropdown-from: 6px; transform-origin: left bottom;
 }
 
 .td-remind-menu p { margin: 0.3rem 0.6rem 0.4rem; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.5); }
@@ -712,7 +717,7 @@
 
 .td-remind-menu button:hover, .td-remind-menu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
 
-@media (max-width: 768px) { .td-remind-menu { left: auto; right: 0; transform: none; } }
+@media (max-width: 768px) { .td-remind-menu { left: auto; right: 0; transform: none; transform-origin: bottom right; } }
 
 /* ── Outside ratings ──────────────────────────────────────────── */
 

@@ -204,6 +204,8 @@
   border: 1px solid var(--exp-border-strong);
   background: rgba(14, 17, 24, 0.97);
   box-shadow: var(--exp-shadow);
+  animation: dropdown-in var(--exp-dropdown-time) var(--exp-dropdown-ease);
+  transform-origin: top left;
 }
 
 .player-ep-section-label {
@@ -276,6 +278,8 @@
   gap: 0.15rem;
   min-width: 200px;
   padding: 0.4rem;
+  animation: dropdown-in var(--exp-dropdown-time) var(--exp-dropdown-ease);
+  transform-origin: top right;
   border-radius: 12px;
   border: 1px solid var(--exp-border-strong);
   background: rgba(14, 17, 24, 0.97);
@@ -316,7 +320,7 @@
 
 /* The panel opens under the Servers pill, from the bar's right edge. */
 
-.player-bar-actions .st-pb-panel { left: auto; right: 0; }
+.player-bar-actions .st-pb-panel { left: auto; right: 0; transform-origin: top right; }
 
 .st-pb-panel {
   position: absolute;
@@ -335,6 +339,8 @@
   box-shadow: var(--exp-shadow);
   color: var(--exp-text);
   text-align: left;
+  animation: dropdown-in var(--exp-dropdown-time) var(--exp-dropdown-ease);
+  transform-origin: top left;
 }
 
 .st-pb-col h3 {

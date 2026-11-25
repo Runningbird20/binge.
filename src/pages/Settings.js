@@ -2,7 +2,7 @@ import LoadingBar from '../components/LoadingBar';
 import ThemedSelect from '../components/ThemedSelect';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BellSimple, Keyboard, Star, Trash } from '@phosphor-icons/react';
+import { Keyboard, Star, Trash } from '@phosphor-icons/react';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../contexts/AuthContext';
 import { AUDIO_CHOICES, SUBTITLE_CHOICES, getPlaybackPrefs, savePlaybackPrefs } from '../utils/streamPreferences';
@@ -328,7 +328,7 @@ export default function Settings() {
           <div className="set-reminders">
             <span className="set-row-label">Upcoming reminders</span>
             {reminders.length === 0 ? (
-              <p className="set-note">None. Use <BellSimple size={13} weight="bold" aria-label="Remind me" /> on a title to set one.</p>
+              <p className="set-note">None. Reminders you set in the binge. TV apps show up here.</p>
             ) : (
               <ul>
                 {reminders.map((reminder) => (

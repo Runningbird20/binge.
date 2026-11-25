@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, FilmStrip, Play, Plus, Star, X } from '@phosphor-icons/react';
 import EmbedPlayer from './EmbedPlayer';
-import RemindButton from './RemindButton';
+import AlertsBell from './AlertsBell';
 import SendToProfileButton from './SendToProfileButton';
 import OutsideRatings from './OutsideRatings';
 import WhereToWatch from './WhereToWatch';
@@ -423,7 +423,7 @@ export default function MediaDetailsModal({
                       />
                     </div>
                   )}
-                  {allowActions && <RemindButton item={item} mediaType={mediaType} />}
+                  {allowActions && isTV && <AlertsBell item={item} />}
                   {allowActions && <SendToProfileButton item={item} mediaType={mediaType} />}
                 </div>
               </div>

@@ -4,7 +4,7 @@ import * as data from '../utils/supabaseData';
 
 jest.mock('react-router-dom', () => require('../testUtils/pageTestSetup').routerMock, { virtual: true });
 jest.mock('./EmbedPlayer', () => () => null);
-jest.mock('./RemindButton', () => () => null);
+jest.mock('./AlertsBell', () => () => <span>alerts bell</span>);
 jest.mock('./SendToProfileButton', () => () => null);
 jest.mock('./OutsideRatings', () => () => null);
 jest.mock('./WhereToWatch', () => () => null);
@@ -143,6 +143,14 @@ test('browse-only viewers get the episode list without marking controls', async 
   expect(await screen.findByText('One 1')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Mark season watched' })).toBeNull();
   expect(screen.queryByRole('button', { name: /Watched up to/ })).toBeNull();
+});
+
+test('a series has the alerts bell; a movie has no bell', () => {
+  const { unmount } = open();
+  expect(screen.getByText('alerts bell')).toBeInTheDocument();
+  unmount();
+  render(<MediaDetailsModal item={{ id: 7, title: 'The Film', media_type: 'movie', source_key: 'tmdb:movie:2' }} mediaType="movie" onClose={() => {}} />);
+  expect(screen.queryByText('alerts bell')).not.toBeInTheDocument();
 });
 
 test('More Like This keeps to a restricted profile’s maturity level', async () => {

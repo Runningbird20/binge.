@@ -324,7 +324,7 @@ Movies/TV land on a Netflix-style rows view (`src/components/BrowseView.js`: a `
   - OMDb (IMDb/RT/Metacritic) is looked up server-side and cached in `title_ratings` (shared; public read).
   - Cards only read that cache, in batches (`useCachedImdb`). Never spend OMDb quota per card.
   - Needs `OMDB_API_KEY`; falls back to the TMDB score.
-- **Remind me** (`RemindButton`) and **Send to profile** (`SendToProfileButton`) sit with the actions.
+- **The alerts bell** (`AlertsBell`, series only) and **Send to profile** (`SendToProfileButton`) sit with the actions. Movies have no bell, by decision.
 - Image sizing goes through `src/utils/imageQuality.js` (TMDB srcsets).
 
 ### Where-to-watch logos
@@ -481,14 +481,14 @@ The website can only learn and use markers on `PAUSE_AWARE` servers, and can onl
   - **Push.** Web Push (`push_subscriptions`) goes to the devices of those profiles; a device saved without a profile counts as the default profile's. The `push`/`notificationclick` handlers are in `public/sw.js`. iPhones need the site installed to the Home Screen.
   - **Once per account.** `push_notified` claims each episode (`S2E5`) and each announced season (`announce:S3`) before anything is sent, so a re-run never repeats one.
   - **Needs** `CRON_SECRET`, the service-role key and `TMDB_API_KEY`. `VAPID_*` is needed only for the push part.
-- **The bell on a series** (`RemindButton` in the title popup, `utils/showAlerts.js`) is one tap, no menu: the switch for new-episode and new-season alerts (`aria-pressed`, rings while on, and the icon swings each time it's turned on or a movie reminder is set: `td-bell--ring` in `title.css`). It's on already for a show the profile follows (list or Continue Watching); tapping it off saves a mute, tapping it on follows any show (`show_alerts`, one row per profile and show), and the daily job above applies the same rule. A series has no "remind me to watch" times on the website any more, by decision; a movie's bell keeps them.
-- **Reminders** (`watch_reminders`, `src/utils/reminders.js`, `RemindButton`, `ReminderWatcher`):
+- **The bell on a series** (`AlertsBell` in the title popup, `utils/showAlerts.js`) is one tap, no menu: the switch for new-episode and new-season alerts (`aria-pressed`, rings while on, and the icon swings each time it's turned on: `td-bell--ring` in `title.css`). It's on already for a show the profile follows (list or Continue Watching); tapping it off saves a mute, tapping it on follows any show (`show_alerts`, one row per profile and show), and the daily job above applies the same rule. The website sets no "remind me to watch" reminders any more, for movies or series, by decision; movies have no bell.
+- **Reminders** (`watch_reminders`, `src/utils/reminders.js`, `ReminderWatcher`). Only the TV apps set them now; the website lists them in Settings and delivers them:
   - Delivered in the app when due, and by push and email (see Email alerts) via `GET /api/cron/reminders`. The route runs with push or SMTP set up; game alerts and the uptime probe need push.
   - Vercel Hobby crons are daily, so frequent delivery needs Supabase pg_cron: `supabase/manual/schedule_reminders.sql` (fill in the site URL + CRON_SECRET, run once).
   - That job also runs the server uptime probe and the followed-team alerts.
 - **Email alerts** (`email_alerts`, migration `20261118140000_email_alerts.sql`, NOT applied yet; `utils/emailAlerts.js`, `EmailRemindersPrompt`; server `emailRecipients` / `sendEmailDigests` in `server/routes/cron.js`, words in `server/alertEmails.js`, sent by `server/mailer.js`):
   - **Opt-in per account, off until chosen.** One row per account (owner-only RLS; its own table because `profiles` is readable by every signed-in user). No row = never asked; `enabled = false` = said no or turned off. Settings › Notifications › "Email alerts" switches it.
-  - **Asked once.** The first time an account sets a movie reminder or turns a series' alerts on (`RemindButton`, not on kids profiles), a dialog asks "Email you reminders too?" / "Email you about new episodes too?" "Email me" turns it on; "Not now", Escape or a click outside saves no. It's portaled above the title popup and keeps Escape from closing the popup too.
+  - **Asked once.** The first time an account turns a series' alerts on (`AlertsBell`, not on kids profiles), a dialog asks "Email you about new episodes too?" (`EmailRemindersPrompt`). "Email me" turns it on; "Not now", Escape or a click outside saves no. It's portaled above the title popup and keeps Escape from closing the popup too.
   - **What's sent.** Reminders, by email when due (`sendDueReminders`). Once a day, after the new-episode run, one digest per account of its unread new episodes and announcements from the last 48 hours not yet emailed (`emailed_at` on `notifications`), one per alert across profiles, at most 20 listed. Game alerts aren't emailed (stale by then). Every email links to Settings to turn them off.
   - **Needs** `SMTP_*`; without it nothing is sent and nothing is marked. Addresses come from `profiles.email`.
 - **Notification inbox** (`notifications`, migrations `20261116120000_notifications_inbox.sql` and `20261118130000_notifications_realtime.sql`, the second NOT applied yet; `utils/notificationsInbox.js`, `hooks/useNotifications.js`, `NotificationBell`):
@@ -661,6 +661,7 @@ All UI follows [impeccable](https://github.com/pbakaus/impeccable) (`skill/refer
   - small pill actions are `td-mark-season`;
   - secondary play-style buttons are `st-btn td-resume-control td-play--compact`.
 - **Every control has its states.** Loading uses `LoadingBar` in place, not page-centered spinners. Empty states explain what to do next.
+- **Dropdowns open with `dropdown-in`** (`streaming.css`): `animation: dropdown-in var(--exp-dropdown-time) var(--exp-dropdown-ease)` plus a `transform-origin` at the corner it hangs from. A menu that opens upward also sets `--dropdown-from: 6px`. It moves with the `translate`/`scale` properties, so a menu's own `transform` stays. Opening only: menus unmount on close.
 - **Verify in one batched screenshot round:** desktop plus a phone on the web, the simulator on tvOS.
 
 ## Environment variables

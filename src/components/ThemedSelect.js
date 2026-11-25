@@ -30,6 +30,7 @@ export default function ThemedSelect({
   const rootRef = useRef(null);
   const menuRef = useRef(null);
   const [menuStyle, setMenuStyle] = useState(null);
+  const [menuUp, setMenuUp] = useState(false);
   const normalizedOptions = useMemo(() => normalizeOptions(options), [options]);
   const selectedIndex = Math.max(0, normalizedOptions.findIndex((option) => String(option.value) === String(value)));
   const selectedOption = normalizedOptions[selectedIndex] || normalizedOptions[0] || { label: '' };
@@ -68,6 +69,7 @@ export default function ThemedSelect({
     const estimated = Math.min(260, normalizedOptions.length * 44 + 16);
     const below = window.innerHeight - rect.bottom;
     const up = below < estimated + 12 && rect.top > below;
+    setMenuUp(up);
     setMenuStyle({
       position: 'fixed',
       zIndex: 4000,
@@ -160,7 +162,7 @@ export default function ThemedSelect({
         <span className="themed-select-chevron" aria-hidden="true" />
       </button>
       {open && menuStyle && createPortal(
-        <div ref={menuRef} className={`themed-select-menu${variant ? ` themed-select-menu--${variant}` : ''}`} role="listbox" aria-label={controlLabel} style={menuStyle}>
+        <div ref={menuRef} className={`themed-select-menu${variant ? ` themed-select-menu--${variant}` : ''}${menuUp ? ' themed-select-menu--up' : ''}`} role="listbox" aria-label={controlLabel} style={menuStyle}>
           {normalizedOptions.map((option, index) => {
             const selected = String(option.value) === String(value);
             const active = index === activeIndex;

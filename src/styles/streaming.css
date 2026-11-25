@@ -2418,6 +2418,37 @@ kbd {
 
 .themed-select .themed-select-chevron { color: rgba(255, 255, 255, 0.8); }
 
+/* ── Dropdown open animation ──────────────────────────────────────
+   Every dropdown drops a few pixels into place from its anchor while it
+   fades in. Opening only: menus unmount on close, so they leave at once.
+   It moves with the individual `translate` / `scale` properties, not
+   `transform`, so menus positioned with a transform (the title popup's
+   Send to menu) keep it. Older TV browsers without them just fade.
+   A menu that opens upward sets --dropdown-from: 6px and a bottom origin.
+   The reduced-motion rule above ends it at once. The area menus (player,
+   title popup) take it in their own files. */
+
+@keyframes dropdown-in {
+  from { opacity: 0; translate: 0 var(--dropdown-from, -6px); scale: 0.97; }
+}
+
+.themed-select-menu,
+.global-search-dropdown,
+.nav-inbox-panel {
+  animation: dropdown-in var(--exp-dropdown-time) var(--exp-dropdown-ease);
+  transform-origin: top center;
+}
+
+.themed-select-menu--up { --dropdown-from: 6px; transform-origin: bottom center; }
+
+/* The header's search results hang from its right edge, the inbox from its left. */
+.global-search-dropdown { transform-origin: top right; }
+.nav-inbox-panel { transform-origin: top left; }
+
+@media (max-width: 768px) {
+  .global-search-dropdown { transform-origin: top center; }
+}
+
 /* Expanded detail dropdowns follow the same dark pill controls. */
 
 .themed-select-menu--pill {
