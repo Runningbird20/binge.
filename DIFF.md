@@ -23,6 +23,7 @@ Checked against the code on 2026-11-05. **When a feature ships on only some apps
 
 | Feature | Computer | Phone | Apple TV | Fire TV | Notes |
 |---|:-:|:-:|:-:|:-:|---|
+| Captions remembered per series (per profile) | — | — | — | ✓ | Fire TV `TitleCaptions` (`data/Prefs.kt`): a caption choice made in the player (off, a language, the server's track) starts every later episode of that show the same way. The website's captions are mostly inside the servers' own players. |
 | Where to watch (legal streaming services row) | ✓ | ✓ | — | — | `WhereToWatch.js`, TMDB `watch/providers`. |
 | Cast & crew photo row | ✓ | ✓ | ✓ | ✓ | Both TV apps: the Cast row (`CastRow`), each photo opening the person's page. |
 | Actor / director pages (`/person/:id`) | ✓ | ✓ | ✓ | ✓ | `pages/Person.js`, `utils/people.js`; Apple TV `PersonView`, Fire TV `PersonScreen` (`data/People.kt`), same rules. |
