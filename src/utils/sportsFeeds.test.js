@@ -33,6 +33,27 @@ test('StreamFree sources count whether they come as objects or plain URLs', asyn
   expect(listings[0]).toMatchObject({ category: 'Soccer', teams: { home: 'Ferencvaros', away: 'AC Milan' } });
 });
 
+test('StreamFree since 2026-11-26: one iframe per game, plus additional sources', async () => {
+  global.fetch = jest.fn(() => reply({
+    count: 2,
+    streams: [
+      {
+        name: 'Louisville Cardinals vs St. John\'s Red Storm', category: 'basketball', match_timestamp: now,
+        team1: { name: 'Louisville Cardinals' }, team2: { name: 'St. John\'s Red Storm' },
+        iframe: 'https://strmfree.st/embed/basketball/louisville1080p',
+        additional_sources: [{ quality: 'HD', url: 'https://strmfree.st/embed/basketball/louisville720p' }],
+      },
+      { name: 'No embed yet', category: 'basketball', match_timestamp: now, iframe: null, additional_sources: [] },
+    ],
+  }));
+  const listings = await fetchStreamfreeNormalized();
+  expect(listings.map((entry) => entry.provider.embedUrl)).toEqual([
+    'https://strmfree.st/embed/basketball/louisville1080p',
+    'https://strmfree.st/embed/basketball/louisville720p',
+  ]);
+  expect(listings[0].provider.label).toBe('StreamFree 1080p');
+});
+
 test('the server’s options reach the request: its own timeout and extra headers', async () => {
   global.fetch = jest.fn(() => reply({ success: true, streams: [] }));
   await fetchPpvNormalized({ timeoutMs: 8000, headers: { 'User-Agent': 'binge-test' } });

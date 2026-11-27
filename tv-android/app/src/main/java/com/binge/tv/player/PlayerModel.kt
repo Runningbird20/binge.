@@ -282,6 +282,13 @@ class PlayerModel(val context: Context, initial: PlayRequest) {
             w.web.onProcessGone = { checkLost(force = true) }
             resolveSubtitleSync()
         } else if (r.failed) {
+            // The TV's video decoder is stuck (NativeEngine.decoderStuck): no
+            // server can play until the Fire TV restarts, so say that.
+            if (NativeEngine.decoderStuck) {
+                notice = "This Fire TV's video player has stopped responding, so nothing can play until it restarts. " +
+                    "Hold Select and Play/Pause on the remote for 5 seconds (or Settings › My Fire TV › Restart), then try again."
+                return
+            }
             // Nothing in this race played, but there are untried servers.
             if (!handPicked && recoveries < 3 && servers.any { it.id !in raced }) {
                 recoveries++

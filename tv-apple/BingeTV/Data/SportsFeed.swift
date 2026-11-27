@@ -185,11 +185,14 @@ enum SportsFeed {
         let now = Date()
         var out: [SportGame] = []
         for s in streams {
-            // Embeds appear in "sources" near game time (older API: embed_url).
+            // Its embeds have changed shape more than once (as on the website):
+            // since 2026-11-26 one "iframe" plus "additional_sources"; before that
+            // "sources" ({quality, url, live} objects, plain strings before
+            // 2026-11), and embed_url before that. Every shape is read.
             var seen = Set<String>()
-            // "sources" are objects ({quality, url, live}) since 2026-11; plain strings before.
-            let sources = (s["sources"] as? [Any] ?? []).compactMap { ($0 as? String) ?? (($0 as? [String: Any])?["url"] as? String) }
-            let embeds = (sources + [s["embed_url"] as? String].compactMap { $0 })
+            let listed = (s["additional_sources"] as? [Any] ?? []) + (s["sources"] as? [Any] ?? [])
+            let sources = listed.compactMap { ($0 as? String) ?? (($0 as? [String: Any])?["url"] as? String) ?? (($0 as? [String: Any])?["iframe"] as? String) }
+            let embeds = ([s["iframe"] as? String].compactMap { $0 } + sources + [s["embed_url"] as? String].compactMap { $0 })
                 .filter { $0.hasPrefix("http") && seen.insert($0).inserted }
                 .compactMap(URL.init(string:))
             guard !embeds.isEmpty else { continue }

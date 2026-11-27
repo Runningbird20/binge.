@@ -110,10 +110,13 @@ export async function fetchStreamfreeNormalized({ timeoutMs = 10000, headers = {
     const startsAt = s.match_timestamp || 0;
     const duration = DURATION_SEC[category] || DEFAULT_DURATION_SEC;
     const endsAt = startsAt ? startsAt + duration : now + duration;
-    // Embeds appear in "sources" near game time: { quality, url, live } objects
-    // (plain URL strings until 2026-11; the older API had embed_url).
-    const sources = (Array.isArray(s.sources) ? s.sources : []).map((source) => (typeof source === 'string' ? source : source?.url));
-    const embeds = [...new Set([...sources, s.embed_url].filter((url) => typeof url === 'string' && url.startsWith('http')))];
+    // Its embeds have changed shape more than once: since 2026-11-26 one
+    // `iframe` per game plus `additional_sources`; before that "sources"
+    // ({ quality, url, live } objects, plain URL strings before 2026-11), and
+    // embed_url before that. Every shape is read, so a game is never dropped.
+    const listed = [...(Array.isArray(s.additional_sources) ? s.additional_sources : []), ...(Array.isArray(s.sources) ? s.sources : [])];
+    const sources = listed.map((source) => (typeof source === 'string' ? source : source?.url || source?.iframe));
+    const embeds = [...new Set([s.iframe, ...sources, s.embed_url].filter((url) => typeof url === 'string' && url.startsWith('http')))];
     if (embeds.length === 0) continue;
     // Channels (RedZone, Sky Sports F1, Willow) keep a timestamp from weeks
     // ago; anything with embeds that "started" over 2 days back is one.

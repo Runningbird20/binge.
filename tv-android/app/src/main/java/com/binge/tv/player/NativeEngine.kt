@@ -112,7 +112,7 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
             override fun onVolumeChanged(t: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, volume: Float) { Perf.mark("native volume $volume") }
         })
         player.addListener(object : Player.Listener {
-            override fun onRenderedFirstFrame() { firstFrame = true }
+            override fun onRenderedFirstFrame() { firstFrame = true; decoderStuck = false }
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_BUFFERING && firstFrame && player.playWhenReady) stalls++
             }
@@ -136,6 +136,16 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
+                // A Fire Stick has one hardware video decoder. A player stopped
+                // while its decoder was still starting can fail to let it go
+                // ("Detaching surface timed out", "Player release timed out"),
+                // and then every video on the TV hangs at "buffering" until the
+                // TV restarts (2026-11-26: sports and films alike, fixed by a
+                // restart). The player says so instead of trying servers forever.
+                if (error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT) {
+                    decoderStuck = true
+                    Perf.mark("decoder stuck: ${error.cause?.message}")
+                }
                 if (destroyed) return
                 // A live stream that fell behind its window: back to the edge.
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
@@ -304,6 +314,9 @@ class NativeEngine(context: Context, source: StreamSource, private val isLive: B
     }
 
     companion object {
+        // The TV's video decoder stopped answering (see onPlayerError); cleared
+        // as soon as any native player shows a picture again.
+        @Volatile var decoderStuck = false
         private const val OFF_SCREEN = 20_000f
         // Native players alive right now (each holds a hardware decoder).
         var live = 0

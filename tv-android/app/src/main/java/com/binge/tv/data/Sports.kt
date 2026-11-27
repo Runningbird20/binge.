@@ -345,9 +345,13 @@ object SportsFeed {
         for (stream in streams) {
             val s = stream.obj() ?: continue
             val seen = HashSet<String>()
-            // "sources" are objects ({quality, url, live}) since 2026-11; plain strings before.
-            val qualities = s["sources"].arr().mapNotNull { src -> src.obj()?.let { o -> o["url"].str()?.let { it to o["quality"].str() } } }.toMap()
-            val embeds = (s["sources"].arr().mapNotNull { it.str() ?: it.obj()?.get("url").str() } + listOfNotNull(s["embed_url"].str()))
+            // Its embeds have changed shape more than once (as on the website):
+            // since 2026-11-26 one "iframe" plus "additional_sources"; before
+            // that "sources" ({quality, url, live} objects, plain strings before
+            // 2026-11), and embed_url before that. Every shape is read.
+            val listed = s["additional_sources"].arr() + s["sources"].arr()
+            val qualities = listed.mapNotNull { src -> src.obj()?.let { o -> o["url"].str()?.let { it to o["quality"].str() } } }.toMap()
+            val embeds = (listOfNotNull(s["iframe"].str()) + listed.mapNotNull { it.str() ?: it.obj()?.get("url").str() ?: it.obj()?.get("iframe").str() } + listOfNotNull(s["embed_url"].str()))
                 .filter { it.startsWith("http") && seen.add(it) }
             if (embeds.isEmpty()) continue
             val category = streamfreeCategories[s["category"].str() ?: ""] ?: "Other"
